@@ -15,8 +15,8 @@ export const APP_ROLES = [
 export const PERMISSIONS = {
   viewOwnCases:         ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin', 'Vitauri Ops'],
   viewAllTenantCases:   ['QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin', 'Vitauri Ops'],
-  createEditClient:     ['Analyst'],
-  createRunCase:        ['Analyst'],
+  createEditClient:     ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'],
+  createRunCase:        ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'],
   qcFlag:               ['QC Reviewer'],
   approveMedium:        ['Manager', 'Director'],
   approveHighUnacceptable: ['Director'],
