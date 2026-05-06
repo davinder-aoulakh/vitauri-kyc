@@ -34,6 +34,8 @@ export default function ClientDetail() {
   const [loading, setLoading]         = useState(true);
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignTo, setReassignTo]   = useState('');
+  const [pendingOcr, setPendingOcr]   = useState(null);
+  const [activeTab, setActiveTab]     = useState('profile');
 
   const userRole = currentUser?.app_role;
   const canReassign = hasPermission(userRole, 'viewAllTenantCases');
@@ -174,7 +176,7 @@ export default function ClientDetail() {
         </div>
 
         {/* ── Tabs ── */}
-        <Tabs defaultValue="profile">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="bg-card border border-border h-auto p-1 gap-1 flex-wrap">
             {[
               { value: 'profile',          label: 'Profile' },
@@ -191,7 +193,12 @@ export default function ClientDetail() {
           </TabsList>
 
           <TabsContent value="profile">
-            <ProfileTab client={client} onClientUpdated={updated => setClient(updated)} />
+            <ProfileTab
+              client={client}
+              onClientUpdated={updated => setClient(updated)}
+              pendingOcr={pendingOcr}
+              onOcrApplied={() => setPendingOcr(null)}
+            />
           </TabsContent>
 
           <TabsContent value="related-parties">
@@ -217,6 +224,10 @@ export default function ClientDetail() {
               client={client}
               documents={documents}
               onRefresh={loadAll}
+              onOcrExtracted={fields => {
+                setPendingOcr(fields);
+                setActiveTab('profile');
+              }}
             />
           </TabsContent>
 

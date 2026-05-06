@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { hasPermission } from '@/lib/permissions';
@@ -8,17 +8,26 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertTriangle, Save, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import OcrResultPanel from '@/components/client/OcrResultPanel';
 
 const COUNTRIES = ['Netherlands (NL)','Belgium (BE)','Germany (DE)','France (FR)','United Kingdom (GB)','United States (US)','Luxembourg (LU)','Switzerland (CH)','Curaçao (CW)','Aruba (AW)','Suriname (SR)','Other'];
 const SECTORS   = ['Financial Services','Real Estate','Legal Services','Consulting','Technology','Manufacturing','Trading','Healthcare','Energy','Retail','Construction','Other'];
 const LEGAL_FORMS = ['BV','NV','Ltd','SA','GmbH','LLC','Inc','PLC','SRL','AG','SARL','Other'];
 const ID_TYPES    = ['Passport','National ID Card','Driving Licence','Residence Permit','Other'];
 
-export default function ProfileTab({ client, onClientUpdated }) {
+export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrApplied }) {
   const { currentUser } = useTenant();
   const [form, setForm] = useState({ ...client });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // When parent pushes new OCR data, pre-fill form but don't auto-save
+  useEffect(() => {
+    if (pendingOcr && Object.keys(pendingOcr).length > 0) {
+      setForm(f => ({ ...f, ...pendingOcr }));
+      setSaved(false);
+    }
+  }, [pendingOcr]);
   const isOrg = client.client_type === 'ORG';
   const canEdit = hasPermission(currentUser?.app_role, 'createEditClient');
 
@@ -72,8 +81,22 @@ export default function ProfileTab({ client, onClientUpdated }) {
     );
   }
 
+  function handleOcrApply(fields) {
+    setForm(f => ({ ...f, ...fields }));
+    setSaved(false);
+    onOcrApplied?.();
+  }
+
   return (
     <div className="bg-card border border-border rounded-xl p-5 space-y-6">
+      {/* OCR prefill banner */}
+      {pendingOcr && Object.keys(pendingOcr).length > 0 && (
+        <OcrResultPanel
+          ocrResult={{ extracted: pendingOcr, confidence: null, warnings: [] }}
+          onApply={handleOcrApply}
+          onDismiss={() => onOcrApplied?.()}
+        />
+      )}
       {/* Core Details */}
       <div>
         <h3 className="text-sm font-semibold mb-3">{isOrg ? 'Organisation Details' : 'Personal Details'}</h3>

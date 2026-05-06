@@ -8,10 +8,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   FileText, Plus, Download, ChevronDown, ChevronRight,
-  Loader2, Upload, CheckCircle, XCircle, Clock, Filter, X
+  Loader2, Upload, CheckCircle, XCircle, Clock, Filter, X, Sparkles
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import OcrResultPanel from '@/components/client/OcrResultPanel';
+
+// Doc types that support OCR extraction
+const OCR_SUPPORTED = ['Passport', 'ID_Card', 'Articles_of_Association', 'UBO_Register', 'KYC_Report'];
 
 const DOC_TYPES = [
   'Passport','ID_Card','UBO_Register','Articles_of_Association','KYC_Report',
@@ -35,7 +39,7 @@ function ReviewStatusBadge({ status }) {
   );
 }
 
-export default function DocumentsTab({ client, documents, onRefresh }) {
+export default function DocumentsTab({ client, documents, onRefresh, onOcrExtracted }) {
   const { currentUser } = useTenant();
   const [uploadOpen, setUploadOpen]     = useState(false);
   const [reviewOpen, setReviewOpen]     = useState(null); // doc object
@@ -187,6 +191,7 @@ export default function DocumentsTab({ client, documents, onRefresh }) {
         currentUser={currentUser}
         existingDocs={documents}
         onUploaded={onRefresh}
+        onOcrExtracted={onOcrExtracted}
       />
 
       <ReviewDialog
@@ -283,18 +288,25 @@ function ReviewDialog({ doc, onClose, currentUser, onSaved }) {
   );
 }
 
-function UploadDialog({ open, onClose, client, currentUser, existingDocs, onUploaded }) {
-  const [file, setFile]       = useState(null);
-  const [docType, setDocType] = useState('');
+function UploadDialog({ open, onClose, client, currentUser, existingDocs, onUploaded, onOcrExtracted }) {
+  const [file, setFile]           = useState(null);
+  const [docType, setDocType]     = useState('');
   const [uploading, setUploading] = useState(false);
+  const [ocrRunning, setOcrRunning] = useState(false);
+  const [ocrResult, setOcrResult]   = useState(null);
+  const [uploadedFileUrl, setUploadedFileUrl] = useState(null);
 
   const existingOfType = existingDocs.filter(d => d.doc_type === docType);
   const nextVersion = existingOfType.length > 0 ? Math.max(...existingOfType.map(d => d.version || 1)) + 1 : 1;
+  const ocrSupported = OCR_SUPPORTED.includes(docType);
 
   async function handleUpload() {
     if (!file || !docType) return;
     setUploading(true);
+
     const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    setUploadedFileUrl(file_url);
+
     await base44.entities.Document.create({
       tenant_id: client.tenant_id,
       client_id: client.id,
@@ -306,6 +318,7 @@ function UploadDialog({ open, onClose, client, currentUser, existingDocs, onUplo
       is_ai_generated: false,
       review_status: 'Pending_Review',
     });
+
     await base44.entities.AuditEvent.create({
       tenant_id: client.tenant_id,
       client_id: client.id,
@@ -315,56 +328,122 @@ function UploadDialog({ open, onClose, client, currentUser, existingDocs, onUplo
       event_type: 'document_uploaded',
       notes: `Uploaded ${docType.replace(/_/g,' ')} v${nextVersion}: ${file.name}`,
     });
+
     setUploading(false);
+    onUploaded?.();
+
+    // Run OCR if supported
+    if (ocrSupported) {
+      setOcrRunning(true);
+      const res = await base44.functions.invoke('ocrDocumentParse', {
+        file_url,
+        doc_type: docType,
+        client_type: client.client_type,
+      });
+      setOcrRunning(false);
+      const result = res?.data;
+      if (result?.extracted && Object.keys(result.extracted).length > 0) {
+        setOcrResult(result);
+        return; // Keep dialog open to show OCR results
+      }
+    }
+
+    // No OCR or no results — close normally
+    handleClose();
+  }
+
+  function handleApplyOcr(fields) {
+    onOcrExtracted?.(fields);
+    handleClose();
+  }
+
+  function handleClose() {
     setFile(null);
     setDocType('');
-    onUploaded?.();
+    setOcrResult(null);
+    setOcrRunning(false);
+    setUploadedFileUrl(null);
     onClose();
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>Upload Document</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>{ocrResult ? 'OCR Data Extracted' : 'Upload Document'}</DialogTitle>
+        </DialogHeader>
         <div className="space-y-4">
-          <div>
-            <Label className="text-xs font-medium mb-1.5 block">Document Type</Label>
-            <Select value={docType} onValueChange={setDocType}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select type" /></SelectTrigger>
-              <SelectContent>
-                {DOC_TYPES.map(t => <SelectItem key={t} value={t}>{t.replace(/_/g,' ')}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs font-medium mb-1.5 block">File</Label>
-            <div
-              className={cn(
-                'border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors',
-                file ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-primary/40 hover:bg-muted/30'
+          {/* OCR results view */}
+          {ocrResult ? (
+            <OcrResultPanel
+              ocrResult={ocrResult}
+              onApply={handleApplyOcr}
+              onDismiss={handleClose}
+            />
+          ) : ocrRunning ? (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <div className="relative">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <Sparkles className="w-3.5 h-3.5 text-primary absolute -top-1 -right-1" />
+              </div>
+              <div className="text-sm font-medium text-foreground">Analysing document with OCR…</div>
+              <div className="text-xs text-muted-foreground">Extracting fields from {docType.replace(/_/g,' ')}</div>
+            </div>
+          ) : (
+            <>
+              <div>
+                <Label className="text-xs font-medium mb-1.5 block">Document Type</Label>
+                <Select value={docType} onValueChange={v => { setDocType(v); setOcrResult(null); }}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select type" /></SelectTrigger>
+                  <SelectContent>
+                    {DOC_TYPES.map(t => (
+                      <SelectItem key={t} value={t}>
+                        <span>{t.replace(/_/g,' ')}</span>
+                        {OCR_SUPPORTED.includes(t) && <span className="ml-1.5 text-[10px] text-primary/60">✦ OCR</span>}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {ocrSupported && (
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <Sparkles className="w-3 h-3 text-primary" />
+                    <span className="text-xs text-primary/80">OCR will auto-extract profile fields after upload</span>
+                  </div>
+                )}
+              </div>
+              <div>
+                <Label className="text-xs font-medium mb-1.5 block">File</Label>
+                <div
+                  className={cn(
+                    'border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors',
+                    file ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-primary/40 hover:bg-muted/30'
+                  )}
+                  onClick={() => document.getElementById('doc-upload-input').click()}
+                >
+                  <Upload className="w-5 h-5 mx-auto text-muted-foreground mb-2" />
+                  {file
+                    ? <div className="text-sm font-medium">{file.name}</div>
+                    : <div className="text-sm text-muted-foreground">Click to select a file</div>
+                  }
+                  <input id="doc-upload-input" type="file" className="hidden"
+                    accept=".pdf,.jpg,.jpeg,.png,.tiff,.webp"
+                    onChange={e => setFile(e.target.files?.[0])} />
+                </div>
+              </div>
+              {docType && existingOfType.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+                  A previous version exists (v{nextVersion - 1}). This will be saved as v{nextVersion}.
+                </div>
               )}
-              onClick={() => document.getElementById('doc-upload-input').click()}
-            >
-              <Upload className="w-5 h-5 mx-auto text-muted-foreground mb-2" />
-              {file
-                ? <div className="text-sm font-medium">{file.name}</div>
-                : <div className="text-sm text-muted-foreground">Click to select a file</div>
-              }
-              <input id="doc-upload-input" type="file" className="hidden" onChange={e => setFile(e.target.files?.[0])} />
-            </div>
-          </div>
-          {docType && existingOfType.length > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
-              A previous version exists (v{nextVersion - 1}). This will be saved as v{nextVersion}.
-            </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={handleClose}>Cancel</Button>
+                <Button onClick={handleUpload} disabled={!file || !docType || uploading} className="gap-2">
+                  {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  {uploading ? 'Uploading…' : 'Upload'}
+                </Button>
+              </div>
+            </>
           )}
-          <div className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
-            <Button onClick={handleUpload} disabled={!file || !docType || uploading} className="gap-2">
-              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              {uploading ? 'Uploading…' : 'Upload'}
-            </Button>
-          </div>
         </div>
       </DialogContent>
     </Dialog>
