@@ -21,6 +21,8 @@ import TenantConfig from './pages/TenantConfig';
 import UserManagement from './pages/UserManagement';
 import BatchUpload from './pages/BatchUpload';
 import ClientPortal from './pages/ClientPortal';
+import ReviewPlanner from './pages/ReviewPlanner';
+import MIDashboard from './pages/MIDashboard';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -87,6 +89,10 @@ const AuthenticatedApp = () => {
 
       {/* Monitoring */}
       <Route path="/monitoring" element={<MonitoringAlerts />} />
+
+      {/* Monitoring / Planning */}
+      <Route path="/review-planner" element={<ReviewPlanner />} />
+      <Route path="/mi-dashboard" element={<MIDashboard />} />
 
       {/* Admin */}
       <Route path="/tenant-config" element={<TenantConfig />} />
