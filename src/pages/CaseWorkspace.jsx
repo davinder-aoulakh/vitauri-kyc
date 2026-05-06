@@ -15,6 +15,7 @@ import SoFSoWStep           from '@/components/case/SoFSoWStep';
 import RiskAssessmentStep   from '@/components/case/RiskAssessmentStep';
 import ControlMeasuresStep  from '@/components/case/ControlMeasuresStep';
 import SignOffStep          from '@/components/case/SignOffStep';
+import KycReportStep        from '@/components/case/KycReportStep';
 import AiAssistantPanel     from '@/components/case/AiAssistantPanel';
 import ClientProfileStep    from '@/components/case/ClientProfileStep';
 
@@ -373,7 +374,14 @@ export default function CaseWorkspace() {
                 {activeStep === 5 && <SoFSoWStep kycCase={kycCase} client={client} currentUser={currentUser} />}
                 {activeStep === 6 && <RiskAssessmentStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />}
                 {activeStep === 7 && <ControlMeasuresStep kycCase={kycCase} currentUser={currentUser} />}
-                {activeStep === 8 && <SignOffStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />}
+                {activeStep === 8 && (
+                  <div className="space-y-8">
+                    <SignOffStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />
+                    <div className="border-t border-border pt-6">
+                      <KycReportStep kycCase={kycCase} client={client} currentUser={currentUser} />
+                    </div>
+                  </div>
+                )}
               </div>
             </main>
 
