@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line, CartesianGrid
+  PieChart, Pie, Cell, Legend, LineChart, Line, CartesianGrid,
+  ScatterChart, Scatter, FunnelChart, Funnel, LabelList, RadarChart, Radar, PolarGrid, PolarAngleAxis
 } from 'recharts';
 import {
   Loader2, Download, BarChart3, Users, Shield, Sparkles,
@@ -185,7 +186,55 @@ export default function MIDashboard() {
     name: u.full_name,
     open: filteredCases.filter(c => c.assigned_analyst_id === u.id && !CLOSED.includes(c.status)).length,
     approved: filteredCases.filter(c => c.assigned_analyst_id === u.id && c.status === 'Approved').length,
-  })).filter(a => a.open + a.approved > 0);
+    total: filteredCases.filter(c => c.assigned_analyst_id === u.id).length,
+  })).filter(a => a.total > 0);
+
+  // Avg handling time by RISK class
+  const avgHandlingByRisk = useMemo(() => {
+    const completed = filteredCases.filter(c => c.status === 'Approved' && c.created_date && c.completed_at && c.risk_classification);
+    const grouped = {};
+    completed.forEach(c => {
+      const k = c.risk_classification;
+      if (!grouped[k]) grouped[k] = [];
+      grouped[k].push(differenceInDays(new Date(c.completed_at), new Date(c.created_date)));
+    });
+    return ['Low','Medium','High','Unacceptable']
+      .filter(r => grouped[r]?.length)
+      .map(r => ({
+        risk: r,
+        avg: Math.round(grouped[r].reduce((a,b)=>a+b,0)/grouped[r].length),
+        count: grouped[r].length,
+        fill: RISK_COLORS[r],
+      }));
+  }, [filteredCases]);
+
+  // Case funnel: Draft → In Progress → … → Approved
+  const FUNNEL_STAGES = ['Draft','In_Progress','Outreach_Pending','Screening','Assessment','QC','Compliance_Review','Sign_Off_Pending','Approved'];
+  const caseFunnel = FUNNEL_STAGES.map(s => ({
+    name: s.replace(/_/g,' '),
+    value: filteredCases.filter(c => c.status === s).length,
+  })).filter(s => s.value > 0);
+
+  // Analyst throughput trend: approved cases per analyst per month (last 6m)
+  const analystTrend = useMemo(() => {
+    const months = Array.from({length:6}, (_,i) => {
+      const d = subMonths(new Date(), 5-i);
+      return { month: format(d,'MMM yy'), start: startOfMonth(d), end: endOfMonth(d) };
+    });
+    return months.map(m => {
+      const row = { month: m.month };
+      tenantUsers.slice(0, 5).forEach(u => {
+        row[u.full_name] = filteredCases.filter(c =>
+          c.assigned_analyst_id === u.id &&
+          c.status === 'Approved' && c.completed_at &&
+          isWithinInterval(new Date(c.completed_at), { start: m.start, end: m.end })
+        ).length;
+      });
+      return row;
+    });
+  }, [filteredCases, tenantUsers]);
+
+  const analystColors = ['#3b82f6','#22c55e','#f59e0b','#8b5cf6','#ef4444'];
 
   // Power BI export URL (stub)
   const pbiUrl = `${window.location.origin}/api/mi-export?tenant=${currentUser?.tenant_id}`;
@@ -391,6 +440,66 @@ export default function MIDashboard() {
             )}
           </div>
         </div>
+
+        {/* ── Row 4: Avg Handling by Risk + Case Funnel ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="bg-card border border-border rounded-xl p-4">
+            <SectionHeader title="Avg Handling Time (days) by Risk Class"
+              onExport={() => exportCSV(avgHandlingByRisk.map(r=>({risk:r.risk,avg_days:r.avg,count:r.count})), 'handling-by-risk.csv')} />
+            {avgHandlingByRisk.length === 0
+              ? <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">No completed cases in range</div>
+              : <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={avgHandlingByRisk} margin={{ top: 0, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="risk" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <Tooltip formatter={(v,n,p) => [`${v} days (${p.payload.count} cases)`, 'Avg']} />
+                    <Bar dataKey="avg" radius={[4,4,0,0]}>
+                      {avgHandlingByRisk.map((e,i) => <Cell key={i} fill={e.fill} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+            }
+          </div>
+
+          <div className="bg-card border border-border rounded-xl p-4">
+            <SectionHeader title="Live Case Pipeline (by stage)"
+              onExport={() => exportCSV(caseFunnel, 'case-funnel.csv')} />
+            {caseFunnel.length === 0
+              ? <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">No open cases in range</div>
+              : <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={caseFunnel} layout="vertical" margin={{ top: 0, right: 40, left: 10, bottom: 0 }}>
+                    <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={110} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="hsl(var(--primary))" radius={[0,4,4,0]}>
+                      <LabelList dataKey="value" position="right" style={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+            }
+          </div>
+        </div>
+
+        {/* ── Row 5: Analyst throughput trend (Manager only) ── */}
+        {isManager && tenantUsers.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-4">
+            <SectionHeader title="Analyst Throughput Trend — Approved Cases (last 6 months)"
+              onExport={() => exportCSV(analystTrend, 'analyst-trend.csv')} />
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={analystTrend} margin={{ top: 5, right: 20, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {tenantUsers.slice(0,5).map((u,i) => (
+                  <Line key={u.id} type="monotone" dataKey={u.full_name} stroke={analystColors[i]} strokeWidth={2} dot={{ r: 3 }} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
         {/* ── Analyst Breakdown (Manager only) ── */}
         {isManager && analystBreakdown.length > 0 && (

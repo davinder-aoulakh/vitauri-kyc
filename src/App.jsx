@@ -27,6 +27,7 @@ import ReviewPlanner from './pages/ReviewPlanner';
 import MIDashboard from './pages/MIDashboard';
 import AiPromptLibrary from './pages/AiPromptLibrary';
 import ArchiveClients from './pages/ArchiveClients';
+import AuditLogs from './pages/AuditLogs';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -105,6 +106,7 @@ const AuthenticatedApp = () => {
       <Route path="/ai-prompts" element={<AiPromptLibrary />} />
       <Route path="/archive" element={<ArchiveClients />} />
       <Route path="/user-management" element={<UserManagement />} />
+      <Route path="/audit-logs" element={<AuditLogs />} />
 
       <Route path="*" element={<PageNotFound />} />
     </Routes>

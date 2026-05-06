@@ -10,7 +10,7 @@ import {
   LayoutDashboard, FolderOpen, Users, Search, Shield,
   Settings, BarChart3, AlertTriangle, Calendar, Archive,
   ChevronLeft, ChevronRight, Menu, X, LogOut,
-  Building2, UserCircle, Bell
+  Building2, UserCircle, Bell, ClipboardList
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -41,6 +41,7 @@ const navItems = [
     group: 'REPORTS & ADMIN',
     items: [
       { label: 'MI Dashboard', icon: BarChart3, href: '/mi-dashboard', permission: 'viewMIDashboard' },
+      { label: 'Audit Log', icon: ClipboardList, href: '/audit-logs', permission: 'tenantConfig' },
       { label: 'Archive', icon: Archive, href: '/archive', permission: 'viewArchive' },
       { label: 'Tenant Config', icon: Settings, href: '/tenant-config', permission: 'tenantConfig' },
       { label: 'User Management', icon: UserCircle, href: '/user-management', permission: 'userManagement' },
