@@ -14,7 +14,7 @@ import RelatedPartiesTab from '@/components/client/RelatedPartiesTab';
 import CasesTab         from '@/components/client/CasesTab';
 import DocumentsTab     from '@/components/client/DocumentsTab';
 import AuditTrailTab    from '@/components/client/AuditTrailTab';
-import { Network, ChevronRight, User, Building2, UserCog } from 'lucide-react';
+import { Network, ChevronRight, User, Building2, UserCog, GitFork } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CLIENT_STATUS_COLORS } from '@/lib/riskColors';
@@ -144,6 +144,11 @@ export default function ClientDetail() {
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => navigate(`/org-chart/${id}`)}>
                 <Network className="w-3.5 h-3.5" /> Org Chart
               </Button>
+              {client.client_type === 'ORG' && (
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => navigate(`/entity-map/${id}`)}>
+                  <GitFork className="w-3.5 h-3.5" /> Entity Map
+                </Button>
+              )}
               {activeCase && (
                 <Button size="sm" className="gap-1.5" onClick={() => navigate(`/case/${activeCase.id}`)}>
                   Active Case <ChevronRight className="w-3.5 h-3.5" />

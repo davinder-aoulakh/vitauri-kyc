@@ -28,6 +28,7 @@ import MIDashboard from './pages/MIDashboard';
 import AiPromptLibrary from './pages/AiPromptLibrary';
 import ArchiveClients from './pages/ArchiveClients';
 import AuditLogs from './pages/AuditLogs';
+import EntityMap from './pages/EntityMap';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -93,6 +94,7 @@ const AuthenticatedApp = () => {
       <Route path="/batch-upload" element={<BatchUpload />} />
       <Route path="/client/:id" element={<ClientDetail />} />
       <Route path="/org-chart/:clientId" element={<OrgChart />} />
+      <Route path="/entity-map/:clientId" element={<EntityMap />} />
 
       {/* Monitoring */}
       <Route path="/monitoring" element={<MonitoringAlerts />} />
