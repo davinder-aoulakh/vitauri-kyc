@@ -1,0 +1,50 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "user"
+      ],
+      "default": "user",
+      "description": "Base44 platform role \u2014 controls invite rights only"
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "FK to Tenant"
+    },
+    "app_role": {
+      "type": "string",
+      "enum": [
+        "Analyst",
+        "QC Reviewer",
+        "Compliance Officer",
+        "Manager",
+        "Director",
+        "Compliance Admin",
+        "Tenant Admin",
+        "Vitauri Ops"
+      ],
+      "default": "Analyst",
+      "description": "Vitauri KYC business role \u2014 drives all in-app permissions"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "mfa_enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "language_preference": {
+      "type": "string",
+      "enum": [
+        "en",
+        "nl"
+      ],
+      "default": "en"
+    }
+  }
+}

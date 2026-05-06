@@ -1,0 +1,95 @@
+{
+  "name": "OutreachRequest",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "case_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "deadline": {
+      "type": "string",
+      "format": "date"
+    },
+    "delivery_channel": {
+      "type": "string",
+      "enum": [
+        "Email",
+        "SMS",
+        "Portal"
+      ],
+      "default": "Email"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Draft",
+        "Sent",
+        "Viewed",
+        "Partial_Response",
+        "Complete"
+      ],
+      "default": "Draft"
+    },
+    "access_token": {
+      "type": "string",
+      "description": "Secure unique token for client portal"
+    },
+    "token_expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "items": {
+      "type": "array",
+      "description": "Requested data points and documents",
+      "items": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string"
+          },
+          "item_type": {
+            "type": "string",
+            "enum": [
+              "document",
+              "data_point"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "Requested",
+              "Received",
+              "Verified",
+              "Missing"
+            ]
+          },
+          "response_text": {
+            "type": "string"
+          },
+          "file_url": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "tenant_id",
+    "case_id",
+    "client_id"
+  ]
+}

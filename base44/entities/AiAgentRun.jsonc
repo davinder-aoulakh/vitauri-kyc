@@ -1,0 +1,58 @@
+{
+  "name": "AiAgentRun",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "case_id": {
+      "type": "string",
+      "description": "nullable"
+    },
+    "agent_type": {
+      "type": "string",
+      "enum": [
+        "OrgChart",
+        "OutreachCopilot",
+        "ClientOutreachCopilot",
+        "ScreeningTriage",
+        "ClientProfile",
+        "SoFSoW",
+        "IndicatorApplicability",
+        "RiskNarrative",
+        "WorkflowOptimisation"
+      ]
+    },
+    "prompt_hash": {
+      "type": "string"
+    },
+    "model_used": {
+      "type": "string"
+    },
+    "tokens_input": {
+      "type": "number"
+    },
+    "tokens_output": {
+      "type": "number"
+    },
+    "output_summary": {
+      "type": "string"
+    },
+    "analyst_action": {
+      "type": "string",
+      "enum": [
+        "Accepted",
+        "Edited",
+        "Overridden",
+        "Rejected"
+      ]
+    },
+    "analyst_justification": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "agent_type"
+  ]
+}

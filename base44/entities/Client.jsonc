@@ -1,0 +1,137 @@
+{
+  "name": "Client",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "client_type": {
+      "type": "string",
+      "enum": [
+        "NP",
+        "ORG"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Prospect",
+        "Active",
+        "Inactive",
+        "Former",
+        "Rejected",
+        "Unacceptable"
+      ],
+      "default": "Prospect"
+    },
+    "full_name": {
+      "type": "string",
+      "description": "Full name (NP) or Legal name (ORG)"
+    },
+    "date_of_birth": {
+      "type": "string",
+      "format": "date",
+      "description": "NP only"
+    },
+    "nationality": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "country_of_residence": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "id_type": {
+      "type": "string",
+      "description": "NP only \u2014 Passport, ID Card etc"
+    },
+    "id_number": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "registration_number": {
+      "type": "string",
+      "description": "ORG only \u2014 KvK/Chamber of Commerce"
+    },
+    "lei_code": {
+      "type": "string",
+      "description": "ORG only"
+    },
+    "registered_country": {
+      "type": "string",
+      "description": "ORG only"
+    },
+    "registered_address": {
+      "type": "string",
+      "description": "ORG only"
+    },
+    "sector": {
+      "type": "string",
+      "description": "ORG only"
+    },
+    "legal_form": {
+      "type": "string",
+      "description": "ORG only \u2014 BV, NV, Ltd etc"
+    },
+    "primary_contact_name": {
+      "type": "string"
+    },
+    "primary_contact_email": {
+      "type": "string"
+    },
+    "primary_contact_phone": {
+      "type": "string"
+    },
+    "risk_classification": {
+      "type": "string",
+      "enum": [
+        "Low",
+        "Medium",
+        "High",
+        "Unacceptable"
+      ],
+      "description": "Current risk classification"
+    },
+    "assigned_analyst_id": {
+      "type": "string",
+      "description": "FK to User"
+    },
+    "source_channel": {
+      "type": "string",
+      "enum": [
+        "Manual",
+        "Batch",
+        "API_CRM"
+      ],
+      "default": "Manual"
+    },
+    "next_review_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "last_review_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "tax_residency": {
+      "type": "string",
+      "description": "FATCA/CRS \u2014 TBD schema"
+    },
+    "tin": {
+      "type": "string",
+      "description": "FATCA/CRS TIN"
+    },
+    "entity_classification": {
+      "type": "string",
+      "description": "FATCA/CRS \u2014 FFI/NFFE/Active/Passive"
+    },
+    "fatca_reporting_status": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "client_type",
+    "full_name"
+  ]
+}

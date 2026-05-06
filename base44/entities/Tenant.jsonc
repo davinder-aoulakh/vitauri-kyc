@@ -1,0 +1,60 @@
+{
+  "name": "Tenant",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Institution name e.g. Acme Bank NV"
+    },
+    "slug": {
+      "type": "string",
+      "description": "URL slug, unique"
+    },
+    "branding_logo_url": {
+      "type": "string",
+      "description": "Logo URL"
+    },
+    "branding_primary_color": {
+      "type": "string",
+      "description": "Hex color e.g. #1A6BFF",
+      "default": "#1A6BFF"
+    },
+    "default_language": {
+      "type": "string",
+      "enum": [
+        "en",
+        "nl"
+      ],
+      "default": "en"
+    },
+    "audit_retention_years": {
+      "type": "number",
+      "default": 5
+    },
+    "risk_scoring_model": {
+      "type": "string",
+      "enum": [
+        "highest_risk",
+        "points_based"
+      ],
+      "default": "highest_risk"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Active",
+        "Suspended",
+        "Demo"
+      ],
+      "default": "Active"
+    },
+    "edr_due_days": {
+      "type": "number",
+      "default": 30
+    }
+  },
+  "required": [
+    "name",
+    "slug"
+  ]
+}

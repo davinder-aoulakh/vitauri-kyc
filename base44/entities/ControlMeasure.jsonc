@@ -1,0 +1,47 @@
+{
+  "name": "ControlMeasure",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "case_id": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string",
+      "description": "SMART action description"
+    },
+    "owner_user_id": {
+      "type": "string"
+    },
+    "owner_name": {
+      "type": "string",
+      "description": "Denormalized"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "reminder_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Open",
+        "In_Progress",
+        "Completed",
+        "Overdue"
+      ],
+      "default": "Open"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "case_id",
+    "description",
+    "due_date"
+  ]
+}

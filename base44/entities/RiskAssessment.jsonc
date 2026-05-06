@@ -1,0 +1,70 @@
+{
+  "name": "RiskAssessment",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "case_id": {
+      "type": "string"
+    },
+    "entity_id": {
+      "type": "string",
+      "description": "client_id or related_party_id"
+    },
+    "entity_type": {
+      "type": "string",
+      "enum": [
+        "Client",
+        "Related_Party"
+      ]
+    },
+    "entity_name": {
+      "type": "string",
+      "description": "Denormalized"
+    },
+    "indicator_id": {
+      "type": "string",
+      "description": "FK to RiskIndicator"
+    },
+    "indicator_name": {
+      "type": "string",
+      "description": "Denormalized"
+    },
+    "score": {
+      "type": "string",
+      "enum": [
+        "Low",
+        "Medium",
+        "High",
+        "Unacceptable"
+      ]
+    },
+    "ai_narrative": {
+      "type": "string"
+    },
+    "analyst_narrative": {
+      "type": "string"
+    },
+    "analyst_override": {
+      "type": "boolean",
+      "default": false
+    },
+    "analyst_justification": {
+      "type": "string"
+    },
+    "evidence_document_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "tenant_id",
+    "case_id",
+    "entity_id",
+    "indicator_id",
+    "score"
+  ]
+}

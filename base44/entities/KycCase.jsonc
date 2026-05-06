@@ -1,0 +1,183 @@
+{
+  "name": "KycCase",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "FK to Client"
+    },
+    "case_type": {
+      "type": "string",
+      "enum": [
+        "Onboarding",
+        "Periodic_Review",
+        "Event_Driven_Review",
+        "Offboarding"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Draft",
+        "In_Progress",
+        "Outreach_Pending",
+        "Screening",
+        "Assessment",
+        "QC",
+        "Compliance_Review",
+        "Sign_Off_Pending",
+        "Approved",
+        "Rejected",
+        "Closed"
+      ],
+      "default": "Draft"
+    },
+    "risk_classification": {
+      "type": "string",
+      "enum": [
+        "Low",
+        "Medium",
+        "High",
+        "Unacceptable"
+      ]
+    },
+    "assigned_analyst_id": {
+      "type": "string",
+      "description": "FK to User"
+    },
+    "trigger_reason": {
+      "type": "string",
+      "description": "EDR trigger description"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_by_user_id": {
+      "type": "string"
+    },
+    "step_1_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
+      ],
+      "default": "not_started"
+    },
+    "step_2_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
+      ],
+      "default": "not_started"
+    },
+    "step_3_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
+      ],
+      "default": "not_started"
+    },
+    "step_4_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
+      ],
+      "default": "not_started"
+    },
+    "step_5_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
+      ],
+      "default": "not_started"
+    },
+    "step_6_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
+      ],
+      "default": "not_started"
+    },
+    "step_7_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
+      ],
+      "default": "not_started"
+    },
+    "step_8_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
+      ],
+      "default": "not_started"
+    },
+    "case_notes": {
+      "type": "string"
+    },
+    "sign_off_submitted_by": {
+      "type": "string"
+    },
+    "sign_off_submitted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sign_off_approved_by": {
+      "type": "string"
+    },
+    "sign_off_approved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sign_off_rejection_reason": {
+      "type": "string"
+    },
+    "compliance_advisory_note": {
+      "type": "string"
+    },
+    "is_re_onboarding": {
+      "type": "boolean",
+      "default": false
+    },
+    "previous_case_id": {
+      "type": "string",
+      "description": "For EDR/re-onboarding: FK to previous case"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "client_id",
+    "case_type"
+  ]
+}

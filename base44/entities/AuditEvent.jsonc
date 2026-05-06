@@ -1,0 +1,55 @@
+{
+  "name": "AuditEvent",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "case_id": {
+      "type": "string",
+      "description": "FK to KycCase, nullable"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "FK to Client, nullable"
+    },
+    "actor_user_id": {
+      "type": "string",
+      "description": "FK to User"
+    },
+    "actor_name": {
+      "type": "string",
+      "description": "Denormalized for display"
+    },
+    "actor_type": {
+      "type": "string",
+      "enum": [
+        "User",
+        "AI_Agent",
+        "System"
+      ]
+    },
+    "event_type": {
+      "type": "string",
+      "description": "e.g. case_created, document_uploaded, risk_override"
+    },
+    "before_state": {
+      "type": "object"
+    },
+    "after_state": {
+      "type": "object"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "is_override": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "tenant_id",
+    "actor_type",
+    "event_type"
+  ]
+}

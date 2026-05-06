@@ -1,0 +1,85 @@
+{
+  "name": "RelatedParty",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "party_type": {
+      "type": "string",
+      "enum": [
+        "NP",
+        "ORG"
+      ]
+    },
+    "full_name": {
+      "type": "string"
+    },
+    "date_of_birth": {
+      "type": "string",
+      "format": "date",
+      "description": "NP only"
+    },
+    "nationality": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "country_of_residence": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "id_type": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "id_number": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "registration_number": {
+      "type": "string",
+      "description": "ORG only"
+    },
+    "registered_country": {
+      "type": "string",
+      "description": "ORG only"
+    },
+    "registered_address": {
+      "type": "string",
+      "description": "ORG only"
+    },
+    "sector": {
+      "type": "string",
+      "description": "ORG only"
+    },
+    "legal_form": {
+      "type": "string",
+      "description": "ORG only"
+    },
+    "role_in_relationship": {
+      "type": "string",
+      "description": "UBO, Director, Shareholder, Beneficiary, Insured"
+    },
+    "ownership_percentage": {
+      "type": "number"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "risk_classification": {
+      "type": "string",
+      "enum": [
+        "Low",
+        "Medium",
+        "High",
+        "Unacceptable"
+      ]
+    }
+  },
+  "required": [
+    "tenant_id",
+    "party_type",
+    "full_name"
+  ]
+}

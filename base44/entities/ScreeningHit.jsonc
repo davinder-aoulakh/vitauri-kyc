@@ -1,0 +1,99 @@
+{
+  "name": "ScreeningHit",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "nullable"
+    },
+    "related_party_id": {
+      "type": "string",
+      "description": "nullable"
+    },
+    "case_id": {
+      "type": "string"
+    },
+    "entity_name": {
+      "type": "string",
+      "description": "Denormalized entity name for display"
+    },
+    "entity_type": {
+      "type": "string",
+      "enum": [
+        "Client",
+        "Related_Party"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "PEP_List",
+        "Sanctions_EU",
+        "Sanctions_UN",
+        "Adverse_Media",
+        "Internal_Flag"
+      ]
+    },
+    "hit_name": {
+      "type": "string"
+    },
+    "hit_details": {
+      "type": "object"
+    },
+    "confidence_score": {
+      "type": "number",
+      "description": "0-100"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "New",
+        "Under_Review",
+        "Discounted",
+        "Confirmed_Match",
+        "Escalated"
+      ],
+      "default": "New"
+    },
+    "ai_discount_suggestion": {
+      "type": "string"
+    },
+    "ai_recommendation": {
+      "type": "string",
+      "enum": [
+        "Likely_False_Positive",
+        "Possible_Match",
+        "Confirmed_Match"
+      ]
+    },
+    "ai_rationale": {
+      "type": "string"
+    },
+    "analyst_decision": {
+      "type": "string",
+      "enum": [
+        "Discounted",
+        "Confirmed"
+      ]
+    },
+    "analyst_justification": {
+      "type": "string"
+    },
+    "resolved_by_user_id": {
+      "type": "string"
+    },
+    "is_monitoring_alert": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "tenant_id",
+    "case_id",
+    "source",
+    "hit_name"
+  ]
+}

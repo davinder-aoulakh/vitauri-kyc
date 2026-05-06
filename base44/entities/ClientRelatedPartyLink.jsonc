@@ -1,0 +1,32 @@
+{
+  "name": "ClientRelatedPartyLink",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "FK to Client"
+    },
+    "related_party_id": {
+      "type": "string",
+      "description": "FK to RelatedParty"
+    },
+    "role": {
+      "type": "string",
+      "description": "UBO, Director, Shareholder etc"
+    },
+    "ownership_percentage": {
+      "type": "number"
+    },
+    "added_by_user_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "client_id",
+    "related_party_id"
+  ]
+}

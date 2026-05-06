@@ -1,0 +1,31 @@
+{
+  "name": "ReviewCycle",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "risk_class": {
+      "type": "string",
+      "enum": [
+        "Low",
+        "Medium",
+        "High",
+        "Unacceptable"
+      ]
+    },
+    "cycle_years": {
+      "type": "number",
+      "description": "e.g. 5, 3, 1, 0.25"
+    },
+    "is_configurable": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "tenant_id",
+    "risk_class",
+    "cycle_years"
+  ]
+}

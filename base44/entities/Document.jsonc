@@ -1,0 +1,59 @@
+{
+  "name": "Document",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "case_id": {
+      "type": "string",
+      "description": "nullable"
+    },
+    "doc_type": {
+      "type": "string",
+      "enum": [
+        "Passport",
+        "ID_Card",
+        "UBO_Register",
+        "Articles_of_Association",
+        "KYC_Report",
+        "Outreach_Response",
+        "Financial_Statement",
+        "Tax_Return",
+        "Salary_Slip",
+        "Other"
+      ]
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "file_url": {
+      "type": "string"
+    },
+    "version": {
+      "type": "number",
+      "default": 1
+    },
+    "uploaded_by_user_id": {
+      "type": "string"
+    },
+    "is_ai_generated": {
+      "type": "boolean",
+      "default": false
+    },
+    "related_party_id": {
+      "type": "string",
+      "description": "nullable \u2014 if doc belongs to a related party"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "client_id",
+    "doc_type",
+    "file_name",
+    "file_url"
+  ]
+}

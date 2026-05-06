@@ -1,0 +1,47 @@
+{
+  "name": "Notification",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "user_id": {
+      "type": "string",
+      "description": "Recipient user FK"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "case_assigned",
+        "sign_off_request",
+        "sign_off_decision",
+        "outreach_response",
+        "monitoring_alert",
+        "control_measure_due",
+        "periodic_review_created"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "link_case_id": {
+      "type": "string"
+    },
+    "link_client_id": {
+      "type": "string"
+    },
+    "is_read": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "tenant_id",
+    "user_id",
+    "type",
+    "title"
+  ]
+}
