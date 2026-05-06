@@ -36,6 +36,11 @@
       "type": "string",
       "description": "NP only"
     },
+    "id_expiry_date": {
+      "type": "string",
+      "format": "date",
+      "description": "NP only"
+    },
     "registration_number": {
       "type": "string",
       "description": "ORG only"
@@ -75,6 +80,26 @@
         "High",
         "Unacceptable"
       ]
+    },
+    "verification_status": {
+      "type": "string",
+      "enum": [
+        "Unverified",
+        "Pending_Verification",
+        "Verified",
+        "Rejected"
+      ],
+      "default": "Unverified"
+    },
+    "verification_notes": {
+      "type": "string"
+    },
+    "verified_by_user_id": {
+      "type": "string"
+    },
+    "verified_at": {
+      "type": "string",
+      "format": "date-time"
     }
   },
   "required": [

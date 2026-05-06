@@ -4,27 +4,19 @@ import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import AppShell from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Building2, User, ChevronRight, ChevronLeft, CheckCircle, AlertTriangle, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { addDays, format } from 'date-fns';
 import { findDuplicates, DEDUP_THRESHOLD } from '@/lib/dedup';
 import RestrictedClientGate from '@/components/archive/RestrictedClientGate';
+import { NaturalPersonStep2A, NaturalPersonStep2B } from '@/components/client/forms/NaturalPersonForm';
+import { OrganizationStep2A, OrganizationStep2B } from '@/components/client/forms/OrganizationForm';
 
-const SECTORS = [
-  'Financial Services','Real Estate','Legal Services','Consulting','Technology',
-  'Manufacturing','Trading','Healthcare','Energy','Retail','Construction',
-  'Transport & Logistics','Media & Entertainment','Non-Profit','Government','Other'
-];
-const LEGAL_FORMS = ['BV','NV','Ltd','SA','GmbH','LLC','Inc','PLC','SRL','AG','SARL','Other'];
-const COUNTRIES = [
-  'Netherlands (NL)','Belgium (BE)','Germany (DE)','France (FR)',
-  'United Kingdom (GB)','United States (US)','Luxembourg (LU)',
-  'Switzerland (CH)','Curaçao (CW)','Aruba (AW)','Suriname (SR)','Other'
-];
-const SOURCE_CHANNELS = ['Manual','Batch','API_CRM'];
+// Steps: 1=Type, 2=Core Details, 3=Additional Details, 4=Review
+const STEP_LABELS = {
+  NP:  ['Client Type', 'Identity', 'ID & Contact', 'Review & Create'],
+  ORG: ['Client Type', 'Organisation', 'Contact & Tax', 'Review & Create'],
+};
 
 export default function NewClient() {
   const { currentUser, tenant } = useTenant();
@@ -34,15 +26,17 @@ export default function NewClient() {
   const [clientType, setClientType] = useState(null);
   const [saving, setSaving]       = useState(false);
   const [allClients, setAllClients] = useState([]);
-  const [dupWarning, setDupWarning] = useState(null); // { duplicates: [] } | null
-  const [restrictedBlock, setRestrictedBlock] = useState(null); // hard-stop for Rejected/Unacceptable
+  const [dupWarning, setDupWarning] = useState(null);
+  const [restrictedBlock, setRestrictedBlock] = useState(null);
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
 
   const [form, setForm] = useState({
     full_name: '', date_of_birth: '', nationality: '', country_of_residence: '',
+    id_type: '', id_number: '', id_expiry_date: '',
     primary_contact_email: '', primary_contact_phone: '', primary_contact_name: '',
     registration_number: '', lei_code: '', registered_country: '',
     registered_address: '', sector: '', legal_form: '',
+    tax_residency: '', tin: '', entity_classification: '',
     source_channel: 'Manual',
   });
 
@@ -56,8 +50,7 @@ export default function NewClient() {
 
   function runDedup() {
     const country = form.registered_country || form.nationality || form.country_of_residence;
-    const hits = findDuplicates(form.full_name, country, allClients);
-    return hits;
+    return findDuplicates(form.full_name, country, allClients);
   }
 
   function splitDups(dups) {
@@ -66,14 +59,11 @@ export default function NewClient() {
     return { restricted, normal };
   }
 
-  function handleStepTwoNext() {
+  function handleStep2Next() {
     const dups = runDedup();
     if (dups.length > 0) {
       const { restricted, normal } = splitDups(dups);
-      if (restricted.length > 0) {
-        setRestrictedBlock(restricted);
-        return;
-      }
+      if (restricted.length > 0) { setRestrictedBlock(restricted); return; }
       setDupWarning({ duplicates: normal });
       return;
     }
@@ -81,14 +71,10 @@ export default function NewClient() {
   }
 
   async function handleCreate() {
-    // Final dedup gate
     const dups = runDedup();
     if (dups.length > 0) {
       const { restricted, normal } = splitDups(dups);
-      if (restricted.length > 0) {
-        setRestrictedBlock(restricted);
-        return;
-      }
+      if (restricted.length > 0) { setRestrictedBlock(restricted); return; }
       setDupWarning({ duplicates: normal });
       return;
     }
@@ -125,32 +111,36 @@ export default function NewClient() {
     navigate(`/case/${kycCase.id}`);
   }
 
-  const StepIndicator = ({ n, label, active, done }) => (
-    <div className={cn('flex items-center gap-2', !active && !done && 'opacity-40')}>
-      <div className={cn(
-        'w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold border-2',
-        done ? 'bg-emerald-500 border-emerald-500 text-white'
-          : active ? 'border-primary text-primary bg-primary/10'
-          : 'border-border text-muted-foreground'
-      )}>
-        {done ? <CheckCircle className="w-3.5 h-3.5" /> : n}
-      </div>
-      <span className={cn('text-sm hidden sm:block', active ? 'font-semibold text-foreground' : 'text-muted-foreground')}>
-        {label}
-      </span>
-    </div>
-  );
+  const stepLabels = clientType ? STEP_LABELS[clientType] : ['Client Type', 'Details', 'Additional Details', 'Review & Create'];
 
   return (
     <AppShell>
       <div className="p-6 max-w-2xl mx-auto">
         {/* Step indicators */}
-        <div className="flex items-center gap-3 mb-8">
-          <StepIndicator n={1} label="Client Type"   active={step===1} done={step>1} />
-          <div className="flex-1 h-px bg-border" />
-          <StepIndicator n={2} label="Details"       active={step===2} done={step>2} />
-          <div className="flex-1 h-px bg-border" />
-          <StepIndicator n={3} label="Review & Create" active={step===3} done={false} />
+        <div className="flex items-center gap-2 mb-8">
+          {stepLabels.map((label, i) => {
+            const n = i + 1;
+            const active = step === n;
+            const done = step > n;
+            return (
+              <React.Fragment key={n}>
+                {i > 0 && <div className={cn('flex-1 h-px transition-colors', done ? 'bg-primary' : 'bg-border')} />}
+                <div className={cn('flex items-center gap-2', !active && !done && 'opacity-40')}>
+                  <div className={cn(
+                    'w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold border-2 flex-shrink-0',
+                    done   ? 'bg-emerald-500 border-emerald-500 text-white'
+                           : active ? 'border-primary text-primary bg-primary/10'
+                           : 'border-border text-muted-foreground'
+                  )}>
+                    {done ? <CheckCircle className="w-3.5 h-3.5" /> : n}
+                  </div>
+                  <span className={cn('text-sm hidden sm:block whitespace-nowrap', active ? 'font-semibold text-foreground' : 'text-muted-foreground')}>
+                    {label}
+                  </span>
+                </div>
+              </React.Fragment>
+            );
+          })}
         </div>
 
         <div className="bg-card border border-border rounded-xl p-6">
@@ -162,9 +152,9 @@ export default function NewClient() {
               <p className="text-sm text-muted-foreground mb-6">Choose the type of client you are onboarding</p>
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { type: 'NP',  icon: User,      label: 'Natural Person', sub: 'Individual client — passport, ID' },
-                  { type: 'ORG', icon: Building2,  label: 'Organisation',   sub: 'Corporate entity — BV, NV, Ltd, etc.' },
-                ].map(({ type, icon: Icon, label, sub }) => (
+                  { type: 'NP',  TypeIcon: User,     label: 'Natural Person', sub: 'Individual client — passport, national ID' },
+                  { type: 'ORG', TypeIcon: Building2, label: 'Organisation',   sub: 'Corporate entity — BV, NV, Ltd, etc.' },
+                ].map(({ type, TypeIcon, label, sub }) => (
                   <button
                     key={type}
                     onClick={() => { setClientType(type); setStep(2); }}
@@ -173,7 +163,7 @@ export default function NewClient() {
                       clientType === type ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
                     )}
                   >
-                    <Icon className="w-8 h-8 mb-3 text-primary" />
+                    <TypeIcon className="w-8 h-8 mb-3 text-primary" />
                     <div className="font-semibold text-foreground">{label}</div>
                     <div className="text-xs text-muted-foreground mt-1">{sub}</div>
                   </button>
@@ -191,15 +181,14 @@ export default function NewClient() {
             </div>
           )}
 
-          {/* ── Step 2: Details ── */}
+          {/* ── Step 2: Core Details ── */}
           {step === 2 && (
             <div>
               <h2 className="text-lg font-semibold mb-1">
-                {clientType === 'NP' ? 'Natural Person Details' : 'Organisation Details'}
+                {clientType === 'NP' ? 'Identity Details' : 'Organisation Details'}
               </h2>
-              <p className="text-sm text-muted-foreground mb-6">All fields marked * are required</p>
+              <p className="text-sm text-muted-foreground mb-5">Fields marked * are required</p>
 
-              {/* HARD STOP: Restricted client gate */}
               {restrictedBlock && (
                 <RestrictedClientGate
                   matches={restrictedBlock}
@@ -208,8 +197,6 @@ export default function NewClient() {
                   onDismiss={() => setRestrictedBlock(null)}
                 />
               )}
-
-              {/* Soft dup warning from step transition */}
               {!restrictedBlock && dupWarning && (
                 <DupWarningBlock
                   duplicates={dupWarning.duplicates}
@@ -218,68 +205,65 @@ export default function NewClient() {
                 />
               )}
 
-              <div className="space-y-4">
-                {clientType === 'NP' ? (
-                  <>
-                    <Field label="Full Name *" value={form.full_name} onChange={v => set('full_name', v)} placeholder="First Middle Last" />
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-xs font-medium mb-1.5 block">Date of Birth</Label>
-                        <Input type="date" value={form.date_of_birth} onChange={e => set('date_of_birth', e.target.value)} className="h-9 text-sm" />
-                      </div>
-                      <SelectField label="Nationality" value={form.nationality} onChange={v => set('nationality', v)} options={COUNTRIES} />
-                    </div>
-                    <SelectField label="Country of Residence" value={form.country_of_residence} onChange={v => set('country_of_residence', v)} options={COUNTRIES} />
-                    <div className="grid grid-cols-2 gap-4">
-                      <Field label="Contact Email" value={form.primary_contact_email} onChange={v => set('primary_contact_email', v)} type="email" />
-                      <Field label="Contact Phone" value={form.primary_contact_phone} onChange={v => set('primary_contact_phone', v)} />
-                    </div>
-                    <SelectField label="Source Channel" value={form.source_channel} onChange={v => set('source_channel', v)} options={SOURCE_CHANNELS} />
-                  </>
-                ) : (
-                  <>
-                    <Field label="Legal Name *" value={form.full_name} onChange={v => set('full_name', v)} placeholder="Company Legal Name" />
-                    <div className="grid grid-cols-2 gap-4">
-                      <SelectField label="Legal Form *" value={form.legal_form} onChange={v => set('legal_form', v)} options={LEGAL_FORMS} />
-                      <Field label="Registration No. / KvK *" value={form.registration_number} onChange={v => set('registration_number', v)} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <SelectField label="Registered Country *" value={form.registered_country} onChange={v => set('registered_country', v)} options={COUNTRIES} />
-                      <Field label="LEI Code" value={form.lei_code} onChange={v => set('lei_code', v)} placeholder="Optional" />
-                    </div>
-                    <SelectField label="Sector / Industry *" value={form.sector} onChange={v => set('sector', v)} options={SECTORS} />
-                    <Field label="Registered Address *" value={form.registered_address} onChange={v => set('registered_address', v)} placeholder="Street, City, Postcode, Country" />
-                    <div className="grid grid-cols-2 gap-4">
-                      <Field label="Contact Name *" value={form.primary_contact_name} onChange={v => set('primary_contact_name', v)} />
-                      <Field label="Contact Email *" value={form.primary_contact_email} onChange={v => set('primary_contact_email', v)} type="email" />
-                    </div>
-                    <Field label="Contact Phone" value={form.primary_contact_phone} onChange={v => set('primary_contact_phone', v)} />
-                    <SelectField label="Source Channel" value={form.source_channel} onChange={v => set('source_channel', v)} options={SOURCE_CHANNELS} />
-                  </>
-                )}
-              </div>
+              {!restrictedBlock && !dupWarning && (
+                <>
+                  {clientType === 'NP'
+                    ? <NaturalPersonStep2A form={form} set={set} />
+                    : <OrganizationStep2A form={form} set={set} />
+                  }
+                  <div className="flex gap-3 mt-6">
+                    <Button variant="outline" onClick={() => setStep(1)}>
+                      <ChevronLeft className="w-4 h-4 mr-1" /> Back
+                    </Button>
+                    <Button
+                      onClick={handleStep2Next}
+                      disabled={!form.full_name}
+                      style={{ backgroundColor: tenantColor }}
+                      className="flex-1 text-white"
+                    >
+                      Continue <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ── Step 3: Additional Details ── */}
+          {step === 3 && (
+            <div>
+              <h2 className="text-lg font-semibold mb-1">
+                {clientType === 'NP' ? 'ID Document & Contact' : 'Contact & Tax Compliance'}
+              </h2>
+              <p className="text-sm text-muted-foreground mb-5">
+                {clientType === 'NP' ? 'Provide identity document details and contact information' : 'Primary contact and FATCA/CRS information'}
+              </p>
+
+              {clientType === 'NP'
+                ? <NaturalPersonStep2B form={form} set={set} />
+                : <OrganizationStep2B form={form} set={set} />
+              }
 
               <div className="flex gap-3 mt-6">
-                <Button variant="outline" onClick={() => setStep(1)}>
+                <Button variant="outline" onClick={() => setStep(2)}>
                   <ChevronLeft className="w-4 h-4 mr-1" /> Back
                 </Button>
                 <Button
-                  onClick={handleStepTwoNext}
-                  disabled={!form.full_name || !!restrictedBlock}
+                  onClick={() => setStep(4)}
                   style={{ backgroundColor: tenantColor }}
                   className="flex-1 text-white"
                 >
-                  Continue to Review <ChevronRight className="w-4 h-4 ml-1" />
+                  Review & Create <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
               </div>
             </div>
           )}
 
-          {/* ── Step 3: Review ── */}
-          {step === 3 && (
+          {/* ── Step 4: Review ── */}
+          {step === 4 && (
             <div>
               <h2 className="text-lg font-semibold mb-1">Review & Create</h2>
-              <p className="text-sm text-muted-foreground mb-5">Confirm the details before creating the client and opening a KYC case</p>
+              <p className="text-sm text-muted-foreground mb-5">Confirm all details before creating the client and opening a KYC case</p>
 
               {dupWarning && (
                 <DupWarningBlock
@@ -289,8 +273,8 @@ export default function NewClient() {
                 />
               )}
 
-              <div className="bg-muted/40 rounded-lg p-4 space-y-2 text-sm mb-5 border border-border">
-                <ReviewRow label="Client Type" value={clientType} />
+              <div className="bg-muted/40 rounded-lg p-4 space-y-0 text-sm mb-5 border border-border divide-y divide-border">
+                <ReviewRow label="Client Type" value={clientType === 'NP' ? 'Natural Person' : 'Organisation'} />
                 <ReviewRow label="Name" value={form.full_name} />
                 {clientType === 'ORG' && <>
                   <ReviewRow label="Legal Form" value={form.legal_form} />
@@ -298,14 +282,19 @@ export default function NewClient() {
                   <ReviewRow label="Registered Country" value={form.registered_country} />
                   <ReviewRow label="Sector" value={form.sector} />
                   <ReviewRow label="Address" value={form.registered_address} />
+                  <ReviewRow label="Contact Name" value={form.primary_contact_name} />
+                  <ReviewRow label="Entity Classification" value={form.entity_classification} />
                 </>}
                 {clientType === 'NP' && <>
                   <ReviewRow label="Date of Birth" value={form.date_of_birth} />
                   <ReviewRow label="Nationality" value={form.nationality} />
                   <ReviewRow label="Country of Residence" value={form.country_of_residence} />
+                  <ReviewRow label="ID Type" value={form.id_type} />
+                  <ReviewRow label="ID Number" value={form.id_number} />
                 </>}
                 <ReviewRow label="Contact Email" value={form.primary_contact_email} />
-                {form.primary_contact_name && <ReviewRow label="Contact Name" value={form.primary_contact_name} />}
+                <ReviewRow label="Tax Residency" value={form.tax_residency} />
+                <ReviewRow label="TIN" value={form.tin} />
                 <ReviewRow label="Source Channel" value={form.source_channel} />
               </div>
 
@@ -314,7 +303,7 @@ export default function NewClient() {
               </div>
 
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep(2)}>
+                <Button variant="outline" onClick={() => setStep(3)}>
                   <ChevronLeft className="w-4 h-4 mr-1" /> Back
                 </Button>
                 <Button
@@ -369,34 +358,9 @@ function DupWarningBlock({ duplicates, onDismiss, onViewClient }) {
 
 function ReviewRow({ label, value }) {
   return (
-    <div className="flex justify-between">
+    <div className="flex justify-between py-2">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium text-right max-w-[60%]">{value || '—'}</span>
-    </div>
-  );
-}
-
-function Field({ label, value, onChange, type = 'text', placeholder }) {
-  return (
-    <div>
-      <Label className="text-xs font-medium mb-1.5 block">{label}</Label>
-      <Input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="h-9 text-sm" />
-    </div>
-  );
-}
-
-function SelectField({ label, value, onChange, options }) {
-  return (
-    <div>
-      <Label className="text-xs font-medium mb-1.5 block">{label}</Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="h-9 text-sm">
-          <SelectValue placeholder={`Select ${label.replace(' *','')}`} />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-        </SelectContent>
-      </Select>
     </div>
   );
 }
