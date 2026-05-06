@@ -20,6 +20,7 @@ import MonitoringAlerts from './pages/MonitoringAlerts';
 import TenantConfig from './pages/TenantConfig';
 import UserManagement from './pages/UserManagement';
 import BatchUpload from './pages/BatchUpload';
+import ClientPortal from './pages/ClientPortal';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -102,9 +103,16 @@ function App() {
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <Router>
-          <TenantProvider>
-            <AuthenticatedApp />
-          </TenantProvider>
+          <Routes>
+            {/* Public client portal — no auth required, token-only */}
+            <Route path="/portal/:token" element={<ClientPortal />} />
+            {/* All other routes require auth */}
+            <Route path="/*" element={
+              <TenantProvider>
+                <AuthenticatedApp />
+              </TenantProvider>
+            } />
+          </Routes>
         </Router>
         <Toaster />
       </QueryClientProvider>
