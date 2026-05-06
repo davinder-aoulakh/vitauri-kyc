@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { resolveLang } from '@/lib/i18n';
 
 const TenantContext = createContext(null);
 
@@ -45,12 +46,15 @@ export function TenantProvider({ children }) {
   const effectiveTenant = opsTenantId ? opsTenant : tenant;
   const isOpsViewing = !!opsTenantId && currentUser?.app_role === 'Vitauri Ops';
 
+  const lang = resolveLang(currentUser, effectiveTenant);
+
   return (
     <TenantContext.Provider value={{
       currentUser, tenant: effectiveTenant, loading,
       setCurrentUser, setTenant,
       opsTenantId, setOpsTenantId,
       opsTenant, isOpsViewing,
+      lang,
     }}>
       {children}
     </TenantContext.Provider>

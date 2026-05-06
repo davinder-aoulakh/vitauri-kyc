@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { FileText, Upload, CheckCircle, Clock, Send, Loader2, MessageCircle, AlertTriangle, X } from 'lucide-react';
+import { portalSecureUpload } from '@/lib/securityUtils';
 import { format, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -147,10 +148,14 @@ export default function ClientPortal() {
 
   async function uploadFile(itemId, file) {
     if (!file) return;
-    if (file.size > 25 * 1024 * 1024) { alert('File too large (max 25MB)'); return; }
     setItemState(s => ({ ...s, [itemId]: { ...s[itemId], uploading: true } }));
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    setItemState(s => ({ ...s, [itemId]: { ...s[itemId], uploading: false, fileUrl: file_url, done: false } }));
+    try {
+      const file_url = await portalSecureUpload(file);
+      setItemState(s => ({ ...s, [itemId]: { ...s[itemId], uploading: false, fileUrl: file_url, done: false } }));
+    } catch (err) {
+      setItemState(s => ({ ...s, [itemId]: { ...s[itemId], uploading: false } }));
+      alert(err.message || 'Upload failed. Please try again.');
+    }
   }
 
   function setItemText(itemId, text) {

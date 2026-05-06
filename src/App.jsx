@@ -6,6 +6,8 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import { TenantProvider, useTenant } from '@/lib/tenantContext';
+import { I18nProvider } from '@/lib/i18n';
+import NetworkErrorToast from '@/components/shared/NetworkErrorToast';
 
 // Page imports
 import Dashboard from './pages/Dashboard';
@@ -47,6 +49,7 @@ function OpsRouteGuard({ children }) {
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { lang } = useTenant();
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
@@ -69,6 +72,7 @@ const AuthenticatedApp = () => {
   }
 
   return (
+    <I18nProvider lang={lang || 'en'}>
     <OpsRouteGuard>
     <Routes>
       {/* Main */}
@@ -105,6 +109,7 @@ const AuthenticatedApp = () => {
       <Route path="*" element={<PageNotFound />} />
     </Routes>
     </OpsRouteGuard>
+    </I18nProvider>
   );
 };
 
@@ -125,6 +130,7 @@ function App() {
           </Routes>
         </Router>
         <Toaster />
+        <NetworkErrorToast />
       </QueryClientProvider>
     </AuthProvider>
   );
