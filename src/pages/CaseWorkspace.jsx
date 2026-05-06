@@ -16,6 +16,7 @@ import RiskAssessmentStep   from '@/components/case/RiskAssessmentStep';
 import ControlMeasuresStep  from '@/components/case/ControlMeasuresStep';
 import SignOffStep          from '@/components/case/SignOffStep';
 import AiAssistantPanel     from '@/components/case/AiAssistantPanel';
+import ClientProfileStep    from '@/components/case/ClientProfileStep';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,7 +25,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ChevronLeft, CheckCircle, Circle, AlertTriangle, Clock,
   MessageSquare, User, Shield, BarChart3, ClipboardCheck,
-  FileText, PanelRightClose, PanelRightOpen, Loader2, Building2
+  FileText, Loader2
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -49,53 +50,7 @@ function StepIcon({ status }) {
   return <Circle className="w-4 h-4 text-muted-foreground/30 flex-shrink-0" />;
 }
 
-// Simple read-only profile view for Step 4
-function ClientProfileStep({ client }) {
-  const isOrg = client?.client_type === 'ORG';
-  return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="font-semibold text-sm">Client Profile Review</h3>
-        <p className="text-xs text-muted-foreground mt-0.5">Review and verify client profile data. Edit via the Client Detail screen.</p>
-      </div>
-      <div className="bg-card border border-border rounded-xl p-4">
-        <div className="flex items-center gap-3 mb-4">
-          <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0', isOrg ? 'bg-blue-100 text-blue-700' : 'bg-violet-100 text-violet-700')}>
-            {isOrg ? <Building2 className="w-5 h-5" /> : <User className="w-5 h-5" />}
-          </div>
-          <div>
-            <div className="font-semibold text-foreground">{client?.full_name}</div>
-            <div className="text-xs text-muted-foreground">{client?.client_type} · {client?.registered_country || client?.nationality || '—'}</div>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
-          {(isOrg ? [
-            ['Legal Form',     client?.legal_form],
-            ['Reg. No.',       client?.registration_number],
-            ['Country',        client?.registered_country],
-            ['Sector',         client?.sector],
-            ['LEI Code',       client?.lei_code],
-            ['Address',        client?.registered_address],
-            ['Contact',        client?.primary_contact_email],
-          ] : [
-            ['Date of Birth',  client?.date_of_birth],
-            ['Nationality',    client?.nationality],
-            ['Residence',      client?.country_of_residence],
-            ['ID Type',        client?.id_type],
-            ['ID Number',      client?.id_number],
-            ['Contact Email',  client?.primary_contact_email],
-            ['Phone',          client?.primary_contact_phone],
-          ]).map(([label, value]) => (
-            <div key={label} className="flex justify-between border-b border-border/50 py-1.5">
-              <span className="text-muted-foreground">{label}</span>
-              <span className={cn('font-medium', !value && 'text-red-400 italic')}>{value || 'Missing'}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
+
 
 export default function CaseWorkspace() {
   const { id } = useParams();
@@ -414,7 +369,7 @@ export default function CaseWorkspace() {
                 {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} />}
                 {activeStep === 2 && <IdentityVerificationStep kycCase={kycCase} client={client} currentUser={currentUser} />}
                 {activeStep === 3 && <ScreeningStep caseId={id} tenantId={currentUser?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} />}
-                {activeStep === 4 && <ClientProfileStep client={client} />}
+                {activeStep === 4 && <ClientProfileStep kycCase={kycCase} client={client} currentUser={currentUser} />}
                 {activeStep === 5 && <SoFSoWStep kycCase={kycCase} client={client} currentUser={currentUser} />}
                 {activeStep === 6 && <RiskAssessmentStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />}
                 {activeStep === 7 && <ControlMeasuresStep kycCase={kycCase} currentUser={currentUser} />}
