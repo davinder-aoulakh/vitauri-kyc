@@ -9,6 +9,7 @@ import RiskBadge from '@/components/shared/RiskBadge';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import { Button } from '@/components/ui/button';
+import WorkflowOptimisationWidget from '@/components/dashboard/WorkflowOptimisationWidget';
 import {
   FolderOpen, UserCircle, AlertTriangle, Shield, Calendar,
   Plus, ChevronRight, RefreshCw
@@ -34,6 +35,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [cases, setCases] = useState([]);
   const [clients, setClients] = useState({});   // id → client record
+  const [users, setUsers] = useState([]);
   const [auditEvents, setAuditEvents] = useState([]);
   const [screeningAlerts, setScreeningAlerts] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -45,16 +47,18 @@ export default function Dashboard() {
 
   const loadData = useCallback(async () => {
     if (!currentUser?.tenant_id) return;
-    const [casesData, auditData, clientsData, newHits, reviewHits] = await Promise.all([
+    const [casesData, auditData, clientsData, newHits, reviewHits, usersData] = await Promise.all([
       base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }),
       base44.entities.AuditEvent.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 20),
       base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }),
       base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'New' }),
       base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'Under_Review' }),
+      base44.entities.User.list(),
     ]);
     setCases(casesData || []);
     setAuditEvents(auditData || []);
     setScreeningAlerts((newHits?.length || 0) + (reviewHits?.length || 0));
+    setUsers(usersData || []);
     // Build client lookup map
     const clientMap = {};
     (clientsData || []).forEach(c => { clientMap[c.id] = c; });
@@ -183,6 +187,18 @@ export default function Dashboard() {
             })}
           </div>
         </div>
+
+        {/* Workflow Optimisation Widget — Manager+ only */}
+        {isManager && (
+          <WorkflowOptimisationWidget
+            cases={openCases}
+            clients={clients}
+            users={users}
+            currentUser={currentUser}
+            tenantId={currentUser?.tenant_id}
+            onNavigate={path => navigate(path)}
+          />
+        )}
 
         {/* Cases Table + Activity Feed */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
