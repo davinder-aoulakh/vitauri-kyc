@@ -22,6 +22,7 @@ import MonitoringAlerts from './pages/MonitoringAlerts';
 import TenantConfig from './pages/TenantConfig';
 import UserManagement from './pages/UserManagement';
 import BatchUpload from './pages/BatchUpload';
+import BatchScreening from './pages/BatchScreening';
 import ClientPortal from './pages/ClientPortal';
 import ReviewPlanner from './pages/ReviewPlanner';
 import MIDashboard from './pages/MIDashboard';
@@ -92,6 +93,7 @@ const AuthenticatedApp = () => {
       <Route path="/client-search" element={<ClientSearch />} />
       <Route path="/new-client" element={<NewClient />} />
       <Route path="/batch-upload" element={<BatchUpload />} />
+      <Route path="/batch-screening" element={<BatchScreening />} />
       <Route path="/client/:id" element={<ClientDetail />} />
       <Route path="/org-chart/:clientId" element={<OrgChart />} />
       <Route path="/entity-map/:clientId" element={<EntityMap />} />

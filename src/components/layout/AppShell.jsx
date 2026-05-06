@@ -10,7 +10,7 @@ import {
   LayoutDashboard, FolderOpen, Users, Search, Shield,
   Settings, BarChart3, AlertTriangle, Calendar, Archive,
   ChevronLeft, ChevronRight, Menu, X, LogOut,
-  Building2, UserCircle, Bell, ClipboardList
+  Building2, UserCircle, Bell, ClipboardList, ScanSearch
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +34,7 @@ const navItems = [
     group: 'MONITORING',
     items: [
       { label: 'Screening', icon: Shield, href: '/monitoring', permission: null, badge: 'alerts' },
+      { label: 'Batch Screening', icon: ScanSearch, href: '/batch-screening', permission: 'createEditClient' },
       { label: 'Review Planner', icon: Calendar, href: '/review-planner', permission: 'viewAllTenantCases' },
     ],
   },
