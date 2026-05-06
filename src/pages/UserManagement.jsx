@@ -10,9 +10,35 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Users, Plus, Mail, Shield, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Users, Plus, Mail, Shield, Loader2, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { APP_ROLES } from '@/lib/permissions';
+import { APP_ROLES, PERMISSIONS } from '@/lib/permissions';
+
+const PERMISSION_LABELS = {
+  viewOwnCases: 'View Own Cases', viewAllTenantCases: 'View All Cases',
+  createEditClient: 'Create/Edit Clients', createRunCase: 'Create/Run Cases',
+  qcFlag: 'QC Flag', approveMedium: 'Approve Medium Risk',
+  approveHighUnacceptable: 'Approve High/Unacceptable', tenantConfig: 'Tenant Config',
+  userManagement: 'User Management', bulkActions: 'Bulk Actions',
+  exportData: 'Export Data', viewMIDashboard: 'MI Dashboard',
+  viewArchive: 'View Archive', manageArchive: 'Manage Archive',
+};
+
+function RolePermissionSummary({ role }) {
+  const granted = Object.entries(PERMISSIONS)
+    .filter(([, roles]) => roles.includes(role))
+    .map(([perm]) => perm);
+  if (!granted.length) return <p className="text-xs text-muted-foreground italic">No permissions assigned to this role.</p>;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {granted.map(p => (
+        <span key={p} className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20">
+          {PERMISSION_LABELS[p] || p}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export default function UserManagement() {
   const { currentUser } = useTenant();
@@ -199,15 +225,23 @@ export default function UserManagement() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs font-semibold mb-1.5 block">Application Role (Vitauri KYC)</Label>
-                  <p className="text-xs text-muted-foreground mb-1.5">Controls all in-app permissions and sign-off authority</p>
-                  <Select value={editUser.app_role || 'Analyst'} onValueChange={v => setEditUser(u => ({ ...u, app_role: v }))}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {APP_ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+                   <Label className="text-xs font-semibold mb-1.5 block">Application Role (Vitauri KYC)</Label>
+                   <p className="text-xs text-muted-foreground mb-1.5">Controls all in-app permissions and sign-off authority</p>
+                   <Select value={editUser.app_role || 'Analyst'} onValueChange={v => setEditUser(u => ({ ...u, app_role: v }))}>
+                     <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                     <SelectContent>
+                       {APP_ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                     </SelectContent>
+                   </Select>
+                 </div>
+                 {/* Permission summary for selected role */}
+                 <div className="bg-muted/30 border border-border rounded-lg p-3">
+                   <div className="flex items-center gap-1.5 mb-2">
+                     <Info className="w-3.5 h-3.5 text-muted-foreground" />
+                     <span className="text-xs font-medium text-muted-foreground">Permissions granted by <strong className="text-foreground">{editUser.app_role || 'Analyst'}</strong></span>
+                   </div>
+                   <RolePermissionSummary role={editUser.app_role || 'Analyst'} />
+                 </div>
                 <div className="flex items-center justify-between">
                   <div>
                     <Label className="text-xs font-medium">Active</Label>

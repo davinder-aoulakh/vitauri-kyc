@@ -16,7 +16,30 @@
     },
     "cycle_years": {
       "type": "number",
-      "description": "e.g. 5, 3, 1, 0.25"
+      "description": "Default cycle in years e.g. 5, 3, 1, 0.25"
+    },
+    "cycle_months_override": {
+      "type": "number",
+      "description": "Optional: express cycle in months instead (takes precedence over cycle_years)"
+    },
+    "max_extension_days": {
+      "type": "number",
+      "default": 90,
+      "description": "Max days a review date can be extended without escalation"
+    },
+    "escalate_after_days_overdue": {
+      "type": "number",
+      "default": 30,
+      "description": "Create monitoring alert after this many days overdue"
+    },
+    "exception_allowed": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether manual override/extension is allowed for this risk class"
+    },
+    "exception_requires_role": {
+      "type": "string",
+      "description": "Minimum role required to approve extension e.g. Manager"
     },
     "is_configurable": {
       "type": "boolean",

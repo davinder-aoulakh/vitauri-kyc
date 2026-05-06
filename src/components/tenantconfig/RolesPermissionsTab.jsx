@@ -124,17 +124,21 @@ export default function RolesPermissionsTab({ tenant, currentUser }) {
           <thead>
             <tr className="bg-muted/40 border-b border-border">
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wide w-48">Permission</th>
-              {roles.map(role => (
-                <th key={role} className="px-3 py-3 text-center font-semibold text-foreground min-w-[100px]">
-                  <div className="flex flex-col items-center gap-1">
-                    <Shield className="w-3.5 h-3.5 text-primary/60" />
-                    <span className="text-xs leading-tight">{role}</span>
-                    <button onClick={() => removeRole(role)} className="text-muted-foreground/40 hover:text-red-500 transition-colors mt-0.5">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                </th>
-              ))}
+              {roles.map(role => {
+                const userCount = users.filter(u => u.app_role === role).length;
+                return (
+                  <th key={role} className="px-3 py-3 text-center font-semibold text-foreground min-w-[100px]">
+                    <div className="flex flex-col items-center gap-1">
+                      <Shield className="w-3.5 h-3.5 text-primary/60" />
+                      <span className="text-xs leading-tight">{role}</span>
+                      <span className="text-xs text-muted-foreground font-normal">{userCount} user{userCount !== 1 ? 's' : ''}</span>
+                      <button onClick={() => removeRole(role)} className="text-muted-foreground/40 hover:text-red-500 transition-colors mt-0.5">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
