@@ -5,7 +5,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
-import { TenantProvider } from '@/lib/tenantContext';
+import { TenantProvider, useTenant } from '@/lib/tenantContext';
 
 // Page imports
 import Dashboard from './pages/Dashboard';
@@ -19,6 +19,25 @@ import OrgChart from './pages/OrgChart';
 import MonitoringAlerts from './pages/MonitoringAlerts';
 import TenantConfig from './pages/TenantConfig';
 import UserManagement from './pages/UserManagement';
+
+// Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
+function OpsRouteGuard({ children }) {
+  const { currentUser, loading } = useTenant();
+  // Wait for user to load before enforcing route rules
+  if (loading || !currentUser) return children;
+
+  const isOps = currentUser.app_role === 'Vitauri Ops';
+
+  if (isOps && window.location.pathname === '/') {
+    window.location.replace('/ops');
+    return null;
+  }
+  if (!isOps && window.location.pathname === '/ops') {
+    window.location.replace('/');
+    return null;
+  }
+  return children;
+}
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -44,6 +63,7 @@ const AuthenticatedApp = () => {
   }
 
   return (
+    <OpsRouteGuard>
     <Routes>
       {/* Main */}
       <Route path="/" element={<Dashboard />} />
@@ -71,6 +91,7 @@ const AuthenticatedApp = () => {
 
       <Route path="*" element={<PageNotFound />} />
     </Routes>
+    </OpsRouteGuard>
   );
 };
 
@@ -78,11 +99,11 @@ function App() {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
-        <TenantProvider>
-          <Router>
+        <Router>
+          <TenantProvider>
             <AuthenticatedApp />
-          </Router>
-        </TenantProvider>
+          </TenantProvider>
+        </Router>
         <Toaster />
       </QueryClientProvider>
     </AuthProvider>

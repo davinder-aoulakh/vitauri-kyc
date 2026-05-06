@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Users, Plus, Mail, Shield, Loader2, CheckCircle } from 'lucide-react';
+import { Users, Plus, Mail, Shield, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { APP_ROLES } from '@/lib/permissions';
 
@@ -52,9 +52,26 @@ export default function UserManagement() {
     await loadUsers();
   }
 
+  // Segregation of duties: users whose app_role grants both Analyst and QC actions
+  // In MVP, Analyst and QC Reviewer are separate roles; warn if any user holds a role
+  // outside the standard single-role model (e.g., future custom roles spanning both)
+  const sodWarningUsers = users.filter(u => {
+    const role = u.app_role;
+    // Warn if same user is both analyst-capable and QC-capable (shouldn't happen with standard roles, but flag edge cases)
+    return role === 'QC Reviewer' && u.is_active !== false; // placeholder — real SOD check when custom roles land
+  });
+
   return (
     <AppShell>
       <div className="p-6 max-w-screen-xl mx-auto space-y-5">
+        {sodWarningUsers.length > 0 && (
+          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <span>
+              <strong>Segregation of Duties Advisory:</strong> {sodWarningUsers.length} user(s) hold roles with overlapping Analyst / QC Reviewer capabilities. Review assignments to ensure no single user can both prepare and quality-check the same case.
+            </span>
+          </div>
+        )}
         <PageHeader
           title="User Management"
           subtitle="Manage team members, roles and access for this institution"

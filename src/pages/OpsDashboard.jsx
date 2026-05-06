@@ -2,37 +2,66 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
-import { Shield, Building2, AlertTriangle, FolderOpen, Activity } from 'lucide-react';
+import { Shield, Building2, AlertTriangle, FolderOpen, Activity, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
+const statusColor = {
+  Active: 'bg-emerald-100 text-emerald-700',
+  Suspended: 'bg-red-100 text-red-700',
+  Demo: 'bg-blue-100 text-blue-700',
+};
+
 export default function OpsDashboard() {
-  const { currentUser } = useTenant();
+  const { currentUser, setOpsTenantId } = useTenant();
   const navigate = useNavigate();
   const [tenants, setTenants] = useState([]);
+  const [cases, setCases] = useState([]);
+  const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (currentUser?.app_role !== 'Vitauri Ops') {
+    if (currentUser && currentUser.app_role !== 'Vitauri Ops') {
       navigate('/');
       return;
     }
-    loadTenants();
+    if (currentUser) loadData();
   }, [currentUser]);
 
-  async function loadTenants() {
-    const data = await base44.entities.Tenant.list();
-    setTenants(data || []);
+  async function loadData() {
+    const [tenantData, caseData, alertData] = await Promise.all([
+      base44.entities.Tenant.list(),
+      base44.entities.KycCase.list(),
+      base44.entities.MonitoringAlert.filter({ status: 'New' }),
+    ]);
+    setTenants(tenantData || []);
+    setCases(caseData || []);
+    setAlerts(alertData || []);
     setLoading(false);
   }
 
-  const statusColor = {
-    Active: 'bg-emerald-100 text-emerald-700',
-    Suspended: 'bg-red-100 text-red-700',
-    Demo: 'bg-blue-100 text-blue-700',
-  };
+  const today = new Date().toISOString().split('T')[0];
+
+  function getCasesForTenant(tenantId) {
+    const tenantCases = cases.filter(c => c.tenant_id === tenantId);
+    const active = tenantCases.filter(c => !['Approved', 'Closed', 'Rejected'].includes(c.status));
+    const overdue = active.filter(c => c.due_date && c.due_date < today);
+    return { active: active.length, overdue: overdue.length };
+  }
+
+  function getAlertsForTenant(tenantId) {
+    return alerts.filter(a => a.tenant_id === tenantId).length;
+  }
+
+  const totalActive  = cases.filter(c => !['Approved', 'Closed', 'Rejected'].includes(c.status)).length;
+  const totalOverdue = cases.filter(c => !['Approved', 'Closed', 'Rejected'].includes(c.status) && c.due_date && c.due_date < today).length;
+
+  function handleViewTenant(tenant) {
+    // Store the ops context then navigate to the tenant dashboard
+    if (setOpsTenantId) setOpsTenantId(tenant.id);
+    navigate('/');
+  }
 
   return (
     <div className="min-h-screen bg-background font-inter">
@@ -60,10 +89,10 @@ export default function OpsDashboard() {
         {/* Summary Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {[
-            { label: 'Total Tenants', value: tenants.length, icon: Building2 },
-            { label: 'Active Tenants', value: tenants.filter(t => t.status === 'Active').length, icon: Activity },
-            { label: 'Demo Tenants', value: tenants.filter(t => t.status === 'Demo').length, icon: Shield },
-            { label: 'Suspended', value: tenants.filter(t => t.status === 'Suspended').length, icon: AlertTriangle },
+            { label: 'Total Tenants',       value: tenants.length,                                               icon: Building2 },
+            { label: 'Active Cases (all)',   value: totalActive,                                                  icon: FolderOpen },
+            { label: 'Overdue Cases (all)',  value: totalOverdue,                                                 icon: AlertTriangle },
+            { label: 'Open Alerts (all)',    value: alerts.length,                                                icon: Activity },
           ].map(s => (
             <div key={s.label} className="bg-card border border-border rounded-xl p-4">
               <div className="text-xs text-muted-foreground">{s.label}</div>
@@ -86,60 +115,63 @@ export default function OpsDashboard() {
                   <tr className="bg-muted/40 border-b border-border text-xs text-muted-foreground uppercase tracking-wide">
                     <th className="text-left px-4 py-3">Tenant Name</th>
                     <th className="text-left px-4 py-3">Status</th>
-                    <th className="text-left px-4 py-3">Risk Model</th>
-                    <th className="text-left px-4 py-3">Language</th>
-                    <th className="text-left px-4 py-3">Created</th>
+                    <th className="text-left px-4 py-3">Active Cases</th>
+                    <th className="text-left px-4 py-3">Overdue Cases</th>
+                    <th className="text-left px-4 py-3">Open Alerts</th>
+                    <th className="text-left px-4 py-3">Last Activity</th>
                     <th className="px-4 py-3">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {tenants.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground text-sm">
+                      <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground text-sm">
                         No tenants found
                       </td>
                     </tr>
                   ) : (
-                    tenants.map(t => (
-                      <tr key={t.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-6 h-6 rounded flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                              style={{ backgroundColor: t.branding_primary_color || '#1A6BFF' }}
-                            >
-                              {t.name?.charAt(0)}
+                    tenants.map(t => {
+                      const { active, overdue } = getCasesForTenant(t.id);
+                      const openAlerts = getAlertsForTenant(t.id);
+                      return (
+                        <tr key={t.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-6 h-6 rounded flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                                style={{ backgroundColor: t.branding_primary_color || '#1A6BFF' }}
+                              >
+                                {t.name?.charAt(0)}
+                              </div>
+                              <div>
+                                <div className="font-medium text-foreground">{t.name}</div>
+                                <div className="text-xs text-muted-foreground">{t.slug}</div>
+                              </div>
                             </div>
-                            <div>
-                              <div className="font-medium text-foreground">{t.name}</div>
-                              <div className="text-xs text-muted-foreground">{t.slug}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={cn(
-                            'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
-                            statusColor[t.status] || 'bg-slate-100 text-slate-600'
-                          )}>
-                            {t.status || 'Active'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">
-                          {t.risk_scoring_model?.replace('_', ' ') || 'highest risk'}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground uppercase">
-                          {t.default_language || 'en'}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">
-                          {t.created_date ? format(new Date(t.created_date), 'd MMM yyyy') : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <Button variant="outline" size="sm" className="text-xs gap-1">
-                            View Tenant →
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', statusColor[t.status] || 'bg-slate-100 text-slate-600')}>
+                              {t.status || 'Active'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium">{active}</td>
+                          <td className="px-4 py-3">
+                            <span className={cn('text-sm font-medium', overdue > 0 ? 'text-red-600' : 'text-foreground')}>{overdue}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={cn('text-sm font-medium', openAlerts > 0 ? 'text-amber-600' : 'text-foreground')}>{openAlerts}</span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
+                            {t.updated_date ? format(new Date(t.updated_date), 'd MMM yyyy') : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => handleViewTenant(t)}>
+                              View Tenant <ExternalLink className="w-3 h-3" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

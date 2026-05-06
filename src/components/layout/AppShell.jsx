@@ -3,6 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { useTenant } from '@/lib/tenantContext';
 import { hasPermission, isVitauriOps } from '@/lib/permissions';
 import NotificationBell from '@/components/layout/NotificationBell';
+import OpsBanner from '@/components/layout/OpsBanner';
+import SessionWatcher from '@/components/layout/SessionWatcher';
 import { base44 } from '@/api/base44Client';
 import {
   LayoutDashboard, FolderOpen, Users, Search, Shield,
@@ -51,6 +53,7 @@ export default function AppShell({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const { isOpsViewing, setOpsTenantId } = useTenant();
   const userRole = currentUser?.app_role;
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
 
@@ -95,7 +98,14 @@ export default function AppShell({ children }) {
                 </div>
               )}
               <div className="space-y-0.5">
-                {visibleItems.map((item) => (
+                {visibleItems
+                  // Hide write-only nav items when Ops is in read-only tenant context
+                  .filter(item => {
+                    if (!isOpsViewing) return true;
+                    const writeOnly = ['/new-client'];
+                    return !writeOnly.includes(item.href);
+                  })
+                  .map((item) => (
                   <Link
                     key={item.href}
                     to={item.href}
@@ -155,7 +165,15 @@ export default function AppShell({ children }) {
   );
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex flex-col h-screen bg-background overflow-hidden">
+      <SessionWatcher />
+      {isOpsViewing && (
+        <OpsBanner
+          tenantName={tenant?.name}
+          onExit={() => { setOpsTenantId(null); window.location.href = '/ops'; }}
+        />
+      )}
+    <div className="flex flex-1 overflow-hidden">
       {/* Desktop Sidebar */}
       <aside
         className={cn(
@@ -218,6 +236,7 @@ export default function AppShell({ children }) {
           {children}
         </main>
       </div>
+    </div>
     </div>
   );
 }
