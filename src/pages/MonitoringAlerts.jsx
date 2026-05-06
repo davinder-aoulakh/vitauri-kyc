@@ -34,6 +34,7 @@ export default function MonitoringAlerts() {
   const [alerts, setAlerts]       = useState([]);
   const [clients, setClients]     = useState([]);
   const [loading, setLoading]     = useState(true);
+  const [sourceTab, setSourceTab] = useState('all');
   const [filter, setFilter]       = useState({ type: 'all', status: 'all', client: 'all', search: '' });
   const [selected, setSelected]   = useState(null);
   const [manualFlag, setManualFlag] = useState(false);
@@ -98,7 +99,22 @@ export default function MonitoringAlerts() {
     return d && isWithinInterval(d, { start: monthStart, end: now });
   }).length;
 
+  const SOURCE_TABS = [
+    { value: 'all',          label: 'All Sources' },
+    { value: 'PEP',          label: 'PEP',           sources: ['PEP_List'] },
+    { value: 'Sanctions',    label: 'Sanctions',     sources: ['Sanctions_EU', 'Sanctions_UN'] },
+    { value: 'Adverse_Media',label: 'Adverse Media', sources: ['Adverse_Media'] },
+    { value: 'Other',        label: 'Other',         sources: ['Internal_Flag', 'Register_Change'] },
+  ];
+
+  const pepCount      = alerts.filter(a => a.source === 'PEP_List').length;
+  const sanctionCount = alerts.filter(a => ['Sanctions_EU','Sanctions_UN'].includes(a.source)).length;
+  const mediaCount    = alerts.filter(a => a.source === 'Adverse_Media').length;
+
+  const activeTab = SOURCE_TABS.find(t => t.value === sourceTab);
+
   const filtered = alerts.filter(a => {
+    if (sourceTab !== 'all' && activeTab?.sources && !activeTab.sources.includes(a.source)) return false;
     if (filter.type !== 'all' && a.alert_type !== filter.type) return false;
     if (filter.status !== 'all' && a.status !== filter.status) return false;
     if (filter.client !== 'all' && a.client_id !== filter.client) return false;
@@ -120,10 +136,47 @@ export default function MonitoringAlerts() {
         />
 
         {/* KPIs */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
           <KpiCard label="New Alerts Today"        value={loading ? '…' : newToday}      icon={AlertTriangle} accentColor="#EF4444" />
           <KpiCard label="Alerts Pending Review"   value={loading ? '…' : pendingReview} icon={Shield}        accentColor="#F59E0B" />
           <KpiCard label="EDR Cases This Month"    value={loading ? '…' : edrThisMonth}  icon={AlertTriangle} accentColor="#7C3AED" />
+          <KpiCard label="PEP Hits"                value={loading ? '…' : pepCount}      icon={Shield}        accentColor="#9333EA" />
+          <KpiCard label="Sanctions Hits"          value={loading ? '…' : sanctionCount} icon={AlertTriangle} accentColor="#DC2626" />
+          <KpiCard label="Adverse Media"           value={loading ? '…' : mediaCount}    icon={Flag}          accentColor="#D97706" />
+        </div>
+
+        {/* Source tabs */}
+        <div className="flex gap-1.5 flex-wrap">
+          {SOURCE_TABS.map(tab => {
+            const count = tab.value === 'all' ? alerts.length :
+              tab.sources ? alerts.filter(a => tab.sources.includes(a.source)).length : 0;
+            const pending = tab.value === 'all'
+              ? alerts.filter(a => a.status === 'New').length
+              : tab.sources
+                ? alerts.filter(a => tab.sources.includes(a.source) && a.status === 'New').length
+                : 0;
+            return (
+              <button
+                key={tab.value}
+                onClick={() => setSourceTab(tab.value)}
+                className={cn(
+                  'flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors',
+                  sourceTab === tab.value
+                    ? 'bg-primary text-white border-primary'
+                    : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground bg-card'
+                )}
+              >
+                {tab.label}
+                <span className={cn(
+                  'text-xs rounded-full px-1.5 font-semibold',
+                  sourceTab === tab.value ? 'bg-white/20 text-white' :
+                  pending > 0 ? 'bg-orange-100 text-orange-700' : 'bg-muted text-muted-foreground'
+                )}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Filters */}

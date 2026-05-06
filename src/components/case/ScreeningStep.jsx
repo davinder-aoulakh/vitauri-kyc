@@ -176,9 +176,25 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
     await loadAll();
   }
 
+  const [sourceFilter, setSourceFilter] = useState('all');
+
+  const SOURCE_TABS = [
+    { value: 'all',          label: 'All',           color: '' },
+    { value: 'PEP_List',     label: 'PEP',           color: 'text-purple-700' },
+    { value: 'Sanctions_EU', label: 'EU Sanctions',  color: 'text-red-700' },
+    { value: 'Sanctions_UN', label: 'UN Sanctions',  color: 'text-red-700' },
+    { value: 'Adverse_Media',label: 'Adverse Media', color: 'text-amber-700' },
+    { value: 'Internal_Flag',label: 'Internal',      color: 'text-slate-600' },
+  ];
+
+  const visibleHits = sourceFilter === 'all' ? hits : hits.filter(h => h.source === sourceFilter);
   const pendingCount = hits.filter(h => h.status === 'New').length;
   const resolvedCount = hits.filter(h => ['Discounted', 'Confirmed_Match'].includes(h.status)).length;
   const newAlerts = monitoringAlerts.filter(a => a.status === 'New').length;
+
+  // Source breakdown counts for tabs
+  const sourceCount = (source) => hits.filter(h => h.source === source).length;
+  const sourcePending = (source) => hits.filter(h => h.source === source && h.status === 'New').length;
 
   return (
     <div className="space-y-4 relative">
@@ -308,7 +324,35 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                     <span className="font-semibold">{hits.length}</span>
                   </div>
                 </div>
-                <HitsTable hits={hits} onRowClick={setSelectedHit} />
+
+                {/* Source filter tabs */}
+                <div className="flex gap-1.5 flex-wrap">
+                  {SOURCE_TABS.filter(t => t.value === 'all' || sourceCount(t.value) > 0).map(tab => (
+                    <button
+                      key={tab.value}
+                      onClick={() => setSourceFilter(tab.value)}
+                      className={cn(
+                        'text-xs px-3 py-1 rounded-full border font-medium transition-colors flex items-center gap-1.5',
+                        sourceFilter === tab.value
+                          ? 'bg-primary text-white border-primary'
+                          : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground bg-card'
+                      )}
+                    >
+                      {tab.label}
+                      {tab.value !== 'all' && (
+                        <span className={cn(
+                          'rounded-full px-1.5 py-0 text-xs font-semibold',
+                          sourceFilter === tab.value ? 'bg-white/20 text-white' :
+                          sourcePending(tab.value) > 0 ? 'bg-orange-100 text-orange-700' : 'bg-muted text-muted-foreground'
+                        )}>
+                          {sourceCount(tab.value)}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                <HitsTable hits={visibleHits} onRowClick={setSelectedHit} onQuickDecision={handleDecision} submitting={submitting} />
               </div>
             )}
           </TabsContent>

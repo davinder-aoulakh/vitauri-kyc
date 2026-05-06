@@ -46,6 +46,8 @@ export default function IndicatorAssessment({
 
   const indicators = selectedIndicatorIds.map(id => ALL_INDICATORS.find(i => i.id === id)).filter(Boolean);
   const proposedRisk = getProposedRisk(scores);
+  const scoredCount = indicators.filter(ind => scores[ind.id]?.score).length;
+  const totalCount = indicators.length;
 
   async function loadDocs() {
     const docs = await base44.entities.Document.filter({ client_id: kycCase?.client_id });
@@ -142,10 +144,68 @@ Tone: professional, regulatory-grade, suitable for a compliance file.`,
     setEvidenceOpen(null);
   }
 
+  const RISK_COLORS_PROGRESS = {
+    Low:          { bar: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
+    Medium:       { bar: 'bg-amber-500',   text: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200' },
+    High:         { bar: 'bg-red-500',     text: 'text-red-700',     bg: 'bg-red-50 border-red-200' },
+    Unacceptable: { bar: 'bg-rose-800',    text: 'text-rose-900',    bg: 'bg-rose-50 border-rose-300' },
+  };
   const finalRisk = scores.__override?.score || proposedRisk;
+  const riskCfg = RISK_COLORS_PROGRESS[finalRisk];
 
   return (
     <div className="space-y-4">
+      {/* Live Scoring Progress Bar */}
+      {totalCount > 0 && (
+        <div className={cn('rounded-xl border p-3 space-y-2 transition-all', riskCfg ? riskCfg.bg : 'bg-muted/30 border-border')}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-foreground">
+                {entityLabel}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {scoredCount}/{totalCount} indicators scored
+              </span>
+            </div>
+            {finalRisk ? (
+              <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full border', RISK_COLORS[finalRisk]?.badge)}>
+                {scores.__override?.score ? '⚠ Override: ' : ''}{finalRisk.toUpperCase()}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full border border-border">
+                Not yet scored
+              </span>
+            )}
+          </div>
+          <div className="h-2 bg-black/10 rounded-full overflow-hidden">
+            <div
+              className={cn('h-full rounded-full transition-all duration-500', riskCfg?.bar || 'bg-muted-foreground/30')}
+              style={{ width: totalCount > 0 ? `${(scoredCount / totalCount) * 100}%` : '0%' }}
+            />
+          </div>
+          {/* Per-indicator chips */}
+          <div className="flex flex-wrap gap-1.5">
+            {indicators.map(ind => {
+              const s = scores[ind.id]?.score;
+              const cfg = s ? RISK_COLORS_PROGRESS[s] : null;
+              return (
+                <span
+                  key={ind.id}
+                  className={cn(
+                    'text-xs px-2 py-0.5 rounded-full border font-medium cursor-pointer transition-colors',
+                    cfg ? cn('border-transparent', RISK_COLORS[s]?.badge) : 'border-border bg-muted text-muted-foreground'
+                  )}
+                  onClick={() => setExpanded(expanded === ind.id ? null : ind.id)}
+                  title={ind.name}
+                >
+                  {ind.name.split(' ').slice(0, 2).join(' ')}{s ? '' : ' …'}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Indicators */}
       {indicators.length === 0 && (
         <div className="text-center text-muted-foreground text-sm py-8 bg-card border border-border rounded-xl">
