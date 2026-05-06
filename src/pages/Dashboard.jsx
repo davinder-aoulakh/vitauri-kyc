@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
@@ -13,82 +13,107 @@ import {
   FolderOpen, UserCircle, AlertTriangle, Shield, Calendar,
   Plus, ChevronRight, RefreshCw
 } from 'lucide-react';
-import { format, isAfter, addDays } from 'date-fns';
+import { format, isAfter, addDays, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 const PIPELINE_STATUSES = [
-  { key: 'Draft', label: 'Draft' },
-  { key: 'In_Progress', label: 'In Progress' },
-  { key: 'Outreach_Pending', label: 'Outreach' },
-  { key: 'Screening', label: 'Screening' },
-  { key: 'Assessment', label: 'Assessment' },
-  { key: 'QC', label: 'QC Review' },
-  { key: 'Sign_Off_Pending', label: 'Sign-Off' },
+  { key: 'Draft',           label: 'Draft' },
+  { key: 'In_Progress',     label: 'In Progress' },
+  { key: 'Outreach_Pending',label: 'Outreach' },
+  { key: 'Screening',       label: 'Screening' },
+  { key: 'Assessment',      label: 'Assessment' },
+  { key: 'QC',              label: 'QC' },
+  { key: 'Sign_Off_Pending',label: 'Sign-Off' },
+  { key: 'Approved',        label: 'Approved' },
 ];
+
+const CLOSED_STATUSES = ['Approved', 'Closed', 'Rejected'];
 
 export default function Dashboard() {
   const { currentUser, tenant } = useTenant();
   const navigate = useNavigate();
   const [cases, setCases] = useState([]);
+  const [clients, setClients] = useState({});   // id → client record
   const [auditEvents, setAuditEvents] = useState([]);
-  const [screeningHits, setScreeningHits] = useState([]);
+  const [screeningAlerts, setScreeningAlerts] = useState(0);
   const [loading, setLoading] = useState(true);
+  const refreshTimer = useRef(null);
+
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
   const userRole = currentUser?.app_role;
+  const isManager = hasPermission(userRole, 'viewAllTenantCases');
 
-  useEffect(() => {
-    if (currentUser?.tenant_id) loadData();
-  }, [currentUser]);
-
-  async function loadData() {
-    setLoading(true);
-    const [casesData, auditData, hitsData] = await Promise.all([
+  const loadData = useCallback(async () => {
+    if (!currentUser?.tenant_id) return;
+    const [casesData, auditData, clientsData, newHits, reviewHits] = await Promise.all([
       base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }),
       base44.entities.AuditEvent.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 20),
+      base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }),
       base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'New' }),
+      base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'Under_Review' }),
     ]);
     setCases(casesData || []);
     setAuditEvents(auditData || []);
-    setScreeningHits(hitsData || []);
+    setScreeningAlerts((newHits?.length || 0) + (reviewHits?.length || 0));
+    // Build client lookup map
+    const clientMap = {};
+    (clientsData || []).forEach(c => { clientMap[c.id] = c; });
+    setClients(clientMap);
     setLoading(false);
-  }
+  }, [currentUser?.tenant_id]);
+
+  // Initial load + 60s auto-refresh
+  useEffect(() => {
+    if (!currentUser?.tenant_id) return;
+    loadData();
+    refreshTimer.current = setInterval(loadData, 60000);
+    return () => clearInterval(refreshTimer.current);
+  }, [loadData]);
 
   const today = new Date();
-  const openCases = cases.filter(c => !['Approved', 'Closed', 'Rejected'].includes(c.status));
-  const myCases = cases.filter(c => c.assigned_analyst_id === currentUser?.id && !['Approved', 'Closed', 'Rejected'].includes(c.status));
-  const overdueCases = cases.filter(c => c.due_date && isAfter(today, new Date(c.due_date)) && !['Approved', 'Closed', 'Rejected'].includes(c.status));
-  const reviewsDue = cases.filter(c => {
-    if (!c.due_date) return false;
-    const due = new Date(c.due_date);
-    return due >= today && due <= addDays(today, 30) && !['Approved', 'Closed', 'Rejected'].includes(c.status);
+  const openCases    = cases.filter(c => !CLOSED_STATUSES.includes(c.status));
+  const myCases      = cases.filter(c => c.assigned_analyst_id === currentUser?.id && !CLOSED_STATUSES.includes(c.status));
+  const overdueCases = openCases.filter(c => c.due_date && isAfter(today, new Date(c.due_date)));
+
+  // Reviews Due (30d) — based on Client.next_review_date
+  const clientsWithReviewDue = Object.values(clients).filter(cl => {
+    if (!cl.next_review_date) return false;
+    const d = new Date(cl.next_review_date);
+    return d >= today && d <= addDays(today, 30);
   });
 
-  const displayCases = hasPermission(userRole, 'viewAllTenantCases') ? myCases : myCases;
+  // Table cases: Analysts see only their own; Managers+ see all open
+  const tableCases = isManager ? openCases : myCases;
+  // Sort by due_date ascending (nulls last)
+  const sortedTableCases = [...tableCases].sort((a, b) => {
+    if (!a.due_date && !b.due_date) return 0;
+    if (!a.due_date) return 1;
+    if (!b.due_date) return -1;
+    return new Date(a.due_date) - new Date(b.due_date);
+  });
 
   const pipelineCounts = PIPELINE_STATUSES.map(s => ({
     ...s,
-    count: openCases.filter(c => c.status === s.key).length,
+    count: cases.filter(c => c.status === s.key).length,
   }));
+  const pipelineMax = Math.max(...pipelineCounts.map(s => s.count), 1);
 
   return (
     <AppShell>
-      <div className="p-6 space-y-6 max-w-screen-2xl mx-auto">
+      <div className="p-6 space-y-5 max-w-screen-2xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-foreground">Portfolio Dashboard</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {format(today, 'EEEE d MMMM yyyy')} — {tenant?.name}
+              {format(today, 'EEEE d MMMM yyyy')} · {tenant?.name}
             </p>
           </div>
-          <Button
-            onClick={() => navigate('/new-client')}
-            className="gap-2"
-            style={{ backgroundColor: tenantColor }}
-          >
-            <Plus className="w-4 h-4" />
-            New Client
-          </Button>
+          {hasPermission(userRole, 'createEditClient') && (
+            <Button onClick={() => navigate('/new-client')} className="gap-2" style={{ backgroundColor: tenantColor }}>
+              <Plus className="w-4 h-4" /> New Client
+            </Button>
+          )}
         </div>
 
         {/* KPI Tiles */}
@@ -96,9 +121,10 @@ export default function Dashboard() {
           <KpiCard
             label="Open Cases"
             value={loading ? '…' : openCases.length}
+            subtitle={`${cases.filter(c => c.status === 'In_Progress').length} in progress`}
             icon={FolderOpen}
             accentColor={tenantColor}
-            onClick={() => navigate('/all-cases')}
+            onClick={isManager ? () => navigate('/all-cases') : undefined}
           />
           <KpiCard
             label="My Cases"
@@ -113,18 +139,20 @@ export default function Dashboard() {
             subtitle="Requires attention"
             icon={AlertTriangle}
             accentColor="#EF4444"
+            onClick={isManager ? () => navigate('/all-cases') : undefined}
           />
           <KpiCard
             label="Screening Alerts"
-            value={loading ? '…' : screeningHits.length}
+            value={loading ? '…' : screeningAlerts}
+            subtitle="New + under review"
             icon={Shield}
             accentColor="#F59E0B"
             onClick={() => navigate('/monitoring')}
           />
           <KpiCard
             label="Reviews Due (30d)"
-            value={loading ? '…' : reviewsDue.length}
-            subtitle={reviewsDue.length > 0 ? `Next: ${format(new Date(reviewsDue[0]?.due_date || today), 'd MMM')}` : ''}
+            value={loading ? '…' : clientsWithReviewDue.length}
+            subtitle={clientsWithReviewDue.length > 0 ? `Next: ${format(new Date(clientsWithReviewDue[0].next_review_date), 'd MMM')}` : 'None upcoming'}
             icon={Calendar}
             accentColor="#10B981"
           />
@@ -132,49 +160,53 @@ export default function Dashboard() {
 
         {/* Pipeline */}
         <div className="bg-card rounded-xl border border-border p-4">
-          <h2 className="text-sm font-semibold text-foreground mb-3">Case Status Pipeline</h2>
-          <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
-            {pipelineCounts.map((s, i) => (
-              <div
-                key={s.key}
-                className={cn(
-                  'flex flex-col items-center py-3 px-2 rounded-lg border cursor-pointer transition-colors',
-                  s.count > 0 ? 'bg-primary/5 border-primary/20 hover:bg-primary/10' : 'bg-muted/30 border-border hover:bg-muted/50'
-                )}
-                onClick={() => navigate(`/all-cases?status=${s.key}`)}
-              >
-                <span className={cn('text-2xl font-bold', s.count > 0 ? 'text-primary' : 'text-muted-foreground')}>
-                  {loading ? '…' : s.count}
-                </span>
-                <span className="text-xs text-muted-foreground text-center mt-1 leading-tight">{s.label}</span>
-              </div>
-            ))}
+          <h2 className="text-sm font-semibold text-foreground mb-4">Case Status Pipeline</h2>
+          <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+            {pipelineCounts.map((s) => {
+              const barHeight = Math.round((s.count / pipelineMax) * 48);
+              const isActive = s.count > 0;
+              return (
+                <div
+                  key={s.key}
+                  className={cn(
+                    'flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg border cursor-pointer transition-colors',
+                    isActive ? 'bg-primary/5 border-primary/20 hover:bg-primary/10' : 'bg-muted/30 border-border hover:bg-muted/50'
+                  )}
+                  onClick={() => isManager && navigate(`/all-cases?status=${s.key}`)}
+                >
+                  <span className={cn('text-2xl font-bold tabular-nums', isActive ? 'text-primary' : 'text-muted-foreground')}>
+                    {loading ? '…' : s.count}
+                  </span>
+                  <span className="text-xs text-muted-foreground text-center leading-tight">{s.label}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* My Cases + Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Cases Table + Activity Feed */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
           {/* Cases Table */}
           <div className="lg:col-span-2 bg-card rounded-xl border border-border overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div>
-                <span className="font-semibold text-sm">My Cases</span>
-                <span className="ml-2 text-xs text-muted-foreground">{myCases.length} cases assigned to you</span>
+                <span className="font-semibold text-sm">{isManager ? 'All Open Cases' : 'My Cases'}</span>
+                <span className="ml-2 text-xs text-muted-foreground">
+                  {sortedTableCases.length} {isManager ? 'open cases' : 'assigned to you'}
+                </span>
               </div>
-              {hasPermission(userRole, 'viewAllTenantCases') && (
+              {isManager && (
                 <Button variant="ghost" size="sm" onClick={() => navigate('/all-cases')} className="gap-1 text-xs">
                   View All <ChevronRight className="w-3 h-3" />
                 </Button>
               )}
             </div>
+
             {loading ? (
               <div className="p-8 text-center text-muted-foreground text-sm">Loading cases…</div>
-            ) : myCases.length === 0 ? (
-              <EmptyState
-                icon={FolderOpen}
-                title="No cases assigned"
-                description="Cases assigned to you will appear here."
-              />
+            ) : sortedTableCases.length === 0 ? (
+              <EmptyState icon={FolderOpen} title="No cases assigned" description="Cases assigned to you will appear here." />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -186,18 +218,28 @@ export default function Dashboard() {
                       <th className="text-left px-4 py-2.5">Status</th>
                       <th className="text-left px-4 py-2.5">Risk</th>
                       <th className="text-left px-4 py-2.5">Due</th>
-                      <th className="px-4 py-2.5"></th>
+                      <th className="text-left px-4 py-2.5">Days Open</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {myCases.slice(0, 8).map((c) => (
-                      <CaseRow key={c.id} caseItem={c} tenantColor={tenantColor} onOpen={() => navigate(`/case/${c.id}`)} />
+                    {sortedTableCases.slice(0, 10).map(c => (
+                      <CaseRow
+                        key={c.id}
+                        caseItem={c}
+                        client={clients[c.client_id]}
+                        onOpen={() => navigate(`/case/${c.id}`)}
+                      />
                     ))}
                   </tbody>
                 </table>
-                {myCases.length > 8 && (
-                  <div className="px-4 py-3 text-center text-xs text-muted-foreground border-t border-border">
-                    Showing 8 of {myCases.length} cases
+                {sortedTableCases.length > 10 && (
+                  <div className="px-4 py-3 border-t border-border flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Showing 10 of {sortedTableCases.length}</span>
+                    {isManager && (
+                      <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={() => navigate('/all-cases')}>
+                        View All <ChevronRight className="w-3 h-3" />
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -207,16 +249,19 @@ export default function Dashboard() {
           {/* Recent Activity */}
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <span className="font-semibold text-sm">Recent Activity</span>
-              <button onClick={loadData} className="text-muted-foreground hover:text-foreground transition-colors">
+              <div>
+                <span className="font-semibold text-sm">Recent Activity</span>
+                <span className="ml-2 text-xs text-muted-foreground">Auto-refreshes every 60s</span>
+              </div>
+              <button onClick={loadData} className="text-muted-foreground hover:text-foreground transition-colors" title="Refresh now">
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="divide-y divide-border max-h-96 overflow-y-auto">
+            <div className="divide-y divide-border overflow-y-auto" style={{ maxHeight: 440 }}>
               {auditEvents.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground text-xs">No recent activity</div>
               ) : (
-                auditEvents.map((event) => (
+                auditEvents.map(event => (
                   <ActivityItem key={event.id} event={event} />
                 ))
               )}
@@ -228,25 +273,26 @@ export default function Dashboard() {
   );
 }
 
-function CaseRow({ caseItem, tenantColor, onOpen }) {
+function CaseRow({ caseItem, client, onOpen }) {
   const today = new Date();
   const isOverdue = caseItem.due_date && isAfter(today, new Date(caseItem.due_date)) &&
-    !['Approved', 'Closed', 'Rejected'].includes(caseItem.status);
+    !CLOSED_STATUSES.includes(caseItem.status);
+  const daysOpen = differenceInDays(today, new Date(caseItem.created_date || today));
 
   return (
     <tr className="hover:bg-muted/30 transition-colors cursor-pointer" onClick={onOpen}>
-      <td className="px-4 py-3 font-medium text-foreground text-sm">
-        {caseItem.client_name || caseItem.client_id?.slice(0, 8) + '…'}
+      <td className="px-4 py-3 font-medium text-foreground text-sm max-w-[160px] truncate">
+        {client?.full_name || '—'}
       </td>
       <td className="px-4 py-3">
         <span className={cn(
           'text-xs font-medium px-1.5 py-0.5 rounded',
-          caseItem.client_type === 'ORG' ? 'bg-blue-100 text-blue-700' : 'bg-violet-100 text-violet-700'
+          client?.client_type === 'ORG' ? 'bg-blue-100 text-blue-700' : 'bg-violet-100 text-violet-700'
         )}>
-          {caseItem.client_type || '—'}
+          {client?.client_type || '—'}
         </span>
       </td>
-      <td className="px-4 py-3 text-xs text-muted-foreground">
+      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
         {caseItem.case_type?.replace(/_/g, ' ') || '—'}
       </td>
       <td className="px-4 py-3">
@@ -255,43 +301,49 @@ function CaseRow({ caseItem, tenantColor, onOpen }) {
       <td className="px-4 py-3">
         <RiskBadge risk={caseItem.risk_classification} />
       </td>
-      <td className={cn('px-4 py-3 text-xs', isOverdue ? 'text-red-600 font-semibold' : 'text-muted-foreground')}>
-        {caseItem.due_date ? format(new Date(caseItem.due_date), 'd MMM yyyy') : '—'}
+      <td className={cn('px-4 py-3 text-xs whitespace-nowrap', isOverdue ? 'text-red-600 font-semibold' : 'text-muted-foreground')}>
+        {caseItem.due_date ? format(new Date(caseItem.due_date), 'd MMM yy') : '—'}
+        {isOverdue && ' ⚠'}
       </td>
-      <td className="px-4 py-3">
-        <button className="text-xs text-primary hover:text-primary/80 font-medium whitespace-nowrap">
-          Open →
-        </button>
+      <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums">
+        {daysOpen}d
       </td>
     </tr>
   );
 }
 
 function ActivityItem({ event }) {
-  const actorColor = event.actor_type === 'AI_Agent'
-    ? 'text-purple-600'
-    : event.actor_type === 'System'
-      ? 'text-blue-600'
-      : 'text-foreground';
+  const actorColor =
+    event.actor_type === 'AI_Agent' ? 'text-purple-600' :
+    event.actor_type === 'System'   ? 'text-blue-500'   :
+    'text-foreground';
+
+  const eventLabel = event.event_type?.replace(/_/g, ' ');
+  const timeLabel  = event.created_date
+    ? format(new Date(event.created_date), 'HH:mm')
+    : '';
+  const dateLabel  = event.created_date
+    ? format(new Date(event.created_date), 'd MMM')
+    : '';
 
   return (
-    <div className="px-4 py-3 hover:bg-muted/30 transition-colors">
-      <div className="flex items-start gap-2">
+    <div className="px-4 py-2.5 hover:bg-muted/30 transition-colors">
+      <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-muted-foreground leading-relaxed">
+          <p className="text-xs leading-snug">
             <span className={cn('font-medium', actorColor)}>
               {event.actor_name || event.actor_type}
             </span>
-            {' · '}
-            {event.event_type?.replace(/_/g, ' ')}
+            <span className="text-muted-foreground"> · {eventLabel}</span>
           </p>
           {event.notes && (
             <p className="text-xs text-muted-foreground/70 mt-0.5 truncate">{event.notes}</p>
           )}
         </div>
-        <span className="text-xs text-muted-foreground/60 flex-shrink-0">
-          {event.created_date ? format(new Date(event.created_date), 'HH:mm') : ''}
-        </span>
+        <div className="flex-shrink-0 text-right">
+          <div className="text-xs text-muted-foreground/60">{timeLabel}</div>
+          <div className="text-xs text-muted-foreground/40">{dateLabel}</div>
+        </div>
       </div>
     </div>
   );
