@@ -25,12 +25,16 @@ export default function NotificationBell({ userId, tenantId }) {
 
   const load = useCallback(async () => {
     if (!userId) return;
-    const [unread, all] = await Promise.all([
-      base44.entities.Notification.filter({ user_id: userId, is_read: false }, '-created_date', 20),
-      base44.entities.Notification.filter({ user_id: userId }, '-created_date', 40),
-    ]);
-    setNotifications(unread || []);
-    setAllNotifications(all || []);
+    try {
+      const [unread, all] = await Promise.all([
+        base44.entities.Notification.filter({ user_id: userId, is_read: false }, '-created_date', 20),
+        base44.entities.Notification.filter({ user_id: userId }, '-created_date', 40),
+      ]);
+      setNotifications(unread || []);
+      setAllNotifications(all || []);
+    } catch {
+      // swallow transient network errors silently — polling will retry
+    }
   }, [userId]);
 
   // Initial load
