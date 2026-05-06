@@ -8,7 +8,7 @@ import SessionWatcher from '@/components/layout/SessionWatcher';
 import { base44 } from '@/api/base44Client';
 import {
   LayoutDashboard, FolderOpen, Users, Search, Shield,
-  Settings, BarChart3, AlertTriangle, Calendar, 
+  Settings, BarChart3, AlertTriangle, Calendar, Archive,
   ChevronLeft, ChevronRight, Menu, X, LogOut,
   Building2, UserCircle, Bell
 } from 'lucide-react';
@@ -41,6 +41,7 @@ const navItems = [
     group: 'REPORTS & ADMIN',
     items: [
       { label: 'MI Dashboard', icon: BarChart3, href: '/mi-dashboard', permission: 'viewMIDashboard' },
+      { label: 'Archive', icon: Archive, href: '/archive', permission: 'viewArchive' },
       { label: 'Tenant Config', icon: Settings, href: '/tenant-config', permission: 'tenantConfig' },
       { label: 'User Management', icon: UserCircle, href: '/user-management', permission: 'userManagement' },
     ],

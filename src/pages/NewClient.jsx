@@ -11,6 +11,7 @@ import { Building2, User, ChevronRight, ChevronLeft, CheckCircle, AlertTriangle,
 import { cn } from '@/lib/utils';
 import { addDays, format } from 'date-fns';
 import { findDuplicates, DEDUP_THRESHOLD } from '@/lib/dedup';
+import RestrictedClientGate from '@/components/archive/RestrictedClientGate';
 
 const SECTORS = [
   'Financial Services','Real Estate','Legal Services','Consulting','Technology',
@@ -34,6 +35,7 @@ export default function NewClient() {
   const [saving, setSaving]       = useState(false);
   const [allClients, setAllClients] = useState([]);
   const [dupWarning, setDupWarning] = useState(null); // { duplicates: [] } | null
+  const [restrictedBlock, setRestrictedBlock] = useState(null); // hard-stop for Rejected/Unacceptable
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
 
   const [form, setForm] = useState({
@@ -58,10 +60,21 @@ export default function NewClient() {
     return hits;
   }
 
+  function splitDups(dups) {
+    const restricted = dups.filter(d => ['Rejected', 'Unacceptable'].includes(d.client.status));
+    const normal     = dups.filter(d => !['Rejected', 'Unacceptable'].includes(d.client.status));
+    return { restricted, normal };
+  }
+
   function handleStepTwoNext() {
     const dups = runDedup();
     if (dups.length > 0) {
-      setDupWarning({ duplicates: dups });
+      const { restricted, normal } = splitDups(dups);
+      if (restricted.length > 0) {
+        setRestrictedBlock(restricted);
+        return;
+      }
+      setDupWarning({ duplicates: normal });
       return;
     }
     setStep(3);
@@ -71,7 +84,12 @@ export default function NewClient() {
     // Final dedup gate
     const dups = runDedup();
     if (dups.length > 0) {
-      setDupWarning({ duplicates: dups });
+      const { restricted, normal } = splitDups(dups);
+      if (restricted.length > 0) {
+        setRestrictedBlock(restricted);
+        return;
+      }
+      setDupWarning({ duplicates: normal });
       return;
     }
 
@@ -181,8 +199,18 @@ export default function NewClient() {
               </h2>
               <p className="text-sm text-muted-foreground mb-6">All fields marked * are required</p>
 
-              {/* Dup warning from step transition */}
-              {dupWarning && (
+              {/* HARD STOP: Restricted client gate */}
+              {restrictedBlock && (
+                <RestrictedClientGate
+                  matches={restrictedBlock}
+                  currentUser={currentUser}
+                  tenantId={currentUser?.tenant_id}
+                  onDismiss={() => setRestrictedBlock(null)}
+                />
+              )}
+
+              {/* Soft dup warning from step transition */}
+              {!restrictedBlock && dupWarning && (
                 <DupWarningBlock
                   duplicates={dupWarning.duplicates}
                   onDismiss={() => { setDupWarning(null); setStep(3); }}
@@ -237,7 +265,7 @@ export default function NewClient() {
                 </Button>
                 <Button
                   onClick={handleStepTwoNext}
-                  disabled={!form.full_name}
+                  disabled={!form.full_name || !!restrictedBlock}
                   style={{ backgroundColor: tenantColor }}
                   className="flex-1 text-white"
                 >
