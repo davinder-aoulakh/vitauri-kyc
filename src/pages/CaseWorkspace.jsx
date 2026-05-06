@@ -413,7 +413,7 @@ export default function CaseWorkspace() {
                 {/* Step content */}
                 {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} />}
                 {activeStep === 2 && <IdentityVerificationStep kycCase={kycCase} client={client} currentUser={currentUser} />}
-                {activeStep === 3 && <ScreeningStep caseId={id} tenantId={currentUser?.tenant_id} currentUser={currentUser} />}
+                {activeStep === 3 && <ScreeningStep caseId={id} tenantId={currentUser?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} />}
                 {activeStep === 4 && <ClientProfileStep client={client} />}
                 {activeStep === 5 && <SoFSoWStep kycCase={kycCase} client={client} currentUser={currentUser} />}
                 {activeStep === 6 && <RiskAssessmentStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />}
