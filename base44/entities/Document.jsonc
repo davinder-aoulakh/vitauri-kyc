@@ -47,6 +47,27 @@
     "related_party_id": {
       "type": "string",
       "description": "nullable \u2014 if doc belongs to a related party"
+    },
+    "review_status": {
+      "type": "string",
+      "enum": [
+        "Pending_Review",
+        "Approved",
+        "Rejected"
+      ],
+      "default": "Pending_Review",
+      "description": "Analyst approval status"
+    },
+    "review_notes": {
+      "type": "string",
+      "description": "Rejection reason or approval notes"
+    },
+    "reviewed_by_user_id": {
+      "type": "string"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date-time"
     }
   },
   "required": [

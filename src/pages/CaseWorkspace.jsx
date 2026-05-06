@@ -18,6 +18,7 @@ import SignOffStep          from '@/components/case/SignOffStep';
 import KycReportStep        from '@/components/case/KycReportStep';
 import AiAssistantPanel     from '@/components/case/AiAssistantPanel';
 import ClientProfileStep    from '@/components/case/ClientProfileStep';
+import CaseTypeBanner       from '@/components/case/views/CaseTypeBanner';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -365,6 +366,9 @@ export default function CaseWorkspace() {
                     </Button>
                   </div>
                 </div>
+
+                {/* Case type context banner */}
+                <CaseTypeBanner kycCase={kycCase} client={client} />
 
                 {/* Step content */}
                 {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} />}
