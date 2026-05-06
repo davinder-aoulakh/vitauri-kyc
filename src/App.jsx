@@ -19,6 +19,7 @@ import OrgChart from './pages/OrgChart';
 import MonitoringAlerts from './pages/MonitoringAlerts';
 import TenantConfig from './pages/TenantConfig';
 import UserManagement from './pages/UserManagement';
+import BatchUpload from './pages/BatchUpload';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -79,6 +80,7 @@ const AuthenticatedApp = () => {
       {/* Clients */}
       <Route path="/client-search" element={<ClientSearch />} />
       <Route path="/new-client" element={<NewClient />} />
+      <Route path="/batch-upload" element={<BatchUpload />} />
       <Route path="/client/:id" element={<ClientDetail />} />
       <Route path="/org-chart/:clientId" element={<OrgChart />} />
 

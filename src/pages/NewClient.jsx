@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
@@ -7,32 +7,74 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Building2, User, ChevronRight, ChevronLeft, CheckCircle } from 'lucide-react';
+import { Building2, User, ChevronRight, ChevronLeft, CheckCircle, AlertTriangle, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { addDays, format } from 'date-fns';
+import { findDuplicates, DEDUP_THRESHOLD } from '@/lib/dedup';
 
-const SECTORS = ['Financial Services', 'Real Estate', 'Legal Services', 'Consulting', 'Technology', 'Manufacturing', 'Trading', 'Healthcare', 'Energy', 'Other'];
-const LEGAL_FORMS = ['BV', 'NV', 'Ltd', 'SA', 'GmbH', 'LLC', 'Inc', 'PLC', 'Other'];
-const COUNTRIES = ['Netherlands (NL)', 'Belgium (BE)', 'Germany (DE)', 'France (FR)', 'United Kingdom (GB)', 'United States (US)', 'Curaçao (CW)', 'Aruba (AW)', 'Suriname (SR)', 'Other'];
+const SECTORS = [
+  'Financial Services','Real Estate','Legal Services','Consulting','Technology',
+  'Manufacturing','Trading','Healthcare','Energy','Retail','Construction',
+  'Transport & Logistics','Media & Entertainment','Non-Profit','Government','Other'
+];
+const LEGAL_FORMS = ['BV','NV','Ltd','SA','GmbH','LLC','Inc','PLC','SRL','AG','SARL','Other'];
+const COUNTRIES = [
+  'Netherlands (NL)','Belgium (BE)','Germany (DE)','France (FR)',
+  'United Kingdom (GB)','United States (US)','Luxembourg (LU)',
+  'Switzerland (CH)','Curaçao (CW)','Aruba (AW)','Suriname (SR)','Other'
+];
+const SOURCE_CHANNELS = ['Manual','Batch','API_CRM'];
 
 export default function NewClient() {
   const { currentUser, tenant } = useTenant();
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
+
+  const [step, setStep]           = useState(1);
   const [clientType, setClientType] = useState(null);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [allClients, setAllClients] = useState([]);
+  const [dupWarning, setDupWarning] = useState(null); // { duplicates: [] } | null
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
 
   const [form, setForm] = useState({
     full_name: '', date_of_birth: '', nationality: '', country_of_residence: '',
     primary_contact_email: '', primary_contact_phone: '', primary_contact_name: '',
-    registration_number: '', lei_code: '', registered_country: '', registered_address: '',
-    sector: '', legal_form: '', source_channel: 'Manual',
+    registration_number: '', lei_code: '', registered_country: '',
+    registered_address: '', sector: '', legal_form: '',
+    source_channel: 'Manual',
   });
 
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
+  useEffect(() => {
+    if (currentUser?.tenant_id) {
+      base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }).then(d => setAllClients(d || []));
+    }
+  }, [currentUser]);
+
+  function runDedup() {
+    const country = form.registered_country || form.nationality || form.country_of_residence;
+    const hits = findDuplicates(form.full_name, country, allClients);
+    return hits;
+  }
+
+  function handleStepTwoNext() {
+    const dups = runDedup();
+    if (dups.length > 0) {
+      setDupWarning({ duplicates: dups });
+      return;
+    }
+    setStep(3);
+  }
+
   async function handleCreate() {
+    // Final dedup gate
+    const dups = runDedup();
+    if (dups.length > 0) {
+      setDupWarning({ duplicates: dups });
+      return;
+    }
+
     setSaving(true);
     const client = await base44.entities.Client.create({
       ...form,
@@ -48,16 +90,13 @@ export default function NewClient() {
       actor_name: currentUser.full_name,
       actor_type: 'User',
       event_type: 'client_created',
-      after_state: form,
+      after_state: { ...form, client_type: clientType },
     });
 
-    // Create Onboarding case
     const dueDate = addDays(new Date(), 30);
     const kycCase = await base44.entities.KycCase.create({
       tenant_id: currentUser.tenant_id,
       client_id: client.id,
-      client_name: form.full_name,
-      client_type: clientType,
       case_type: 'Onboarding',
       status: 'Draft',
       assigned_analyst_id: currentUser.id,
@@ -71,14 +110,14 @@ export default function NewClient() {
   const StepIndicator = ({ n, label, active, done }) => (
     <div className={cn('flex items-center gap-2', !active && !done && 'opacity-40')}>
       <div className={cn(
-        'w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold border-2 transition-colors',
+        'w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold border-2',
         done ? 'bg-emerald-500 border-emerald-500 text-white'
           : active ? 'border-primary text-primary bg-primary/10'
           : 'border-border text-muted-foreground'
       )}>
         {done ? <CheckCircle className="w-3.5 h-3.5" /> : n}
       </div>
-      <span className={cn('text-sm', active ? 'font-semibold text-foreground' : 'text-muted-foreground')}>
+      <span className={cn('text-sm hidden sm:block', active ? 'font-semibold text-foreground' : 'text-muted-foreground')}>
         {label}
       </span>
     </div>
@@ -87,25 +126,26 @@ export default function NewClient() {
   return (
     <AppShell>
       <div className="p-6 max-w-2xl mx-auto">
-        {/* Steps */}
-        <div className="flex items-center gap-6 mb-8">
-          <StepIndicator n={1} label="Client Type" active={step===1} done={step>1} />
+        {/* Step indicators */}
+        <div className="flex items-center gap-3 mb-8">
+          <StepIndicator n={1} label="Client Type"   active={step===1} done={step>1} />
           <div className="flex-1 h-px bg-border" />
-          <StepIndicator n={2} label={clientType==='NP' ? 'Personal Details' : 'Organisation Details'} active={step===2} done={step>2} />
+          <StepIndicator n={2} label="Details"       active={step===2} done={step>2} />
           <div className="flex-1 h-px bg-border" />
           <StepIndicator n={3} label="Review & Create" active={step===3} done={false} />
         </div>
 
         <div className="bg-card border border-border rounded-xl p-6">
-          {/* Step 1 */}
+
+          {/* ── Step 1: Client Type ── */}
           {step === 1 && (
             <div>
               <h2 className="text-lg font-semibold mb-1">Select Client Type</h2>
               <p className="text-sm text-muted-foreground mb-6">Choose the type of client you are onboarding</p>
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { type: 'NP', icon: User, label: 'Natural Person', sub: 'Individual client (NP)' },
-                  { type: 'ORG', icon: Building2, label: 'Organisation', sub: 'Corporate entity (ORG)' },
+                  { type: 'NP',  icon: User,      label: 'Natural Person', sub: 'Individual client — passport, ID' },
+                  { type: 'ORG', icon: Building2,  label: 'Organisation',   sub: 'Corporate entity — BV, NV, Ltd, etc.' },
                 ].map(({ type, icon: Icon, label, sub }) => (
                   <button
                     key={type}
@@ -121,16 +161,35 @@ export default function NewClient() {
                   </button>
                 ))}
               </div>
+              <div className="mt-6 pt-5 border-t border-border">
+                <button
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => navigate('/batch-upload')}
+                >
+                  <Upload className="w-4 h-4" />
+                  Batch upload multiple clients via CSV
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Step 2 */}
+          {/* ── Step 2: Details ── */}
           {step === 2 && (
             <div>
               <h2 className="text-lg font-semibold mb-1">
-                Step 2 of 3 — {clientType === 'NP' ? 'Personal' : 'Organisation'} Details
+                {clientType === 'NP' ? 'Natural Person Details' : 'Organisation Details'}
               </h2>
-              <p className="text-sm text-muted-foreground mb-6">Enter the required information for this client</p>
+              <p className="text-sm text-muted-foreground mb-6">All fields marked * are required</p>
+
+              {/* Dup warning from step transition */}
+              {dupWarning && (
+                <DupWarningBlock
+                  duplicates={dupWarning.duplicates}
+                  onDismiss={() => { setDupWarning(null); setStep(3); }}
+                  onViewClient={id => navigate(`/client/${id}`)}
+                />
+              )}
+
               <div className="space-y-4">
                 {clientType === 'NP' ? (
                   <>
@@ -147,6 +206,7 @@ export default function NewClient() {
                       <Field label="Contact Email" value={form.primary_contact_email} onChange={v => set('primary_contact_email', v)} type="email" />
                       <Field label="Contact Phone" value={form.primary_contact_phone} onChange={v => set('primary_contact_phone', v)} />
                     </div>
+                    <SelectField label="Source Channel" value={form.source_channel} onChange={v => set('source_channel', v)} options={SOURCE_CHANNELS} />
                   </>
                 ) : (
                   <>
@@ -160,21 +220,23 @@ export default function NewClient() {
                       <Field label="LEI Code" value={form.lei_code} onChange={v => set('lei_code', v)} placeholder="Optional" />
                     </div>
                     <SelectField label="Sector / Industry *" value={form.sector} onChange={v => set('sector', v)} options={SECTORS} />
-                    <Field label="Registered Address *" value={form.registered_address} onChange={v => set('registered_address', v)} placeholder="Street, City, Postcode" />
+                    <Field label="Registered Address *" value={form.registered_address} onChange={v => set('registered_address', v)} placeholder="Street, City, Postcode, Country" />
                     <div className="grid grid-cols-2 gap-4">
                       <Field label="Contact Name *" value={form.primary_contact_name} onChange={v => set('primary_contact_name', v)} />
                       <Field label="Contact Email *" value={form.primary_contact_email} onChange={v => set('primary_contact_email', v)} type="email" />
                     </div>
                     <Field label="Contact Phone" value={form.primary_contact_phone} onChange={v => set('primary_contact_phone', v)} />
+                    <SelectField label="Source Channel" value={form.source_channel} onChange={v => set('source_channel', v)} options={SOURCE_CHANNELS} />
                   </>
                 )}
               </div>
+
               <div className="flex gap-3 mt-6">
                 <Button variant="outline" onClick={() => setStep(1)}>
                   <ChevronLeft className="w-4 h-4 mr-1" /> Back
                 </Button>
                 <Button
-                  onClick={() => setStep(3)}
+                  onClick={handleStepTwoNext}
                   disabled={!form.full_name}
                   style={{ backgroundColor: tenantColor }}
                   className="flex-1 text-white"
@@ -185,40 +247,51 @@ export default function NewClient() {
             </div>
           )}
 
-          {/* Step 3 */}
+          {/* ── Step 3: Review ── */}
           {step === 3 && (
             <div>
-              <h2 className="text-lg font-semibold mb-1">Step 3 of 3 — Review & Create</h2>
-              <p className="text-sm text-muted-foreground mb-6">Confirm the details before creating the client and opening a KYC case</p>
-              <div className="bg-muted/40 rounded-lg p-4 space-y-2 text-sm mb-6">
-                <div className="flex justify-between"><span className="text-muted-foreground">Client Type</span><span className="font-medium">{clientType}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Name</span><span className="font-medium">{form.full_name}</span></div>
-                {clientType === 'ORG' && (
-                  <>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Legal Form</span><span className="font-medium">{form.legal_form}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Registration No.</span><span className="font-medium">{form.registration_number || '—'}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Country</span><span className="font-medium">{form.registered_country || '—'}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Sector</span><span className="font-medium">{form.sector || '—'}</span></div>
-                  </>
-                )}
-                {clientType === 'NP' && (
-                  <>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Date of Birth</span><span className="font-medium">{form.date_of_birth || '—'}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Nationality</span><span className="font-medium">{form.nationality || '—'}</span></div>
-                  </>
-                )}
-                <div className="flex justify-between"><span className="text-muted-foreground">Contact Email</span><span className="font-medium">{form.primary_contact_email || '—'}</span></div>
+              <h2 className="text-lg font-semibold mb-1">Review & Create</h2>
+              <p className="text-sm text-muted-foreground mb-5">Confirm the details before creating the client and opening a KYC case</p>
+
+              {dupWarning && (
+                <DupWarningBlock
+                  duplicates={dupWarning.duplicates}
+                  onDismiss={() => setDupWarning(null)}
+                  onViewClient={id => navigate(`/client/${id}`)}
+                />
+              )}
+
+              <div className="bg-muted/40 rounded-lg p-4 space-y-2 text-sm mb-5 border border-border">
+                <ReviewRow label="Client Type" value={clientType} />
+                <ReviewRow label="Name" value={form.full_name} />
+                {clientType === 'ORG' && <>
+                  <ReviewRow label="Legal Form" value={form.legal_form} />
+                  <ReviewRow label="Registration No." value={form.registration_number} />
+                  <ReviewRow label="Registered Country" value={form.registered_country} />
+                  <ReviewRow label="Sector" value={form.sector} />
+                  <ReviewRow label="Address" value={form.registered_address} />
+                </>}
+                {clientType === 'NP' && <>
+                  <ReviewRow label="Date of Birth" value={form.date_of_birth} />
+                  <ReviewRow label="Nationality" value={form.nationality} />
+                  <ReviewRow label="Country of Residence" value={form.country_of_residence} />
+                </>}
+                <ReviewRow label="Contact Email" value={form.primary_contact_email} />
+                {form.primary_contact_name && <ReviewRow label="Contact Name" value={form.primary_contact_name} />}
+                <ReviewRow label="Source Channel" value={form.source_channel} />
               </div>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 mb-6">
-                A new <strong>Onboarding</strong> KYC case will be created automatically and assigned to you.
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 mb-5">
+                A new <strong>Onboarding</strong> KYC case will be created and assigned to you with a 30-day due date.
               </div>
+
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => setStep(2)}>
                   <ChevronLeft className="w-4 h-4 mr-1" /> Back
                 </Button>
                 <Button
                   onClick={handleCreate}
-                  disabled={saving}
+                  disabled={saving || !!dupWarning}
                   style={{ backgroundColor: tenantColor }}
                   className="flex-1 text-white"
                 >
@@ -230,6 +303,48 @@ export default function NewClient() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function DupWarningBlock({ duplicates, onDismiss, onViewClient }) {
+  return (
+    <div className="bg-red-50 border border-red-300 rounded-lg p-4 mb-4">
+      <div className="flex gap-2 items-start mb-3">
+        <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+        <div>
+          <div className="text-sm font-semibold text-red-800">Duplicate client detected</div>
+          <div className="text-xs text-red-600 mt-0.5">
+            The following existing clients match at ≥{DEDUP_THRESHOLD}% similarity. Review before proceeding.
+          </div>
+        </div>
+      </div>
+      <div className="space-y-2 mb-3">
+        {duplicates.map(({ client, score }) => (
+          <div key={client.id} className="flex items-center justify-between bg-white border border-red-200 rounded px-3 py-2">
+            <div>
+              <span className="text-sm font-medium">{client.full_name}</span>
+              <span className="ml-2 text-xs text-red-600 font-mono">{score}% match</span>
+              <div className="text-xs text-muted-foreground">{client.status} · {client.registered_country || client.nationality || '—'}</div>
+            </div>
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onViewClient(client.id)}>
+              View
+            </Button>
+          </div>
+        ))}
+      </div>
+      <Button variant="destructive" size="sm" className="text-xs" onClick={onDismiss}>
+        Confirm this is NOT a duplicate — proceed anyway
+      </Button>
+    </div>
+  );
+}
+
+function ReviewRow({ label, value }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium text-right max-w-[60%]">{value || '—'}</span>
+    </div>
   );
 }
 
