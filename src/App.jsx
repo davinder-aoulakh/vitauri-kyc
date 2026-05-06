@@ -23,6 +23,7 @@ import BatchUpload from './pages/BatchUpload';
 import ClientPortal from './pages/ClientPortal';
 import ReviewPlanner from './pages/ReviewPlanner';
 import MIDashboard from './pages/MIDashboard';
+import AiPromptLibrary from './pages/AiPromptLibrary';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -96,6 +97,7 @@ const AuthenticatedApp = () => {
 
       {/* Admin */}
       <Route path="/tenant-config" element={<TenantConfig />} />
+      <Route path="/ai-prompts" element={<AiPromptLibrary />} />
       <Route path="/user-management" element={<UserManagement />} />
 
       <Route path="*" element={<PageNotFound />} />

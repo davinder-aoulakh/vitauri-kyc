@@ -1,0 +1,35 @@
+{
+  "name": "AiPromptConfig",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "agent_key": {
+      "type": "string",
+      "description": "Unique key identifying the agent, e.g. OrgChart, OutreachCopilot"
+    },
+    "agent_label": {
+      "type": "string"
+    },
+    "system_prompt": {
+      "type": "string"
+    },
+    "default_prompt": {
+      "type": "string",
+      "description": "Immutable default \u2014 used for Reset to Default"
+    },
+    "modified_by_name": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "tenant_id",
+    "agent_key",
+    "system_prompt"
+  ]
+}
