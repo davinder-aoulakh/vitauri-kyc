@@ -47,13 +47,14 @@ export default function Dashboard() {
 
   const loadData = useCallback(async () => {
     if (!currentUser?.tenant_id) return;
+    const canViewUsers = hasPermission(currentUser?.app_role, 'viewAllTenantCases');
     const [casesData, auditData, clientsData, newHits, reviewHits, usersData] = await Promise.all([
       base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }),
       base44.entities.AuditEvent.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 20),
       base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }),
       base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'New' }),
       base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'Under_Review' }),
-      base44.entities.User.list(),
+      canViewUsers ? base44.entities.User.list() : Promise.resolve([]),
     ]);
     setCases(casesData || []);
     setAuditEvents(auditData || []);
