@@ -56,9 +56,12 @@ export default function UserManagement() {
   }, [currentUser]);
 
   async function loadUsers() {
-    const data = await base44.entities.User.filter({ tenant_id: currentUser.tenant_id });
-    setUsers(data || []);
-    setLoading(false);
+    try {
+      const data = await base44.entities.User.filter({ tenant_id: currentUser.tenant_id }).catch(() => []);
+      setUsers(data || []);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function inviteUser() {
