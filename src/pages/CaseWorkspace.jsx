@@ -80,20 +80,23 @@ export default function CaseWorkspace() {
   useEffect(() => { loadAll(); }, [id]);
 
   async function loadAll() {
-    const caseData = await base44.entities.KycCase.filter({ id });
-    const c = caseData?.[0];
-    setKycCase(c);
-    setNoteText(c?.case_notes || '');
+    try {
+      const caseData = await base44.entities.KycCase.filter({ id });
+      const c = caseData?.[0];
+      setKycCase(c);
+      setNoteText(c?.case_notes || '');
 
-    const [clientData, usersData, auditData] = await Promise.all([
-      c?.client_id ? base44.entities.Client.filter({ id: c.client_id }) : Promise.resolve([]),
-      base44.entities.User.list().catch(() => []),
-      base44.entities.AuditEvent.filter({ case_id: id }, '-created_date', 100),
-    ]);
-    setClient(clientData?.[0] || null);
-    setUsers(usersData || []);
-    setAuditEvents(auditData || []);
-    setLoading(false);
+      const [clientData, usersData, auditData] = await Promise.all([
+        c?.client_id ? base44.entities.Client.filter({ id: c.client_id }) : Promise.resolve([]),
+        base44.entities.User.list().catch(() => []),
+        base44.entities.AuditEvent.filter({ case_id: id }, '-created_date', 100).catch(() => []),
+      ]);
+      setClient(clientData?.[0] || null);
+      setUsers(usersData || []);
+      setAuditEvents(auditData || []);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function saveNote() {
