@@ -136,10 +136,13 @@ export default function CasesList({ myOnly = false }) {
     const query = { tenant_id: currentUser.tenant_id };
     if (myOnly) query.assigned_analyst_id = currentUser.id;
     const canViewUsers = hasPermission(currentUser?.app_role, 'viewAllTenantCases');
+    const usersPromise = canViewUsers
+      ? base44.entities.User.filter({ tenant_id: currentUser.tenant_id })
+      : Promise.resolve([]);
     const [casesData, clientsData, usersData] = await Promise.all([
       base44.entities.KycCase.filter(query, '-created_date', 1000),
       base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }),
-      canViewUsers ? base44.entities.User.filter({ tenant_id: currentUser.tenant_id }) : Promise.resolve([]),
+      usersPromise,
     ]);
     setCases(casesData || []);
     const cm = {};
