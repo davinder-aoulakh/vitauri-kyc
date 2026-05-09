@@ -16,6 +16,14 @@ export function TenantProvider({ children }) {
     async function init() {
       try {
         const user = await base44.auth.me();
+        // Ensure app_role and tenant_id are accessible at top level
+        // (invited users may have these nested under user.data)
+        if (user && !user.app_role && user.data?.app_role) {
+          user.app_role = user.data.app_role;
+        }
+        if (user && !user.tenant_id && user.data?.tenant_id) {
+          user.tenant_id = user.data.tenant_id;
+        }
         setCurrentUser(user);
 
         if (user?.tenant_id) {
