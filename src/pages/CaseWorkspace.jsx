@@ -87,7 +87,7 @@ export default function CaseWorkspace() {
 
     const [clientData, usersData, auditData] = await Promise.all([
       c?.client_id ? base44.entities.Client.filter({ id: c.client_id }) : Promise.resolve([]),
-      base44.entities.User.list(),
+      base44.entities.User.list().catch(() => []),
       base44.entities.AuditEvent.filter({ case_id: id }, '-created_date', 100),
     ]);
     setClient(clientData?.[0] || null);
