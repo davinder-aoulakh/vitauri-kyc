@@ -43,29 +43,32 @@ export default function ClientDetail() {
   useEffect(() => { loadAll(); }, [id]);
 
   async function loadAll() {
-    const [clientData, casesData, linksData, docsData, auditData, usersData] = await Promise.all([
-      base44.entities.Client.filter({ id }),
-      base44.entities.KycCase.filter({ client_id: id }, '-created_date'),
-      base44.entities.ClientRelatedPartyLink.filter({ client_id: id }),
-      base44.entities.Document.filter({ client_id: id }, '-created_date'),
-      base44.entities.AuditEvent.filter({ client_id: id }, '-created_date', 200),
-      base44.entities.User.list(),
-    ]);
-    const c = clientData?.[0];
-    setClient(c);
-    setCases(casesData || []);
-    setRpLinks(linksData || []);
-    setDocuments(docsData || []);
-    setAuditEvents(auditData || []);
-    setUsers(usersData || []);
+    try {
+      const [clientData, casesData, linksData, docsData, auditData, usersData] = await Promise.all([
+        base44.entities.Client.filter({ id }),
+        base44.entities.KycCase.filter({ client_id: id }, '-created_date'),
+        base44.entities.ClientRelatedPartyLink.filter({ client_id: id }),
+        base44.entities.Document.filter({ client_id: id }, '-created_date'),
+        base44.entities.AuditEvent.filter({ client_id: id }, '-created_date', 200),
+        base44.entities.User.list().catch(() => []),
+      ]);
+      const c = clientData?.[0];
+      setClient(c);
+      setCases(casesData || []);
+      setRpLinks(linksData || []);
+      setDocuments(docsData || []);
+      setAuditEvents(auditData || []);
+      setUsers(usersData || []);
 
-    if (linksData?.length > 0) {
-      const rps = await Promise.all(
-        linksData.map(link => base44.entities.RelatedParty.filter({ id: link.related_party_id }))
-      );
-      setRelatedParties(rps.flat().filter(Boolean));
+      if (linksData?.length > 0) {
+        const rps = await Promise.all(
+          linksData.map(link => base44.entities.RelatedParty.filter({ id: link.related_party_id }))
+        );
+        setRelatedParties(rps.flat().filter(Boolean));
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function handleReassign() {
