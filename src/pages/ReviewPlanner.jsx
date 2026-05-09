@@ -76,7 +76,7 @@ export default function ReviewPlanner() {
     setLoading(true);
     const [clientData, usersData, caseData] = await Promise.all([
       base44.entities.Client.filter({ tenant_id: currentUser.tenant_id, status: 'Active' }),
-      base44.entities.User.list(),
+      base44.entities.User.list().catch(() => []),
       base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
     ]);
     setClients(clientData || []);
