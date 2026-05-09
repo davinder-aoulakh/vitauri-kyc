@@ -129,7 +129,7 @@ export default function CasesList({ myOnly = false }) {
 
   useEffect(() => {
     if (currentUser?.tenant_id) loadAll();
-  }, [currentUser]);
+  }, [currentUser?.tenant_id, myOnly]);
 
   async function loadAll() {
     setLoading(true);
