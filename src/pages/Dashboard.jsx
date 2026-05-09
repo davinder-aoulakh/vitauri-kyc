@@ -54,7 +54,7 @@ export default function Dashboard() {
       base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }),
       base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'New' }),
       base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'Under_Review' }),
-      canViewUsers ? base44.entities.User.list() : Promise.resolve([]),
+      canViewUsers ? base44.entities.User.list().catch(() => []) : Promise.resolve([]),
     ]);
     setCases(casesData || []);
     setAuditEvents(auditData || []);
