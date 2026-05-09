@@ -65,13 +65,16 @@ export default function AuditLogs() {
 
   async function load() {
     setLoading(true);
-    const [evData, usersData] = await Promise.all([
-      base44.entities.AuditEvent.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 2000),
-      base44.entities.User.list(),
-    ]);
-    setEvents(evData || []);
-    setUsers(usersData || []);
-    setLoading(false);
+    try {
+      const [evData, usersData] = await Promise.all([
+        base44.entities.AuditEvent.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 2000),
+        base44.entities.User.list().catch(() => []),
+      ]);
+      setEvents(evData || []);
+      setUsers(usersData || []);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const tenantUsers = users.filter(u => u.tenant_id === currentUser?.tenant_id);
