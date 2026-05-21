@@ -22,6 +22,7 @@ import OsintPanel           from '@/components/case/OsintPanel';
 import ClientProfileStep    from '@/components/case/ClientProfileStep';
 import CaseTypeBanner       from '@/components/case/views/CaseTypeBanner';
 import CaseAssignmentPicker from '@/components/case/CaseAssignmentPicker';
+import CaseNotesSidebar     from '@/components/case/CaseNotesSidebar';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -380,20 +381,14 @@ export default function CaseWorkspace() {
               </div>
 
               {/* Case Notes */}
-              <div className="border-t border-border p-3 flex-shrink-0">
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="text-xs font-semibold text-muted-foreground">Case Notes</div>
-                  {noteSaved && <span className="text-xs text-emerald-600">✓</span>}
-                </div>
-                <Textarea
-                  value={noteText}
-                  onChange={e => { setNoteText(e.target.value); setNoteSaved(false); }}
-                  placeholder="Add notes…"
-                  className="text-xs min-h-14 resize-none"
-                  onBlur={saveNote}
-                />
-                {noteSaving && <div className="text-xs text-muted-foreground mt-1">Saving…</div>}
-              </div>
+              <CaseNotesSidebar
+                noteText={noteText}
+                onNoteChange={(text) => { setNoteText(text); setNoteSaved(false); }}
+                onNoteSave={saveNote}
+                noteSaving={noteSaving}
+                noteSaved={noteSaved}
+                caseCreatedDate={kycCase.created_date}
+              />
             </aside>
 
             {/* Main Content */}
