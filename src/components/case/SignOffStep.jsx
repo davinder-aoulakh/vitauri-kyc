@@ -49,7 +49,7 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
   const requiredApprover = SIGN_OFF_MATRIX[risk] || 'Analyst (self-sign-off)';
 
   useEffect(() => {
-    base44.entities.User.list().then(u => setUsers(u || []));
+    base44.entities.User.list().then(u => setUsers(u || [])).catch(() => setUsers([]));
   }, []);
 
   const submittedByUser = users.find(u => u.id === kycCase?.sign_off_submitted_by);
