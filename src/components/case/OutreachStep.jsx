@@ -10,6 +10,7 @@ import {
   MessageSquare, Plus, Send, Loader2, FileText, CheckCircle,
   AlertTriangle, Sparkles, Eye, Copy, ExternalLink, ShieldCheck
 } from 'lucide-react';
+import DocumentViewer from '@/components/shared/DocumentViewer';
 import { format, addDays, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -57,6 +58,7 @@ export default function OutreachStep({ kycCase, client, currentUser }) {
   const [loading, setLoading]     = useState(true);
   const [newOpen, setNewOpen]     = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [viewerDoc, setViewerDoc] = useState(null); // { url, name }
 
   // Builder state
   const [selectedItems, setSelectedItems] = useState([]);
@@ -306,9 +308,12 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                               <div className="text-xs text-foreground truncate">{item.label}</div>
                               {item.response_text && <div className="text-xs text-muted-foreground truncate">{item.response_text}</div>}
                               {item.file_url && (
-                                <a href={item.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
-                                  View uploaded file ↗
-                                </a>
+                                <button
+                                  className="text-xs text-primary hover:underline text-left"
+                                  onClick={() => setViewerDoc({ url: item.file_url, name: item.label })}
+                                >
+                                  View uploaded file
+                                </button>
                               )}
                             </div>
                           </div>
@@ -339,6 +344,14 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
             );
           })}
         </div>
+      )}
+
+      {viewerDoc && (
+        <DocumentViewer
+          fileUrl={viewerDoc.url}
+          fileName={viewerDoc.name}
+          onClose={() => setViewerDoc(null)}
+        />
       )}
 
       {/* ── Builder Dialog ── */}

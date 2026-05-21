@@ -8,8 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   FileText, Plus, Download, ChevronDown, ChevronRight,
-  Loader2, Upload, CheckCircle, XCircle, Clock, Filter, X, Sparkles
+  Loader2, Upload, CheckCircle, XCircle, Clock, Filter, X, Sparkles, Eye
 } from 'lucide-react';
+import DocumentViewer from '@/components/shared/DocumentViewer';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import OcrResultPanel from '@/components/client/OcrResultPanel';
@@ -43,6 +44,7 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
   const { currentUser } = useTenant();
   const [uploadOpen, setUploadOpen]     = useState(false);
   const [reviewOpen, setReviewOpen]     = useState(null); // doc object
+  const [viewerDoc, setViewerDoc]       = useState(null); // { url, name }
   const [expanded, setExpanded]         = useState({});
   const [filterType, setFilterType]     = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -161,10 +163,15 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
                         <div className="flex items-center gap-1 flex-shrink-0 ml-2">
                           <Button
                             variant="ghost" size="sm" className="h-7 text-xs gap-1"
-                            onClick={() => window.open(doc.file_url, '_blank')}
+                            onClick={() => setViewerDoc({ url: doc.file_url, name: doc.file_name })}
                           >
-                            <Download className="w-3 h-3" />
+                            <Eye className="w-3 h-3" />
                           </Button>
+                          <a href={doc.file_url} download target="_blank" rel="noopener noreferrer">
+                            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
+                              <Download className="w-3 h-3" />
+                            </Button>
+                          </a>
                           {idx === 0 && (
                             <Button
                               variant="outline" size="sm" className="h-7 text-xs"
@@ -182,6 +189,14 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
             );
           })}
         </div>
+      )}
+
+      {viewerDoc && (
+        <DocumentViewer
+          fileUrl={viewerDoc.url}
+          fileName={viewerDoc.name}
+          onClose={() => setViewerDoc(null)}
+        />
       )}
 
       <UploadDialog

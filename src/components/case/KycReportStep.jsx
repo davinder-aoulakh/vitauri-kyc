@@ -8,6 +8,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { FileText, Download, Loader2, Share2, CheckCircle, XCircle, Eye, RefreshCw, Shield } from 'lucide-react';
+import DocumentViewer from '@/components/shared/DocumentViewer';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
@@ -570,6 +571,7 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
   const [reports, setReports]       = useState([]);
   const [loading, setLoading]       = useState(true);
   const [shareLink, setShareLink]   = useState(null);
+  const [viewerDoc, setViewerDoc]   = useState(null);
 
   useEffect(() => { loadReports(); }, [kycCase.id]);
 
@@ -648,6 +650,14 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
 
   return (
     <div className="space-y-5">
+      {viewerDoc && (
+        <DocumentViewer
+          fileUrl={viewerDoc.url}
+          fileName={viewerDoc.name}
+          onClose={() => setViewerDoc(null)}
+        />
+      )}
+
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold text-sm flex items-center gap-2">
@@ -740,7 +750,7 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" className="gap-1 text-xs h-7"
-                  onClick={() => window.open(latestReport.file_url, '_blank')}>
+                  onClick={() => setViewerDoc({ url: latestReport.file_url, name: latestReport.file_name })}>
                   <Eye className="w-3 h-3" /> Preview
                 </Button>
                 <a href={latestReport.file_url} download target="_blank" rel="noopener noreferrer">
@@ -756,8 +766,7 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
                 )}
               </div>
             </div>
-            <iframe src={latestReport.file_url} title="KYC Report Preview"
-              className="w-full border-0" style={{ height: '540px' }} />
+
           </div>
 
           {/* Share link */}
@@ -796,7 +805,11 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {r.created_date && format(new Date(r.created_date), 'd MMM yyyy HH:mm')}
-                      <a href={r.file_url} target="_blank" rel="noopener noreferrer">
+                      <Button size="sm" variant="ghost" className="h-6 text-xs gap-1"
+                        onClick={() => setViewerDoc({ url: r.file_url, name: r.file_name })}>
+                        <Eye className="w-3 h-3" /> View
+                      </Button>
+                      <a href={r.file_url} download target="_blank" rel="noopener noreferrer">
                         <Button size="sm" variant="ghost" className="h-6 text-xs gap-1">
                           <Download className="w-3 h-3" /> Download
                         </Button>

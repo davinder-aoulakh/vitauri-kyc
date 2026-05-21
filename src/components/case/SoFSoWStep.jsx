@@ -8,8 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Sparkles, CheckCircle, Loader2, Paperclip,
-  RefreshCw, Link2, ToggleLeft, ToggleRight, X
+  RefreshCw, Link2, ToggleLeft, ToggleRight, X, Eye
 } from 'lucide-react';
+import DocumentViewer from '@/components/shared/DocumentViewer';
 import { cn } from '@/lib/utils';
 
 const SOF_SOURCES_NP  = ['Salary / Employment Income','Business Income / Dividends','Sale of Property','Inheritance','Investment Returns','Pension','Loan / Credit Facility','Gift','Other'];
@@ -153,6 +154,7 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
   const [evidence, setEvidence] = useState([]); // [{ doc_id, doc_name, claim, verified }]
   const [evidencePickerOpen, setEvidencePickerOpen] = useState(false);
   const [pendingClaim, setPendingClaim] = useState('');
+  const [viewerDoc, setViewerDoc] = useState(null);
 
   useEffect(() => {
     if (kycCase?.client_id) {
@@ -417,21 +419,41 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`,
             </div>
             <div className="flex-1 overflow-y-auto space-y-2">
               {documents.map(doc => (
-                <button
+                <div
                   key={doc.id}
-                  className="w-full text-left flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/40 transition-colors text-xs"
-                  onClick={() => addEvidence(doc, pendingClaim)}
+                  className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/40 transition-colors text-xs"
                 >
-                  <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                  <div>
-                    <div className="font-medium text-foreground">{doc.doc_type?.replace(/_/g, ' ')}</div>
-                    <div className="text-muted-foreground">{doc.file_name}</div>
-                  </div>
-                </button>
+                  <button
+                    className="flex-1 text-left flex items-center gap-3"
+                    onClick={() => addEvidence(doc, pendingClaim)}
+                  >
+                    <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    <div>
+                      <div className="font-medium text-foreground">{doc.doc_type?.replace(/_/g, ' ')}</div>
+                      <div className="text-muted-foreground">{doc.file_name}</div>
+                    </div>
+                  </button>
+                  {doc.file_url && (
+                    <button
+                      className="text-muted-foreground hover:text-primary flex-shrink-0 p-1"
+                      onClick={() => setViewerDoc({ url: doc.file_url, name: doc.file_name })}
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           </div>
         </div>
+      )}
+
+      {viewerDoc && (
+        <DocumentViewer
+          fileUrl={viewerDoc.url}
+          fileName={viewerDoc.name}
+          onClose={() => setViewerDoc(null)}
+        />
       )}
 
       {/* Override Modal */}
