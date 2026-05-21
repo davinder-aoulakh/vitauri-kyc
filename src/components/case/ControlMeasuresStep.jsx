@@ -42,18 +42,27 @@ export default function ControlMeasuresStep({ kycCase, currentUser }) {
   useEffect(() => { load(); }, [kycCase.id]);
 
   async function load() {
-    const [data, usersData] = await Promise.all([
-      base44.entities.ControlMeasure.filter({ case_id: kycCase.id }),
-      base44.entities.User.list(),
-    ]);
-    // Auto-flag overdue
-    const withStatus = (data || []).map(m => ({
-      ...m,
-      status: isOverdue(m) ? 'Overdue' : m.status,
-    }));
-    setMeasures(withStatus);
-    setUsers(usersData || []);
-    setLoading(false);
+    try {
+      const measures = await base44.entities.ControlMeasure.filter({ case_id: kycCase.id });
+      let usersData = [];
+      try {
+        usersData = await base44.entities.User.list();
+      } catch (e) {
+        // User doesn't have permission to list all users, use empty list
+        usersData = [];
+      }
+      // Auto-flag overdue
+      const withStatus = (measures || []).map(m => ({
+        ...m,
+        status: isOverdue(m) ? 'Overdue' : m.status,
+      }));
+      setMeasures(withStatus);
+      setUsers(usersData || []);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading control measures:', error);
+      setLoading(false);
+    }
   }
 
   function openNew() {
