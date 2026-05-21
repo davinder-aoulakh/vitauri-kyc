@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,6 +14,39 @@ const SOF_SOURCES_NP  = ['Salary / Employment Income','Business Income / Dividen
 const SOF_SOURCES_ORG = ['Trading / Operating Revenue','Investment Income','Dividend Income','Loan / Debt Facility','Capital Raise / Equity','Asset Sale Proceeds','Other'];
 const SOW_SOURCES_NP  = ['Lifetime Savings','Business Ownership / Sale','Inheritance / Gift','Property Portfolio','Investment Portfolio','Pension / Retirement Funds','Compensation / Settlement','Other'];
 const ADEQUACY_LEVELS = ['Fully Adequate','Mostly Adequate','Partially Adequate','Inadequate','Unable to Assess'];
+
+function SectionCard({ title, state, setState, sources }) {
+  return (
+    <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+      <h4 className="font-medium text-sm">{title}</h4>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2">
+          <Label className="text-xs mb-1.5 block">Primary Source</Label>
+          <Select value={state.source} onValueChange={v => setState(s => ({ ...s, source: v }))}>
+            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select source…" /></SelectTrigger>
+            <SelectContent>{sources.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div className="col-span-2">
+          <Label className="text-xs mb-1.5 block">Explanation / Details</Label>
+          <Textarea
+            value={state.explanation}
+            onChange={e => setState(s => ({ ...s, explanation: e.target.value }))}
+            className="text-sm min-h-16 resize-none"
+            placeholder="Describe the source in detail, including amounts where known…"
+          />
+        </div>
+        <div>
+          <Label className="text-xs mb-1.5 block">Adequacy Assessment</Label>
+          <Select value={state.adequacy} onValueChange={v => setState(s => ({ ...s, adequacy: v }))}>
+            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select…" /></SelectTrigger>
+            <SelectContent>{ADEQUACY_LEVELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function SoFSoWStep({ kycCase, client, currentUser }) {
   const isNP = client?.client_type === 'NP';
@@ -155,38 +188,8 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`,
     setSaved(true);
   }
 
-  function SectionCard({ title, state, setState, sources }) {
-    return (
-      <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-        <h4 className="font-medium text-sm">{title}</h4>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <Label className="text-xs mb-1.5 block">Primary Source</Label>
-            <Select value={state.source} onValueChange={v => setState(s => ({ ...s, source: v }))}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select source…" /></SelectTrigger>
-              <SelectContent>{sources.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div className="col-span-2">
-            <Label className="text-xs mb-1.5 block">Explanation / Details</Label>
-            <Textarea
-              value={state.explanation}
-              onChange={e => setState(s => ({ ...s, explanation: e.target.value }))}
-              className="text-sm min-h-16 resize-none"
-              placeholder="Describe the source in detail, including amounts where known…"
-            />
-          </div>
-          <div>
-            <Label className="text-xs mb-1.5 block">Adequacy Assessment</Label>
-            <Select value={state.adequacy} onValueChange={v => setState(s => ({ ...s, adequacy: v }))}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select…" /></SelectTrigger>
-              <SelectContent>{ADEQUACY_LEVELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleSetSof = useCallback(setSof, []);
+  const handleSetSow = useCallback(setSow, []);
 
   return (
     <div className="space-y-5">
@@ -207,8 +210,8 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`,
       </div>
 
       {/* Source Cards */}
-      <SectionCard title="Source of Funds (SoF)" state={sof} setState={setSof} sources={isNP ? SOF_SOURCES_NP : SOF_SOURCES_ORG} />
-      {isNP && <SectionCard title="Source of Wealth (SoW)" state={sow} setState={setSow} sources={SOW_SOURCES_NP} />}
+      <SectionCard title="Source of Funds (SoF)" state={sof} setState={handleSetSof} sources={isNP ? SOF_SOURCES_NP : SOF_SOURCES_ORG} />
+      {isNP && <SectionCard title="Source of Wealth (SoW)" state={sow} setState={handleSetSow} sources={SOW_SOURCES_NP} />}
 
       {/* Evidence Linker */}
       <div className="bg-card border border-border rounded-xl p-4 space-y-3">
