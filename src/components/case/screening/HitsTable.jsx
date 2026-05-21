@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { Shield, AlertTriangle, CheckCircle, Clock, FileSearch, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+
+const MIN_DISCOUNT_CHARS = 10;
 
 const SOURCE_LABELS = {
   PEP_List: 'PEP',
@@ -34,35 +37,55 @@ const DECISION_LABELS = {
 
 function QuickResolveRow({ hit, onDecision, submitting }) {
   const [just, setJust] = useState('');
+  const meetsMinimum = just.length >= MIN_DISCOUNT_CHARS;
+
   return (
     <tr className="bg-muted/30">
       <td colSpan={6} className="px-4 py-3">
         <div className="flex items-start gap-3">
-          <Textarea
-            value={just}
-            onChange={e => setJust(e.target.value)}
-            placeholder="Justification required (min 20 chars)…"
-            className="text-xs min-h-10 resize-none flex-1"
-          />
-          <div className="flex flex-col gap-1.5 flex-shrink-0">
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-xs h-7 gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-              disabled={just.length < 20 || submitting}
-              onClick={() => onDecision(hit, 'Discounted', just)}
-            >
-              <CheckCircle className="w-3 h-3" /> Discount
-            </Button>
-            <Button
-              size="sm"
-              className="text-xs h-7 gap-1 bg-red-600 hover:bg-red-700 text-white"
-              disabled={just.length < 5 || submitting}
-              onClick={() => onDecision(hit, 'Confirmed', just)}
-            >
-              <AlertTriangle className="w-3 h-3" /> Confirm + EDR
-            </Button>
+          <div className="flex flex-col gap-1 flex-1">
+            <Textarea
+              value={just}
+              onChange={e => setJust(e.target.value)}
+              placeholder="Enter reason for discounting this hit (min. 10 characters)"
+              className="text-xs min-h-10 resize-none"
+            />
+            <span className={cn('text-xs', meetsMinimum ? 'text-muted-foreground' : 'text-red-500')}>
+              {just.length} / {MIN_DISCOUNT_CHARS} characters minimum
+            </span>
           </div>
+          <TooltipProvider>
+            <div className="flex flex-col gap-1.5 flex-shrink-0">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={-1}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs h-7 gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                      disabled={!meetsMinimum || submitting}
+                      onClick={() => onDecision(hit, 'Discounted', just)}
+                    >
+                      <CheckCircle className="w-3 h-3" /> Discount
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {!meetsMinimum && (
+                  <TooltipContent side="left" className="text-xs max-w-48">
+                    Please provide at least 10 characters of justification
+                  </TooltipContent>
+                )}
+              </Tooltip>
+              <Button
+                size="sm"
+                className="text-xs h-7 gap-1 bg-red-600 hover:bg-red-700 text-white"
+                disabled={just.length < 5 || submitting}
+                onClick={() => onDecision(hit, 'Confirmed', just)}
+              >
+                <AlertTriangle className="w-3 h-3" /> Confirm + EDR
+              </Button>
+            </div>
+          </TooltipProvider>
         </div>
       </td>
     </tr>
