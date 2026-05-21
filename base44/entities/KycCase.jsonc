@@ -146,6 +146,18 @@
     "case_notes": {
       "type": "string"
     },
+    "purpose_nature_text": {
+      "type": "string",
+      "description": "Purpose & Nature of Business Relationship (mandatory)"
+    },
+    "expected_transaction_behavior": {
+      "type": "string",
+      "description": "JSON string: expected transaction types, frequency, counterparties, geographies, volumes"
+    },
+    "sof_narrative": {
+      "type": "string",
+      "description": "SoF/SoW JSON blob"
+    },
     "sign_off_submitted_by": {
       "type": "string"
     },
