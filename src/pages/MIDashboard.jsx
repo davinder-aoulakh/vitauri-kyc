@@ -14,7 +14,7 @@ import {
 } from 'recharts';
 import {
   Loader2, Download, BarChart3, Users, Shield, Sparkles,
-  ExternalLink, RefreshCw, Copy, AlertTriangle
+  ExternalLink, RefreshCw, Copy, AlertTriangle, ChevronRight
 } from 'lucide-react';
 import { format, subMonths, isWithinInterval, startOfMonth, endOfMonth, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -56,6 +56,7 @@ export default function MIDashboard() {
   const [hits, setHits]             = useState([]);
   const [aiRuns, setAiRuns]         = useState([]);
   const [users, setUsers]           = useState([]);
+  const [controlMeasures, setControlMeasures] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
 
@@ -64,6 +65,13 @@ export default function MIDashboard() {
   const [toDate, setToDate]     = useState(format(new Date(), 'yyyy-MM-dd'));
   const [analystFilter, setAnalystFilter] = useState('all');
   const [pbiCopied, setPbiCopied]   = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
+
+  // Check for control-measures tab in query params
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'control-measures') setActiveTab('control-measures');
+  }, []);
 
   useEffect(() => { if (currentUser?.tenant_id) loadData(); }, [currentUser]);
 
@@ -71,18 +79,20 @@ export default function MIDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [casesData, clientsData, hitsData, aiData, usersData] = await Promise.all([
+      const [casesData, clientsData, hitsData, aiData, usersData, controlData] = await Promise.all([
         base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 1000),
         base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 1000),
         base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
         base44.entities.AiAgentRun.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
         base44.entities.User.list(),
+        base44.entities.ControlMeasure.filter({ tenant_id: currentUser.tenant_id }),
       ]);
       setCases(casesData || []);
       setClients(clientsData || []);
       setHits(hitsData || []);
       setAiRuns(aiData || []);
       setUsers(usersData || []);
+      setControlMeasures(controlData || []);
     } catch (err) {
       console.error('MIDashboard loadData error:', err);
       setError(err?.message || 'Failed to load MI data');
@@ -264,6 +274,99 @@ export default function MIDashboard() {
       </div>
     </AppShell>
   );
+
+  // Get case by ID and client name for control measures display
+  const getCaseAndClient = (caseId) => {
+    const kycCase = cases.find(c => c.id === caseId);
+    const client = kycCase ? clients.find(c => c.id === kycCase.client_id) : null;
+    return { kycCase, client };
+  };
+
+  // Filter overdue control measures
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const overdueControlMeasures = controlMeasures
+    .filter(m => m.status !== 'Completed' && m.due_date && m.due_date < today)
+    .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))
+    .map(m => {
+      const { kycCase, client } = getCaseAndClient(m.case_id);
+      const daysOverdue = differenceInDays(new Date(today), new Date(m.due_date));
+      return { ...m, kycCase, client, daysOverdue };
+    });
+
+  // Control Measures Tab View
+  if (activeTab === 'control-measures') {
+    return (
+      <AppShell>
+        <div className="p-6 max-w-screen-2xl mx-auto space-y-6">
+          <PageHeader
+            title="Control Measures Overdue"
+            subtitle={`${overdueControlMeasures.length} overdue measures across active cases`}
+            actions={
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => { setActiveTab('overview'); window.history.replaceState({}, '', '/mi-dashboard'); }}>
+                <ChevronRight className="w-3.5 h-3.5 rotate-180" /> Back to Overview
+              </Button>
+            }
+          />
+
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            {overdueControlMeasures.length === 0 ? (
+              <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">
+                No overdue control measures
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/40 border-b border-border text-xs text-muted-foreground uppercase tracking-wide">
+                      <th className="text-left px-4 py-2.5">Client</th>
+                      <th className="text-left px-4 py-2.5">Measure Description</th>
+                      <th className="text-left px-4 py-2.5">Owner</th>
+                      <th className="text-left px-4 py-2.5">Due Date</th>
+                      <th className="text-left px-4 py-2.5">Days Overdue</th>
+                      <th className="text-left px-4 py-2.5 w-24">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {overdueControlMeasures.map(m => (
+                      <tr key={m.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 font-medium text-foreground text-sm max-w-[180px] truncate">
+                          {m.client?.full_name || '—'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-foreground max-w-[300px] truncate">
+                          {m.description || '—'}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {m.owner_name || '—'}
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap text-muted-foreground">
+                          {m.due_date ? format(new Date(m.due_date), 'd MMM yyyy') : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-semibold text-red-600 tabular-nums">
+                          {m.daysOverdue}d
+                        </td>
+                        <td className="px-4 py-3">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-xs gap-1 h-7"
+                            onClick={() => {
+                              if (m.kycCase?.id) window.location.href = `/case/${m.kycCase.id}`;
+                            }}
+                          >
+                            Go to case <ChevronRight className="w-3 h-3" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import WorkflowOptimisationWidget from '@/components/dashboard/WorkflowOptimisationWidget';
 import {
   FolderOpen, UserCircle, AlertTriangle, Shield, Calendar,
-  Plus, ChevronRight, RefreshCw, XCircle
+  Plus, ChevronRight, RefreshCw, XCircle, ClipboardCheck
 } from 'lucide-react';
 import { format, isAfter, addDays, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -38,6 +38,7 @@ export default function Dashboard() {
   const [users, setUsers] = useState([]);
   const [auditEvents, setAuditEvents] = useState([]);
   const [screeningAlerts, setScreeningAlerts] = useState(0);
+  const [overdueControlMeasures, setOverdueControlMeasures] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const refreshTimer = useRef(null);
@@ -52,18 +53,25 @@ export default function Dashboard() {
     setError(null);
     try {
       const canViewUsers = hasPermission(currentUser?.app_role, 'viewAllTenantCases');
-      const [casesData, auditData, clientsData, newHits, reviewHits, usersData] = await Promise.all([
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      const [casesData, auditData, clientsData, newHits, reviewHits, usersData, controlData] = await Promise.all([
         base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }),
         base44.entities.AuditEvent.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 20),
         base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }),
         base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'New' }),
         base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'Under_Review' }),
         canViewUsers ? base44.entities.User.list().catch(() => []) : Promise.resolve([]),
+        base44.entities.ControlMeasure.filter({ tenant_id: currentUser.tenant_id }),
       ]);
       setCases(casesData || []);
       setAuditEvents(auditData || []);
       setScreeningAlerts((newHits?.length || 0) + (reviewHits?.length || 0));
       setUsers(usersData || []);
+      // Count overdue control measures
+      const overdue = (controlData || []).filter(m => 
+        m.status !== 'Completed' && m.due_date && m.due_date < today
+      ).length;
+      setOverdueControlMeasures(overdue);
       const clientMap = {};
       (clientsData || []).forEach(c => { clientMap[c.id] = c; });
       setClients(clientMap);
@@ -139,46 +147,54 @@ export default function Dashboard() {
       )}
 
       {/* KPI Tiles */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          <KpiCard
-            label="Open Cases"
-            value={loading ? '…' : openCases.length}
-            subtitle={`${cases.filter(c => c.status === 'In_Progress').length} in progress`}
-            icon={FolderOpen}
-            accentColor={tenantColor}
-            onClick={isManager ? () => navigate('/all-cases') : undefined}
-          />
-          <KpiCard
-            label="My Cases"
-            value={loading ? '…' : myCases.length}
-            subtitle={`${myCases.filter(c => c.due_date && new Date(c.due_date).toDateString() === today.toDateString()).length} due today`}
-            icon={UserCircle}
-            accentColor="#8B5CF6"
-          />
-          <KpiCard
-            label="Overdue"
-            value={loading ? '…' : overdueCases.length}
-            subtitle="Requires attention"
-            icon={AlertTriangle}
-            accentColor="#EF4444"
-            onClick={isManager ? () => navigate('/all-cases') : undefined}
-          />
-          <KpiCard
-            label="Screening Alerts"
-            value={loading ? '…' : screeningAlerts}
-            subtitle="New + under review"
-            icon={Shield}
-            accentColor="#F59E0B"
-            onClick={() => navigate('/monitoring')}
-          />
-          <KpiCard
-            label="Reviews Due (30d)"
-            value={loading ? '…' : clientsWithReviewDue.length}
-            subtitle={clientsWithReviewDue.length > 0 ? `Next: ${format(new Date(clientsWithReviewDue[0].next_review_date), 'd MMM')}` : 'None upcoming'}
-            icon={Calendar}
-            accentColor="#10B981"
-          />
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <KpiCard
+          label="Open Cases"
+          value={loading ? '…' : openCases.length}
+          subtitle={`${cases.filter(c => c.status === 'In_Progress').length} in progress`}
+          icon={FolderOpen}
+          accentColor={tenantColor}
+          onClick={isManager ? () => navigate('/all-cases') : undefined}
+        />
+        <KpiCard
+          label="My Cases"
+          value={loading ? '…' : myCases.length}
+          subtitle={`${myCases.filter(c => c.due_date && new Date(c.due_date).toDateString() === today.toDateString()).length} due today`}
+          icon={UserCircle}
+          accentColor="#8B5CF6"
+        />
+        <KpiCard
+          label="Overdue"
+          value={loading ? '…' : overdueCases.length}
+          subtitle="Requires attention"
+          icon={AlertTriangle}
+          accentColor="#EF4444"
+          onClick={isManager ? () => navigate('/all-cases') : undefined}
+        />
+        <KpiCard
+          label="Screening Alerts"
+          value={loading ? '…' : screeningAlerts}
+          subtitle="New + under review"
+          icon={Shield}
+          accentColor="#F59E0B"
+          onClick={() => navigate('/monitoring')}
+        />
+        <KpiCard
+          label="Reviews Due (30d)"
+          value={loading ? '…' : clientsWithReviewDue.length}
+          subtitle={clientsWithReviewDue.length > 0 ? `Next: ${format(new Date(clientsWithReviewDue[0].next_review_date), 'd MMM')}` : 'None upcoming'}
+          icon={Calendar}
+          accentColor="#10B981"
+        />
+        <KpiCard
+          label="Control Measures Overdue"
+          value={loading ? '…' : overdueControlMeasures}
+          subtitle="Across all active cases"
+          icon={ClipboardCheck}
+          accentColor="#DC2626"
+          onClick={() => navigate('/mi-dashboard?tab=control-measures')}
+        />
+      </div>
 
         {/* Pipeline */}
         <div className="bg-card rounded-xl border border-border p-4">
