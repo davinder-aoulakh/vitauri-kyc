@@ -7,7 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
-import { FileText, Download, Loader2, Share2, CheckCircle, Eye, RefreshCw, Shield } from 'lucide-react';
+import { FileText, Download, Loader2, Share2, CheckCircle, XCircle, Eye, RefreshCw, Shield } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
@@ -552,6 +552,17 @@ async function buildPDF({ kycCase, client, currentUser, screeningHits, assessmen
   return doc;
 }
 
+// ── Step definitions (steps 1–7 must be complete before report) ────────────
+const PREREQUISITE_STEPS = [
+  { id: 1, label: 'Outreach & Documents',  stepKey: 'step_1_status' },
+  { id: 2, label: 'Identity Verification', stepKey: 'step_2_status' },
+  { id: 3, label: 'Screening',             stepKey: 'step_3_status' },
+  { id: 4, label: 'Client Profile',        stepKey: 'step_4_status' },
+  { id: 5, label: 'Source of Funds/Wealth',stepKey: 'step_5_status' },
+  { id: 6, label: 'Risk Assessment',       stepKey: 'step_6_status' },
+  { id: 7, label: 'Control Measures',      stepKey: 'step_7_status' },
+];
+
 // ── Component ──────────────────────────────────────────────────────────────
 export default function KycReportStep({ kycCase, client, currentUser }) {
   const [generating, setGenerating] = useState(false);
@@ -631,6 +642,9 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
   const latestReport = reports[0];
   const isApproved = kycCase?.status === 'Approved';
 
+  const incompleteSteps = PREREQUISITE_STEPS.filter(s => kycCase[s.stepKey] !== 'complete');
+  const allStepsComplete = incompleteSteps.length === 0;
+
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
@@ -645,12 +659,12 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
         </div>
         <div className="flex items-center gap-2">
           {reports.length > 0 && (
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={generateReport} disabled={generating}>
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={generateReport} disabled={generating || !allStepsComplete}>
               {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
               Regenerate
             </Button>
           )}
-          <Button size="sm" className="gap-1.5 text-xs" onClick={generateReport} disabled={generating}>
+          <Button size="sm" className="gap-1.5 text-xs" onClick={generateReport} disabled={generating || !allStepsComplete}>
             {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
             {generating ? 'Building PDF…' : 'Generate Report'}
           </Button>
@@ -661,6 +675,31 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
         <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
           <FileText className="w-3.5 h-3.5 flex-shrink-0" />
           Case not yet approved. A draft report can be generated; regenerate after sign-off for the final version.
+        </div>
+      )}
+
+      {/* Step readiness gate */}
+      {allStepsComplete ? (
+        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-800">
+          <CheckCircle className="w-3.5 h-3.5 flex-shrink-0 text-emerald-600" />
+          <span className="font-medium">All steps complete — ready to generate report</span>
+        </div>
+      ) : (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-2">
+          <p className="text-xs font-semibold text-red-800">
+            The following steps must be completed before generating the report:
+          </p>
+          <ul className="space-y-1">
+            {incompleteSteps.map(s => (
+              <li key={s.stepKey} className="flex items-center gap-2 text-xs text-red-700">
+                <XCircle className="w-3.5 h-3.5 flex-shrink-0 text-red-500" />
+                Step {s.id}: {s.label}
+                <span className="text-red-400 ml-1">
+                  ({kycCase[s.stepKey] === 'in_progress' ? 'in progress' : kycCase[s.stepKey] === 'flagged' ? 'flagged' : 'not started'})
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
