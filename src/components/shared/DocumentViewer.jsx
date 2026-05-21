@@ -56,10 +56,9 @@ export default function DocumentViewer({ fileUrl, fileName, onClose }) {
             </div>
           ) : (
             <iframe
-              src={fileUrl}
+              src={`https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`}
               title={fileName}
-              sandbox="allow-same-origin allow-scripts"
-              className="w-full h-full border-0 min-h-screen"
+              className="w-full h-full border-0"
               style={{ minHeight: '100%' }}
             />
           )}
