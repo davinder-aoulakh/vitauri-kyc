@@ -159,6 +159,12 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Documents for evidence linking — declared before useAutoSave so `evidence` is in scope
+  const [documents, setDocuments] = useState([]);
+  const [evidence, setEvidence] = useState([]);
+  const [evidencePickerOpen, setEvidencePickerOpen] = useState(false);
+  const [viewerDoc, setViewerDoc] = useState(null);
+
   // Auto-save sof, sow, narrative and evidence to KycCase as JSON fields
   const { autoSaving, lastSaved } = useAutoSave(
     { sof, sow, narrative, evidence, sowApplicable },
@@ -170,12 +176,6 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
     },
     1500,
   );
-
-  // Documents for evidence linking
-  const [documents, setDocuments] = useState([]);
-  const [evidence, setEvidence] = useState([]); // [{ doc_id, doc_name, claim, verified }]
-  const [evidencePickerOpen, setEvidencePickerOpen] = useState(false);
-  const [viewerDoc, setViewerDoc] = useState(null);
 
   useEffect(() => {
     if (kycCase?.client_id) {
