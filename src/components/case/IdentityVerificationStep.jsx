@@ -1,4 +1,6 @@
 import React, { useState, useRef } from 'react';
+import { useAutoSave } from '@/hooks/useAutoSave';
+import AutoSaveIndicator from '@/components/shared/AutoSaveIndicator';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -219,6 +221,26 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
 
   const set = (key, field, val) => setVerifications(v => ({ ...v, [key]: { ...v[key], [field]: val } }));
 
+  // Auto-save verification state to AuditEvent (lightweight — just record state snapshot)
+  const { autoSaving, lastSaved } = useAutoSave(
+    verifications,
+    async (data) => {
+      if (!kycCase?.id) return;
+      await base44.entities.AuditEvent.create({
+        tenant_id:     kycCase.tenant_id,
+        case_id:       kycCase.id,
+        client_id:     kycCase.client_id,
+        actor_user_id: currentUser?.id,
+        actor_name:    currentUser?.full_name,
+        actor_type:    'User',
+        event_type:    'identity_verification_autosaved',
+        after_state:   data,
+        notes:         `Auto-saved: Primary ${data.primary.status} | Secondary ${data.secondary.status}`,
+      });
+    },
+    1500,
+  );
+
   // Called when analyst applies OCR results
   async function handleOcrApplied(profileFields, verificationFields) {
     // Pre-fill verification form
@@ -283,10 +305,13 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="font-semibold text-sm flex items-center gap-2">
-          {isOrg ? <Building2 className="w-4 h-4" /> : <User className="w-4 h-4" />}
-          Identity Verification — {isOrg ? 'Organisation' : 'Natural Person'}
-        </h3>
+        <div className="flex items-center gap-3">
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            {isOrg ? <Building2 className="w-4 h-4" /> : <User className="w-4 h-4" />}
+            Identity Verification — {isOrg ? 'Organisation' : 'Natural Person'}
+          </h3>
+          <AutoSaveIndicator autoSaving={autoSaving} lastSaved={lastSaved} />
+        </div>
         <p className="text-xs text-muted-foreground mt-0.5">
           {isOrg
             ? 'Verify legal entity existence and registration details'

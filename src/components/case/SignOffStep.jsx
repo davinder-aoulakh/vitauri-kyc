@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useAutoSave } from '@/hooks/useAutoSave';
+import AutoSaveIndicator from '@/components/shared/AutoSaveIndicator';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,6 +27,17 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
   const [submitting, setSubmitting]           = useState(false);
   const [action, setAction]                   = useState(null); // 'reject' | 'advisory'
   const [users, setUsers]                     = useState([]);
+
+  // Auto-save advisory note for Compliance Officers
+  const { autoSaving: advisoryAutoSaving, lastSaved: advisoryLastSaved } = useAutoSave(
+    advisoryNote,
+    async (note) => {
+      if (!kycCase?.id || !note?.trim()) return;
+      await base44.entities.KycCase.update(kycCase.id, { compliance_advisory_note: note });
+      onCaseUpdate?.(prev => ({ ...prev, compliance_advisory_note: note }));
+    },
+    1500,
+  );
 
   const userRole   = currentUser?.app_role;
   const risk       = kycCase?.risk_classification;
@@ -203,9 +216,12 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
                 placeholder="Add compliance advisory note visible during sign-off and in the final report…"
                 className="text-sm min-h-16 resize-none bg-white/60"
               />
-              <Button size="sm" variant="outline" className="text-xs" onClick={saveAdvisoryNote} disabled={!advisoryNote.trim()}>
-                Save Advisory Note
-              </Button>
+              <div className="flex items-center gap-3">
+                <Button size="sm" variant="outline" className="text-xs" onClick={saveAdvisoryNote} disabled={!advisoryNote.trim()}>
+                  Save Advisory Note
+                </Button>
+                <AutoSaveIndicator autoSaving={advisoryAutoSaving} lastSaved={advisoryLastSaved} />
+              </div>
             </>
           ) : (
             <p className="text-xs text-violet-900 leading-relaxed">{kycCase.compliance_advisory_note}</p>

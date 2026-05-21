@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
+import { useAutoSave } from '@/hooks/useAutoSave';
+import AutoSaveIndicator from '@/components/shared/AutoSaveIndicator';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -24,13 +26,32 @@ export default function ClientProfileStep({ kycCase, client, currentUser }) {
   const [osintOpen, setOsintOpen] = useState(false);
   const [selectedOsint, setSelectedOsint] = useState([]);
 
+  // Track whether initial load has completed so auto-save doesn't fire on mount
+  const loaded = useRef(false);
+
   // Load existing profile draft from audit/case notes
   useEffect(() => {
     if (kycCase?.case_notes?.includes('PROFILE_DRAFT:')) {
       const match = kycCase.case_notes.match(/PROFILE_DRAFT:([\s\S]*?)(?:END_PROFILE|$)/);
       if (match) setDraft(match[1].trim());
     }
+    loaded.current = true;
   }, [kycCase?.id]);
+
+  // Auto-save draft to KycCase after 1500ms of inactivity
+  const { autoSaving, lastSaved } = useAutoSave(
+    draft,
+    async (currentDraft) => {
+      if (!kycCase?.id || !currentDraft) return;
+      const existingNotes = kycCase.case_notes || '';
+      const cleaned = existingNotes.replace(/PROFILE_DRAFT:[\s\S]*?END_PROFILE/g, '').trim();
+      await base44.entities.KycCase.update(kycCase.id, {
+        case_notes: `${cleaned}\n\nPROFILE_DRAFT:${currentDraft}END_PROFILE`,
+      });
+    },
+    1500,
+    !loaded.current,
+  );
 
   async function generateDraft() {
     setGenerating(true);
@@ -349,7 +370,10 @@ Return 3–8 findings. If you find nothing notable, state that explicitly.`,
       {/* AI Draft Editor */}
       <div className="bg-card border border-border rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="font-medium text-sm">Profile Draft</h4>
+          <div className="flex items-center gap-3">
+            <h4 className="font-medium text-sm">Profile Draft</h4>
+            <AutoSaveIndicator autoSaving={autoSaving} lastSaved={lastSaved} />
+          </div>
           {accepted && (
             <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium',
               acceptedBy === 'override' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'

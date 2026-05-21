@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useAutoSave } from '@/hooks/useAutoSave';
+import AutoSaveIndicator from '@/components/shared/AutoSaveIndicator';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -62,6 +64,18 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
   const [overrideJustification, setOverrideJustification] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // Auto-save sof, sow, narrative and evidence to KycCase as JSON fields
+  const { autoSaving, lastSaved } = useAutoSave(
+    { sof, sow, narrative, evidence },
+    async (data) => {
+      if (!kycCase?.id) return;
+      await base44.entities.KycCase.update(kycCase.id, {
+        sof_narrative: JSON.stringify({ sof: data.sof, sow: data.sow, narrative: data.narrative, evidence: data.evidence }),
+      });
+    },
+    1500,
+  );
 
   // Documents for evidence linking
   const [documents, setDocuments] = useState([]);
@@ -195,7 +209,10 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`,
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="font-semibold text-sm text-foreground">Source of Funds / Source of Wealth</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="font-semibold text-sm text-foreground">Source of Funds / Source of Wealth</h3>
+            <AutoSaveIndicator autoSaving={autoSaving} lastSaved={lastSaved} />
+          </div>
           <p className="text-xs text-muted-foreground mt-0.5">Document and assess the client's sources of funds{isNP ? ' and wealth' : ''}</p>
         </div>
         <Button
