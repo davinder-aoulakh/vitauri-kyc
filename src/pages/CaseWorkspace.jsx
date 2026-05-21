@@ -22,7 +22,7 @@ import OsintPanel           from '@/components/case/OsintPanel';
 import ClientProfileStep    from '@/components/case/ClientProfileStep';
 import CaseTypeBanner       from '@/components/case/views/CaseTypeBanner';
 import CaseAssignmentPicker from '@/components/case/CaseAssignmentPicker';
-import CaseNotesSidebar     from '@/components/case/CaseNotesSidebar';
+import CaseNoteThread       from '@/components/case/CaseNoteThread';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -73,9 +73,8 @@ export default function CaseWorkspace() {
   const [mainTab, setMainTab] = useState('workspace'); // 'workspace' | 'audit'
   const [aiCollapsed, setAiCollapsed] = useState(false);
   const [osintAddCallback, setOsintAddCallback] = useState(null);
-  const [noteText, setNoteText] = useState('');
+  const [noteThreads, setNoteThreads] = useState([]);
   const [noteSaving, setNoteSaving] = useState(false);
-  const [noteSaved, setNoteSaved] = useState(false);
   const [statusOverrideOpen, setStatusOverrideOpen] = useState(false);
   const [overrideStatus, setOverrideStatus] = useState('');
   const [overrideNote, setOverrideNote] = useState('');
@@ -98,7 +97,7 @@ export default function CaseWorkspace() {
       const caseData = await base44.entities.KycCase.filter({ id });
       const c = caseData?.[0];
       setKycCase(c);
-      setNoteText(c?.case_notes || '');
+      setNoteThreads(c?.case_notes_threads || []);
 
       const clientDataPromise = c?.client_id ? base44.entities.Client.filter({ id: c.client_id }) : Promise.resolve([]);
       const usersDataPromise = base44.entities.User.list().catch(() => []);
@@ -120,12 +119,56 @@ export default function CaseWorkspace() {
     }
   }
 
-  async function saveNote() {
+  async function addNote(text) {
     setNoteSaving(true);
-    await base44.entities.KycCase.update(id, { case_notes: noteText });
+    const newNote = {
+      id: Date.now().toString(),
+      text,
+      author: currentUser?.full_name || 'Anonymous',
+      timestamp: new Date().toISOString(),
+      replies: [],
+    };
+    const updated = [...noteThreads, newNote];
+    setNoteThreads(updated);
+    await base44.entities.KycCase.update(id, { case_notes_threads: updated });
     setNoteSaving(false);
-    setNoteSaved(true);
-    setTimeout(() => setNoteSaved(false), 2000);
+  }
+
+  async function addReply(parentId, text) {
+    setNoteSaving(true);
+    const updated = noteThreads.map(note => {
+      if (note.id === parentId) {
+        return {
+          ...note,
+          replies: [
+            ...(note.replies || []),
+            {
+              id: Date.now().toString(),
+              text,
+              author: currentUser?.full_name || 'Anonymous',
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        };
+      }
+      return note;
+    });
+    setNoteThreads(updated);
+    await base44.entities.KycCase.update(id, { case_notes_threads: updated });
+    setNoteSaving(false);
+  }
+
+  async function deleteNote(noteId) {
+    setNoteSaving(true);
+    const updated = noteThreads
+      .map(note => ({
+        ...note,
+        replies: note.replies?.filter(r => r.id !== noteId) || [],
+      }))
+      .filter(note => note.id !== noteId);
+    setNoteThreads(updated);
+    await base44.entities.KycCase.update(id, { case_notes_threads: updated });
+    setNoteSaving(false);
   }
 
   async function updateStepStatus(stepKey, status) {
@@ -380,14 +423,14 @@ export default function CaseWorkspace() {
                 })}
               </div>
 
-              {/* Case Notes */}
-              <CaseNotesSidebar
-                noteText={noteText}
-                onNoteChange={(text) => { setNoteText(text); setNoteSaved(false); }}
-                onNoteSave={saveNote}
-                noteSaving={noteSaving}
-                noteSaved={noteSaved}
-                caseCreatedDate={kycCase.created_date}
+              {/* Case Notes Thread */}
+              <CaseNoteThread
+                threads={noteThreads}
+                onAddNote={addNote}
+                onAddReply={addReply}
+                onDeleteNote={deleteNote}
+                saving={noteSaving}
+                currentUserName={currentUser?.full_name}
               />
             </aside>
 
@@ -525,10 +568,8 @@ export default function CaseWorkspace() {
                 disabled={!flagReason}
                 onClick={async () => {
                   const combined = [flagReason, flagNote].filter(Boolean).join(' — ');
-                  const existingNotes = noteText ? `${noteText}\n` : '';
-                  const updatedNotes = `${existingNotes}[FLAG Step ${activeStep}: ${combined}]`;
-                  setNoteText(updatedNotes);
-                  await base44.entities.KycCase.update(id, { case_notes: updatedNotes });
+                  const flagMessage = `[FLAG Step ${activeStep}]: ${combined}`;
+                  await addNote(flagMessage);
                   await updateStepStatus(activeStepData.stepKey, 'flagged');
                   setFlagPopoverOpen(false);
                 }}

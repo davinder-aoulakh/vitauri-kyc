@@ -146,6 +146,13 @@
     "case_notes": {
       "type": "string"
     },
+    "case_notes_threads": {
+      "type": "array",
+      "description": "Array of threaded notes with replies",
+      "items": {
+        "type": "object"
+      }
+    },
     "purpose_nature_text": {
       "type": "string",
       "description": "Purpose & Nature of Business Relationship (mandatory)"
