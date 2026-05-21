@@ -158,6 +158,11 @@
       "type": "string",
       "description": "SoF/SoW JSON blob"
     },
+    "sow_applicable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether SoW assessment is applicable for this NP client"
+    },
     "osint_cache": {
       "type": "string",
       "description": "JSON string: cached OSINT results including findings and run timestamp"

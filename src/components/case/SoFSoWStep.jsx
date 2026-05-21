@@ -8,11 +8,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Sparkles, CheckCircle, Loader2, Paperclip,
-  RefreshCw, Link2, ToggleLeft, ToggleRight, X
+  RefreshCw, Link2, ToggleLeft, ToggleRight, X, ChevronDown
 } from 'lucide-react';
 import DocumentViewer from '@/components/shared/DocumentViewer';
 import DocUploadPicker from '@/components/shared/DocUploadPicker';
 import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const SOF_SOURCES_NP  = ['Salary / Employment Income','Business Income / Dividends','Sale of Property','Inheritance','Investment Returns','Pension','Loan / Credit Facility','Gift','Other'];
 const SOF_SOURCES_ORG = ['Trading / Operating Revenue','Investment Income','Dividend Income','Loan / Debt Facility','Capital Raise / Equity','Asset Sale Proceeds','Other'];
@@ -129,6 +130,26 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
   const [sof, setSof] = useState({ sources: [], explanation: '', adequacy: '' });
   const [sow, setSow] = useState({ sources: [], explanation: '', adequacy: '' });
 
+  // SoW applicability toggle — for NP only
+  // Default: true if High/Unacceptable risk; persisted on kycCase.sow_applicable
+  const getDefaultSowApplicable = useCallback(() => {
+    if (!isNP) return false;
+    if (kycCase?.sow_applicable !== undefined && kycCase?.sow_applicable !== null) {
+      return kycCase.sow_applicable;
+    }
+    return ['High', 'Unacceptable'].includes(kycCase?.risk_classification);
+  }, [isNP, kycCase?.sow_applicable, kycCase?.risk_classification]);
+
+  const [sowApplicable, setSowApplicableState] = useState(getDefaultSowApplicable);
+
+  function setSowApplicable(val) {
+    setSowApplicableState(val);
+    if (!val) setSow({ sources: [], explanation: '', adequacy: '' });
+    if (kycCase?.id) {
+      base44.entities.KycCase.update(kycCase.id, { sow_applicable: val });
+    }
+  }
+
   const [narrative, setNarrative] = useState('');
   const [generating, setGenerating] = useState(false);
   const [accepted, setAccepted] = useState(false);
@@ -140,7 +161,7 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
 
   // Auto-save sof, sow, narrative and evidence to KycCase as JSON fields
   const { autoSaving, lastSaved } = useAutoSave(
-    { sof, sow, narrative, evidence },
+    { sof, sow, narrative, evidence, sowApplicable },
     async (data) => {
       if (!kycCase?.id) return;
       await base44.entities.KycCase.update(kycCase.id, {
@@ -178,6 +199,8 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
     const docList = documents.map(d => `${d.doc_type}: ${d.file_name}`).join('\n') || 'No documents uploaded';
     const evidenceList = evidence.map(e => `${e.claim} — supported by: ${e.doc_name} (${e.verified ? 'Verified' : 'Unverified'})`).join('\n') || '';
 
+    const includeSoW = isNP && sowApplicable;
+
     const result = await base44.integrations.Core.InvokeLLM({
       prompt: `You are a senior KYC analyst at a regulated financial institution.
 
@@ -186,11 +209,13 @@ ${isNP ? `
 SOURCE OF FUNDS: ${(sof.sources || []).join(', ') || 'Not specified'}
 SoF Details: ${sof.explanation || 'None provided'}
 SoF Adequacy: ${sof.adequacy || 'Not assessed'}
-
+${includeSoW ? `
 SOURCE OF WEALTH: ${(sow.sources || []).join(', ') || 'Not specified'}
 SoW Details: ${sow.explanation || 'None provided'}
 SoW Adequacy: ${sow.adequacy || 'Not assessed'}
 ` : `
+NOTE: Source of Wealth assessment has been determined as not applicable for this client.
+`}` : `
 SOURCE OF FUNDS (Organisation): ${(sof.sources || []).join(', ') || 'Not specified'}
 Revenue/Funding Details: ${sof.explanation || 'None provided'}
 Adequacy: ${sof.adequacy || 'Not assessed'}
@@ -204,12 +229,13 @@ ${outreachSoF}
 
 ${evidenceList ? `EVIDENCE LINKED:\n${evidenceList}` : ''}
 
-Draft a professional, regulatory-grade Source of Funds${isNP ? ' and Source of Wealth' : ''} assessment. Cover:
+Draft a professional, regulatory-grade Source of Funds${includeSoW ? ' and Source of Wealth' : ''} assessment. Cover:
 1. Primary funding sources and their origin
 2. Plausibility and consistency with client profile
 3. Adequacy of documentary evidence
 4. Gaps in evidence or areas requiring further clarification
 5. Risk observation / conclusion
+${!includeSoW && isNP ? '6. Note that SoW assessment is not applicable and briefly justify why (e.g. lower risk profile / SoF deemed sufficient).' : ''}
 
 Write in factual, neutral, third-person tone. 3–6 paragraphs.`,
       model: 'claude_sonnet_4_6',
@@ -299,7 +325,71 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`,
 
       {/* Source Cards */}
       <SectionCard title="Source of Funds (SoF)" state={sof} setState={handleSetSof} sources={isNP ? SOF_SOURCES_NP : SOF_SOURCES_ORG} />
-      {isNP && <SectionCard title="Source of Wealth (SoW)" state={sow} setState={handleSetSow} sources={SOW_SOURCES_NP} />}
+
+      {/* SoW — NP only: optional/collapsible */}
+      {isNP && (
+        <div className="space-y-2">
+          {/* Toggle row */}
+          <div className="flex items-center justify-between bg-muted/30 border border-border rounded-xl px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Source of Wealth applicable for this client?</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Required for High / Unacceptable risk clients. Optional for lower risk where SoF is sufficient.
+              </p>
+            </div>
+            <div className="flex items-center gap-1 bg-card border border-border rounded-lg p-0.5 flex-shrink-0">
+              <button
+                onClick={() => setSowApplicable(false)}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-medium rounded-md transition-all',
+                  !sowApplicable ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                No
+              </button>
+              <button
+                onClick={() => setSowApplicable(true)}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-medium rounded-md transition-all',
+                  sowApplicable ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+
+          {/* Collapsible SoW card */}
+          <AnimatePresence>
+            {sowApplicable && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                className="overflow-hidden"
+              >
+                <SectionCard title="Source of Wealth (SoW)" state={sow} setState={handleSetSow} sources={SOW_SOURCES_NP} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Not applicable note */}
+          <AnimatePresence>
+            {!sowApplicable && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="text-xs text-muted-foreground italic px-1"
+              >
+                SoW section will be excluded from the assessment narrative.
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* Evidence Linker */}
       <div className="bg-card border border-border rounded-xl p-4 space-y-3">
