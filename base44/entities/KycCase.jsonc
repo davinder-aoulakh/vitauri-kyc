@@ -158,6 +158,10 @@
       "type": "string",
       "description": "SoF/SoW JSON blob"
     },
+    "osint_cache": {
+      "type": "string",
+      "description": "JSON string: cached OSINT results including findings and run timestamp"
+    },
     "sign_off_submitted_by": {
       "type": "string"
     },

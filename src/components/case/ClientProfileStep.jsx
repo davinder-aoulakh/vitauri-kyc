@@ -7,9 +7,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Sparkles, CheckCircle, Loader2, RefreshCw, Globe, ChevronDown,
-  ChevronUp, ExternalLink, Plus, User, Building2, AlertTriangle, X
+  Sparkles, CheckCircle, Loader2, RefreshCw, User, Building2, AlertTriangle, ChevronDown, ChevronUp, X
 } from 'lucide-react';
+// Note: ChevronDown/ChevronUp used by Section 1B accordion; X used by MultiSelectChips
 import { cn } from '@/lib/utils';
 
 const TX_TYPES = ['Payments', 'Investments', 'Transfers', 'FX', 'Other'];
@@ -47,7 +47,7 @@ function MultiSelectChips({ options, selected, onChange }) {
   );
 }
 
-export default function ClientProfileStep({ kycCase, client, currentUser }) {
+export default function ClientProfileStep({ kycCase, client, currentUser, onRegisterOsintAdd }) {
   // Section 1A
   const [purposeText, setPurposeText] = useState('');
   const [generatingPurpose, setGeneratingPurpose] = useState(false);
@@ -68,12 +68,6 @@ export default function ClientProfileStep({ kycCase, client, currentUser }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // OSINT
-  const [osintResults, setOsintResults] = useState(null);
-  const [osintLoading, setOsintLoading] = useState(false);
-  const [osintOpen, setOsintOpen] = useState(false);
-  const [selectedOsint, setSelectedOsint] = useState([]);
-
   const loaded = useRef(false);
 
   // Load saved data on mount
@@ -93,6 +87,17 @@ export default function ClientProfileStep({ kycCase, client, currentUser }) {
     }
     loaded.current = true;
   }, [kycCase?.id]);
+
+  // Register OSINT "Add to Profile" callback with parent (CaseWorkspace → OsintPanel)
+  useEffect(() => {
+    if (onRegisterOsintAdd) {
+      onRegisterOsintAdd((finding) => {
+        const text = `\n\n[OSINT — ${finding.source_type?.toUpperCase()}] ${finding.title}: ${finding.summary}`;
+        setDraft(d => d + text);
+        setAccepted(false);
+      });
+    }
+  }, [onRegisterOsintAdd]);
 
   // Auto-save all sections
   const { autoSaving, lastSaved } = useAutoSave(
@@ -151,7 +156,8 @@ Write 2–4 sentences describing: (1) why the client is engaging with the instit
     ).join('\n') || 'No outreach data';
 
     const docContext = docsData?.map(d => `Document: ${d.doc_type} — ${d.file_name}`).join('\n') || 'No documents';
-    const osintContext = osintResults?.findings?.map(f => `OSINT: ${f.title} — ${f.summary}`).join('\n') || '';
+    const osintCache = kycCase?.osint_cache ? (() => { try { return JSON.parse(kycCase.osint_cache); } catch { return null; } })() : null;
+    const osintContext = osintCache?.results?.findings?.map(f => `OSINT: ${f.title} — ${f.summary}`).join('\n') || '';
     const isOrg = client?.client_type === 'ORG';
 
     const clientContext = isOrg ? `
@@ -208,64 +214,6 @@ Tone: factual, neutral, professional. Use third person. 4–8 paragraphs. Do not
 
     setDraft(typeof result === 'string' ? result : result?.narrative || result?.profile || JSON.stringify(result));
     setGenerating(false);
-  }
-
-  async function runOsint() {
-    setOsintLoading(true);
-    setOsintOpen(true);
-    const name = client?.full_name || '';
-    const country = client?.registered_country || client?.nationality || '';
-
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are an OSINT researcher. Conduct open-source intelligence research on the following entity and return structured findings.
-
-Entity: "${name}"
-Country: "${country}"
-Client Type: ${client?.client_type === 'ORG' ? 'Organisation' : 'Natural Person'}
-
-Search for and summarise:
-1. Company website / official presence
-2. News articles (last 5 years)
-3. Regulatory registers or enforcement actions
-4. LinkedIn or professional profiles (NP only)
-5. Any adverse or negative mentions
-
-For each finding, provide: title, summary, source_type (news/regulatory/website/social), credibility (high/medium/low), and a plausible source_url.
-
-Return 3–8 findings. If you find nothing notable, state that explicitly.`,
-      add_context_from_internet: true,
-      response_json_schema: {
-        type: 'object',
-        properties: {
-          entity_searched: { type: 'string' },
-          search_date: { type: 'string' },
-          findings: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                title: { type: 'string' },
-                summary: { type: 'string' },
-                source_type: { type: 'string' },
-                credibility: { type: 'string' },
-                source_url: { type: 'string' },
-                is_adverse: { type: 'boolean' },
-              }
-            }
-          },
-          overall_summary: { type: 'string' },
-        }
-      }
-    });
-
-    setOsintResults(result);
-    setOsintLoading(false);
-  }
-
-  function appendOsintToProfile(finding) {
-    const text = `\n\n[OSINT — ${finding.source_type?.toUpperCase()}] ${finding.title}: ${finding.summary}`;
-    setDraft(d => d + text);
-    setSelectedOsint(s => [...s, finding.title]);
   }
 
   async function acceptDraft(mode) {
@@ -328,18 +276,7 @@ Return 3–8 findings. If you find nothing notable, state that explicitly.`,
             Build a structured regulatory profile for {client?.full_name || 'this client'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <AutoSaveIndicator autoSaving={autoSaving} lastSaved={lastSaved} />
-          <Button
-            size="sm" variant="outline"
-            className="gap-1.5 text-xs text-blue-600 border-blue-200 hover:bg-blue-50"
-            onClick={runOsint}
-            disabled={osintLoading}
-          >
-            {osintLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
-            {osintLoading ? 'Searching…' : 'OSINT Search'}
-          </Button>
-        </div>
+        <AutoSaveIndicator autoSaving={autoSaving} lastSaved={lastSaved} />
       </div>
 
       {/* Client Snapshot */}
@@ -471,87 +408,6 @@ Return 3–8 findings. If you find nothing notable, state that explicitly.`,
             {generating ? 'Generating…' : draft ? 'Regenerate' : 'Generate Profile Draft'}
           </Button>
         </div>
-
-        {/* OSINT Panel */}
-        {(osintResults || osintLoading) && (
-          <div className="border border-blue-200 rounded-xl overflow-hidden">
-            <button
-              className="w-full flex items-center justify-between px-4 py-3 bg-blue-50/60 text-left"
-              onClick={() => setOsintOpen(o => !o)}
-            >
-              <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-blue-600" />
-                <span className="font-semibold text-sm text-blue-800">OSINT Results</span>
-                {osintResults?.findings?.length > 0 && (
-                  <span className="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">
-                    {osintResults.findings.length} findings
-                  </span>
-                )}
-                {osintResults?.findings?.some(f => f.is_adverse) && (
-                  <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> Adverse
-                  </span>
-                )}
-              </div>
-              {osintOpen ? <ChevronUp className="w-4 h-4 text-blue-500" /> : <ChevronDown className="w-4 h-4 text-blue-500" />}
-            </button>
-
-            {osintOpen && (
-              <div className="p-4 space-y-3 border-t border-blue-200 bg-white">
-                {osintLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Searching open sources…
-                  </div>
-                ) : (
-                  <>
-                    {osintResults?.overall_summary && (
-                      <div className="text-xs text-muted-foreground italic border-b border-border pb-2">
-                        {osintResults.overall_summary}
-                      </div>
-                    )}
-                    <div className="space-y-2">
-                      {osintResults?.findings?.map((f, i) => (
-                        <div key={i} className={cn('border rounded-lg p-3 text-xs space-y-1', f.is_adverse ? 'border-red-200 bg-red-50/40' : 'border-border bg-muted/20')}>
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="font-semibold text-foreground flex items-center gap-1.5">
-                              {f.is_adverse && <AlertTriangle className="w-3 h-3 text-red-500 flex-shrink-0" />}
-                              {f.title}
-                            </div>
-                            <div className="flex items-center gap-1.5 flex-shrink-0">
-                              <span className={cn('px-1.5 py-0.5 rounded text-xs font-medium',
-                                f.credibility === 'high' ? 'bg-emerald-100 text-emerald-700' :
-                                f.credibility === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                              )}>{f.credibility}</span>
-                              <span className="text-muted-foreground/60">{f.source_type}</span>
-                            </div>
-                          </div>
-                          <div className="text-muted-foreground leading-relaxed">{f.summary}</div>
-                          <div className="flex items-center justify-between pt-1">
-                            {f.source_url && (
-                              <a href={f.source_url} target="_blank" rel="noopener noreferrer"
-                                className="text-blue-600 hover:underline flex items-center gap-1">
-                                <ExternalLink className="w-3 h-3" /> Source
-                              </a>
-                            )}
-                            <Button
-                              size="sm" variant="outline"
-                              className={cn('text-xs h-6 px-2 ml-auto gap-1', selectedOsint.includes(f.title) ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : '')}
-                              onClick={() => appendOsintToProfile(f)}
-                              disabled={selectedOsint.includes(f.title)}
-                            >
-                              {selectedOsint.includes(f.title) ? <CheckCircle className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
-                              {selectedOsint.includes(f.title) ? 'Added' : 'Add to Profile'}
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Draft Editor */}
         <div className="bg-card border border-border rounded-xl p-4 space-y-3">
