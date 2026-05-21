@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useTenant } from '@/lib/tenantContext';
+import { base44 } from '@/api/base44Client';
 import { hasPermission, isVitauriOps } from '@/lib/permissions';
 import NotificationBell from '@/components/layout/NotificationBell';
 import OpsBanner from '@/components/layout/OpsBanner';
 import SessionWatcher from '@/components/layout/SessionWatcher';
-import { base44 } from '@/api/base44Client';
 import {
   LayoutDashboard, FolderOpen, Users, Search, Shield,
   Settings, BarChart3, AlertTriangle, Calendar, Archive,
   ChevronLeft, ChevronRight, Menu, X, LogOut,
-  Building2, UserCircle, Bell, ClipboardList, ScanSearch
+  Building2, UserCircle, Bell, ClipboardList, ScanSearch, Mail
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +35,7 @@ const navItems = [
     group: 'MONITORING',
     items: [
       { label: 'Screening', icon: Shield, href: '/monitoring', permission: null, badge: 'alerts' },
+      { label: 'Outreach', icon: Mail, href: '/outreach-dashboard', permission: null, badge: 'outreach' },
       { label: 'Batch Screening', icon: ScanSearch, href: '/batch-screening', permission: 'createEditClient' },
       { label: 'Review Planner', icon: Calendar, href: '/review-planner', permission: 'viewAllTenantCases' },
     ],
@@ -59,6 +61,16 @@ export default function AppShell({ children }) {
   const { isOpsViewing, setOpsTenantId } = useTenant();
   const userRole = currentUser?.app_role;
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
+
+  // Fetch outreach count for badge
+  const { data: outreachCount = 0 } = useQuery({
+    queryKey: ['outreachBadgeCount'],
+    queryFn: async () => {
+      const all = await base44.entities.OutreachRequest.list();
+      return all.filter(r => r.status !== 'Complete').length;
+    },
+    staleTime: 60000,
+  });
 
   const isActive = (href) => {
     if (href === '/') return location.pathname === '/';
@@ -114,14 +126,21 @@ export default function AppShell({ children }) {
                     to={item.href}
                     onClick={() => setMobileOpen(false)}
                     className={cn(
-                      'flex items-center gap-3 px-2.5 py-2 rounded-md text-sm transition-colors group',
+                      'flex items-center gap-3 px-2.5 py-2 rounded-md text-sm transition-colors group justify-between',
                       isActive(item.href)
                         ? 'bg-sidebar-accent text-white font-medium'
                         : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-white'
                     )}
                   >
-                    <item.icon className={cn('flex-shrink-0', collapsed ? 'w-5 h-5' : 'w-4 h-4')} />
-                    {!collapsed && <span className="truncate">{item.label}</span>}
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <item.icon className={cn('flex-shrink-0', collapsed ? 'w-5 h-5' : 'w-4 h-4')} />
+                      {!collapsed && <span className="truncate">{item.label}</span>}
+                    </div>
+                    {item.badge === 'outreach' && outreachCount > 0 && !collapsed && (
+                      <span className="ml-auto flex-shrink-0 px-2 py-0.5 bg-destructive/20 text-destructive text-xs font-semibold rounded-full">
+                        {outreachCount}
+                      </span>
+                    )}
                   </Link>
                 ))}
               </div>
