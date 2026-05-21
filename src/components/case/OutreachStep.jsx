@@ -8,9 +8,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   MessageSquare, Plus, Send, Loader2, FileText, CheckCircle,
-  AlertTriangle, Sparkles, Eye, Copy, ExternalLink, ShieldCheck
+  AlertTriangle, Sparkles, Eye, Copy, ExternalLink, ShieldCheck, Mail, ChevronDown
 } from 'lucide-react';
 import DocumentViewer from '@/components/shared/DocumentViewer';
+
+const SITUATION_LABELS = {
+  Welcome: 'Welcome',
+  Documentation_Request: 'Documentation Request',
+  First_Reminder: 'First Reminder',
+  Second_Reminder: 'Second Reminder',
+  Third_Reminder: 'Third Reminder',
+  Additional_Info: 'Additional Info',
+};
 import { format, addDays, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -53,7 +62,7 @@ function generateToken() {
   return Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
-export default function OutreachStep({ kycCase, client, currentUser }) {
+export default function OutreachStep({ kycCase, client, currentUser, tenant }) {
   const [requests, setRequests]   = useState([]);
   const [loading, setLoading]     = useState(true);
   const [newOpen, setNewOpen]     = useState(false);
@@ -63,9 +72,15 @@ export default function OutreachStep({ kycCase, client, currentUser }) {
   // Builder state
   const [selectedItems, setSelectedItems] = useState([]);
   const [message, setMessage]     = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
   const [channel, setChannel]     = useState('Email');
   const [deadline, setDeadline]   = useState(format(addDays(new Date(), 14), 'yyyy-MM-dd'));
   const [creating, setCreating]   = useState(false);
+  const [sending, setSending]     = useState(false);
+
+  // Email templates
+  const [emailTemplates, setEmailTemplates] = useState([]);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
 
   // AI copilot
   const [aiLoading, setAiLoading] = useState(false);
@@ -74,12 +89,35 @@ export default function OutreachStep({ kycCase, client, currentUser }) {
   const clientType = client?.client_type || 'NP';
   const catalogueItems = ALL_ITEMS.filter(i => i.applies.includes(clientType));
 
-  useEffect(() => { load(); }, [kycCase.id]);
+  useEffect(() => { load(); loadTemplates(); }, [kycCase.id]);
 
   async function load() {
     const data = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
     setRequests(data || []);
     setLoading(false);
+  }
+
+  async function loadTemplates() {
+    if (!kycCase.tenant_id) return;
+    const data = await base44.entities.EmailTemplate.filter({ tenant_id: kycCase.tenant_id, is_active: true });
+    setEmailTemplates(data || []);
+  }
+
+  function resolveTemplateVars(text, portalUrl) {
+    return (text || '')
+      .replace(/{{client_name}}/g, client?.full_name || '')
+      .replace(/{{tenant_name}}/g, tenant?.name || '')
+      .replace(/{{portal_link}}/g, portalUrl || '')
+      .replace(/{{due_date}}/g, deadline || '')
+      .replace(/{{analyst_name}}/g, currentUser?.full_name || '');
+  }
+
+  function applyTemplate(tmpl, portalUrl) {
+    setEmailSubject(resolveTemplateVars(tmpl.subject, portalUrl));
+    // Strip HTML tags for the plain message field
+    const stripped = tmpl.body_html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+    setMessage(resolveTemplateVars(stripped, portalUrl));
+    setTemplatePickerOpen(false);
   }
 
   async function runAiCopilot() {
@@ -163,8 +201,52 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
     setPreviewOpen(false);
     setSelectedItems([]);
     setMessage('');
+    setEmailSubject('');
     setAiSuggestions(null);
     setCreating(false);
+    load();
+  }
+
+  async function sendEmail(req) {
+    if (!client?.primary_contact_email) return;
+    setSending(true);
+    const portalUrl = getPortalUrl(req);
+    const fromName = tenant?.name || 'KYC Compliance';
+
+    const itemListHtml = (req.items || []).map(i => `<li>${i.label}</li>`).join('');
+    const body = `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+        ${tenant?.branding_logo_url ? `<img src="${tenant.branding_logo_url}" style="height:40px;margin-bottom:24px;" alt="${tenant.name}" />` : `<h2 style="color:#0F1F3D;margin-bottom:24px;">${tenant?.name || 'KYC'}</h2>`}
+        <p>${req.message || `Dear ${client?.full_name || 'Client'},`}</p>
+        <p>As part of our ongoing review, we kindly request the following by <strong>${req.deadline ? format(parseISO(req.deadline), 'd MMMM yyyy') : '—'}</strong>:</p>
+        <ul>${itemListHtml}</ul>
+        <p style="margin-top:24px;">
+          <a href="${portalUrl}" style="background:#1A6BFF;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block;">
+            Submit Documents →
+          </a>
+        </p>
+        <p style="color:#888;font-size:12px;margin-top:32px;">This is a secure link for your use only. Please do not share it.</p>
+      </div>
+    `;
+
+    await base44.integrations.Core.SendEmail({
+      from_name: fromName,
+      to: client.primary_contact_email,
+      subject: emailSubject || `Action Required: Documents needed — ${tenant?.name || 'KYC Review'}`,
+      body,
+    });
+
+    await base44.entities.OutreachRequest.update(req.id, { status: 'Sent' });
+    await base44.entities.AuditEvent.create({
+      tenant_id: kycCase.tenant_id,
+      case_id: kycCase.id,
+      actor_user_id: currentUser?.id,
+      actor_name: currentUser?.full_name,
+      actor_type: 'User',
+      event_type: 'outreach_sent',
+      notes: `Outreach email sent to ${client.primary_contact_email}`,
+    });
+    setSending(false);
     load();
   }
 
@@ -272,9 +354,18 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                       </>
                     )}
                     {req.status === 'Draft' && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => markSent(req)}>
-                        <Send className="w-3 h-3" /> Mark Sent
-                      </Button>
+                      <>
+                        {client?.primary_contact_email && (
+                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-primary border-primary/30 hover:bg-primary/5"
+                            onClick={() => sendEmail(req)} disabled={sending}>
+                            {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
+                            Send Email
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => markSent(req)}>
+                          <Send className="w-3 h-3" /> Mark Sent
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -397,6 +488,51 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                 <p className="text-xs text-purple-600">Click "Suggest Items" to get AI-powered recommendations based on client type, profile gaps, and case context.</p>
               )}
             </div>
+
+            {/* Template Picker */}
+            {emailTemplates.length > 0 && (
+              <div className="relative">
+                <div className="flex items-center justify-between mb-1.5">
+                  <Label className="text-xs font-medium">Use Email Template</Label>
+                </div>
+                <div className="relative">
+                  <Button
+                    type="button" size="sm" variant="outline"
+                    className="w-full justify-between text-xs h-9"
+                    onClick={() => setTemplatePickerOpen(o => !o)}
+                  >
+                    <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-muted-foreground" /> Select a template to pre-fill subject &amp; message…</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                  </Button>
+                  {templatePickerOpen && (
+                    <div className="absolute left-0 top-full mt-1 z-50 w-full bg-popover border border-border rounded-xl shadow-lg overflow-hidden">
+                      {emailTemplates.map(tmpl => (
+                        <button key={tmpl.id} type="button"
+                          className="w-full text-left px-3 py-2.5 text-xs hover:bg-muted/60 transition-colors border-b border-border/50 last:border-0"
+                          onClick={() => applyTemplate(tmpl, `${window.location.origin}/portal/[token]`)}
+                        >
+                          <div className="font-medium text-foreground">{tmpl.name}</div>
+                          <div className="text-muted-foreground mt-0.5">{SITUATION_LABELS[tmpl.situation] || tmpl.situation} · {tmpl.subject}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Email Subject (shown when channel = Email) */}
+            {channel === 'Email' && (
+              <div>
+                <Label className="text-xs font-medium mb-1.5 block">Email Subject</Label>
+                <Input
+                  value={emailSubject}
+                  onChange={e => setEmailSubject(e.target.value)}
+                  placeholder="Action Required: Documents needed for your KYC review"
+                  className="h-9 text-sm"
+                />
+              </div>
+            )}
 
             {/* Item selection */}
             <div>

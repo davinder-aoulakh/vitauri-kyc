@@ -60,7 +60,7 @@ function StepIcon({ status }) {
 export default function CaseWorkspace() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { currentUser } = useTenant();
+  const { currentUser, tenant } = useTenant();
 
   const [kycCase, setKycCase] = useState(null);
   const [client, setClient]   = useState(null);
@@ -400,7 +400,7 @@ export default function CaseWorkspace() {
                 <CaseTypeBanner kycCase={kycCase} client={client} />
 
                 {/* Step content */}
-                {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} />}
+                {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} />}
                 {activeStep === 2 && <IdentityVerificationStep kycCase={kycCase} client={client} currentUser={currentUser} />}
                 {activeStep === 3 && <ScreeningStep caseId={id} tenantId={currentUser?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} />}
                 {activeStep === 4 && <ClientProfileStep kycCase={kycCase} client={client} currentUser={currentUser} onRegisterOsintAdd={cb => setOsintAddCallback(() => cb)} />}

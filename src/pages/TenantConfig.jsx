@@ -18,6 +18,7 @@ import RiskIndicatorsTab    from '@/components/tenantconfig/RiskIndicatorsTab';
 import ReviewCyclesTab      from '@/components/tenantconfig/ReviewCyclesTab';
 import SignOffMatrixTab      from '@/components/tenantconfig/SignOffMatrixTab';
 import OutreachTemplatesTab from '@/components/tenantconfig/OutreachTemplatesTab';
+import EmailTemplatesTab    from '@/components/tenantconfig/EmailTemplatesTab';
 import IntegrationsTab      from '@/components/tenantconfig/IntegrationsTab';
 
 const TABS = [
@@ -28,6 +29,7 @@ const TABS = [
   { id: 'cycles',      label: 'Review Cycles' },
   { id: 'signoff',     label: 'Sign-Off Matrix' },
   { id: 'outreach',    label: 'Outreach Templates' },
+  { id: 'email_tmpl',  label: 'Email Templates' },
   { id: 'retention',   label: 'Audit Retention' },
   { id: 'integrations',label: 'Integrations' },
 ];
@@ -158,6 +160,10 @@ export default function TenantConfig() {
 
           <TabsContent value="outreach" className="mt-5">
             <OutreachTemplatesTab tenant={tenant} />
+          </TabsContent>
+
+          <TabsContent value="email_tmpl" className="mt-5">
+            <EmailTemplatesTab tenant={tenant} currentUser={currentUser} />
           </TabsContent>
 
           <TabsContent value="retention" className="mt-5">

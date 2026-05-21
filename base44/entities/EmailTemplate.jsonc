@@ -1,0 +1,45 @@
+{
+  "name": "EmailTemplate",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "description": "Template display name"
+    },
+    "situation": {
+      "type": "string",
+      "enum": [
+        "Welcome",
+        "First_Reminder",
+        "Second_Reminder",
+        "Third_Reminder",
+        "Additional_Info",
+        "Documentation_Request"
+      ]
+    },
+    "subject": {
+      "type": "string"
+    },
+    "body_html": {
+      "type": "string",
+      "description": "HTML email body with {{variables}}"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "created_by": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "name",
+    "situation",
+    "subject",
+    "body_html"
+  ]
+}
