@@ -75,6 +75,11 @@ export default function CaseWorkspace() {
   const [statusOverrideOpen, setStatusOverrideOpen] = useState(false);
   const [overrideStatus, setOverrideStatus] = useState('');
   const [overrideNote, setOverrideNote] = useState('');
+  const [flagPopoverOpen, setFlagPopoverOpen] = useState(false);
+  const [flagReason, setFlagReason] = useState('');
+  const [flagNote, setFlagNote] = useState('');
+
+  const FLAG_REASONS = ['Missing document', 'Awaiting client response', 'QC query', 'Other'];
 
   const userRole = currentUser?.app_role;
   const canOverrideStatus = hasPermission(userRole, 'viewAllTenantCases');
@@ -369,13 +374,23 @@ export default function CaseWorkspace() {
                       <CheckCircle className="w-3 h-3" />
                       {stepStatus === 'complete' ? '✓ Complete' : 'Mark Complete'}
                     </Button>
-                    <Button
-                      size="sm" variant="ghost" className="text-xs gap-1 text-amber-600"
-                      onClick={() => updateStepStatus(activeStepData.stepKey, 'flagged')}
-                      disabled={stepStatus === 'flagged'}
-                    >
-                      <AlertTriangle className="w-3 h-3" /> Flag
-                    </Button>
+                    {stepStatus === 'flagged' ? (
+                      <Button
+                        size="sm" variant="ghost" className="text-xs gap-1 text-amber-600"
+                        onClick={() => updateStepStatus(activeStepData.stepKey, 'in_progress')}
+                        title="Remove flag and resume this step"
+                      >
+                        <AlertTriangle className="w-3 h-3" /> Un-flag
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm" variant="ghost" className="text-xs gap-1 text-amber-600"
+                        onClick={() => { setFlagReason(''); setFlagNote(''); setFlagPopoverOpen(true); }}
+                        title="Flag this step to mark it for QC review or follow-up"
+                      >
+                        <AlertTriangle className="w-3 h-3" /> Flag
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -413,6 +428,63 @@ export default function CaseWorkspace() {
           </div>
         )}
       </div>
+
+      {/* Flag Step Modal */}
+      {flagPopoverOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-card border border-border rounded-xl p-5 w-88 shadow-xl space-y-4" style={{ width: '22rem' }}>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+              <h3 className="font-semibold text-sm">Flag Step: {activeStepData?.label}</h3>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-2 block text-muted-foreground">Reason *</label>
+              <div className="flex flex-wrap gap-1.5">
+                {FLAG_REASONS.map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setFlagReason(r)}
+                    className={cn(
+                      'text-xs px-2.5 py-1 rounded-full border transition-colors',
+                      flagReason === r
+                        ? 'bg-amber-500 text-white border-amber-500'
+                        : 'border-border text-muted-foreground hover:border-amber-400 hover:text-amber-600'
+                    )}
+                  >{r}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1.5 block text-muted-foreground">Additional notes</label>
+              <Textarea
+                value={flagNote}
+                onChange={e => setFlagNote(e.target.value)}
+                placeholder="Optional detail…"
+                className="text-sm min-h-16 resize-none"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setFlagPopoverOpen(false)}>Cancel</Button>
+              <Button
+                size="sm"
+                className="bg-amber-500 hover:bg-amber-600 text-white gap-1"
+                disabled={!flagReason}
+                onClick={async () => {
+                  const combined = [flagReason, flagNote].filter(Boolean).join(' — ');
+                  const existingNotes = noteText ? `${noteText}\n` : '';
+                  const updatedNotes = `${existingNotes}[FLAG Step ${activeStep}: ${combined}]`;
+                  setNoteText(updatedNotes);
+                  await base44.entities.KycCase.update(id, { case_notes: updatedNotes });
+                  await updateStepStatus(activeStepData.stepKey, 'flagged');
+                  setFlagPopoverOpen(false);
+                }}
+              >
+                <AlertTriangle className="w-3 h-3" /> Confirm Flag
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status Override Modal */}
       {statusOverrideOpen && (
