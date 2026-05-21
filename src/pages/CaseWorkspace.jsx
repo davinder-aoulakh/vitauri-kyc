@@ -99,10 +99,14 @@ export default function CaseWorkspace() {
       setKycCase(c);
       setNoteText(c?.case_notes || '');
 
+      const clientDataPromise = c?.client_id ? base44.entities.Client.filter({ id: c.client_id }) : Promise.resolve([]);
+      const usersDataPromise = base44.entities.User.list().catch(() => []);
+      const auditDataPromise = base44.entities.AuditEvent.filter({ case_id: id }, '-created_date', 100).catch(() => []);
+      
       const [clientData, usersData, auditData] = await Promise.all([
-        c?.client_id ? base44.entities.Client.filter({ id: c.client_id }) : Promise.resolve([]),
-        base44.entities.User.list().catch(() => []),
-        base44.entities.AuditEvent.filter({ case_id: id }, '-created_date', 100).catch(() => []),
+        clientDataPromise,
+        usersDataPromise,
+        auditDataPromise,
       ]);
       setClient(clientData?.[0] || null);
       setUsers(usersData || []);
