@@ -29,6 +29,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
   // Selected hit for slide-over
   const [selectedHit, setSelectedHit] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmedOnboardingHits, setConfirmedOnboardingHits] = useState([]);
 
   useEffect(() => { loadAll(); }, [caseId]);
 
@@ -147,28 +148,62 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
       is_override: false,
     });
 
-    // If Confirmed → create EDR case
+    // If Confirmed — handle differently for Onboarding vs existing client cases
     if (decision === 'Confirmed') {
-      const dueDate = format(addDays(new Date(), 30), 'yyyy-MM-dd');
-      const edrCase = await base44.entities.KycCase.create({
-        tenant_id: tenantId,
-        client_id: kycCase?.client_id,
-        case_type: 'Event_Driven_Review',
-        status: 'Draft',
-        assigned_analyst_id: currentUser?.id,
-        trigger_reason: `Screening hit confirmed: ${hit.hit_name} (${hit.source}) — ${justification}`,
-        due_date: dueDate,
-        created_by_user_id: currentUser?.id,
-      });
-      await base44.entities.AuditEvent.create({
-        tenant_id: tenantId,
-        case_id: caseId,
-        actor_user_id: currentUser?.id,
-        actor_name: currentUser?.full_name,
-        actor_type: 'User',
-        event_type: 'edr_case_created_from_screening',
-        notes: `EDR case created: ${edrCase.id}. Trigger: ${hit.hit_name}`,
-      });
+      if (kycCase?.case_type === 'Onboarding') {
+        // Onboarding: handle in-case, do NOT create EDR
+        // Add a High-risk RiskAssessment indicator entry
+        const indicators = await base44.entities.RiskIndicator.filter({ tenant_id: tenantId });
+        const screeningIndicator = indicators?.find(i =>
+          i.name?.toLowerCase().includes('screening') || i.name?.toLowerCase().includes('pep') || i.name?.toLowerCase().includes('sanction')
+        );
+        if (screeningIndicator) {
+          await base44.entities.RiskAssessment.create({
+            tenant_id: tenantId,
+            case_id: caseId,
+            entity_id: hit.client_id || kycCase?.client_id,
+            entity_type: 'Client',
+            entity_name: hit.entity_name,
+            indicator_id: screeningIndicator.id,
+            indicator_name: screeningIndicator.name,
+            score: 'High',
+            ai_narrative: `Confirmed screening hit: ${hit.hit_name} (${hit.source}). ${hit.ai_rationale || ''}`.trim(),
+            analyst_narrative: `Confirmed match — ${justification}`,
+          });
+        }
+        await base44.entities.AuditEvent.create({
+          tenant_id: tenantId,
+          case_id: caseId,
+          actor_user_id: currentUser?.id,
+          actor_name: currentUser?.full_name,
+          actor_type: 'User',
+          event_type: 'screening_confirmed_hit_onboarding',
+          notes: `Confirmed screening hit (${hit.hit_name} / ${hit.source}) handled in-case. Elevated as High risk indicator in Risk Assessment. EDR will be triggered post-onboarding if client is accepted. Justification: ${justification}`,
+        });
+        setConfirmedOnboardingHits(prev => [...prev, hit]);
+      } else {
+        // Existing client (Periodic Review, EDR, etc.): create EDR case as before
+        const dueDate = format(addDays(new Date(), 30), 'yyyy-MM-dd');
+        const edrCase = await base44.entities.KycCase.create({
+          tenant_id: tenantId,
+          client_id: kycCase?.client_id,
+          case_type: 'Event_Driven_Review',
+          status: 'Draft',
+          assigned_analyst_id: currentUser?.id,
+          trigger_reason: `Screening hit confirmed: ${hit.hit_name} (${hit.source}) — ${justification}`,
+          due_date: dueDate,
+          created_by_user_id: currentUser?.id,
+        });
+        await base44.entities.AuditEvent.create({
+          tenant_id: tenantId,
+          case_id: caseId,
+          actor_user_id: currentUser?.id,
+          actor_name: currentUser?.full_name,
+          actor_type: 'User',
+          event_type: 'edr_case_created_from_screening',
+          notes: `EDR case created: ${edrCase.id}. Trigger: confirmed screening hit — ${hit.hit_name} (${hit.source}). Justification: ${justification}`,
+        });
+      }
     }
 
     setSubmitting(false);
@@ -267,6 +302,29 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
           <span className="text-sm text-red-700 font-medium">
             {pendingCount} hit{pendingCount !== 1 ? 's' : ''} require analyst review. Click any row to open the detail panel.
           </span>
+        </div>
+      )}
+
+      {/* Onboarding confirmed-hit banner */}
+      {confirmedOnboardingHits.length > 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-amber-800">
+              ⚠ Confirmed screening hit{confirmedOnboardingHits.length > 1 ? 's' : ''} — elevated to High risk
+            </p>
+            <p className="text-xs text-amber-700">
+              This hit is being handled within this onboarding case and will be elevated as a <strong>HIGH risk indicator in Step 6 (Risk Assessment)</strong>.
+              An EDR case will be created automatically after onboarding is complete if the client is accepted.
+            </p>
+            <ul className="mt-1 space-y-0.5">
+              {confirmedOnboardingHits.map(h => (
+                <li key={h.id} className="text-xs text-amber-700 font-medium">
+                  • {h.hit_name} ({h.source?.replace(/_/g, ' ')})
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
 
