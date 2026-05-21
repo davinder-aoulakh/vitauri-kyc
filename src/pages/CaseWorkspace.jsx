@@ -19,6 +19,7 @@ import KycReportStep        from '@/components/case/KycReportStep';
 import AiAssistantPanel     from '@/components/case/AiAssistantPanel';
 import ClientProfileStep    from '@/components/case/ClientProfileStep';
 import CaseTypeBanner       from '@/components/case/views/CaseTypeBanner';
+import CaseAssignmentPicker from '@/components/case/CaseAssignmentPicker';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -158,7 +159,7 @@ export default function CaseWorkspace() {
   );
 
   const daysOpen = kycCase.created_date ? differenceInDays(new Date(), new Date(kycCase.created_date)) : 0;
-  const assignedAnalyst = users.find(u => u.id === kycCase.assigned_analyst_id);
+  const analysts = users.filter(u => u.app_role === 'Analyst');
   const activeStepData = STEPS[activeStep - 1];
   const stepStatus = kycCase[activeStepData?.stepKey] || 'not_started';
 
@@ -197,7 +198,12 @@ export default function CaseWorkspace() {
 
             {/* Meta */}
             <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0 flex-wrap">
-              <span>Analyst: <strong className="text-foreground">{assignedAnalyst?.full_name || '—'}</strong></span>
+              <CaseAssignmentPicker
+                kycCase={kycCase}
+                currentUser={currentUser}
+                analysts={analysts}
+                onAssigned={(newId, newName) => setKycCase(prev => ({ ...prev, assigned_analyst_id: newId }))}
+              />
               <span>Due: <strong className={cn('', kycCase.due_date && new Date() > new Date(kycCase.due_date) ? 'text-red-600' : 'text-foreground')}>
                 {kycCase.due_date ? format(new Date(kycCase.due_date), 'd MMM') : '—'}
               </strong></span>
