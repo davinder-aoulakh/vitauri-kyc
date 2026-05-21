@@ -36,6 +36,7 @@ export default function ReviewPlanner() {
   const [users, setUsers]       = useState([]);
   const [cases, setCases]       = useState([]);
   const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'calendar'
   const [calMonth, setCalMonth] = useState(new Date());
 
@@ -74,15 +75,22 @@ export default function ReviewPlanner() {
   async function load() {
     if (!currentUser?.tenant_id) return;
     setLoading(true);
-    const [clientData, usersData, caseData] = await Promise.all([
-      base44.entities.Client.filter({ tenant_id: currentUser.tenant_id, status: 'Active' }),
-      base44.entities.User.list().catch(() => []),
-      base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
-    ]);
-    setClients(clientData || []);
-    setUsers(usersData || []);
-    setCases(caseData || []);
-    setLoading(false);
+    setError(null);
+    try {
+      const [clientData, usersData, caseData] = await Promise.all([
+        base44.entities.Client.filter({ tenant_id: currentUser.tenant_id, status: 'Active' }),
+        base44.entities.User.list().catch(() => []),
+        base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
+      ]);
+      setClients(clientData || []);
+      setUsers(usersData || []);
+      setCases(caseData || []);
+    } catch (err) {
+      console.error('ReviewPlanner load error:', err);
+      setError(err?.message || 'Failed to load review planner data');
+    } finally {
+      setLoading(false);
+    }
   }
 
   // ── Computed filtered list ────────────────────────────────────────────────
@@ -366,6 +374,15 @@ export default function ReviewPlanner() {
             </div>
           }
         />
+
+        {/* Error banner */}
+        {error && (
+          <div className="flex items-center gap-3 bg-destructive/10 border border-destructive/30 rounded-xl px-4 py-3">
+            <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
+            <span className="text-sm text-destructive flex-1">{error}</span>
+            <Button size="sm" variant="outline" onClick={load}>Retry</Button>
+          </div>
+        )}
 
         {/* ── KPI row ── */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

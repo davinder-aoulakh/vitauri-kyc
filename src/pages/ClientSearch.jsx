@@ -32,12 +32,16 @@ export default function ClientSearch() {
   // Load all clients once on mount so dedup runs client-side
   useEffect(() => {
     if (currentUser?.tenant_id) {
-      base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }).then(d => setAllClients(d || []));
-      base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }).then(cases => {
-        const counts = {};
-        (cases || []).forEach(c => { counts[c.client_id] = (counts[c.client_id] || 0) + 1; });
-        setCasesCounts(counts);
-      });
+      base44.entities.Client.filter({ tenant_id: currentUser.tenant_id })
+        .then(d => setAllClients(d || []))
+        .catch(err => console.error('ClientSearch load clients error:', err));
+      base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id })
+        .then(cases => {
+          const counts = {};
+          (cases || []).forEach(c => { counts[c.client_id] = (counts[c.client_id] || 0) + 1; });
+          setCasesCounts(counts);
+        })
+        .catch(err => console.error('ClientSearch load cases error:', err));
     }
   }, [currentUser]);
 

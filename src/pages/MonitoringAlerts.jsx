@@ -34,6 +34,7 @@ export default function MonitoringAlerts() {
   const [alerts, setAlerts]       = useState([]);
   const [clients, setClients]     = useState([]);
   const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
   const [sourceTab, setSourceTab] = useState('all');
   const [filter, setFilter]       = useState({ type: 'all', status: 'all', client: 'all', search: '' });
   const [selected, setSelected]   = useState(null);
@@ -46,13 +47,21 @@ export default function MonitoringAlerts() {
   }, [currentUser]);
 
   async function loadAll() {
-    const [alertData, clientData] = await Promise.all([
-      base44.entities.MonitoringAlert.filter({ tenant_id: currentUser.tenant_id }, '-created_date'),
-      base44.entities.Client.filter({ tenant_id: currentUser.tenant_id, status: 'Active' }),
-    ]);
-    setAlerts(alertData || []);
-    setClients(clientData || []);
-    setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      const [alertData, clientData] = await Promise.all([
+        base44.entities.MonitoringAlert.filter({ tenant_id: currentUser.tenant_id }, '-created_date'),
+        base44.entities.Client.filter({ tenant_id: currentUser.tenant_id, status: 'Active' }),
+      ]);
+      setAlerts(alertData || []);
+      setClients(clientData || []);
+    } catch (err) {
+      console.error('MonitoringAlerts loadAll error:', err);
+      setError(err?.message || 'Failed to load monitoring data');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function createManualFlag() {
@@ -134,6 +143,15 @@ export default function MonitoringAlerts() {
             </Button>
           }
         />
+
+        {/* Error banner */}
+        {error && (
+          <div className="flex items-center gap-3 bg-destructive/10 border border-destructive/30 rounded-xl px-4 py-3">
+            <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
+            <span className="text-sm text-destructive flex-1">{error}</span>
+            <Button size="sm" variant="outline" onClick={loadAll}>Retry</Button>
+          </div>
+        )}
 
         {/* KPIs */}
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">

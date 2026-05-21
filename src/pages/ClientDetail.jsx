@@ -14,7 +14,7 @@ import RelatedPartiesTab from '@/components/client/RelatedPartiesTab';
 import CasesTab         from '@/components/client/CasesTab';
 import DocumentsTab     from '@/components/client/DocumentsTab';
 import AuditTrailTab    from '@/components/client/AuditTrailTab';
-import { Network, ChevronRight, User, Building2, UserCog, GitFork } from 'lucide-react';
+import { Network, ChevronRight, User, Building2, UserCog, GitFork, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CLIENT_STATUS_COLORS } from '@/lib/riskColors';
@@ -32,6 +32,7 @@ export default function ClientDetail() {
   const [auditEvents, setAuditEvents] = useState([]);
   const [users, setUsers]             = useState([]);
   const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignTo, setReassignTo]   = useState('');
   const [pendingOcr, setPendingOcr]   = useState(null);
@@ -43,6 +44,8 @@ export default function ClientDetail() {
   useEffect(() => { loadAll(); }, [id]);
 
   async function loadAll() {
+    setLoading(true);
+    setError(null);
     try {
       const [clientData, casesData, linksData, docsData, auditData, usersData] = await Promise.all([
         base44.entities.Client.filter({ id }),
@@ -66,6 +69,9 @@ export default function ClientDetail() {
         );
         setRelatedParties(rps.flat().filter(Boolean));
       }
+    } catch (err) {
+      console.error('ClientDetail loadAll error:', err);
+      setError(err?.message || 'Failed to load client data');
     } finally {
       setLoading(false);
     }
@@ -88,6 +94,19 @@ export default function ClientDetail() {
   }
 
   if (loading) return <AppShell><div className="p-8 text-center text-muted-foreground">Loading client…</div></AppShell>;
+  if (error) return (
+    <AppShell>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
+            <span className="text-destructive text-lg">!</span>
+          </div>
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button size="sm" variant="outline" onClick={loadAll}>Retry</Button>
+        </div>
+      </div>
+    </AppShell>
+  );
   if (!client)  return <AppShell><div className="p-8 text-center text-muted-foreground">Client not found.</div></AppShell>;
 
   const activeCase = cases.find(c => !['Approved','Closed','Rejected'].includes(c.status));

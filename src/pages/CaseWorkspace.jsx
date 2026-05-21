@@ -67,6 +67,7 @@ export default function CaseWorkspace() {
   const [users, setUsers]     = useState([]);
   const [auditEvents, setAuditEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activeStep, setActiveStep] = useState(1);
   const [mainTab, setMainTab] = useState('workspace'); // 'workspace' | 'audit'
   const [aiCollapsed, setAiCollapsed] = useState(false);
@@ -89,6 +90,8 @@ export default function CaseWorkspace() {
   useEffect(() => { loadAll(); }, [id]);
 
   async function loadAll() {
+    setLoading(true);
+    setError(null);
     try {
       const caseData = await base44.entities.KycCase.filter({ id });
       const c = caseData?.[0];
@@ -103,6 +106,9 @@ export default function CaseWorkspace() {
       setClient(clientData?.[0] || null);
       setUsers(usersData || []);
       setAuditEvents(auditData || []);
+    } catch (err) {
+      console.error('CaseWorkspace loadAll error:', err);
+      setError(err?.message || 'Failed to load case data');
     } finally {
       setLoading(false);
     }
@@ -158,6 +164,18 @@ export default function CaseWorkspace() {
     <AppShell>
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    </AppShell>
+  );
+
+  if (error) return (
+    <AppShell>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <AlertTriangle className="w-8 h-8 text-destructive mx-auto" />
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button size="sm" variant="outline" onClick={loadAll}>Retry</Button>
+        </div>
       </div>
     </AppShell>
   );

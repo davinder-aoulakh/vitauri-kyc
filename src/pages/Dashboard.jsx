@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import WorkflowOptimisationWidget from '@/components/dashboard/WorkflowOptimisationWidget';
 import {
   FolderOpen, UserCircle, AlertTriangle, Shield, Calendar,
-  Plus, ChevronRight, RefreshCw
+  Plus, ChevronRight, RefreshCw, XCircle
 } from 'lucide-react';
 import { format, isAfter, addDays, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [auditEvents, setAuditEvents] = useState([]);
   const [screeningAlerts, setScreeningAlerts] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const refreshTimer = useRef(null);
 
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
@@ -47,24 +48,31 @@ export default function Dashboard() {
 
   const loadData = useCallback(async () => {
     if (!currentUser?.tenant_id) return;
-    const canViewUsers = hasPermission(currentUser?.app_role, 'viewAllTenantCases');
-    const [casesData, auditData, clientsData, newHits, reviewHits, usersData] = await Promise.all([
-      base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }),
-      base44.entities.AuditEvent.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 20),
-      base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }),
-      base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'New' }),
-      base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'Under_Review' }),
-      canViewUsers ? base44.entities.User.list().catch(() => []) : Promise.resolve([]),
-    ]);
-    setCases(casesData || []);
-    setAuditEvents(auditData || []);
-    setScreeningAlerts((newHits?.length || 0) + (reviewHits?.length || 0));
-    setUsers(usersData || []);
-    // Build client lookup map
-    const clientMap = {};
-    (clientsData || []).forEach(c => { clientMap[c.id] = c; });
-    setClients(clientMap);
-    setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      const canViewUsers = hasPermission(currentUser?.app_role, 'viewAllTenantCases');
+      const [casesData, auditData, clientsData, newHits, reviewHits, usersData] = await Promise.all([
+        base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }),
+        base44.entities.AuditEvent.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 20),
+        base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }),
+        base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'New' }),
+        base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'Under_Review' }),
+        canViewUsers ? base44.entities.User.list().catch(() => []) : Promise.resolve([]),
+      ]);
+      setCases(casesData || []);
+      setAuditEvents(auditData || []);
+      setScreeningAlerts((newHits?.length || 0) + (reviewHits?.length || 0));
+      setUsers(usersData || []);
+      const clientMap = {};
+      (clientsData || []).forEach(c => { clientMap[c.id] = c; });
+      setClients(clientMap);
+    } catch (err) {
+      console.error('Dashboard loadData error:', err);
+      setError(err?.message || 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
   }, [currentUser?.tenant_id]);
 
   // Initial load + 60s auto-refresh
@@ -121,7 +129,16 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* KPI Tiles */}
+        {/* Error banner */}
+      {error && (
+        <div className="flex items-center gap-3 bg-destructive/10 border border-destructive/30 rounded-xl px-4 py-3">
+          <XCircle className="w-4 h-4 text-destructive flex-shrink-0" />
+          <span className="text-sm text-destructive flex-1">{error}</span>
+          <Button size="sm" variant="outline" onClick={loadData}>Retry</Button>
+        </div>
+      )}
+
+      {/* KPI Tiles */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <KpiCard
             label="Open Cases"

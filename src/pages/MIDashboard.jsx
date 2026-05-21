@@ -14,7 +14,7 @@ import {
 } from 'recharts';
 import {
   Loader2, Download, BarChart3, Users, Shield, Sparkles,
-  ExternalLink, RefreshCw, Copy
+  ExternalLink, RefreshCw, Copy, AlertTriangle
 } from 'lucide-react';
 import { format, subMonths, isWithinInterval, startOfMonth, endOfMonth, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -57,6 +57,7 @@ export default function MIDashboard() {
   const [aiRuns, setAiRuns]         = useState([]);
   const [users, setUsers]           = useState([]);
   const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
 
   // Date range filter
   const [fromDate, setFromDate] = useState(format(subMonths(new Date(), 12), 'yyyy-MM-dd'));
@@ -68,19 +69,26 @@ export default function MIDashboard() {
 
   async function loadData() {
     setLoading(true);
-    const [casesData, clientsData, hitsData, aiData, usersData] = await Promise.all([
-      base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 1000),
-      base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 1000),
-      base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
-      base44.entities.AiAgentRun.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
-      base44.entities.User.list(),
-    ]);
-    setCases(casesData || []);
-    setClients(clientsData || []);
-    setHits(hitsData || []);
-    setAiRuns(aiData || []);
-    setUsers(usersData || []);
-    setLoading(false);
+    setError(null);
+    try {
+      const [casesData, clientsData, hitsData, aiData, usersData] = await Promise.all([
+        base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 1000),
+        base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 1000),
+        base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
+        base44.entities.AiAgentRun.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
+        base44.entities.User.list(),
+      ]);
+      setCases(casesData || []);
+      setClients(clientsData || []);
+      setHits(hitsData || []);
+      setAiRuns(aiData || []);
+      setUsers(usersData || []);
+    } catch (err) {
+      console.error('MIDashboard loadData error:', err);
+      setError(err?.message || 'Failed to load MI data');
+    } finally {
+      setLoading(false);
+    }
   }
 
   // Apply date range + analyst filters
@@ -242,6 +250,18 @@ export default function MIDashboard() {
   if (loading) return (
     <AppShell>
       <div className="flex items-center justify-center h-64"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+    </AppShell>
+  );
+
+  if (error) return (
+    <AppShell>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <AlertTriangle className="w-8 h-8 text-destructive mx-auto" />
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button size="sm" variant="outline" onClick={loadData}>Retry</Button>
+        </div>
+      </div>
     </AppShell>
   );
 
