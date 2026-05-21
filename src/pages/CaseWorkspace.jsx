@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { hasPermission } from '@/lib/permissions';
+import { getStepStatus } from '@/lib/caseUtils';
 import AppShell from '@/components/layout/AppShell';
 import RiskBadge from '@/components/shared/RiskBadge';
 import StatusBadge from '@/components/shared/StatusBadge';
@@ -109,8 +110,10 @@ export default function CaseWorkspace() {
   }
 
   async function updateStepStatus(stepKey, status) {
-    const updated = await base44.entities.KycCase.update(id, { [stepKey]: status });
-    setKycCase(prev => ({ ...prev, [stepKey]: status }));
+    await base44.entities.KycCase.update(id, { [stepKey]: status });
+    // Refresh from DB — authoritative state for all child components
+    const fresh = await base44.entities.KycCase.filter({ id });
+    if (fresh?.[0]) setKycCase(fresh[0]);
     await base44.entities.AuditEvent.create({
       tenant_id: kycCase.tenant_id,
       case_id: id,
@@ -161,7 +164,7 @@ export default function CaseWorkspace() {
   const daysOpen = kycCase.created_date ? differenceInDays(new Date(), new Date(kycCase.created_date)) : 0;
   const analysts = users.filter(u => u.app_role === 'Analyst');
   const activeStepData = STEPS[activeStep - 1];
-  const stepStatus = kycCase[activeStepData?.stepKey] || 'not_started';
+  const stepStatus = getStepStatus(kycCase, activeStep);
 
   return (
     <AppShell>
@@ -301,7 +304,7 @@ export default function CaseWorkspace() {
               <div className="flex-1 overflow-y-auto p-2 pt-3">
                 <div className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-widest px-2 mb-2">Steps</div>
                 {STEPS.map(step => {
-                  const s = kycCase[step.stepKey] || 'not_started';
+                  const s = getStepStatus(kycCase, step.id);
                   return (
                     <button
                       key={step.id}

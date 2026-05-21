@@ -11,6 +11,7 @@ import { FileText, Download, Loader2, Share2, CheckCircle, XCircle, Eye, Refresh
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
+import { isStepComplete, getStepStatus } from '@/lib/caseUtils';
 
 // ── PDF design tokens ──────────────────────────────────────────────────────
 const C = {
@@ -642,7 +643,7 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
   const latestReport = reports[0];
   const isApproved = kycCase?.status === 'Approved';
 
-  const incompleteSteps = PREREQUISITE_STEPS.filter(s => kycCase[s.stepKey] !== 'complete');
+  const incompleteSteps = PREREQUISITE_STEPS.filter(s => !isStepComplete(kycCase, s.id));
   const allStepsComplete = incompleteSteps.length === 0;
 
   return (
@@ -695,7 +696,7 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
                 <XCircle className="w-3.5 h-3.5 flex-shrink-0 text-red-500" />
                 Step {s.id}: {s.label}
                 <span className="text-red-400 ml-1">
-                  ({kycCase[s.stepKey] === 'in_progress' ? 'in progress' : kycCase[s.stepKey] === 'flagged' ? 'flagged' : 'not started'})
+                  ({(() => { const st = getStepStatus(kycCase, s.id); return st === 'in_progress' ? 'in progress' : st === 'flagged' ? 'flagged' : 'not started'; })()})
                 </span>
               </li>
             ))}
