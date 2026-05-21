@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { FileText, Upload, CheckCircle, Clock, Send, Loader2, MessageCircle, AlertTriangle, X, ChevronRight, ArrowLeft, LayoutDashboard, Shield } from 'lucide-react';
 import { portalSecureUpload } from '@/lib/securityUtils';
+import SubmissionConfirmation from '@/components/portal/SubmissionConfirmation';
 import { format, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -80,6 +81,7 @@ export default function ClientPortal() {
   const [itemStateMap, setItemStateMap] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submittedIds, setSubmittedIds] = useState(new Set());
+  const [confirmedOutreach, setConfirmedOutreach] = useState(null);
 
   // Chat
   const [chatOpen, setChatOpen] = useState(false);
@@ -193,17 +195,38 @@ export default function ClientPortal() {
     });
     const allDone = updatedItems.every(i => i.status === 'Received' || i.status === 'Verified');
     const newStatus = allDone ? 'Complete' : 'Partial_Response';
+    const submittedCount = updatedItems.filter(i => i.status === 'Received').length;
 
     await base44.entities.OutreachRequest.update(outreach.id, { items: updatedItems, status: newStatus });
     await base44.entities.AuditEvent.create({
       tenant_id: outreach.tenant_id, case_id: outreach.case_id, client_id: outreach.client_id,
       actor_type: 'System', actor_name: 'Client Portal', event_type: 'portal_submitted',
-      notes: `Client submitted: ${newStatus}. ${updatedItems.filter(i => i.status === 'Received').length}/${updatedItems.length} items.`,
+      notes: `Client submitted: ${newStatus}. ${submittedCount}/${updatedItems.length} items.`,
     });
 
-    // Update local state
+    // Send confirmation email
+    if (client?.primary_contact_email) {
+      const submittedItems = updatedItems
+        .filter(i => i.status === 'Received' || i.status === 'Verified')
+        .map(i => `• ${i.label}`)
+        .join('\n');
+
+      const emailBody = allDone
+        ? `Dear ${client.full_name},\n\nYour submission has been successfully received by ${tenant?.name}.\n\nSubmitted items:\n${submittedItems}\n\nReference: ${outreach.id.substring(0, 8).toUpperCase()}\n\nOur compliance team will review your submission shortly.\n\nBest regards,\n${tenant?.name}`
+        : `Dear ${client.full_name},\n\nThank you for your submission. We have received ${submittedCount} of ${updatedItems.length} requested items.\n\nReceived:\n${submittedItems}\n\nPlease complete the remaining items by ${format(parseISO(outreach.deadline), 'd MMMM yyyy')}.\n\nReference: ${outreach.id.substring(0, 8).toUpperCase()}\n\nBest regards,\n${tenant?.name}`;
+
+      await base44.integrations.Core.SendEmail({
+        to: client.primary_contact_email,
+        subject: allDone ? 'Document Submission Confirmed' : 'Partial Submission Received',
+        body: emailBody,
+        from_name: tenant?.name || 'Compliance Team',
+      });
+    }
+
+    // Update local state and show confirmation
     setAllOutreaches(prev => prev.map(r => r.id === outreach.id ? { ...r, status: newStatus, items: updatedItems } : r));
     setSubmittedIds(s => new Set([...s, outreach.id]));
+    setConfirmedOutreach({ ...outreach, items: updatedItems, status: newStatus });
     setSubmitting(false);
   }
 
@@ -426,6 +449,27 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
   const states = getItemStates(outreach.id);
   const progress = (outreach.items?.length || 0) > 0 ? Math.round((completedCount(outreach) / outreach.items.length) * 100) : 0;
   const isOverdue = outreach.deadline && isPast(parseISO(outreach.deadline));
+
+  // Show detailed confirmation after submit
+  if (confirmedOutreach) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-blue-50">
+        <Header />
+        <SubmissionConfirmation
+          outreach={confirmedOutreach}
+          client={client}
+          tenantName={tenantName}
+          brandColor={brandColor}
+          lang={lang}
+          onBackToDashboard={
+            allOutreaches.length > 1
+              ? () => { setConfirmedOutreach(null); setView('dashboard'); }
+              : null
+          }
+        />
+      </div>
+    );
+  }
 
   if (isSubmitted) return (
     <div className="min-h-screen bg-slate-50 pb-24">
