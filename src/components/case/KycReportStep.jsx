@@ -576,8 +576,8 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
   useEffect(() => { loadReports(); }, [kycCase.id]);
 
   async function loadReports() {
-    const docs = await base44.entities.Document.filter({ case_id: kycCase.id, doc_type: 'KYC_Report' });
-    setReports((docs || []).sort((a, b) => (b.version || 1) - (a.version || 1)));
+    const kycReports = await base44.entities.KycReport.filter({ case_id: kycCase.id });
+    setReports((kycReports || []).sort((a, b) => b.version_number - a.version_number));
     setLoading(false);
   }
 
@@ -597,7 +597,7 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
     ]);
 
     const tenant = tenantList?.[0] || null;
-    const nextVersion = (reports[0]?.version || 0) + 1;
+    const nextVersion = (reports[0]?.version_number || 0) + 1;
 
     const doc = await buildPDF({
       kycCase, client, currentUser,
@@ -618,17 +618,21 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
 
     const { file_url } = await base44.integrations.Core.UploadFile({ file: pdfFile });
 
-    await base44.entities.Document.create({
+    // Create KycReport record for versioning
+    const reportSnapshot = {
+      client: client,
+      case: { status: kycCase.status, risk_classification: kycCase.risk_classification },
+      summary: { total_pages: doc.getNumberOfPages(), generated_at: new Date().toISOString() }
+    };
+
+    await base44.entities.KycReport.create({
       tenant_id: kycCase.tenant_id,
-      client_id: kycCase.client_id,
-      case_id:   kycCase.id,
-      doc_type:  'KYC_Report',
-      file_name: fileName,
-      file_url,
-      version:   nextVersion,
-      uploaded_by_user_id: currentUser?.id,
-      is_ai_generated: false,
-      review_status: 'Pending_Review',
+      case_id: kycCase.id,
+      version_number: nextVersion,
+      generated_at: new Date().toISOString(),
+      generated_by_id: currentUser?.id,
+      report_data_snapshot: reportSnapshot,
+      pdf_url: file_url,
     });
 
     await base44.entities.AuditEvent.create({
@@ -737,35 +741,36 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
         <div className="space-y-4">
           {/* Latest report */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/20">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-primary" />
-                <span className="text-xs font-semibold">{latestReport.file_name}</span>
-                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">v{latestReport.version} · Latest</span>
-                {isApproved && (
-                  <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" /> Approved
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" className="gap-1 text-xs h-7"
-                  onClick={() => setViewerDoc({ url: latestReport.file_url, name: latestReport.file_name })}>
-                  <Eye className="w-3 h-3" /> Preview
-                </Button>
-                <a href={latestReport.file_url} download target="_blank" rel="noopener noreferrer">
-                  <Button size="sm" className="gap-1 text-xs h-7">
-                    <Download className="w-3 h-3" /> Download
-                  </Button>
-                </a>
-                {isApproved && (
-                  <Button size="sm" variant="outline" className="gap-1 text-xs h-7 text-violet-600 border-violet-200 hover:bg-violet-50"
-                    onClick={() => setShareLink(latestReport.file_url)}>
-                    <Share2 className="w-3 h-3" /> Share
-                  </Button>
-                )}
-              </div>
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/20">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-primary" />
+              <span className="text-xs font-semibold">Report v{latestReport.version_number}</span>
+              <span className="text-xs text-muted-foreground">— {latestReport.generated_at && format(new Date(latestReport.generated_at), 'd MMM yyyy')}</span>
+              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">Latest</span>
+              {isApproved && (
+                <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3" /> Approved
+                </span>
+              )}
             </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" className="gap-1 text-xs h-7"
+                onClick={() => setViewerDoc({ url: latestReport.pdf_url, name: `Report_v${latestReport.version_number}` })}>
+                <Eye className="w-3 h-3" /> Preview
+              </Button>
+              <a href={latestReport.pdf_url} download target="_blank" rel="noopener noreferrer">
+                <Button size="sm" className="gap-1 text-xs h-7">
+                  <Download className="w-3 h-3" /> Download
+                </Button>
+              </a>
+              {isApproved && (
+                <Button size="sm" variant="outline" className="gap-1 text-xs h-7 text-violet-600 border-violet-200 hover:bg-violet-50"
+                  onClick={() => setShareLink(latestReport.pdf_url)}>
+                  <Share2 className="w-3 h-3" /> Share
+                </Button>
+              )}
+            </div>
+          </div>
 
           </div>
 
@@ -800,20 +805,15 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
                   <div key={r.id} className="flex items-center justify-between px-4 py-2.5">
                     <div className="flex items-center gap-2">
                       <FileText className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">{r.file_name}</span>
-                      <span className="text-xs text-muted-foreground">v{r.version}</span>
+                      <span className="text-xs font-medium text-foreground">Version {r.version_number}</span>
+                      <span className="text-xs text-muted-foreground">—</span>
+                      <span className="text-xs text-muted-foreground">{r.generated_at && format(new Date(r.generated_at), 'd MMM yyyy')}</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      {r.created_date && format(new Date(r.created_date), 'd MMM yyyy HH:mm')}
                       <Button size="sm" variant="ghost" className="h-6 text-xs gap-1"
-                        onClick={() => setViewerDoc({ url: r.file_url, name: r.file_name })}>
+                        onClick={() => setViewerDoc({ url: r.pdf_url, name: `Report_v${r.version_number}` })}>
                         <Eye className="w-3 h-3" /> View
                       </Button>
-                      <a href={r.file_url} download target="_blank" rel="noopener noreferrer">
-                        <Button size="sm" variant="ghost" className="h-6 text-xs gap-1">
-                          <Download className="w-3 h-3" /> Download
-                        </Button>
-                      </a>
                     </div>
                   </div>
                 ))}

@@ -81,6 +81,7 @@ export default function CaseWorkspace() {
   const [flagPopoverOpen, setFlagPopoverOpen] = useState(false);
   const [flagReason, setFlagReason] = useState('');
   const [flagNote, setFlagNote] = useState('');
+  const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
 
   const FLAG_REASONS = ['Missing document', 'Awaiting client response', 'QC query', 'Other'];
 
@@ -160,6 +161,23 @@ export default function CaseWorkspace() {
     setOverrideNote('');
   }
 
+  async function handleReopenCase() {
+    await base44.entities.KycCase.update(id, { status: 'In_Progress', step_8_status: 'in_progress' });
+    await base44.entities.AuditEvent.create({
+      tenant_id: kycCase.tenant_id,
+      case_id: id,
+      actor_user_id: currentUser?.id,
+      actor_name: currentUser?.full_name,
+      actor_type: 'User',
+      event_type: 'case_reopened',
+      notes: 'Case reopened by ' + (currentUser?.full_name || 'analyst'),
+    });
+    setKycCase(prev => ({ ...prev, status: 'In_Progress', step_8_status: 'in_progress' }));
+    setReopenConfirmOpen(false);
+  }
+
+  const canReopen = kycCase?.status === 'Approved' && (userRole === 'Director' || userRole === 'Compliance Admin');
+
   if (loading) return (
     <AppShell>
       <div className="flex items-center justify-center h-64">
@@ -236,6 +254,15 @@ export default function CaseWorkspace() {
                 {kycCase.due_date ? format(new Date(kycCase.due_date), 'd MMM') : '—'}
               </strong></span>
               <span className="text-muted-foreground">{daysOpen}d open</span>
+              {canReopen && (
+                <button
+                  className="text-xs text-amber-600 font-medium hover:text-amber-700"
+                  onClick={() => setReopenConfirmOpen(true)}
+                  title="Reopen this approved case for further work"
+                >
+                  Reopen Case
+                </button>
+              )}
               {canOverrideStatus && (
                 <button
                   className="text-xs text-primary font-medium hover:text-primary/80"
@@ -508,6 +535,30 @@ export default function CaseWorkspace() {
                 }}
               >
                 <AlertTriangle className="w-3 h-3" /> Confirm Flag
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reopen Case Modal */}
+      {reopenConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-card border border-border rounded-xl p-5 w-96 shadow-xl space-y-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              <h3 className="font-semibold text-sm">Reopen Case?</h3>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Reopen this case? The approval will be voided and the case will return to <strong>In Progress</strong>. All previous report versions remain available.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setReopenConfirmOpen(false)}>Cancel</Button>
+              <Button
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+                onClick={handleReopenCase}
+              >
+                Reopen Case
               </Button>
             </div>
           </div>

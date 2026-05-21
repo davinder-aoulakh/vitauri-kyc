@@ -1,0 +1,38 @@
+{
+  "name": "KycReport",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "case_id": {
+      "type": "string",
+      "description": "FK to KycCase"
+    },
+    "version_number": {
+      "type": "number",
+      "description": "Auto-incrementing version for this case"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generated_by_id": {
+      "type": "string",
+      "description": "FK to User"
+    },
+    "report_data_snapshot": {
+      "type": "object",
+      "description": "JSON snapshot of report content at time of generation"
+    },
+    "pdf_url": {
+      "type": "string",
+      "description": "URL to generated PDF if available"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "case_id",
+    "version_number"
+  ]
+}
