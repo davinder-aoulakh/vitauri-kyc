@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import AutoSaveIndicator from '@/components/shared/AutoSaveIndicator';
 import { base44 } from '@/api/base44Client';
@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Sparkles, CheckCircle, Loader2, AlertTriangle, Paperclip,
+  Sparkles, CheckCircle, Loader2, Paperclip,
   RefreshCw, Link2, ToggleLeft, ToggleRight, X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -17,19 +17,90 @@ const SOF_SOURCES_ORG = ['Trading / Operating Revenue','Investment Income','Divi
 const SOW_SOURCES_NP  = ['Lifetime Savings','Business Ownership / Sale','Inheritance / Gift','Property Portfolio','Investment Portfolio','Pension / Retirement Funds','Compensation / Settlement','Other'];
 const ADEQUACY_LEVELS = ['Fully Adequate','Mostly Adequate','Partially Adequate','Inadequate','Unable to Assess'];
 
+function SourceMultiSelect({ sources, selected, onChange }) {
+  const [otherText, setOtherText] = useState('');
+  const hasOther = selected.includes('Other');
+
+  function toggle(src) {
+    if (selected.includes(src)) {
+      onChange(selected.filter(s => s !== src));
+    } else {
+      onChange([...selected, src]);
+    }
+  }
+
+  function handleOtherText(val) {
+    setOtherText(val);
+    // store as "Other: <text>" in the array, replacing any previous "Other:…"
+    const without = selected.filter(s => !s.startsWith('Other'));
+    if (val.trim()) {
+      onChange([...without, `Other: ${val.trim()}`]);
+    } else {
+      onChange([...without, 'Other']);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Selected chips */}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map(s => (
+            <span key={s} className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary border border-primary/20 rounded-full px-2.5 py-0.5 font-medium">
+              {s}
+              <button onClick={() => onChange(selected.filter(x => x !== s))} className="hover:text-red-500 ml-0.5">
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {/* Checkbox list */}
+      <div className="grid grid-cols-1 gap-1 border border-border rounded-lg p-2 bg-muted/20 max-h-48 overflow-y-auto">
+        {sources.map(src => {
+          const isOtherOption = src === 'Other';
+          const isChecked = isOtherOption ? selected.some(s => s === 'Other' || s.startsWith('Other:')) : selected.includes(src);
+          return (
+            <label key={src} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 cursor-pointer text-xs">
+              <input
+                type="checkbox"
+                checked={isChecked}
+                onChange={() => toggle(src)}
+                className="rounded border-border accent-primary"
+              />
+              <span className={cn('flex-1', isChecked && 'font-medium text-foreground')}>{src}</span>
+            </label>
+          );
+        })}
+      </div>
+      {/* Other free text */}
+      {hasOther && (
+        <input
+          type="text"
+          value={otherText}
+          onChange={e => handleOtherText(e.target.value)}
+          placeholder="Specify other source…"
+          className="w-full text-sm border border-border rounded-md px-3 py-1.5 bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+      )}
+    </div>
+  );
+}
+
 function SectionCard({ title, state, setState, sources }) {
   return (
     <div className="bg-card border border-border rounded-xl p-4 space-y-3">
       <h4 className="font-medium text-sm">{title}</h4>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="col-span-2">
-          <Label className="text-xs mb-1.5 block">Primary Source</Label>
-          <Select value={state.source} onValueChange={v => setState(s => ({ ...s, source: v }))}>
-            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select source…" /></SelectTrigger>
-            <SelectContent>{sources.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-          </Select>
+      <div className="space-y-3">
+        <div>
+          <Label className="text-xs mb-1.5 block">Sources (select all that apply)</Label>
+          <SourceMultiSelect
+            sources={sources}
+            selected={state.sources || []}
+            onChange={v => setState(s => ({ ...s, sources: v }))}
+          />
         </div>
-        <div className="col-span-2">
+        <div>
           <Label className="text-xs mb-1.5 block">Explanation / Details</Label>
           <Textarea
             value={state.explanation}
@@ -53,8 +124,8 @@ function SectionCard({ title, state, setState, sources }) {
 export default function SoFSoWStep({ kycCase, client, currentUser }) {
   const isNP = client?.client_type === 'NP';
 
-  const [sof, setSof] = useState({ source: '', explanation: '', adequacy: '' });
-  const [sow, setSow] = useState({ source: '', explanation: '', adequacy: '' });
+  const [sof, setSof] = useState({ sources: [], explanation: '', adequacy: '' });
+  const [sow, setSow] = useState({ sources: [], explanation: '', adequacy: '' });
 
   const [narrative, setNarrative] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -110,15 +181,15 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
 
 CLIENT: ${client?.full_name} (${client?.client_type})
 ${isNP ? `
-SOURCE OF FUNDS: ${sof.source || 'Not specified'}
+SOURCE OF FUNDS: ${(sof.sources || []).join(', ') || 'Not specified'}
 SoF Details: ${sof.explanation || 'None provided'}
 SoF Adequacy: ${sof.adequacy || 'Not assessed'}
 
-SOURCE OF WEALTH: ${sow.source || 'Not specified'}
+SOURCE OF WEALTH: ${(sow.sources || []).join(', ') || 'Not specified'}
 SoW Details: ${sow.explanation || 'None provided'}
 SoW Adequacy: ${sow.adequacy || 'Not assessed'}
 ` : `
-SOURCE OF FUNDS (Organisation): ${sof.source || 'Not specified'}
+SOURCE OF FUNDS (Organisation): ${(sof.sources || []).join(', ') || 'Not specified'}
 Revenue/Funding Details: ${sof.explanation || 'None provided'}
 Adequacy: ${sof.adequacy || 'Not assessed'}
 `}
@@ -173,7 +244,7 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`,
       actor_name: currentUser?.full_name,
       actor_type: 'User',
       event_type: mode === 'accept' ? 'sof_sow_accepted' : 'sof_sow_edited_accepted',
-      notes: `SoF/SoW assessment ${mode === 'accept' ? 'accepted as-is' : 'edited and accepted'}. SoF: ${sof.source} (${sof.adequacy}) | ${isNP ? `SoW: ${sow.source} (${sow.adequacy})` : ''}. Evidence items: ${evidence.length}.`,
+      notes: `SoF/SoW assessment ${mode === 'accept' ? 'accepted as-is' : 'edited and accepted'}. SoF: ${(sof.sources || []).join(', ')} (${sof.adequacy}) | ${isNP ? `SoW: ${(sow.sources || []).join(', ')} (${sow.adequacy})` : ''}. Evidence items: ${evidence.length}.`,
     });
 
     setSaving(false);
