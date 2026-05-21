@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import OcrResultPanel from '@/components/client/OcrResultPanel';
 import {
   CheckCircle, XCircle, AlertTriangle, User, Building2, Loader2,
-  Upload, Sparkles, ScanLine, FileText
+  Upload, Sparkles, ScanLine, FileText, Paperclip
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -208,6 +208,63 @@ function OcrUploadPanel({ kycCase, client, currentUser, onOcrApplied }) {
   );
 }
 
+// ── Simple doc upload card ────────────────────────────────────────────────────
+function SimpleDocUpload({ kycCase, currentUser, onUploaded }) {
+  const fileInputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const [lastUploaded, setLastUploaded] = useState(null);
+  const [docType, setDocType] = useState('Other');
+
+  const DOC_TYPES = ['Passport','ID_Card','Articles_of_Association','UBO_Register','Financial_Statement','Tax_Return','Salary_Slip','Other'];
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    const newDoc = await base44.entities.Document.create({
+      tenant_id: kycCase.tenant_id,
+      client_id: kycCase.client_id,
+      case_id: kycCase.id,
+      doc_type: docType,
+      file_name: file.name,
+      file_url,
+      version: 1,
+      uploaded_by_user_id: currentUser?.id,
+      is_ai_generated: false,
+      review_status: 'Pending_Review',
+    });
+    setLastUploaded(file.name);
+    setUploading(false);
+    onUploaded?.(newDoc);
+    e.target.value = '';
+  }
+
+  return (
+    <div className="border-2 border-dashed border-border rounded-xl p-3 bg-muted/20 space-y-2">
+      <div className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+        <Paperclip className="w-3.5 h-3.5" /> Upload Supporting Document
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Select value={docType} onValueChange={setDocType}>
+          <SelectTrigger className="h-8 text-xs w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>{DOC_TYPES.map(t => <SelectItem key={t} value={t}>{t.replace(/_/g,' ')}</SelectItem>)}</SelectContent>
+        </Select>
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-60"
+        >
+          {uploading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…</> : <><Upload className="w-3.5 h-3.5" /> Choose File</>}
+        </button>
+        <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={handleFile} />
+        {lastUploaded && <span className="text-xs text-emerald-600 font-medium">✓ {lastUploaded}</span>}
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function IdentityVerificationStep({ kycCase, client, currentUser }) {
   const isOrg = client?.client_type === 'ORG';
@@ -363,6 +420,9 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
           )}
         </div>
       </div>
+
+      {/* Upload supporting documents */}
+      <SimpleDocUpload kycCase={kycCase} currentUser={currentUser} />
 
       {/* Verification forms */}
       {[

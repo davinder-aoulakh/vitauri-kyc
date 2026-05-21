@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Sparkles, CheckCircle, Loader2, Paperclip,
-  RefreshCw, Link2, ToggleLeft, ToggleRight, X, Eye
+  RefreshCw, Link2, ToggleLeft, ToggleRight, X
 } from 'lucide-react';
 import DocumentViewer from '@/components/shared/DocumentViewer';
+import DocUploadPicker from '@/components/shared/DocUploadPicker';
 import { cn } from '@/lib/utils';
 
 const SOF_SOURCES_NP  = ['Salary / Employment Income','Business Income / Dividends','Sale of Property','Inheritance','Investment Returns','Pension','Loan / Credit Facility','Gift','Other'];
@@ -153,7 +154,6 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
   const [documents, setDocuments] = useState([]);
   const [evidence, setEvidence] = useState([]); // [{ doc_id, doc_name, claim, verified }]
   const [evidencePickerOpen, setEvidencePickerOpen] = useState(false);
-  const [pendingClaim, setPendingClaim] = useState('');
   const [viewerDoc, setViewerDoc] = useState(null);
 
   useEffect(() => {
@@ -221,8 +221,6 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`,
 
   function addEvidence(doc, claim) {
     setEvidence(e => [...e, { doc_id: doc.id, doc_name: `${doc.doc_type}: ${doc.file_name}`, claim, verified: false }]);
-    setEvidencePickerOpen(false);
-    setPendingClaim('');
   }
 
   function toggleVerified(idx) {
@@ -313,7 +311,6 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`,
           <Button
             size="sm" variant="outline" className="text-xs gap-1.5 h-7"
             onClick={() => setEvidencePickerOpen(true)}
-            disabled={documents.length === 0}
           >
             <Paperclip className="w-3 h-3" /> Link Document
           </Button>
@@ -402,50 +399,14 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`,
 
       {/* Evidence Picker Modal */}
       {evidencePickerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <div className="bg-card border border-border rounded-xl p-5 w-[480px] shadow-xl space-y-4 max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-sm">Link Evidence Document</h3>
-              <button onClick={() => setEvidencePickerOpen(false)}><X className="w-4 h-4 text-muted-foreground" /></button>
-            </div>
-            <div>
-              <Label className="text-xs mb-1.5 block">Claim / Note (optional)</Label>
-              <Textarea
-                value={pendingClaim}
-                onChange={e => setPendingClaim(e.target.value)}
-                placeholder="E.g. 'Salary slip confirms employment income of €4,200/month'"
-                className="text-sm min-h-12 resize-none"
-              />
-            </div>
-            <div className="flex-1 overflow-y-auto space-y-2">
-              {documents.map(doc => (
-                <div
-                  key={doc.id}
-                  className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/40 transition-colors text-xs"
-                >
-                  <button
-                    className="flex-1 text-left flex items-center gap-3"
-                    onClick={() => addEvidence(doc, pendingClaim)}
-                  >
-                    <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                    <div>
-                      <div className="font-medium text-foreground">{doc.doc_type?.replace(/_/g, ' ')}</div>
-                      <div className="text-muted-foreground">{doc.file_name}</div>
-                    </div>
-                  </button>
-                  {doc.file_url && (
-                    <button
-                      className="text-muted-foreground hover:text-primary flex-shrink-0 p-1"
-                      onClick={() => setViewerDoc({ url: doc.file_url, name: doc.file_name })}
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <DocUploadPicker
+          kycCase={kycCase}
+          currentUser={currentUser}
+          documents={documents}
+          onDocumentsChange={setDocuments}
+          onSelect={(doc, claim) => { addEvidence(doc, claim); setEvidencePickerOpen(false); }}
+          onClose={() => setEvidencePickerOpen(false)}
+        />
       )}
 
       {viewerDoc && (
