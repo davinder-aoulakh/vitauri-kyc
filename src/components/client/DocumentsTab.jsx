@@ -8,8 +8,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   FileText, Plus, Download, ChevronDown, ChevronRight,
-  Loader2, Upload, CheckCircle, XCircle, Clock, Filter, X, Sparkles, Eye
+  Loader2, Upload, CheckCircle, XCircle, Clock, Filter, X, Sparkles, Eye,
+  Trash2, RotateCcw
 } from 'lucide-react';
+import { hasPermission } from '@/lib/permissions';
+import { differenceInDays } from 'date-fns';
 import DocumentViewer from '@/components/shared/DocumentViewer';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -42,15 +45,73 @@ function ReviewStatusBadge({ status }) {
 
 export default function DocumentsTab({ client, documents, onRefresh, onOcrExtracted }) {
   const { currentUser } = useTenant();
-  const [uploadOpen, setUploadOpen]     = useState(false);
-  const [reviewOpen, setReviewOpen]     = useState(null); // doc object
-  const [viewerDoc, setViewerDoc]       = useState(null); // { url, name }
-  const [expanded, setExpanded]         = useState({});
-  const [filterType, setFilterType]     = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [uploadOpen, setUploadOpen]       = useState(false);
+  const [reviewOpen, setReviewOpen]       = useState(null);
+  const [viewerDoc, setViewerDoc]         = useState(null);
+  const [expanded, setExpanded]           = useState({});
+  const [filterType, setFilterType]       = useState('all');
+  const [filterStatus, setFilterStatus]   = useState('all');
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // doc to confirm delete
+  const [deletedExpanded, setDeletedExpanded] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null); // doc id
 
-  // Filtering
-  const filtered = documents.filter(doc => {
+  const userRole = currentUser?.app_role;
+  const canDeleteAny = hasPermission(userRole, 'deleteAnyDocument');
+
+  function canDelete(doc) {
+    if (canDeleteAny) return true;
+    return doc.uploaded_by_user_id === currentUser?.id;
+  }
+
+  async function handleDelete(doc) {
+    setActionLoading(doc.id);
+    await base44.entities.Document.update(doc.id, {
+      is_deleted: true,
+      deleted_at: new Date().toISOString(),
+      deleted_by_user_id: currentUser?.id,
+    });
+    await base44.entities.AuditEvent.create({
+      tenant_id: doc.tenant_id,
+      client_id: doc.client_id,
+      case_id: doc.case_id || undefined,
+      actor_user_id: currentUser?.id,
+      actor_name: currentUser?.full_name,
+      actor_type: 'User',
+      event_type: 'document_deleted',
+      notes: `Deleted document "${doc.file_name}"`,
+    });
+    setActionLoading(null);
+    setDeleteConfirm(null);
+    onRefresh?.();
+  }
+
+  async function handleRestore(doc) {
+    setActionLoading(doc.id);
+    await base44.entities.Document.update(doc.id, {
+      is_deleted: false,
+      deleted_at: null,
+      deleted_by_user_id: null,
+    });
+    await base44.entities.AuditEvent.create({
+      tenant_id: doc.tenant_id,
+      client_id: doc.client_id,
+      case_id: doc.case_id || undefined,
+      actor_user_id: currentUser?.id,
+      actor_name: currentUser?.full_name,
+      actor_type: 'User',
+      event_type: 'document_restored',
+      notes: `Restored document "${doc.file_name}"`,
+    });
+    setActionLoading(null);
+    onRefresh?.();
+  }
+
+  // Split active vs deleted
+  const activeDocuments = documents.filter(doc => !doc.is_deleted);
+  const deletedDocuments = documents.filter(doc => doc.is_deleted);
+
+  // Filtering (active only)
+  const filtered = activeDocuments.filter(doc => {
     const typeMatch   = filterType === 'all' || doc.doc_type === filterType;
     const statusMatch = filterStatus === 'all' || (doc.review_status || 'Pending_Review') === filterStatus;
     return typeMatch && statusMatch;
@@ -66,11 +127,12 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
   Object.values(grouped).forEach(docs => docs.sort((a, b) => (b.version || 1) - (a.version || 1)));
 
   const hasFilters = filterType !== 'all' || filterStatus !== 'all';
+  const totalActive = activeDocuments.length;
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-wrap gap-2">
-        <h3 className="font-semibold text-sm">Documents ({filtered.length}{hasFilters ? ` of ${documents.length}` : ''})</h3>
+        <h3 className="font-semibold text-sm">Documents ({filtered.length}{hasFilters ? ` of ${totalActive}` : ''})</h3>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Filters */}
           <Select value={filterType} onValueChange={setFilterType}>
@@ -180,6 +242,16 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
                               Review
                             </Button>
                           )}
+                          {canDelete(doc) && (
+                            <Button
+                              variant="ghost" size="sm"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => setDeleteConfirm(doc)}
+                              title="Delete document"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -190,6 +262,81 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
           })}
         </div>
       )}
+
+      {/* Deleted Documents Accordion */}
+      {deletedDocuments.length > 0 && (
+        <div className="border-t border-border">
+          <button
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors text-sm"
+            onClick={() => setDeletedExpanded(v => !v)}
+          >
+            <div className="flex items-center gap-2 text-muted-foreground">
+              {deletedExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="font-medium">Deleted Documents ({deletedDocuments.length})</span>
+              <span className="text-xs">· restorable within 30 days</span>
+            </div>
+          </button>
+          {deletedExpanded && (
+            <div className="divide-y divide-border/50 bg-muted/10">
+              {deletedDocuments.map(doc => {
+                const daysAgo = doc.deleted_at ? differenceInDays(new Date(), new Date(doc.deleted_at)) : 0;
+                const canRestore = daysAgo <= 30;
+                return (
+                  <div key={doc.id} className="flex items-center justify-between px-4 py-2.5 ml-6">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm text-muted-foreground line-through truncate">{doc.file_name}</span>
+                        <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">Deleted</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {doc.deleted_at ? `Deleted ${format(new Date(doc.deleted_at), 'd MMM yyyy')}` : ''}
+                        {!canRestore && <span className="text-red-500 ml-1">· Restore period expired</span>}
+                      </div>
+                    </div>
+                    {canRestore && (
+                      <Button
+                        variant="outline" size="sm" className="h-7 text-xs gap-1 flex-shrink-0"
+                        disabled={actionLoading === doc.id}
+                        onClick={() => handleRestore(doc)}
+                      >
+                        {actionLoading === doc.id
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <RotateCcw className="w-3 h-3" />}
+                        Restore
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Delete Confirm Dialog */}
+      <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete Document?</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Delete <span className="font-medium text-foreground">"{deleteConfirm?.file_name}"</span>?
+              This can be restored within 30 days.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+              <Button
+                variant="destructive"
+                disabled={actionLoading === deleteConfirm?.id}
+                onClick={() => handleDelete(deleteConfirm)}
+              >
+                {actionLoading === deleteConfirm?.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Delete
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {viewerDoc && (
         <DocumentViewer

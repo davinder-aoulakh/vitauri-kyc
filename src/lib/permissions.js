@@ -25,6 +25,7 @@ export const PERMISSIONS = {
   crossTenantOps:       ['Vitauri Ops'],
   bulkActions:          ['Manager', 'Director', 'Compliance Admin', 'Tenant Admin'],
   exportData:           ['Manager', 'Director', 'Compliance Officer', 'Compliance Admin', 'Tenant Admin'],
+  deleteAnyDocument:    ['Manager', 'Director', 'Compliance Admin', 'Tenant Admin'],
   viewMIDashboard:      ['Manager', 'Director', 'Compliance Officer'],
   viewArchive:          ['Compliance Officer', 'Tenant Admin'],
   manageArchive:        ['Compliance Admin', 'Tenant Admin'],

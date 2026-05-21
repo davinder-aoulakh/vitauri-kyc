@@ -68,6 +68,17 @@
     "reviewed_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "is_deleted": {
+      "type": "boolean",
+      "default": false
+    },
+    "deleted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "deleted_by_user_id": {
+      "type": "string"
     }
   },
   "required": [
