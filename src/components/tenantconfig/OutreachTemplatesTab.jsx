@@ -3,22 +3,26 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, Loader2, FileText, Database, ChevronDown, Tag } from 'lucide-react';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { Plus, Pencil, Trash2, Loader2, GripVertical, Eye, Tag, ChevronDown } from 'lucide-react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { cn } from '@/lib/utils';
+import FieldTypePicker, { FIELD_TYPES } from './outreach/FieldTypePicker';
+import FieldTypeConfig from './outreach/FieldTypeConfig';
+import PortalPreviewModal from './outreach/PortalPreviewModal';
 
 const CLIENT_TYPES = ['NP', 'ORG'];
 const CASE_TYPES   = ['Onboarding', 'Periodic_Review', 'Event_Driven_Review', 'Offboarding'];
+
 const BLANK = {
-  label: '', description: '', item_type: 'document',
+  label: '', description: '', item_type: 'document', field_type: 'file_upload',
   client_types: ['NP', 'ORG'], case_types: ['Onboarding'],
   is_mandatory: false, is_active: true, sort_order: 0,
+  field_options: [], validation_accepted_file_types: [], validation_max_file_size_mb: 25,
 };
 
-// Dynamic placeholders that can be inserted into the description
 const PLACEHOLDERS = [
   { group: 'Client', tokens: [
     { label: 'Full Name',       value: '{{client.full_name}}' },
@@ -37,14 +41,12 @@ const PLACEHOLDERS = [
   ]},
 ];
 
-// Quill toolbar config
 const QUILL_MODULES = {
   toolbar: [
     [{ header: [1, 2, false] }],
     ['bold', 'italic', 'underline'],
     [{ list: 'ordered' }, { list: 'bullet' }],
-    ['link'],
-    ['clean'],
+    ['link'], ['clean'],
   ],
 };
 const QUILL_FORMATS = ['header', 'bold', 'italic', 'underline', 'list', 'bullet', 'link'];
@@ -52,13 +54,11 @@ const QUILL_FORMATS = ['header', 'bold', 'italic', 'underline', 'list', 'bullet'
 function PlaceholderPicker({ onInsert }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-
   useEffect(() => {
     function handleClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
-
   return (
     <div className="relative" ref={ref}>
       <Button type="button" size="sm" variant="outline" className="text-xs gap-1.5 h-7" onClick={() => setOpen(o => !o)}>
@@ -70,12 +70,8 @@ function PlaceholderPicker({ onInsert }) {
             <div key={group.group}>
               <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border">{group.group}</div>
               {group.tokens.map(tok => (
-                <button
-                  key={tok.value}
-                  type="button"
-                  onClick={() => { onInsert(tok.value); setOpen(false); }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/60 transition-colors flex items-center justify-between group"
-                >
+                <button key={tok.value} type="button" onClick={() => { onInsert(tok.value); setOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/60 transition-colors flex items-center justify-between group">
                   <span className="font-medium">{tok.label}</span>
                   <span className="font-mono text-muted-foreground text-xs opacity-60 group-hover:opacity-100 truncate ml-2">{tok.value}</span>
                 </button>
@@ -88,12 +84,19 @@ function PlaceholderPicker({ onInsert }) {
   );
 }
 
+function getFieldTypeLabel(ft) {
+  return FIELD_TYPES.find(f => f.value === ft)?.label || ft || 'Unknown';
+}
+function getFieldTypeIcon(ft) {
+  return FIELD_TYPES.find(f => f.value === ft)?.icon || '📄';
+}
+
 export default function OutreachTemplatesTab({ tenant }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading]     = useState(true);
   const [modal, setModal]         = useState(null);
   const [saving, setSaving]       = useState(false);
-  const [filterType, setFilterType] = useState('all');
+  const [previewOpen, setPreviewOpen] = useState(false);
   const quillRef = useRef(null);
 
   useEffect(() => { if (tenant?.id) load(); }, [tenant]);
@@ -108,7 +111,7 @@ export default function OutreachTemplatesTab({ tenant }) {
     setSaving(true);
     const d = modal.data;
     if (modal.mode === 'add') {
-      await base44.entities.OutreachTemplate.create({ ...d, tenant_id: tenant.id });
+      await base44.entities.OutreachTemplate.create({ ...d, tenant_id: tenant.id, sort_order: templates.length });
     } else {
       await base44.entities.OutreachTemplate.update(d.id, d);
     }
@@ -137,108 +140,134 @@ export default function OutreachTemplatesTab({ tenant }) {
   }
 
   function handleInsertPlaceholder(token) {
-    // Insert at cursor position in Quill editor
     const editor = quillRef.current?.getEditor();
     if (editor) {
       const range = editor.getSelection(true);
       editor.insertText(range ? range.index : editor.getLength(), token);
       editor.setSelection((range ? range.index : editor.getLength()) + token.length);
     } else {
-      // Fallback: append to description
       setModal(m => ({ ...m, data: { ...m.data, description: (m.data.description || '') + token } }));
     }
   }
 
-  const filtered = templates.filter(t => filterType === 'all' || t.item_type === filterType);
+  async function onDragEnd(result) {
+    if (!result.destination) return;
+    const reordered = Array.from(templates);
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+    const withOrder = reordered.map((t, i) => ({ ...t, sort_order: i }));
+    setTemplates(withOrder);
+    // Batch update sort_order
+    await Promise.all(withOrder.map(t => base44.entities.OutreachTemplate.update(t.id, { sort_order: t.sort_order })));
+  }
+
+  const isSectionHeader = modal?.data?.field_type === 'section_header';
+  const showDescription = !isSectionHeader;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="font-semibold text-sm">Outreach Templates</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Document and data-point templates used when building outreach requests. Use placeholders for dynamic content.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Field templates used when building outreach requests. Drag to reorder.</p>
         </div>
-        <Button size="sm" className="text-xs gap-1.5" onClick={() => setModal({ mode: 'add', data: { ...BLANK } })}>
-          <Plus className="w-3.5 h-3.5" /> Add Template
-        </Button>
-      </div>
-
-      <div className="flex gap-2">
-        {[['all','All'],['document','Documents'],['data_point','Data Points']].map(([v,l]) => (
-          <button key={v} onClick={() => setFilterType(v)}
-            className={cn('text-xs font-medium px-3 py-1.5 rounded-lg transition-colors',
-              filterType === v ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-            )}>{l}
-          </button>
-        ))}
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={() => setPreviewOpen(true)}>
+            <Eye className="w-3.5 h-3.5" /> Preview in Portal
+          </Button>
+          <Button size="sm" className="text-xs gap-1.5" onClick={() => setModal({ mode: 'add', data: { ...BLANK } })}>
+            <Plus className="w-3.5 h-3.5" /> Add Template
+          </Button>
+        </div>
       </div>
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-        ) : filtered.length === 0 ? (
+        ) : templates.length === 0 ? (
           <div className="py-12 text-center text-muted-foreground text-sm">No templates yet. Add your first template above.</div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-muted/40 border-b border-border text-xs text-muted-foreground uppercase tracking-wide">
-                <th className="text-left px-4 py-3">Label</th>
-                <th className="text-left px-4 py-3">Type</th>
-                <th className="text-left px-4 py-3">Client Types</th>
-                <th className="text-left px-4 py-3">Mandatory</th>
-                <th className="text-left px-4 py-3">Active</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filtered.map(tmpl => (
-                <tr key={tmpl.id} className={cn('hover:bg-muted/20 transition-colors', !tmpl.is_active && 'opacity-50')}>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      {tmpl.item_type === 'document'
-                        ? <FileText className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                        : <Database className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />}
-                      <div>
-                        <div className="font-medium text-xs">{tmpl.label}</div>
-                        {tmpl.description && (
-                          <div className="text-xs text-muted-foreground truncate max-w-xs" dangerouslySetInnerHTML={{ __html: tmpl.description.replace(/<[^>]*>/g,'').substring(0,80) }} />
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={cn('text-xs px-2 py-0.5 rounded-full', tmpl.item_type === 'document' ? 'bg-blue-50 text-blue-700' : 'bg-violet-50 text-violet-700')}>
-                      {tmpl.item_type === 'document' ? 'Document' : 'Data Point'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1 flex-wrap">
-                      {(tmpl.client_types || []).map(ct => <span key={ct} className="text-xs bg-muted px-1.5 py-0.5 rounded">{ct}</span>)}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={cn('text-xs px-2 py-0.5 rounded-full', tmpl.is_mandatory ? 'bg-red-50 text-red-700' : 'bg-slate-50 text-slate-500')}>
-                      {tmpl.is_mandatory ? 'Mandatory' : 'Optional'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3"><Switch checked={!!tmpl.is_active} onCheckedChange={() => toggleActive(tmpl)} /></td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
-                      <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setModal({ mode: 'edit', data: { ...tmpl } })}>
-                        <Pencil className="w-3 h-3" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => remove(tmpl.id)}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </td>
+          <DragDropContext onDragEnd={onDragEnd}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted/40 border-b border-border text-xs text-muted-foreground uppercase tracking-wide">
+                  <th className="w-8 px-2 py-3" />
+                  <th className="text-left px-4 py-3">Label</th>
+                  <th className="text-left px-4 py-3">Type</th>
+                  <th className="text-left px-4 py-3">Client Types</th>
+                  <th className="text-left px-4 py-3">Required</th>
+                  <th className="text-left px-4 py-3">Active</th>
+                  <th className="px-4 py-3" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <Droppable droppableId="templates">
+                {(provided) => (
+                  <tbody className="divide-y divide-border" ref={provided.innerRef} {...provided.droppableProps}>
+                    {templates.map((tmpl, index) => (
+                      <Draggable key={tmpl.id} draggableId={tmpl.id} index={index}>
+                        {(dragProvided, snapshot) => (
+                          <tr
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            className={cn('hover:bg-muted/20 transition-colors', !tmpl.is_active && 'opacity-50', snapshot.isDragging && 'bg-muted/40 shadow-md')}
+                          >
+                            <td className="px-2 py-3">
+                              <div {...dragProvided.dragHandleProps} className="cursor-grab text-muted-foreground hover:text-foreground flex justify-center">
+                                <GripVertical className="w-3.5 h-3.5" />
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm leading-none">{getFieldTypeIcon(tmpl.field_type || (tmpl.item_type === 'document' ? 'file_upload' : 'textarea'))}</span>
+                                <div>
+                                  <div className="font-medium text-xs">{tmpl.label}</div>
+                                  {tmpl.description && (
+                                    <div className="text-xs text-muted-foreground truncate max-w-xs"
+                                      dangerouslySetInnerHTML={{ __html: tmpl.description.replace(/<[^>]*>/g,'').substring(0,60) }} />
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                {getFieldTypeLabel(tmpl.field_type || (tmpl.item_type === 'document' ? 'file_upload' : 'textarea'))}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex gap-1 flex-wrap">
+                                {(tmpl.client_types || []).map(ct => <span key={ct} className="text-xs bg-muted px-1.5 py-0.5 rounded">{ct}</span>)}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={cn('text-xs px-2 py-0.5 rounded-full', tmpl.is_mandatory ? 'bg-red-50 text-red-700' : 'bg-slate-50 text-slate-500')}>
+                                {tmpl.is_mandatory ? 'Required' : 'Optional'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3"><Switch checked={!!tmpl.is_active} onCheckedChange={() => toggleActive(tmpl)} /></td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1 justify-end">
+                                <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setModal({ mode: 'edit', data: { ...tmpl } })}>
+                                  <Pencil className="w-3 h-3" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => remove(tmpl.id)}>
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </tbody>
+                )}
+              </Droppable>
+            </table>
+          </DragDropContext>
         )}
       </div>
 
+      {/* Edit / Add Modal */}
       <Dialog open={!!modal} onOpenChange={v => !v && setModal(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -246,8 +275,9 @@ export default function OutreachTemplatesTab({ tenant }) {
           </DialogHeader>
           {modal && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
+              {/* Label */}
+              {!isSectionHeader && (
+                <div>
                   <label className="text-xs font-medium block mb-1.5">Label *</label>
                   <Input
                     value={modal.data.label}
@@ -256,70 +286,94 @@ export default function OutreachTemplatesTab({ tenant }) {
                     placeholder="e.g. Passport Copy"
                   />
                 </div>
-
+              )}
+              {isSectionHeader && (
                 <div>
-                  <label className="text-xs font-medium block mb-1.5">Type</label>
-                  <Select value={modal.data.item_type} onValueChange={v => setModal(m => ({ ...m, data: { ...m.data, item_type: v } }))}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="document">Document</SelectItem>
-                      <SelectItem value="data_point">Data Point</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-2 pt-5">
-                  <Switch checked={!!modal.data.is_mandatory} onCheckedChange={v => setModal(m => ({ ...m, data: { ...m.data, is_mandatory: v } }))} />
-                  <label className="text-xs font-medium">Mandatory</label>
-                </div>
-              </div>
-
-              {/* Rich text description with placeholder insertion */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-medium">Description / Instructions</label>
-                  <PlaceholderPicker onInsert={handleInsertPlaceholder} />
-                </div>
-                <div className="border border-input rounded-md overflow-hidden [&_.ql-toolbar]:border-0 [&_.ql-toolbar]:border-b [&_.ql-toolbar]:border-input [&_.ql-toolbar]:bg-muted/30 [&_.ql-container]:border-0 [&_.ql-editor]:text-sm [&_.ql-editor]:min-h-[100px]">
-                  <ReactQuill
-                    ref={quillRef}
-                    value={modal.data.description || ''}
-                    onChange={v => setModal(m => ({ ...m, data: { ...m.data, description: v } }))}
-                    modules={QUILL_MODULES}
-                    formats={QUILL_FORMATS}
-                    placeholder="Describe what the client should provide. Use 'Insert Placeholder' to add dynamic fields like {{client.full_name}}."
+                  <label className="text-xs font-medium block mb-1.5">Internal Label *</label>
+                  <Input
+                    value={modal.data.label}
+                    onChange={e => setModal(m => ({ ...m, data: { ...m.data, label: e.target.value } }))}
+                    className="h-9 text-sm"
+                    placeholder="e.g. Identity Documents Section"
                   />
                 </div>
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  Placeholders like <code className="bg-muted px-1 rounded font-mono text-xs">{'{{client.full_name}}'}</code> will be replaced with real values when sending outreach.
-                </p>
-              </div>
+              )}
 
-              <div>
-                <label className="text-xs font-medium block mb-1.5">Client Types</label>
-                <div className="flex gap-2">
-                  {CLIENT_TYPES.map(ct => (
-                    <button key={ct} type="button" onClick={() => toggleTag('client_types', ct)}
-                      className={cn('text-xs px-3 py-1.5 rounded-lg border transition-colors',
-                        modal.data.client_types?.includes(ct) ? 'bg-primary text-white border-primary' : 'border-border hover:bg-muted/50 text-muted-foreground'
-                      )}>{ct}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {/* Field type picker */}
+              <FieldTypePicker
+                value={modal.data.field_type || 'file_upload'}
+                onChange={v => setModal(m => ({ ...m, data: { ...m.data, field_type: v, item_type: v === 'file_upload' ? 'document' : 'data_point' } }))}
+              />
 
-              <div>
-                <label className="text-xs font-medium block mb-1.5">Case Types</label>
-                <div className="flex flex-wrap gap-2">
-                  {CASE_TYPES.map(ct => (
-                    <button key={ct} type="button" onClick={() => toggleTag('case_types', ct)}
-                      className={cn('text-xs px-3 py-1.5 rounded-lg border transition-colors',
-                        modal.data.case_types?.includes(ct) ? 'bg-primary text-white border-primary' : 'border-border hover:bg-muted/50 text-muted-foreground'
-                      )}>{ct.replace(/_/g,' ')}
-                    </button>
-                  ))}
+              {/* Type-specific config */}
+              <FieldTypeConfig
+                fieldType={modal.data.field_type || 'file_upload'}
+                data={modal.data}
+                setData={patch => setModal(m => ({ ...m, data: typeof patch === 'function' ? patch(m.data) : { ...m.data, ...patch } }))}
+              />
+
+              {/* Required toggle (hidden for section header) */}
+              {!isSectionHeader && (
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={!!modal.data.is_mandatory}
+                    onCheckedChange={v => setModal(m => ({ ...m, data: { ...m.data, is_mandatory: v } }))}
+                  />
+                  <label className="text-xs font-medium">Required</label>
                 </div>
-              </div>
+              )}
+
+              {/* Description with placeholder picker (hidden for section header — it uses its own) */}
+              {showDescription && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-medium">Description / Instructions</label>
+                    <PlaceholderPicker onInsert={handleInsertPlaceholder} />
+                  </div>
+                  <div className="border border-input rounded-md overflow-hidden [&_.ql-toolbar]:border-0 [&_.ql-toolbar]:border-b [&_.ql-toolbar]:border-input [&_.ql-toolbar]:bg-muted/30 [&_.ql-container]:border-0 [&_.ql-editor]:text-sm [&_.ql-editor]:min-h-[80px]">
+                    <ReactQuill
+                      ref={quillRef}
+                      value={modal.data.description || ''}
+                      onChange={v => setModal(m => ({ ...m, data: { ...m.data, description: v } }))}
+                      modules={QUILL_MODULES}
+                      formats={QUILL_FORMATS}
+                      placeholder="Describe what the client should provide…"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Client Types */}
+              {!isSectionHeader && (
+                <div>
+                  <label className="text-xs font-medium block mb-1.5">Client Types</label>
+                  <div className="flex gap-2">
+                    {CLIENT_TYPES.map(ct => (
+                      <button key={ct} type="button" onClick={() => toggleTag('client_types', ct)}
+                        className={cn('text-xs px-3 py-1.5 rounded-lg border transition-colors',
+                          modal.data.client_types?.includes(ct) ? 'bg-primary text-white border-primary' : 'border-border hover:bg-muted/50 text-muted-foreground'
+                        )}>{ct}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Case Types */}
+              {!isSectionHeader && (
+                <div>
+                  <label className="text-xs font-medium block mb-1.5">Case Types</label>
+                  <div className="flex flex-wrap gap-2">
+                    {CASE_TYPES.map(ct => (
+                      <button key={ct} type="button" onClick={() => toggleTag('case_types', ct)}
+                        className={cn('text-xs px-3 py-1.5 rounded-lg border transition-colors',
+                          modal.data.case_types?.includes(ct) ? 'bg-primary text-white border-primary' : 'border-border hover:bg-muted/50 text-muted-foreground'
+                        )}>{ct.replace(/_/g,' ')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-2 justify-end pt-2 border-t border-border">
                 <Button variant="outline" onClick={() => setModal(null)}>Cancel</Button>
@@ -331,6 +385,14 @@ export default function OutreachTemplatesTab({ tenant }) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Portal Preview */}
+      <PortalPreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        templates={templates}
+        tenant={tenant}
+      />
     </div>
   );
 }
