@@ -270,7 +270,7 @@ export default function ClientPortal() {
     const errors = {};
     (outreach.items || []).forEach(item => {
       if (item.field_type === 'section_header') return;
-      if (!item.validation_required) return;
+      if (!item.validation_required && !item.is_mandatory) return;
       if (!isFieldVisible(item, states)) return;
       if (!isItemCompleted(item, states[item.item_id])) {
         errors[item.item_id] = 'This field is required.';
