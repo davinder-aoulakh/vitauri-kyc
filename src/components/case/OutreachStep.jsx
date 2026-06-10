@@ -95,6 +95,7 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant }) {
   const [newOpen, setNewOpen]     = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [viewerDoc, setViewerDoc] = useState(null); // { url, name }
+  const [idvDetailItem, setIdvDetailItem] = useState(null);
 
   // Builder state
   const [selectedItems, setSelectedItems] = useState([]);
@@ -464,14 +465,43 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                             <FileText className={cn('w-3.5 h-3.5 flex-shrink-0', item.status === 'Verified' ? 'text-emerald-500' : itemOverdue ? 'text-amber-500' : 'text-muted-foreground')} />
                             <div className="min-w-0">
                               <div className="text-xs text-foreground truncate">{item.label}</div>
-                              {item.response_text && <div className="text-xs text-muted-foreground truncate">{item.response_text}</div>}
-                              {item.file_url && (
+                              {item.response_text && item.field_type !== 'id_verification' && <div className="text-xs text-muted-foreground truncate">{item.response_text}</div>}
+                              {item.file_url && item.field_type !== 'id_verification' && (
                                 <button
                                   className="text-xs text-primary hover:underline text-left"
                                   onClick={() => setViewerDoc({ url: item.file_url, name: item.label })}
                                 >
                                   View uploaded file
                                 </button>
+                              )}
+                              {item.field_type === 'id_verification' && (
+                                <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  {item.idv_status ? (
+                                    <>
+                                      <span className={cn(
+                                        'text-xs px-2 py-0.5 rounded-full font-medium border',
+                                        item.idv_status === 'Pass'
+                                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                          : item.idv_status === 'Fail'
+                                          ? 'bg-red-50 text-red-700 border-red-200'
+                                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                                      )}>
+                                        🪪 IDV: {item.idv_status}
+                                        {item.idv_similarity_score != null && ` · ${item.idv_similarity_score}%`}
+                                      </span>
+                                      <button
+                                        className="text-xs text-primary underline hover:no-underline"
+                                        onClick={() => setIdvDetailItem(item)}
+                                      >
+                                        View details
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground italic">
+                                      🪪 IDV pending — client has not completed verification yet
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </div>
@@ -511,6 +541,117 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
           onClose={() => setViewerDoc(null)}
         />
       )}
+
+      {/* ── IDV Detail Dialog ── */}
+      <Dialog open={!!idvDetailItem} onOpenChange={v => !v && setIdvDetailItem(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>IDV Result — {idvDetailItem?.label}</DialogTitle>
+          </DialogHeader>
+          {idvDetailItem && (
+            <div className="space-y-4">
+              {/* Status banner */}
+              <div className={cn('rounded-xl p-4 text-center',
+                idvDetailItem.idv_status === 'Pass'
+                  ? 'bg-emerald-50 border border-emerald-200'
+                  : 'bg-red-50 border border-red-200'
+              )}>
+                <div className="text-3xl mb-2">
+                  {idvDetailItem.idv_status === 'Pass' ? '✅' : '❌'}
+                </div>
+                <div className="font-bold text-lg">
+                  {idvDetailItem.idv_status} · {idvDetailItem.idv_similarity_score}% match
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  {idvDetailItem.idv_confidence} confidence · {idvDetailItem.idv_provider}
+                </div>
+              </div>
+
+              {/* Match bar */}
+              <div>
+                <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                  <span>Face match score</span>
+                  <span>{idvDetailItem.idv_similarity_score}%</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={cn('h-full rounded-full',
+                      idvDetailItem.idv_status === 'Pass' ? 'bg-emerald-500' : 'bg-red-500')}
+                    style={{ width: `${idvDetailItem.idv_similarity_score}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Side by side photos */}
+              {(idvDetailItem.idv_doc_url || idvDetailItem.idv_selfie_url) && (
+                <div className="flex gap-4 justify-center">
+                  {idvDetailItem.idv_doc_url && (
+                    <div className="text-center">
+                      <img src={idvDetailItem.idv_doc_url} alt="Document"
+                        className="w-20 h-20 rounded-full object-cover border-2 border-muted shadow" />
+                      <div className="text-xs text-muted-foreground mt-1">Document</div>
+                    </div>
+                  )}
+                  <div className="flex items-center text-2xl font-bold">
+                    {idvDetailItem.idv_status === 'Pass' ? '≈' : '≠'}
+                  </div>
+                  {idvDetailItem.idv_selfie_url && (
+                    <div className="text-center">
+                      <img src={idvDetailItem.idv_selfie_url} alt="Selfie"
+                        className="w-20 h-20 rounded-full object-cover border-2 border-muted shadow" />
+                      <div className="text-xs text-muted-foreground mt-1">Selfie</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Meta */}
+              <div className="text-xs text-muted-foreground space-y-1 bg-muted/30 rounded-lg p-3">
+                <div>Document type: {idvDetailItem.idv_document_type || '—'}</div>
+                <div>Liveness: {idvDetailItem.idv_liveness_passed ? '✓ Blink detected' : '—'}</div>
+                <div>Checked: {idvDetailItem.idv_checked_at
+                  ? new Date(idvDetailItem.idv_checked_at).toLocaleString() : '—'}</div>
+                {idvDetailItem.idv_failure_reason && (
+                  <div className="text-red-600">Reason: {idvDetailItem.idv_failure_reason}</div>
+                )}
+              </div>
+
+              {/* Analyst override */}
+              {['Manager','Director','Compliance Admin','Tenant Admin'].includes(currentUser?.app_role) && (
+                <div className="border-t pt-3">
+                  <div className="text-xs font-medium mb-1.5">Manual Override</div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="text-xs flex-1"
+                      onClick={async () => {
+                        const reason = prompt('Enter override justification (required):');
+                        if (!reason) return;
+                        const req = requests.find(r => r.items?.some(i => i.label === idvDetailItem.label));
+                        if (req) {
+                          const updatedItems = req.items.map(i =>
+                            i.label === idvDetailItem.label
+                              ? { ...i, idv_status: 'Pass', idv_failure_reason: `Manually overridden by ${currentUser?.full_name}: ${reason}` }
+                              : i
+                          );
+                          await base44.entities.OutreachRequest.update(req.id, { items: updatedItems });
+                          await base44.entities.AuditEvent.create({
+                            tenant_id: kycCase.tenant_id, case_id: kycCase.id,
+                            actor_user_id: currentUser?.id, actor_name: currentUser?.full_name,
+                            actor_type: 'User', event_type: 'idv_result_overridden',
+                            notes: `IDV manually overridden to Pass for ${idvDetailItem.label}. Justification: ${reason}`,
+                          });
+                          setIdvDetailItem(null);
+                          load();
+                        }
+                      }}>
+                      Override to Pass
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Builder Dialog ── */}
       <Dialog open={newOpen} onOpenChange={v => { setNewOpen(v); if (!v) { setAiSuggestions(null); setSelectedItems([]); setMessage(''); setSelectedFormTemplate(null); } }}>
