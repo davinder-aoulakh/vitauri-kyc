@@ -51,6 +51,93 @@
     "edr_due_days": {
       "type": "number",
       "default": 30
+    },
+    "branding_secondary_color": {
+      "type": "string",
+      "default": "#E8F0FF",
+      "description": "Secondary brand color"
+    },
+    "branding_bg_color": {
+      "type": "string",
+      "default": "#F4F6FA",
+      "description": "Portal background color"
+    },
+    "branding_text_color": {
+      "type": "string",
+      "default": "#1A2332",
+      "description": "Primary text color"
+    },
+    "branding_font_family": {
+      "type": "string",
+      "default": "Inter",
+      "enum": [
+        "Inter",
+        "DM Sans",
+        "Georgia",
+        "Roboto",
+        "Open Sans"
+      ],
+      "description": "Portal font family"
+    },
+    "branding_button_radius": {
+      "type": "string",
+      "default": "rounded",
+      "enum": [
+        "square",
+        "rounded",
+        "pill"
+      ],
+      "description": "Button border radius style"
+    },
+    "branding_favicon_url": {
+      "type": "string",
+      "description": "Favicon URL"
+    },
+    "branding_header_style": {
+      "type": "string",
+      "default": "dark",
+      "enum": [
+        "dark",
+        "light"
+      ],
+      "description": "Portal header style"
+    },
+    "white_label_enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Hide Vitauri branding from portal"
+    },
+    "email_from_name": {
+      "type": "string",
+      "description": "From name e.g. Compliance Team \u2014 Meridian Trust"
+    },
+    "email_from_address": {
+      "type": "string",
+      "description": "From address e.g. compliance@meridiantrust.nl"
+    },
+    "email_reply_to": {
+      "type": "string",
+      "description": "Optional reply-to email address"
+    },
+    "portal_welcome_title": {
+      "type": "string",
+      "description": "Portal welcome heading"
+    },
+    "portal_welcome_body": {
+      "type": "string",
+      "description": "Portal welcome body (rich text)"
+    },
+    "portal_footer_text": {
+      "type": "string",
+      "description": "Portal footer (rich text)"
+    },
+    "portal_contact_info": {
+      "type": "string",
+      "description": "Contact info shown on portal"
+    },
+    "portal_subdomain": {
+      "type": "string",
+      "description": "Portal subdomain (lowercase, no spaces)"
     }
   },
   "required": [

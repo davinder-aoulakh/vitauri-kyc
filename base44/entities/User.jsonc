@@ -46,5 +46,8 @@
       ],
       "default": "en"
     }
-  }
+  },
+  "required": [
+    "tenant_id"
+  ]
 }
