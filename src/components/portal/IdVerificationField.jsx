@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import SelfieCaptureWidget from './SelfieCaptureWidget';
 import { compareFaces, loadFaceModels, getFaceDescriptor } from '@/lib/faceComparison';
 import { portalSecureUpload } from '@/lib/securityUtils';
+import { base44 } from '@/api/base44Client';
 
 const DOC_TYPE_META = {
   Passport:         { icon: '📘', label: 'Passport' },
@@ -45,6 +46,52 @@ export default function IdVerificationField({
     border: '1px solid #e5e7eb', borderRadius: 12, padding: 20, background: '#fff',
   };
 
+  // ── Gemini deepfake advisory (non-blocking) ───────────────────────────────
+  async function checkSelfieAuthenticity(selfieUrl) {
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `Analyse this selfie image and assess whether it appears to be authentic.
+
+Look for these signals of a non-authentic submission:
+- Photo of a screen or printed photo: moiré patterns, screen glare, curved edges, pixelation
+- Video replay: motion blur, interlacing artefacts, timestamp overlays
+- AI-generated or deepfake face: unnatural skin texture, asymmetric facial features,
+  blurred hairline, inconsistent lighting direction, artefacts around the face boundary
+- Flat lighting with no natural shadows (suggests a static printed photo)
+
+Return ONLY valid JSON:
+{
+  "appears_authentic": boolean,
+  "confidence": "High" or "Medium" or "Low",
+  "signals_found": [string],
+  "summary": string (one sentence)
+}
+
+Image to analyse: ${selfieUrl}`,
+        model: 'gemini_3_1_pro',
+        response_json_schema: {
+          type: 'object',
+          properties: {
+            appears_authentic: { type: 'boolean' },
+            confidence:        { type: 'string', enum: ['High', 'Medium', 'Low'] },
+            signals_found:     { type: 'array', items: { type: 'string' } },
+            summary:           { type: 'string' },
+          }
+        }
+      });
+
+      if (result && typeof result === 'object' && 'appears_authentic' in result) {
+        return result;
+      }
+      if (typeof result === 'string') {
+        return JSON.parse(result.replace(/```json|```/g, '').trim());
+      }
+      return null;
+    } catch {
+      return null; // Non-blocking — deepfake check failure must not block the IDV flow
+    }
+  }
+
   // ── Doc upload handler ────────────────────────────────────────────────────
   async function handleDocFile(e) {
     const file = e.target.files?.[0];
@@ -74,9 +121,16 @@ export default function IdVerificationField({
   async function runComparison(dUrl, sUrl) {
     setPhase('comparing');
     try {
-      const result = await compareFaces(dUrl, sUrl, minScore);
+      const [result, authenticityCheck] = await Promise.all([
+        compareFaces(dUrl, sUrl, minScore),
+        checkSelfieAuthenticity(sUrl),
+      ]);
+
+      const deepfakeFlagged = authenticityCheck && !authenticityCheck.appears_authentic
+        && authenticityCheck.confidence !== 'Low';
+
       const idvResultObj = {
-        idv_status:               result.matched ? 'Pass' : 'Fail',
+        idv_status:               result.matched && !deepfakeFlagged ? 'Pass' : result.matched ? 'Inconclusive' : 'Fail',
         idv_similarity_score:     result.similarity,
         idv_confidence:           result.confidence,
         idv_face_detected_in_doc: result.face_in_doc_detected,
@@ -84,9 +138,12 @@ export default function IdVerificationField({
         idv_selfie_url:           sUrl,
         idv_doc_url:              dUrl,
         idv_checked_at:           new Date().toISOString(),
-        idv_failure_reason:       result.reason || null,
+        idv_failure_reason:       deepfakeFlagged
+          ? `Authenticity advisory: ${authenticityCheck.summary}`
+          : result.reason || null,
         idv_liveness_passed:      true,
         idv_provider:             'face_api_js_browser',
+        idv_authenticity_check:   authenticityCheck || null,
       };
       setIdvResult(idvResultObj);
       setPhase('result');
