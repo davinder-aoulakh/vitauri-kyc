@@ -13,6 +13,69 @@ function resolveFieldType(item) {
 function PreviewField({ item, primaryColor, buttonRadius }) {
   const ft = resolveFieldType(item);
 
+  if (ft === 'id_verification') {
+    return (
+      <div style={{ marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginBottom: '8px' }}>
+          <label style={{ fontSize: '14px', fontWeight: 500, color: '#111827' }}>
+            {item.label}
+          </label>
+          {(item.validation_required || item.is_mandatory)
+            ? <span style={{ color: '#EF4444', fontSize: '13px' }}>*</span>
+            : <span style={{ fontSize: '12px', color: '#9CA3AF' }}>(optional)</span>}
+        </div>
+        <div style={{
+          border: '1px solid #BFDBFE', borderRadius: '12px',
+          padding: '18px', background: '#EFF6FF', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: '32px', marginBottom: '10px' }}>🪪</div>
+          <div style={{ fontWeight: 600, fontSize: '14px', color: '#1D4ED8', marginBottom: '8px' }}>
+            Identity Verification
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        gap: '4px', marginBottom: '14px' }}>
+            {['Upload ID', 'Take Selfie', 'Face Match'].map((step, idx) => (
+              <React.Fragment key={step}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    width: '26px', height: '26px', borderRadius: '50%',
+                    background: primaryColor, color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '11px', fontWeight: 700, margin: '0 auto 3px',
+                  }}>{idx + 1}</div>
+                  <div style={{ fontSize: '10px', color: '#6B7280', whiteSpace: 'nowrap' }}>{step}</div>
+                </div>
+                {idx < 2 && (
+                  <div style={{ width: '18px', height: '1px', background: '#93C5FD', marginBottom: '14px' }} />
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '10px' }}>
+            {(item.idv_accepted_doc_types || ['Passport', 'Driving_Licence', 'National_ID']).map(dt => (
+              <span key={dt} style={{
+                fontSize: '11px', background: 'white', border: '1px solid #BFDBFE',
+                color: '#3B82F6', padding: '2px 8px', borderRadius: '20px',
+              }}>
+                {dt.replace('_', ' ')}
+              </span>
+            ))}
+          </div>
+          <div style={{ fontSize: '11px', color: '#6B7280' }}>
+            Min. match score: <strong>{item.idv_min_match_score || 75}%</strong>
+            {item.idv_liveness_required && ' · Blink liveness required'}
+          </div>
+          <div style={{
+            border: '2px dashed #BFDBFE', borderRadius: '8px', padding: '12px',
+            background: 'white', marginTop: '12px', fontSize: '12px', color: '#9CA3AF',
+          }}>
+            📤 Client uploads document here
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (ft === 'section_header') {
     return (
       <div className="pt-4 pb-1">
