@@ -62,28 +62,63 @@ function statusConfig(outreach) {
   return { label: 'Draft', color: 'text-slate-600 bg-slate-50 border-slate-200', dot: 'bg-slate-400' };
 }
 
+// Derive all branding values from a tenant object
+function getBranding(tenant) {
+  const primary = tenant?.branding_primary_color || '#1A6BFF';
+  const secondary = tenant?.branding_secondary_color || '#E8F0FF';
+  const bg = tenant?.branding_bg_color || '#F4F6FA';
+  const text = tenant?.branding_text_color || '#1A2332';
+  const font = tenant?.branding_font_family || 'Inter';
+  const headerStyle = tenant?.branding_header_style || 'dark';
+  const radiusMap = { square: '0px', rounded: '8px', pill: '9999px' };
+  const radius = radiusMap[tenant?.branding_button_radius] || '8px';
+  const whiteLabel = !!tenant?.white_label_enabled;
+
+  const headerBg = headerStyle === 'light' ? '#FFFFFF' : primary;
+  const headerText = headerStyle === 'light' ? text : '#FFFFFF';
+  const headerBorder = headerStyle === 'light' ? '#E2E8F0' : 'transparent';
+
+  return { primary, secondary, bg, text, font, radius, whiteLabel, headerBg, headerText, headerBorder };
+}
+
+// Portal footer shown at the bottom of every view
+function PortalFooter({ tenant, branding }) {
+  const hasFooter = !!tenant?.portal_footer_text;
+  return (
+    <div
+      className="max-w-lg mx-auto px-4 py-5 mt-6 border-t text-xs"
+      style={{ borderColor: branding.secondary, color: branding.text, opacity: 0.75 }}
+    >
+      {hasFooter ? (
+        <div dangerouslySetInnerHTML={{ __html: tenant.portal_footer_text }} className="leading-relaxed" />
+      ) : (
+        <p>This is a secure, one-time link. Do not share it with others.</p>
+      )}
+      {tenant?.portal_contact_info && (
+        <p className="mt-1.5 opacity-70">{tenant.portal_contact_info}</p>
+      )}
+    </div>
+  );
+}
+
 export default function ClientPortal() {
   const { token } = useParams();
   const [lang, setLang] = useState(navigator.language?.startsWith('nl') ? 'nl' : 'en');
 
-  // All outreach requests for this client (shared token → same client_id)
   const [allOutreaches, setAllOutreaches] = useState([]);
   const [tenant, setTenant] = useState(null);
   const [client, setClient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expired, setExpired] = useState(false);
 
-  // Which view: 'dashboard' | 'request' | 'compliance'
   const [view, setView] = useState('dashboard');
   const [activeOutreach, setActiveOutreach] = useState(null);
 
-  // Per-item state keyed by outreach id → item_id
   const [itemStateMap, setItemStateMap] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submittedIds, setSubmittedIds] = useState(new Set());
   const [confirmedOutreach, setConfirmedOutreach] = useState(null);
 
-  // Chat
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
@@ -94,12 +129,28 @@ export default function ClientPortal() {
 
   useEffect(() => { if (token) loadByToken(); else setLoading(false); }, [token]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
+  useEffect(() => { setChatMessages([{ role: 'ai', text: T[lang].chat_intro }]); }, [lang]);
+
+  // Apply favicon + page title when tenant loads
   useEffect(() => {
-    setChatMessages([{ role: 'ai', text: T[lang].chat_intro }]);
-  }, [lang]);
+    if (!tenant) return;
+    const branding = getBranding(tenant);
+
+    if (branding.whiteLabel) {
+      document.title = `${tenant.name} — Secure Portal`;
+    }
+
+    if (tenant.branding_favicon_url) {
+      // Remove any existing favicon
+      document.querySelectorAll('link[rel="icon"]').forEach(el => el.remove());
+      const link = document.createElement('link');
+      link.rel = 'icon';
+      link.href = tenant.branding_favicon_url;
+      document.head.appendChild(link);
+    }
+  }, [tenant]);
 
   async function loadByToken() {
-    // Find outreach by token
     const results = await base44.entities.OutreachRequest.filter({ access_token: token });
     const primary = results?.[0];
     if (!primary) { setExpired(true); setLoading(false); return; }
@@ -107,7 +158,6 @@ export default function ClientPortal() {
       setExpired(true); setLoading(false); return;
     }
 
-    // Load all outreaches for this client
     const [allReqs, tenantData, clientData] = await Promise.all([
       base44.entities.OutreachRequest.filter({ client_id: primary.client_id, tenant_id: primary.tenant_id }),
       base44.entities.Tenant.filter({ id: primary.tenant_id }),
@@ -119,7 +169,6 @@ export default function ClientPortal() {
     setTenant(tenantData?.[0] || null);
     setClient(clientData?.[0] || null);
 
-    // Init item states for all outreaches
     const map = {};
     visibleReqs.forEach(req => {
       map[req.id] = {};
@@ -134,7 +183,6 @@ export default function ClientPortal() {
     });
     setItemStateMap(map);
 
-    // Log view
     await Promise.all([
       base44.entities.AuditEvent.create({
         tenant_id: primary.tenant_id, case_id: primary.case_id,
@@ -146,12 +194,10 @@ export default function ClientPortal() {
       }),
     ]);
 
-    // If only one request, go straight to it
     if (visibleReqs.length === 1) {
       setActiveOutreach(visibleReqs[0]);
       setView('request');
     } else {
-      // Default to the primary token's request
       setActiveOutreach(primary);
       setView('dashboard');
     }
@@ -204,13 +250,8 @@ export default function ClientPortal() {
       notes: `Client submitted: ${newStatus}. ${submittedCount}/${updatedItems.length} items.`,
     });
 
-    // Send confirmation email
     if (client?.primary_contact_email) {
-      const submittedItems = updatedItems
-        .filter(i => i.status === 'Received' || i.status === 'Verified')
-        .map(i => `• ${i.label}`)
-        .join('\n');
-
+      const submittedItems = updatedItems.filter(i => i.status === 'Received' || i.status === 'Verified').map(i => `• ${i.label}`).join('\n');
       const emailBody = allDone
         ? `Dear ${client.full_name},\n\nYour submission has been successfully received by ${tenant?.name}.\n\nSubmitted items:\n${submittedItems}\n\nReference: ${outreach.id.substring(0, 8).toUpperCase()}\n\nOur compliance team will review your submission shortly.\n\nBest regards,\n${tenant?.name}`
         : `Dear ${client.full_name},\n\nThank you for your submission. We have received ${submittedCount} of ${updatedItems.length} requested items.\n\nReceived:\n${submittedItems}\n\nPlease complete the remaining items by ${format(parseISO(outreach.deadline), 'd MMMM yyyy')}.\n\nReference: ${outreach.id.substring(0, 8).toUpperCase()}\n\nBest regards,\n${tenant?.name}`;
@@ -219,11 +260,10 @@ export default function ClientPortal() {
         to: client.primary_contact_email,
         subject: allDone ? 'Document Submission Confirmed' : 'Partial Submission Received',
         body: emailBody,
-        from_name: tenant?.name || 'Compliance Team',
+        from_name: tenant?.email_from_name || tenant?.name || 'Compliance Team',
       });
     }
 
-    // Update local state and show confirmation
     setAllOutreaches(prev => prev.map(r => r.id === outreach.id ? { ...r, status: newStatus, items: updatedItems } : r));
     setSubmittedIds(s => new Set([...s, outreach.id]));
     setConfirmedOutreach({ ...outreach, items: updatedItems, status: newStatus });
@@ -246,71 +286,90 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
     setChatLoading(false);
   }
 
-  const brandColor = tenant?.branding_primary_color || '#1A6BFF';
+  const branding = getBranding(tenant);
   const tenantName = tenant?.name || 'Your Financial Institution';
   const logoUrl = tenant?.branding_logo_url;
+  const contactInfo = tenant?.portal_contact_info || tenantName;
+  const errorMsg = branding.whiteLabel
+    ? `Please contact ${contactInfo} for assistance.`
+    : 'If you think this is an error, please contact your relationship manager.';
 
+  // ── Loading ──
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: branding.bg }}>
+      <Loader2 className="w-6 h-6 animate-spin" style={{ color: branding.primary }} />
     </div>
   );
 
+  // ── Expired ──
   if (expired || !token) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: branding.bg, fontFamily: branding.font }}>
       <div className="text-center max-w-sm">
         <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto mb-4" />
-        <h2 className="text-lg font-semibold text-slate-800 mb-2">{t.expired}</h2>
-        <p className="text-sm text-slate-500">If you think this is an error, please contact your relationship manager.</p>
+        <h2 className="text-lg font-semibold mb-2" style={{ color: branding.text }}>{t.expired}</h2>
+        <p className="text-sm opacity-60" style={{ color: branding.text }}>{errorMsg}</p>
       </div>
     </div>
   );
 
-  // Overall compliance status
   const totalItems = allOutreaches.reduce((acc, r) => acc + (r.items?.length || 0), 0);
   const doneItems  = allOutreaches.reduce((acc, r) => acc + completedCount(r), 0);
   const allComplete = allOutreaches.every(r => r.status === 'Complete' || submittedIds.has(r.id));
   const anyOverdue  = allOutreaches.some(r => r.deadline && isPast(parseISO(r.deadline)) && r.status !== 'Complete');
 
+  // ── Shared Header ──
   const Header = () => (
-    <div className="sticky top-0 z-10 bg-white border-b border-slate-200 shadow-sm">
+    <div
+      className="sticky top-0 z-10 shadow-sm"
+      style={{ backgroundColor: branding.headerBg, borderBottom: `1px solid ${branding.headerBorder}` }}
+    >
       <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {logoUrl ? (
             <img src={logoUrl} alt={tenantName} className="h-8 w-auto object-contain" />
           ) : (
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: brandColor }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: branding.primary }}>
               {tenantName.charAt(0)}
             </div>
           )}
-          <span className="font-semibold text-slate-800 text-sm">{tenantName}</span>
+          <span className="font-semibold text-sm" style={{ color: branding.headerText }}>{tenantName}</span>
         </div>
         <div className="flex items-center gap-2">
           {allOutreaches.length > 1 && view !== 'dashboard' && (
-            <button onClick={() => setView('dashboard')} className="text-xs font-medium text-slate-500 hover:text-slate-800 flex items-center gap-1 border border-slate-200 rounded-md px-2 py-1 transition-colors">
+            <button
+              onClick={() => setView('dashboard')}
+              className="text-xs font-medium flex items-center gap-1 rounded-md px-2 py-1 transition-colors"
+              style={{ color: branding.headerText, border: `1px solid ${branding.headerText}30`, opacity: 0.8 }}
+            >
               <ArrowLeft className="w-3 h-3" /> {t.back_to_dashboard}
             </button>
           )}
           <button
             onClick={() => setLang(l => l === 'en' ? 'nl' : 'en')}
-            className="text-xs font-medium text-slate-500 hover:text-slate-800 border border-slate-200 rounded-md px-2 py-1 transition-colors"
+            className="text-xs font-medium rounded-md px-2 py-1 transition-colors"
+            style={{ color: branding.headerText, border: `1px solid ${branding.headerText}30`, opacity: 0.8 }}
           >{t.lang}</button>
         </div>
       </div>
-      {/* Tab nav when multiple requests */}
       {allOutreaches.length > 1 && (
         <div className="max-w-lg mx-auto px-4 pb-2 flex items-center gap-1">
           <button
             onClick={() => setView('dashboard')}
-            className={cn('flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors',
-              view === 'dashboard' ? 'bg-slate-100 text-slate-800' : 'text-slate-500 hover:text-slate-800')}
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+            style={{
+              backgroundColor: view === 'dashboard' ? `${branding.headerText}20` : 'transparent',
+              color: branding.headerText,
+            }}
           >
             <LayoutDashboard className="w-3.5 h-3.5" /> {t.all_requests}
           </button>
           <button
             onClick={() => setView('compliance')}
-            className={cn('flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors',
-              view === 'compliance' ? 'bg-slate-100 text-slate-800' : 'text-slate-500 hover:text-slate-800')}
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+            style={{
+              backgroundColor: view === 'compliance' ? `${branding.headerText}20` : 'transparent',
+              color: branding.headerText,
+            }}
           >
             <Shield className="w-3.5 h-3.5" /> {t.compliance_status}
           </button>
@@ -319,32 +378,35 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
     </div>
   );
 
+  // Styled card wrapper
+  const cardStyle = { backgroundColor: '#FFFFFF', borderColor: `${branding.secondary}` };
+
   // ── Dashboard View ──
   if (view === 'dashboard' && allOutreaches.length > 1) {
+    const welcomeTitle = tenant?.portal_welcome_title || t.dashboard_title;
+    const welcomeBody = tenant?.portal_welcome_body || t.dashboard_sub;
     return (
-      <div className="min-h-screen bg-slate-50 pb-24">
+      <div className="min-h-screen pb-8" style={{ backgroundColor: branding.bg, fontFamily: branding.font, color: branding.text }}>
         <Header />
         <div className="max-w-lg mx-auto px-4 pt-6 space-y-4">
           <div>
-            <h1 className="text-lg font-bold text-slate-800">{t.dashboard_title}</h1>
-            <p className="text-sm text-slate-500 mt-0.5">{t.dashboard_sub}</p>
+            <h1 className="text-lg font-bold">{welcomeTitle}</h1>
+            <p className="text-sm opacity-60 mt-0.5">{welcomeBody}</p>
           </div>
 
-          {/* Overall progress card */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+          <div className="bg-white rounded-2xl border p-4 shadow-sm" style={{ borderColor: branding.secondary }}>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-slate-700">{t.progress}</span>
-              <span className="text-sm font-bold" style={{ color: brandColor }}>
+              <span className="text-sm font-medium opacity-70">{t.progress}</span>
+              <span className="text-sm font-bold" style={{ color: branding.primary }}>
                 {totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0}%
               </span>
             </div>
-            <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0}%`, backgroundColor: brandColor }} />
+            <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: branding.secondary }}>
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0}%`, backgroundColor: branding.primary }} />
             </div>
-            <div className="text-xs text-slate-500 mt-1.5">{doneItems} of {totalItems} items completed across {allOutreaches.length} {allOutreaches.length === 1 ? t.requests_count : t.requests_count_pl}</div>
+            <div className="text-xs opacity-50 mt-1.5">{doneItems} of {totalItems} items completed across {allOutreaches.length} {allOutreaches.length === 1 ? t.requests_count : t.requests_count_pl}</div>
           </div>
 
-          {/* Request cards */}
           <div className="space-y-3">
             {allOutreaches.map(req => {
               const cfg = statusConfig(req);
@@ -355,7 +417,8 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                 <button
                   key={req.id}
                   onClick={() => { setActiveOutreach(req); setView('request'); }}
-                  className="w-full text-left bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-slate-300 hover:shadow-md transition-all"
+                  className="w-full text-left bg-white rounded-2xl border p-4 shadow-sm hover:shadow-md transition-all"
+                  style={{ borderColor: branding.secondary }}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
@@ -363,16 +426,16 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                         <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full border', cfg.color)}>{cfg.label}</span>
                         {isOver && <span className="text-xs text-red-600 font-medium">Overdue</span>}
                       </div>
-                      {req.message && <p className="text-sm text-slate-700 font-medium truncate">{req.message.substring(0, 80)}{req.message.length > 80 ? '…' : ''}</p>}
-                      <div className="text-xs text-slate-500 mt-1">
+                      {req.message && <p className="text-sm font-medium truncate opacity-80">{req.message.substring(0, 80)}{req.message.length > 80 ? '…' : ''}</p>}
+                      <div className="text-xs opacity-50 mt-1">
                         {done}/{total} items · {req.deadline ? `Due ${format(parseISO(req.deadline), 'd MMM yyyy')}` : 'No deadline'}
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0 mt-1" />
+                    <ChevronRight className="w-4 h-4 opacity-40 flex-shrink-0 mt-1" />
                   </div>
                   {total > 0 && (
-                    <div className="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${Math.round((done / total) * 100)}%`, backgroundColor: brandColor }} />
+                    <div className="mt-3 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: branding.secondary }}>
+                      <div className="h-full rounded-full" style={{ width: `${Math.round((done / total) * 100)}%`, backgroundColor: branding.primary }} />
                     </div>
                   )}
                 </button>
@@ -380,6 +443,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
             })}
           </div>
         </div>
+        <PortalFooter tenant={tenant} branding={branding} />
       </div>
     );
   }
@@ -390,10 +454,10 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
     const partialReqs  = allOutreaches.filter(r => r.status === 'Partial_Response');
     const completeReqs = allOutreaches.filter(r => r.status === 'Complete' || submittedIds.has(r.id));
     return (
-      <div className="min-h-screen bg-slate-50 pb-24">
+      <div className="min-h-screen pb-8" style={{ backgroundColor: branding.bg, fontFamily: branding.font, color: branding.text }}>
         <Header />
         <div className="max-w-lg mx-auto px-4 pt-6 space-y-4">
-          <h1 className="text-lg font-bold text-slate-800">{t.compliance_title}</h1>
+          <h1 className="text-lg font-bold">{t.compliance_title}</h1>
 
           <div className={cn('rounded-2xl border p-4 flex items-center gap-3', allComplete ? 'bg-emerald-50 border-emerald-200' : anyOverdue ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200')}>
             {allComplete
@@ -417,22 +481,24 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
             { label: 'Complete', items: completeReqs, color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
           ].filter(g => g.items.length > 0).map(group => (
             <div key={group.label}>
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{group.label}</div>
+              <div className="text-xs font-semibold opacity-50 uppercase tracking-wide mb-2">{group.label}</div>
               <div className="space-y-2">
                 {group.items.map(req => (
                   <button key={req.id} onClick={() => { setActiveOutreach(req); setView('request'); }}
-                    className="w-full text-left bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between hover:border-slate-300 transition-colors">
+                    className="w-full text-left bg-white rounded-xl border px-4 py-3 flex items-center justify-between hover:shadow-sm transition-all"
+                    style={{ borderColor: branding.secondary }}>
                     <div>
-                      <div className="text-sm font-medium text-slate-700 truncate max-w-xs">{req.message?.substring(0, 60) || 'Information Request'}</div>
-                      <div className="text-xs text-slate-500">{completedCount(req)}/{req.items?.length || 0} items</div>
+                      <div className="text-sm font-medium truncate max-w-xs">{req.message?.substring(0, 60) || 'Information Request'}</div>
+                      <div className="text-xs opacity-50">{completedCount(req)}/{req.items?.length || 0} items</div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                    <ChevronRight className="w-4 h-4 opacity-40" />
                   </button>
                 ))}
               </div>
             </div>
           ))}
         </div>
+        <PortalFooter tenant={tenant} branding={branding} />
       </div>
     );
   }
@@ -440,8 +506,8 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
   // ── Single Request View ──
   const outreach = activeOutreach;
   if (!outreach) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="text-center text-slate-500 text-sm">{t.no_requests}</div>
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: branding.bg }}>
+      <div className="text-center text-sm opacity-50" style={{ color: branding.text }}>{t.no_requests}</div>
     </div>
   );
 
@@ -450,16 +516,15 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
   const progress = (outreach.items?.length || 0) > 0 ? Math.round((completedCount(outreach) / outreach.items.length) * 100) : 0;
   const isOverdue = outreach.deadline && isPast(parseISO(outreach.deadline));
 
-  // Show detailed confirmation after submit
   if (confirmedOutreach) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-blue-50">
+      <div className="min-h-screen" style={{ backgroundColor: branding.bg, fontFamily: branding.font }}>
         <Header />
         <SubmissionConfirmation
           outreach={confirmedOutreach}
           client={client}
           tenantName={tenantName}
-          brandColor={brandColor}
+          brandColor={branding.primary}
           lang={lang}
           onBackToDashboard={
             allOutreaches.length > 1
@@ -467,34 +532,48 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
               : null
           }
         />
+        <PortalFooter tenant={tenant} branding={branding} />
       </div>
     );
   }
 
   if (isSubmitted) return (
-    <div className="min-h-screen bg-slate-50 pb-24">
+    <div className="min-h-screen pb-8" style={{ backgroundColor: branding.bg, fontFamily: branding.font, color: branding.text }}>
       <Header />
       <div className="max-w-lg mx-auto px-4 pt-16 flex flex-col items-center text-center">
         <CheckCircle className="w-14 h-14 text-emerald-500 mb-4" />
-        <h2 className="text-lg font-semibold text-slate-800 mb-2">{t.completed}</h2>
-        <p className="text-sm text-slate-500">You may close this window.</p>
+        <h2 className="text-lg font-semibold mb-2">{t.completed}</h2>
+        <p className="text-sm opacity-50">You may close this window.</p>
         {allOutreaches.length > 1 && (
-          <Button variant="outline" className="mt-6" onClick={() => setView('dashboard')}>
+          <Button
+            variant="outline"
+            className="mt-6"
+            style={{ borderRadius: branding.radius }}
+            onClick={() => setView('dashboard')}
+          >
             <ArrowLeft className="w-4 h-4 mr-1.5" /> {t.back_to_dashboard}
           </Button>
         )}
       </div>
+      <PortalFooter tenant={tenant} branding={branding} />
     </div>
   );
 
+  const welcomeHeading = tenant?.portal_welcome_title
+    ? `${t.welcome} ${client?.full_name || ''},`
+    : `${t.welcome} ${client?.full_name || ''},`;
+  const welcomeSub = tenant?.portal_welcome_body || null;
+
   return (
-    <div className="min-h-screen bg-slate-50 pb-24">
+    <div className="min-h-screen pb-8" style={{ backgroundColor: branding.bg, fontFamily: branding.font, color: branding.text }}>
       <Header />
       <div className="max-w-lg mx-auto px-4 pt-6 space-y-5">
+
         {/* Welcome + deadline */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <div className="text-lg font-semibold text-slate-800 mb-1">{t.welcome} {client?.full_name || ''},</div>
-          {outreach.message && <p className="text-sm text-slate-600 mb-3">{outreach.message}</p>}
+        <div className="bg-white rounded-2xl border p-5 shadow-sm" style={{ borderColor: branding.secondary }}>
+          <div className="text-lg font-semibold mb-1">{welcomeHeading}</div>
+          {welcomeSub && <p className="text-sm opacity-60 mb-2">{welcomeSub}</p>}
+          {outreach.message && <p className="text-sm opacity-70 mb-3">{outreach.message}</p>}
           <div className={cn('flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium', isOverdue ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800')}>
             {isOverdue ? <AlertTriangle className="w-4 h-4 flex-shrink-0" /> : <Clock className="w-4 h-4 flex-shrink-0" />}
             {isOverdue ? t.overdue : `${t.deadline} ${outreach.deadline ? format(parseISO(outreach.deadline), 'd MMMM yyyy') : '—'}`}
@@ -502,15 +581,15 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
         </div>
 
         {/* Progress */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <div className="bg-white rounded-2xl border p-4 shadow-sm" style={{ borderColor: branding.secondary }}>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-slate-700">{t.progress}</span>
-            <span className="text-sm font-bold" style={{ color: brandColor }}>{progress}%</span>
+            <span className="text-sm font-medium opacity-70">{t.progress}</span>
+            <span className="text-sm font-bold" style={{ color: branding.primary }}>{progress}%</span>
           </div>
-          <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, backgroundColor: brandColor }} />
+          <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: branding.secondary }}>
+            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, backgroundColor: branding.primary }} />
           </div>
-          <div className="text-xs text-slate-500 mt-1.5">{completedCount(outreach)} of {outreach.items?.length || 0} items completed</div>
+          <div className="text-xs opacity-50 mt-1.5">{completedCount(outreach)} of {outreach.items?.length || 0} items completed</div>
         </div>
 
         {/* Items */}
@@ -520,15 +599,15 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
             const isDoc = item.item_type === 'document';
             const isDone = s.done || (isDoc ? !!s.fileUrl : !!s.text?.trim());
             return (
-              <div key={item.item_id} className={cn('bg-white rounded-2xl border shadow-sm overflow-hidden transition-all', isDone ? 'border-emerald-200' : 'border-slate-200')}>
+              <div key={item.item_id} className={cn('bg-white rounded-2xl border shadow-sm overflow-hidden transition-all', isDone ? 'border-emerald-200' : '')} style={!isDone ? { borderColor: branding.secondary } : {}}>
                 <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <div className={cn('w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5', isDone ? 'bg-emerald-100' : 'bg-slate-100')}>
                       {isDone ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <FileText className="w-4 h-4 text-slate-400" />}
                     </div>
                     <div className="min-w-0">
-                      <div className="font-medium text-slate-800 text-sm">{item.label}</div>
-                      <div className="text-xs text-slate-500 mt-0.5">{isDoc ? t.description_doc : t.description_dp}</div>
+                      <div className="font-medium text-sm" style={{ color: branding.text }}>{item.label}</div>
+                      <div className="text-xs opacity-50 mt-0.5">{isDoc ? t.description_doc : t.description_dp}</div>
                     </div>
                   </div>
                   {isDone && <span className="text-xs font-medium text-emerald-600 flex-shrink-0">{t.submitted_item}</span>}
@@ -546,16 +625,16 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                             </button>
                           </div>
                         ) : (
-                          <label className={cn('flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-5 cursor-pointer transition-colors', s.uploading ? 'border-slate-300 bg-slate-50' : 'border-slate-200 hover:border-slate-400 hover:bg-slate-50')}>
-                            {s.uploading ? <Loader2 className="w-5 h-5 animate-spin text-slate-400 mb-1" /> : <Upload className="w-5 h-5 text-slate-400 mb-1" />}
-                            <span className="text-sm font-medium text-slate-600">{s.uploading ? 'Uploading…' : t.upload_btn}</span>
-                            <span className="text-xs text-slate-400 mt-0.5">PDF, JPG, PNG — max 25MB</span>
+                          <label className={cn('flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-5 cursor-pointer transition-colors', s.uploading ? 'bg-slate-50' : 'hover:bg-slate-50')} style={{ borderColor: branding.secondary }}>
+                            {s.uploading ? <Loader2 className="w-5 h-5 animate-spin mb-1" style={{ color: branding.primary }} /> : <Upload className="w-5 h-5 mb-1 opacity-40" />}
+                            <span className="text-sm font-medium opacity-60">{s.uploading ? 'Uploading…' : t.upload_btn}</span>
+                            <span className="text-xs opacity-40 mt-0.5">PDF, JPG, PNG — max 25MB</span>
                             <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" disabled={s.uploading} onChange={e => uploadFile(outreach.id, item.item_id, e.target.files?.[0])} />
                           </label>
                         )}
                       </div>
                     ) : (
-                      <Textarea value={s.text || ''} onChange={e => setItemText(outreach.id, item.item_id, e.target.value)} placeholder={t.text_placeholder} className="mt-2 text-sm min-h-16 bg-slate-50 border-slate-200 rounded-xl" />
+                      <Textarea value={s.text || ''} onChange={e => setItemText(outreach.id, item.item_id, e.target.value)} placeholder={t.text_placeholder} className="mt-2 text-sm min-h-16 rounded-xl" style={{ borderColor: branding.secondary }} />
                     )}
                   </div>
                 )}
@@ -564,27 +643,37 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
           })}
         </div>
 
-        <Button className="w-full h-12 text-base font-semibold rounded-2xl gap-2 shadow-sm" style={{ backgroundColor: brandColor }} onClick={() => handleSubmit(outreach)} disabled={submitting || completedCount(outreach) === 0}>
+        <Button
+          className="w-full h-12 text-base font-semibold gap-2 shadow-sm text-white"
+          style={{ backgroundColor: branding.primary, borderRadius: branding.radius }}
+          onClick={() => handleSubmit(outreach)}
+          disabled={submitting || completedCount(outreach) === 0}
+        >
           {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           {submitting ? t.submitting : t.submit}
         </Button>
       </div>
 
+      <PortalFooter tenant={tenant} branding={branding} />
+
       {/* AI Chat bubble */}
       <div className="fixed bottom-5 right-5 z-20">
         {chatOpen && (
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl w-80 mb-3 overflow-hidden flex flex-col" style={{ maxHeight: '60vh' }}>
-            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between flex-shrink-0" style={{ backgroundColor: brandColor + '15' }}>
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between flex-shrink-0" style={{ backgroundColor: branding.primary + '15' }}>
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: brandColor }}>AI</div>
-                <span className="text-sm font-semibold text-slate-800">Assistant</span>
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: branding.primary }}>AI</div>
+                <span className="text-sm font-semibold" style={{ color: branding.text }}>Assistant</span>
               </div>
-              <button onClick={() => setChatOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+              <button onClick={() => setChatOpen(false)} className="opacity-40 hover:opacity-70"><X className="w-4 h-4" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
               {chatMessages.map((msg, i) => (
                 <div key={i} className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
-                  <div className={cn('max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed', msg.role === 'user' ? 'text-white rounded-br-sm' : 'bg-slate-100 text-slate-700 rounded-bl-sm')} style={msg.role === 'user' ? { backgroundColor: brandColor } : {}}>
+                  <div
+                    className={cn('max-w-[85%] px-3 py-2 text-sm leading-relaxed', msg.role === 'user' ? 'text-white' : 'bg-slate-100 text-slate-700')}
+                    style={{ borderRadius: branding.radius, ...(msg.role === 'user' ? { backgroundColor: branding.primary } : {}) }}
+                  >
                     {msg.text}
                   </div>
                 </div>
@@ -595,14 +684,18 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
             <div className="p-3 border-t border-slate-100 flex-shrink-0">
               <div className="flex gap-2">
                 <Input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder={t.ask} className="text-sm rounded-xl border-slate-200" onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askAI(chatInput); } }} />
-                <Button size="icon" className="rounded-xl flex-shrink-0 text-white" style={{ backgroundColor: brandColor }} onClick={() => askAI(chatInput)} disabled={!chatInput.trim() || chatLoading}>
+                <Button size="icon" className="flex-shrink-0 text-white" style={{ backgroundColor: branding.primary, borderRadius: branding.radius }} onClick={() => askAI(chatInput)} disabled={!chatInput.trim() || chatLoading}>
                   <Send className="w-4 h-4" />
                 </Button>
               </div>
             </div>
           </div>
         )}
-        <button onClick={() => setChatOpen(o => !o)} className="w-14 h-14 rounded-full text-white shadow-lg flex items-center justify-center transition-transform hover:scale-105 active:scale-95" style={{ backgroundColor: brandColor }}>
+        <button
+          onClick={() => setChatOpen(o => !o)}
+          className="w-14 h-14 text-white shadow-lg flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+          style={{ backgroundColor: branding.primary, borderRadius: '9999px' }}
+        >
           {chatOpen ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
         </button>
       </div>
