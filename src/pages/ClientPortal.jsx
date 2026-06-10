@@ -4,7 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { FileText, Upload, CheckCircle, Clock, Send, Loader2, MessageCircle, AlertTriangle, X, ChevronRight, ArrowLeft, LayoutDashboard, Shield } from 'lucide-react';
+import { FileText, Upload, CheckCircle, Clock, Send, Loader2, MessageCircle, AlertTriangle, X, ChevronRight, ArrowLeft, LayoutDashboard, Shield, ToggleLeft, ToggleRight, PenLine } from 'lucide-react';
 import { portalSecureUpload } from '@/lib/securityUtils';
 import SubmissionConfirmation from '@/components/portal/SubmissionConfirmation';
 import { format, isPast, parseISO } from 'date-fns';
@@ -158,6 +158,7 @@ export default function ClientPortal() {
       setExpired(true); setLoading(false); return;
     }
 
+    // For standalone outreach (case_id is null) only load client + tenant, skip case lookups
     const [allReqs, tenantData, clientData] = await Promise.all([
       base44.entities.OutreachRequest.filter({ client_id: primary.client_id, tenant_id: primary.tenant_id }),
       base44.entities.Tenant.filter({ id: primary.tenant_id }),
@@ -178,6 +179,7 @@ export default function ClientPortal() {
           fileUrl: item.file_url || '',
           uploading: false,
           done: item.status === 'Received' || item.status === 'Verified',
+          selected: [], // for multi_select / checkbox
         };
       });
     });
@@ -185,7 +187,8 @@ export default function ClientPortal() {
 
     await Promise.all([
       base44.entities.AuditEvent.create({
-        tenant_id: primary.tenant_id, case_id: primary.case_id,
+        tenant_id: primary.tenant_id,
+        case_id: primary.case_id || null,
         client_id: primary.client_id, actor_type: 'System', actor_name: 'Client Portal',
         event_type: 'portal_viewed', notes: 'Client portal accessed via token',
       }),
@@ -221,40 +224,98 @@ export default function ClientPortal() {
     setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], text } } }));
   }
 
+  function setItemSelected(outreachId, itemId, selected) {
+    setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], selected } } }));
+  }
+
   function getItemStates(outreachId) { return itemStateMap[outreachId] || {}; }
+
+  function isItemCompleted(item, s) {
+    if (!s) return false;
+    if (s.done) return true;
+    const ft = item.field_type || (item.item_type === 'document' ? 'file_upload' : 'textarea');
+    if (ft === 'file_upload') return !!s.fileUrl;
+    if (ft === 'section_header') return true;
+    if (ft === 'multi_select' || ft === 'checkbox') return (s.selected || []).length > 0;
+    if (ft === 'yes_no') return s.text === 'yes' || s.text === 'no';
+    return !!s.text?.trim();
+  }
 
   function completedCount(outreach) {
     const states = getItemStates(outreach.id);
     return (outreach?.items || []).filter(item => {
-      const s = states[item.item_id];
-      return s?.done || (item.item_type === 'document' ? !!s?.fileUrl : !!s?.text?.trim());
+      if (item.field_type === 'section_header') return false;
+      return isItemCompleted(item, states[item.item_id]);
     }).length;
   }
 
+  function totalCountable(outreach) {
+    return (outreach?.items || []).filter(i => i.field_type !== 'section_header').length;
+  }
+
+  // Check if a conditional field should be visible
+  function isFieldVisible(item, states) {
+    if (!item.condition_depends_on_item_id) return true;
+    const depState = states[item.condition_depends_on_item_id] || {};
+    const depValue = depState.text || '';
+    return depValue === item.condition_equals_value;
+  }
+
+  const [validationErrors, setValidationErrors] = useState({});
+
   async function handleSubmit(outreach) {
-    setSubmitting(true);
     const states = getItemStates(outreach.id);
+
+    // Validate required fields
+    const errors = {};
+    (outreach.items || []).forEach(item => {
+      if (item.field_type === 'section_header') return;
+      if (!item.validation_required) return;
+      if (!isFieldVisible(item, states)) return;
+      if (!isItemCompleted(item, states[item.item_id])) {
+        errors[item.item_id] = 'This field is required.';
+      }
+    });
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    setValidationErrors({});
+    setSubmitting(true);
+
     const updatedItems = (outreach.items || []).map(item => {
       const s = states[item.item_id] || {};
-      const isDone = s.done || (item.item_type === 'document' ? !!s.fileUrl : !!s.text?.trim());
-      return { ...item, response_text: s.text || item.response_text || '', file_url: s.fileUrl || item.file_url || '', status: isDone ? 'Received' : 'Requested' };
+      const ft = item.field_type || (item.item_type === 'document' ? 'file_upload' : 'textarea');
+      let responseText = s.text || item.response_text || '';
+      if (ft === 'multi_select' || ft === 'checkbox') responseText = (s.selected || []).join(', ');
+      const isDone = isItemCompleted(item, s) || item.field_type === 'section_header';
+      return {
+        ...item,
+        response_text: responseText,
+        file_url: s.fileUrl || item.file_url || '',
+        status: isDone ? 'Received' : 'Requested',
+      };
     });
-    const allDone = updatedItems.every(i => i.status === 'Received' || i.status === 'Verified');
+    const countable = updatedItems.filter(i => i.field_type !== 'section_header');
+    const allDone = countable.every(i => i.status === 'Received' || i.status === 'Verified');
     const newStatus = allDone ? 'Complete' : 'Partial_Response';
-    const submittedCount = updatedItems.filter(i => i.status === 'Received').length;
+    const submittedCount = countable.filter(i => i.status === 'Received').length;
 
     await base44.entities.OutreachRequest.update(outreach.id, { items: updatedItems, status: newStatus });
+    // For standalone (case_id null), still create audit event but with null case_id
     await base44.entities.AuditEvent.create({
-      tenant_id: outreach.tenant_id, case_id: outreach.case_id, client_id: outreach.client_id,
+      tenant_id: outreach.tenant_id,
+      case_id: outreach.case_id || null,
+      client_id: outreach.client_id,
       actor_type: 'System', actor_name: 'Client Portal', event_type: 'portal_submitted',
-      notes: `Client submitted: ${newStatus}. ${submittedCount}/${updatedItems.length} items.`,
+      notes: `Client submitted: ${newStatus}. ${submittedCount}/${countable.length} items.${!outreach.case_id ? ' (Standalone outreach)' : ''}`,
     });
 
     if (client?.primary_contact_email) {
       const submittedItems = updatedItems.filter(i => i.status === 'Received' || i.status === 'Verified').map(i => `• ${i.label}`).join('\n');
       const emailBody = allDone
         ? `Dear ${client.full_name},\n\nYour submission has been successfully received by ${tenant?.name}.\n\nSubmitted items:\n${submittedItems}\n\nReference: ${outreach.id.substring(0, 8).toUpperCase()}\n\nOur compliance team will review your submission shortly.\n\nBest regards,\n${tenant?.name}`
-        : `Dear ${client.full_name},\n\nThank you for your submission. We have received ${submittedCount} of ${updatedItems.length} requested items.\n\nReceived:\n${submittedItems}\n\nPlease complete the remaining items by ${format(parseISO(outreach.deadline), 'd MMMM yyyy')}.\n\nReference: ${outreach.id.substring(0, 8).toUpperCase()}\n\nBest regards,\n${tenant?.name}`;
+        : `Dear ${client.full_name},\n\nThank you for your submission. We have received ${submittedCount} of ${countable.length} requested items.\n\nReceived:\n${submittedItems}\n\nPlease complete the remaining items by ${outreach.deadline ? format(parseISO(outreach.deadline), 'd MMMM yyyy') : 'the deadline'}.\n\nReference: ${outreach.id.substring(0, 8).toUpperCase()}\n\nBest regards,\n${tenant?.name}`;
 
       await base44.integrations.Core.SendEmail({
         to: client.primary_contact_email,
@@ -294,6 +355,11 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
     ? `Please contact ${contactInfo} for assistance.`
     : 'If you think this is an error, please contact your relationship manager.';
 
+  // Portal page/header title
+  const portalTitle = branding.whiteLabel
+    ? (tenant?.portal_welcome_title || `${tenantName} — Document Request`)
+    : `${tenantName} — Document Request`;
+
   // ── Loading ──
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: branding.bg }}>
@@ -332,7 +398,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
               {tenantName.charAt(0)}
             </div>
           )}
-          <span className="font-semibold text-sm" style={{ color: branding.headerText }}>{tenantName}</span>
+          <span className="font-semibold text-sm" style={{ color: branding.headerText }}>{portalTitle}</span>
         </div>
         <div className="flex items-center gap-2">
           {allOutreaches.length > 1 && view !== 'dashboard' && (
@@ -513,7 +579,8 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
 
   const isSubmitted = submittedIds.has(outreach.id) || outreach.status === 'Complete';
   const states = getItemStates(outreach.id);
-  const progress = (outreach.items?.length || 0) > 0 ? Math.round((completedCount(outreach) / outreach.items.length) * 100) : 0;
+  const _total = totalCountable(outreach);
+  const progress = _total > 0 ? Math.round((completedCount(outreach) / _total) * 100) : 0;
   const isOverdue = outreach.deadline && isPast(parseISO(outreach.deadline));
 
   if (confirmedOutreach) {
@@ -589,52 +656,233 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
           <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: branding.secondary }}>
             <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, backgroundColor: branding.primary }} />
           </div>
-          <div className="text-xs opacity-50 mt-1.5">{completedCount(outreach)} of {outreach.items?.length || 0} items completed</div>
+          <div className="text-xs opacity-50 mt-1.5">{completedCount(outreach)} of {_total} items completed</div>
         </div>
 
         {/* Items */}
         <div className="space-y-3">
           {(outreach.items || []).map(item => {
             const s = states[item.item_id] || {};
-            const isDoc = item.item_type === 'document';
-            const isDone = s.done || (isDoc ? !!s.fileUrl : !!s.text?.trim());
+            const ft = item.field_type || (item.item_type === 'document' ? 'file_upload' : 'textarea');
+
+            // Conditional field visibility
+            if (!isFieldVisible(item, states)) return null;
+
+            // Section header — rendered as a divider, not an input
+            if (ft === 'section_header') {
+              return (
+                <div key={item.item_id} className="pt-3 pb-1">
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1" style={{ backgroundColor: branding.secondary }} />
+                    <span className="text-xs font-bold uppercase tracking-widest opacity-60" style={{ color: branding.text }}>
+                      {item.section_title || item.label}
+                    </span>
+                    <div className="h-px flex-1" style={{ backgroundColor: branding.secondary }} />
+                  </div>
+                </div>
+              );
+            }
+
+            const isDone = isItemCompleted(item, s);
+            const hasError = !!validationErrors[item.item_id];
+
             return (
-              <div key={item.item_id} className={cn('bg-white rounded-2xl border shadow-sm overflow-hidden transition-all', isDone ? 'border-emerald-200' : '')} style={!isDone ? { borderColor: branding.secondary } : {}}>
+              <div key={item.item_id} className={cn('bg-white rounded-2xl border shadow-sm overflow-hidden transition-all', isDone ? 'border-emerald-200' : hasError ? 'border-red-300' : '')} style={!isDone && !hasError ? { borderColor: branding.secondary } : {}}>
                 <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <div className={cn('w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5', isDone ? 'bg-emerald-100' : 'bg-slate-100')}>
                       {isDone ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <FileText className="w-4 h-4 text-slate-400" />}
                     </div>
                     <div className="min-w-0">
-                      <div className="font-medium text-sm" style={{ color: branding.text }}>{item.label}</div>
-                      <div className="text-xs opacity-50 mt-0.5">{isDoc ? t.description_doc : t.description_dp}</div>
+                      <div className="font-medium text-sm" style={{ color: branding.text }}>
+                        {item.label}
+                        {item.validation_required && <span className="text-red-500 ml-1">*</span>}
+                      </div>
+                      {item.description && <div className="text-xs opacity-50 mt-0.5">{item.description}</div>}
                     </div>
                   </div>
                   {isDone && <span className="text-xs font-medium text-emerald-600 flex-shrink-0">{t.submitted_item}</span>}
                 </div>
+
                 {!s.done && (
-                  <div className="px-4 pb-4">
-                    {isDoc ? (
+                  <div className="px-4 pb-4 mt-1">
+                    {/* file_upload */}
+                    {ft === 'file_upload' && (
+                      s.fileUrl ? (
+                        <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2.5">
+                          <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate">{t.uploaded}</span>
+                          <button className="ml-auto text-slate-400 hover:text-slate-600" onClick={() => setItemStateMap(m => ({ ...m, [outreach.id]: { ...m[outreach.id], [item.item_id]: { ...m[outreach.id]?.[item.item_id], fileUrl: '' } } }))}>
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className={cn('flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-5 cursor-pointer transition-colors', s.uploading ? 'bg-slate-50' : 'hover:bg-slate-50')} style={{ borderColor: branding.secondary }}>
+                          {s.uploading ? <Loader2 className="w-5 h-5 animate-spin mb-1" style={{ color: branding.primary }} /> : <Upload className="w-5 h-5 mb-1 opacity-40" />}
+                          <span className="text-sm font-medium opacity-60">{s.uploading ? 'Uploading…' : t.upload_btn}</span>
+                          <span className="text-xs opacity-40 mt-0.5">
+                            {item.validation_accepted_file_types?.length > 0 ? item.validation_accepted_file_types.join(', ').toUpperCase() : 'PDF, JPG, PNG'} — max {item.validation_max_file_size_mb || 25}MB
+                          </span>
+                          <input
+                            type="file"
+                            accept={item.validation_accepted_file_types?.length > 0 ? item.validation_accepted_file_types.map(e => `.${e}`).join(',') : '.pdf,.jpg,.jpeg,.png'}
+                            className="hidden"
+                            disabled={s.uploading}
+                            onChange={e => uploadFile(outreach.id, item.item_id, e.target.files?.[0])}
+                          />
+                        </label>
+                      )
+                    )}
+
+                    {/* text */}
+                    {ft === 'text' && (
+                      <Input
+                        value={s.text || ''}
+                        onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
+                        placeholder={t.text_placeholder}
+                        className="mt-1 text-sm rounded-xl"
+                        style={{ borderColor: branding.secondary }}
+                      />
+                    )}
+
+                    {/* textarea (default for data_point) */}
+                    {(ft === 'textarea' || (ft !== 'file_upload' && ft !== 'text' && ft !== 'number' && ft !== 'date' && ft !== 'dropdown' && ft !== 'multi_select' && ft !== 'checkbox' && ft !== 'yes_no' && ft !== 'signature' && item.item_type === 'data_point')) && (
+                      <Textarea
+                        value={s.text || ''}
+                        onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
+                        placeholder={t.text_placeholder}
+                        className="mt-1 text-sm min-h-16 rounded-xl"
+                        style={{ borderColor: branding.secondary }}
+                      />
+                    )}
+
+                    {/* number */}
+                    {ft === 'number' && (
+                      <Input
+                        type="number"
+                        value={s.text || ''}
+                        onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
+                        min={item.validation_min_value}
+                        max={item.validation_max_value}
+                        placeholder="Enter a number…"
+                        className="mt-1 text-sm rounded-xl"
+                        style={{ borderColor: branding.secondary }}
+                      />
+                    )}
+
+                    {/* date */}
+                    {ft === 'date' && (
+                      <Input
+                        type="date"
+                        value={s.text || ''}
+                        onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
+                        className="mt-1 text-sm rounded-xl"
+                        style={{ borderColor: branding.secondary }}
+                      />
+                    )}
+
+                    {/* dropdown */}
+                    {ft === 'dropdown' && (
+                      <select
+                        value={s.text || ''}
+                        onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
+                        className="mt-1 w-full text-sm rounded-xl border px-3 py-2 bg-white"
+                        style={{ borderColor: branding.secondary, color: branding.text }}
+                      >
+                        <option value="">Select an option…</option>
+                        {(item.field_options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    )}
+
+                    {/* multi_select */}
+                    {ft === 'multi_select' && (
+                      <div className="mt-2 space-y-2">
+                        {(item.field_options || []).map(opt => {
+                          const checked = (s.selected || []).includes(opt);
+                          return (
+                            <label key={opt} className="flex items-center gap-2.5 cursor-pointer text-sm">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                  const cur = s.selected || [];
+                                  setItemSelected(outreach.id, item.item_id, checked ? cur.filter(v => v !== opt) : [...cur, opt]);
+                                }}
+                                className="rounded"
+                              />
+                              <span style={{ color: branding.text }}>{opt}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* checkbox (single boolean) */}
+                    {ft === 'checkbox' && (
+                      <label className="mt-2 flex items-center gap-2.5 cursor-pointer text-sm">
+                        <input
+                          type="checkbox"
+                          checked={s.text === 'true'}
+                          onChange={e => setItemText(outreach.id, item.item_id, e.target.checked ? 'true' : '')}
+                          className="rounded"
+                        />
+                        <span style={{ color: branding.text }}>{item.label}</span>
+                      </label>
+                    )}
+
+                    {/* yes_no */}
+                    {ft === 'yes_no' && (
+                      <div className="mt-2 flex gap-3">
+                        {['yes', 'no'].map(val => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => setItemText(outreach.id, item.item_id, val)}
+                            className={cn(
+                              'flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all',
+                              s.text === val
+                                ? 'text-white border-transparent'
+                                : 'bg-white border-slate-200 opacity-70 hover:opacity-100'
+                            )}
+                            style={s.text === val ? { backgroundColor: branding.primary, borderColor: branding.primary } : {}}
+                          >
+                            {val === 'yes' ? '✓ Yes' : '✗ No'}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* signature */}
+                    {ft === 'signature' && (
                       <div className="mt-2">
-                        {s.fileUrl ? (
+                        {s.text ? (
                           <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2.5">
-                            <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                            <span className="truncate">{t.uploaded}</span>
-                            <button className="ml-auto text-slate-400 hover:text-slate-600" onClick={() => setItemStateMap(m => ({ ...m, [outreach.id]: { ...m[outreach.id], [item.item_id]: { ...m[outreach.id]?.[item.item_id], fileUrl: '' } } }))}>
+                            <PenLine className="w-4 h-4 flex-shrink-0" />
+                            <span className="italic">{s.text}</span>
+                            <button className="ml-auto text-slate-400 hover:text-slate-600" onClick={() => setItemText(outreach.id, item.item_id, '')}>
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         ) : (
-                          <label className={cn('flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-5 cursor-pointer transition-colors', s.uploading ? 'bg-slate-50' : 'hover:bg-slate-50')} style={{ borderColor: branding.secondary }}>
-                            {s.uploading ? <Loader2 className="w-5 h-5 animate-spin mb-1" style={{ color: branding.primary }} /> : <Upload className="w-5 h-5 mb-1 opacity-40" />}
-                            <span className="text-sm font-medium opacity-60">{s.uploading ? 'Uploading…' : t.upload_btn}</span>
-                            <span className="text-xs opacity-40 mt-0.5">PDF, JPG, PNG — max 25MB</span>
-                            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" disabled={s.uploading} onChange={e => uploadFile(outreach.id, item.item_id, e.target.files?.[0])} />
-                          </label>
+                          <div className="border-2 border-dashed rounded-xl p-4" style={{ borderColor: branding.secondary }}>
+                            <p className="text-xs opacity-50 mb-2">Type your full name as a digital signature:</p>
+                            <Input
+                              value={s.text || ''}
+                              onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
+                              placeholder="Full name…"
+                              className="text-sm font-semibold italic rounded-xl"
+                              style={{ borderColor: branding.secondary }}
+                            />
+                          </div>
                         )}
                       </div>
-                    ) : (
-                      <Textarea value={s.text || ''} onChange={e => setItemText(outreach.id, item.item_id, e.target.value)} placeholder={t.text_placeholder} className="mt-2 text-sm min-h-16 rounded-xl" style={{ borderColor: branding.secondary }} />
+                    )}
+
+                    {/* Validation error */}
+                    {hasError && (
+                      <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 flex-shrink-0" /> {validationErrors[item.item_id]}
+                      </p>
                     )}
                   </div>
                 )}
