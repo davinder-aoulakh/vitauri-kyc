@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   MessageSquare, Plus, Send, Loader2, FileText, CheckCircle,
-  AlertTriangle, Sparkles, Eye, Copy, ExternalLink, ShieldCheck, Mail, ChevronDown
+  AlertTriangle, Sparkles, Eye, Copy, ExternalLink, ShieldCheck, Mail, ChevronDown, LibraryBig
 } from 'lucide-react';
 import DocumentViewer from '@/components/shared/DocumentViewer';
 
@@ -117,6 +117,10 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant }) {
   const [libraryItems, setLibraryItems] = useState([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
 
+  // Form templates
+  const [formTemplates, setFormTemplates] = useState([]);
+  const [selectedFormTemplate, setSelectedFormTemplate] = useState(null);
+
   const clientType = client?.client_type || 'NP';
   const catalogueItems = libraryItems.filter(item =>
     !item.client_types?.length || item.client_types.includes(clientType)
@@ -132,12 +136,14 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant }) {
 
   async function loadTemplates() {
     if (!kycCase.tenant_id) return;
-    const [emailTmplData, libraryData] = await Promise.all([
+    const [emailTmplData, libraryData, formTmplData] = await Promise.all([
       base44.entities.EmailTemplate.filter({ tenant_id: kycCase.tenant_id, is_active: true }),
       base44.entities.OutreachTemplate.filter({ tenant_id: kycCase.tenant_id, is_active: true }, 'sort_order'),
+      base44.entities.OutreachFormTemplate.filter({ tenant_id: kycCase.tenant_id, is_active: true }),
     ]);
     setEmailTemplates(emailTmplData || []);
     setLibraryItems(libraryData || []);
+    setFormTemplates(formTmplData || []);
     setLibraryLoading(false);
   }
 
@@ -148,6 +154,29 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant }) {
       .replace(/{{portal_link}}/g, portalUrl || '')
       .replace(/{{due_date}}/g, deadline || '')
       .replace(/{{analyst_name}}/g, currentUser?.full_name || '');
+  }
+
+  function applyFormTemplate(formTmpl) {
+    const itemIds = (formTmpl.items || [])
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+      .map(i => i.outreach_template_id)
+      .filter(id => libraryItems.find(lib => lib.id === id));
+
+    setSelectedItems(itemIds);
+    setSelectedFormTemplate(formTmpl);
+
+    if (formTmpl.default_deadline_days) {
+      setDeadline(format(addDays(new Date(), formTmpl.default_deadline_days), 'yyyy-MM-dd'));
+    }
+    if (formTmpl.default_channel) {
+      setChannel(formTmpl.default_channel);
+    }
+    if (formTmpl.email_template_id) {
+      const linkedEmailTmpl = emailTemplates.find(t => t.id === formTmpl.email_template_id);
+      if (linkedEmailTmpl) {
+        applyTemplate(linkedEmailTmpl, `${window.location.origin}/portal/[token]`);
+      }
+    }
   }
 
   function applyTemplate(tmpl, portalUrl) {
@@ -484,12 +513,74 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
       )}
 
       {/* ── Builder Dialog ── */}
-      <Dialog open={newOpen} onOpenChange={v => { setNewOpen(v); if (!v) { setAiSuggestions(null); setSelectedItems([]); setMessage(''); } }}>
+      <Dialog open={newOpen} onOpenChange={v => { setNewOpen(v); if (!v) { setAiSuggestions(null); setSelectedItems([]); setMessage(''); setSelectedFormTemplate(null); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New Outreach Request — {client?.full_name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-1">
+
+            {/* Form Template Picker */}
+            {formTemplates.filter(ft => !ft.applicable_client_types?.length || ft.applicable_client_types.includes(clientType)).length > 0 && (
+              <div>
+                <Label className="text-xs font-medium mb-2 block">Start from a Form Template</Label>
+                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
+                  {formTemplates
+                    .filter(ft => !ft.applicable_client_types?.length || ft.applicable_client_types.includes(clientType))
+                    .map(ft => {
+                      const isSelected = selectedFormTemplate?.id === ft.id;
+                      const itemCount = ft.items?.length || 0;
+                      const linkedEmail = emailTemplates.find(e => e.id === ft.email_template_id);
+                      return (
+                        <button key={ft.id} type="button" onClick={() => applyFormTemplate(ft)}
+                          className={cn('w-full text-left px-3 py-2.5 rounded-lg border transition-all',
+                            isSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30 hover:bg-muted/20'
+                          )}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {isSelected
+                                ? <CheckCircle className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                                : <LibraryBig className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                              }
+                              <div className="min-w-0">
+                                <div className="text-xs font-medium truncate">{ft.name}</div>
+                                {ft.description && <div className="text-xs text-muted-foreground truncate">{ft.description}</div>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
+                                {itemCount} field{itemCount !== 1 ? 's' : ''}
+                              </span>
+                              {linkedEmail && (
+                                <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">+ email</span>
+                              )}
+                              {ft.default_deadline_days && (
+                                <span className="text-xs text-muted-foreground">{ft.default_deadline_days}d deadline</span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+                {selectedFormTemplate && (
+                  <button type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground mt-1.5 underline"
+                    onClick={() => { setSelectedFormTemplate(null); setSelectedItems([]); setMessage(''); setEmailSubject(''); }}>
+                    Clear template selection
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Divider */}
+            {formTemplates.filter(ft => !ft.applicable_client_types?.length || ft.applicable_client_types.includes(clientType)).length > 0 && (
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs text-muted-foreground">or build manually</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+            )}
 
             {/* AI Copilot */}
             <div className="bg-purple-50/60 border border-purple-100 rounded-xl p-3">
@@ -574,7 +665,17 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
 
             {/* Item selection */}
             <div>
-              <Label className="text-xs font-medium mb-2 block">Select Items to Request</Label>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-xs font-medium">Select Items to Request</Label>
+                {selectedFormTemplate ? (
+                  <div className="flex items-center gap-1.5 text-xs text-primary">
+                    <CheckCircle className="w-3 h-3" />
+                    {selectedFormTemplate.name} — {selectedItems.length} fields loaded
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">{selectedItems.length} item(s) selected</div>
+                )}
+              </div>
               {libraryLoading ? (
                 <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading your field library…
