@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { Plus, Pencil, Trash2, Loader2, GripVertical, Eye, Tag, ChevronDown, Sparkles } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, GripVertical, Eye, Tag, ChevronDown, Sparkles, Copy } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { cn } from '@/lib/utils';
@@ -100,6 +101,7 @@ export default function OutreachTemplatesTab({ tenant }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const quillRef = useRef(null);
+  const { toast } = useToast();
 
   useEffect(() => { if (tenant?.id) load(); }, [tenant]);
 
@@ -131,6 +133,17 @@ export default function OutreachTemplatesTab({ tenant }) {
   async function toggleActive(tmpl) {
     await base44.entities.OutreachTemplate.update(tmpl.id, { is_active: !tmpl.is_active });
     load();
+  }
+
+  async function cloneTemplate(tmpl) {
+    const { id, created_date, updated_date, ...rest } = tmpl;
+    const cloned = { ...rest, label: `Copy of ${tmpl.label}`, tenant_id: tenant.id, sort_order: templates.length };
+    await base44.entities.OutreachTemplate.create(cloned);
+    const newTemplates = await base44.entities.OutreachTemplate.filter({ tenant_id: tenant.id }, 'sort_order');
+    setTemplates(newTemplates || []);
+    const clonedRecord = (newTemplates || []).find(t => t.label === cloned.label);
+    if (clonedRecord) setModal({ mode: 'edit', data: { ...clonedRecord } });
+    toast({ description: 'Template cloned — editing copy now' });
   }
 
   function toggleTag(field, val) {
@@ -251,6 +264,9 @@ export default function OutreachTemplatesTab({ tenant }) {
                             <td className="px-4 py-3"><Switch checked={!!tmpl.is_active} onCheckedChange={() => toggleActive(tmpl)} /></td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1 justify-end">
+                                <Button size="sm" variant="ghost" className="h-7 text-xs" title="Clone" onClick={() => cloneTemplate(tmpl)}>
+                                  <Copy className="w-3 h-3" />
+                                </Button>
                                 <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setModal({ mode: 'edit', data: { ...tmpl } })}>
                                   <Pencil className="w-3 h-3" />
                                 </Button>

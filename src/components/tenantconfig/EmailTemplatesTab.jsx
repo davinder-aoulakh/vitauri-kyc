@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, Loader2, Mail, Eye, X, Sparkles, RefreshCw, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Mail, Eye, X, Sparkles, RefreshCw, CheckCircle2, ChevronDown, ChevronUp, Copy } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { cn } from '@/lib/utils';
@@ -48,6 +49,7 @@ export default function EmailTemplatesTab({ tenant, currentUser }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiStatus, setAiStatus]   = useState(null); // 'success' | 'error' | null
   const quillRef = useRef(null);
+  const { toast } = useToast();
 
   useEffect(() => { if (tenant?.id) load(); }, [tenant]);
 
@@ -80,6 +82,17 @@ export default function EmailTemplatesTab({ tenant, currentUser }) {
   async function toggleActive(tmpl) {
     await base44.entities.EmailTemplate.update(tmpl.id, { is_active: !tmpl.is_active });
     load();
+  }
+
+  async function cloneTemplate(tmpl) {
+    const { id, created_date, updated_date, ...rest } = tmpl;
+    const cloned = { ...rest, name: `Copy of ${tmpl.name}`, tenant_id: tenant.id };
+    await base44.entities.EmailTemplate.create(cloned);
+    const newTemplates = await base44.entities.EmailTemplate.filter({ tenant_id: tenant.id });
+    setTemplates(newTemplates || []);
+    const clonedRecord = (newTemplates || []).find(t => t.name === cloned.name);
+    if (clonedRecord) setModal({ mode: 'edit', data: { ...clonedRecord } });
+    toast({ description: 'Template cloned — editing copy now' });
   }
 
   async function generateDraft() {
@@ -197,6 +210,9 @@ Return JSON with two fields:
                     <div className="flex items-center gap-1 justify-end">
                       <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setPreviewTmpl(tmpl)}>
                         <Eye className="w-3 h-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" title="Clone" onClick={() => cloneTemplate(tmpl)}>
+                        <Copy className="w-3 h-3" />
                       </Button>
                       <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setModal({ mode: 'edit', data: { ...tmpl } })}>
                         <Pencil className="w-3 h-3" />
