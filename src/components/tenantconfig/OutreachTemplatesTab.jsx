@@ -5,13 +5,14 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { Plus, Pencil, Trash2, Loader2, GripVertical, Eye, Tag, ChevronDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, GripVertical, Eye, Tag, ChevronDown, Sparkles } from 'lucide-react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { cn } from '@/lib/utils';
 import FieldTypePicker, { FIELD_TYPES } from './outreach/FieldTypePicker';
 import FieldTypeConfig from './outreach/FieldTypeConfig';
 import PortalPreviewModal from './outreach/PortalPreviewModal';
+import AiGenerateModal from './outreach/AiGenerateModal';
 
 const CLIENT_TYPES = ['NP', 'ORG'];
 const CASE_TYPES   = ['Onboarding', 'Periodic_Review', 'Event_Driven_Review', 'Offboarding'];
@@ -97,6 +98,7 @@ export default function OutreachTemplatesTab({ tenant }) {
   const [modal, setModal]         = useState(null);
   const [saving, setSaving]       = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const quillRef = useRef(null);
 
   useEffect(() => { if (tenant?.id) load(); }, [tenant]);
@@ -174,6 +176,9 @@ export default function OutreachTemplatesTab({ tenant }) {
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={() => setPreviewOpen(true)}>
             <Eye className="w-3.5 h-3.5" /> Preview in Portal
+          </Button>
+          <Button size="sm" variant="outline" className="text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/5" onClick={() => setAiOpen(true)}>
+            <Sparkles className="w-3.5 h-3.5" /> Generate with AI
           </Button>
           <Button size="sm" className="text-xs gap-1.5" onClick={() => setModal({ mode: 'add', data: { ...BLANK } })}>
             <Plus className="w-3.5 h-3.5" /> Add Template
@@ -385,6 +390,17 @@ export default function OutreachTemplatesTab({ tenant }) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* AI Generate */}
+      <AiGenerateModal
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        existingCount={templates.length}
+        onSave={async (items) => {
+          await Promise.all(items.map(item => base44.entities.OutreachTemplate.create({ ...item, tenant_id: tenant.id })));
+          load();
+        }}
+      />
 
       {/* Portal Preview */}
       <PortalPreviewModal
