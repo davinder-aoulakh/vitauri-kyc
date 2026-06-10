@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, Loader2, Mail, Eye, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Mail, Eye, X, Sparkles, RefreshCw, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { cn } from '@/lib/utils';
@@ -42,6 +42,11 @@ export default function EmailTemplatesTab({ tenant, currentUser }) {
   const [modal, setModal]         = useState(null); // { mode: 'add'|'edit', data }
   const [previewTmpl, setPreviewTmpl] = useState(null);
   const [saving, setSaving]       = useState(false);
+  const [aiPanel, setAiPanel]     = useState(false);
+  const [aiTone, setAiTone]       = useState('Formal');
+  const [aiInstructions, setAiInstructions] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiStatus, setAiStatus]   = useState(null); // 'success' | 'error' | null
   const quillRef = useRef(null);
 
   useEffect(() => { if (tenant?.id) load(); }, [tenant]);
@@ -75,6 +80,51 @@ export default function EmailTemplatesTab({ tenant, currentUser }) {
   async function toggleActive(tmpl) {
     await base44.entities.EmailTemplate.update(tmpl.id, { is_active: !tmpl.is_active });
     load();
+  }
+
+  async function generateDraft() {
+    setAiLoading(true);
+    setAiStatus(null);
+    const situationLabel = SITUATIONS.find(s => s.value === modal.data.situation)?.label || modal.data.situation;
+    const prompt = `Write an email for situation: ${situationLabel}.
+Tone: ${aiTone}.
+Additional instructions: ${aiInstructions || 'None'}.
+Institution name: {{tenant_name}}
+Client name: {{client_name}}
+Portal link variable: {{portal_link}}
+Deadline variable: {{due_date}}
+Analyst name: {{analyst_name}}
+
+Return JSON with two fields:
+- subject: the email subject line (do not include RE: or FW:)
+- body_html: the full email body as clean HTML (no <html>/<body> tags, just the content div). Use variables {{client_name}}, {{tenant_name}}, {{portal_link}}, {{due_date}}, {{analyst_name}} where appropriate. Format professionally with paragraphs, not bullet points.`;
+
+    const res = await base44.integrations.Core.InvokeLLM({
+      system_prompt: 'You are a compliance professional writing client-facing emails for a financial institution\'s KYC process. Write professional, clear emails that clients will understand and act on.',
+      prompt,
+    });
+
+    const raw = res?.result || res?.text || res || '';
+    const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
+    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+      if (!parsed.subject || !parsed.body_html) throw new Error('Missing fields');
+    } catch {
+      setAiStatus('error');
+      setAiLoading(false);
+      return;
+    }
+    // Populate subject and body
+    setModal(m => ({ ...m, data: { ...m.data, subject: parsed.subject, body_html: parsed.body_html } }));
+    // Load into Quill
+    const editor = quillRef.current?.getEditor();
+    if (editor) {
+      editor.clipboard.dangerouslyPasteHTML(parsed.body_html);
+    }
+    setAiStatus('success');
+    setAiLoading(false);
   }
 
   function insertVariable(v) {
@@ -164,7 +214,7 @@ export default function EmailTemplatesTab({ tenant, currentUser }) {
       </div>
 
       {/* Edit / Create Modal */}
-      <Dialog open={!!modal} onOpenChange={v => !v && setModal(null)}>
+      <Dialog open={!!modal} onOpenChange={v => { if (!v) { setModal(null); setAiPanel(false); setAiStatus(null); setAiInstructions(''); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{modal?.mode === 'add' ? 'Create Email Template' : 'Edit Email Template'}</DialogTitle>
@@ -205,15 +255,85 @@ export default function EmailTemplatesTab({ tenant, currentUser }) {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium">Email Body *</label>
-                  <div className="flex flex-wrap gap-1">
-                    {VARIABLES.map(v => (
-                      <button key={v} type="button" onClick={() => insertVariable(v)}
-                        className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-mono hover:bg-blue-100 transition-colors">
-                        {v}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap gap-1">
+                      {VARIABLES.map(v => (
+                        <button key={v} type="button" onClick={() => insertVariable(v)}
+                          className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-mono hover:bg-blue-100 transition-colors">
+                          {v}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setAiPanel(p => !p); setAiStatus(null); }}
+                      className="flex items-center gap-1 text-xs font-medium text-primary border border-primary/30 bg-primary/5 hover:bg-primary/10 px-2.5 py-1 rounded-lg transition-colors flex-shrink-0"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      AI Draft
+                      {aiPanel ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
                   </div>
                 </div>
+
+                {/* Inline AI panel */}
+                {aiPanel && (
+                  <div className="mb-2 border border-primary/20 bg-primary/5 rounded-lg p-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs font-medium block mb-1">Situation</label>
+                        <div className="h-8 px-2.5 border border-input bg-white rounded-md text-xs flex items-center text-muted-foreground">
+                          {SITUATIONS.find(s => s.value === modal.data.situation)?.label || modal.data.situation}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium block mb-1">Tone</label>
+                        <Select value={aiTone} onValueChange={setAiTone}>
+                          <SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Formal">Formal</SelectItem>
+                            <SelectItem value="Friendly">Friendly</SelectItem>
+                            <SelectItem value="Urgent">Urgent</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium block mb-1">Any specific instructions?</label>
+                      <textarea
+                        rows={2}
+                        value={aiInstructions}
+                        onChange={e => setAiInstructions(e.target.value)}
+                        className="w-full text-xs border border-input rounded-md px-2.5 py-2 bg-white resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring placeholder:text-muted-foreground"
+                        placeholder="e.g. Mention that this is the second reminder and that we need the documents within 5 days"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        {aiStatus === 'success' && (
+                          <span className="flex items-center gap-1 text-xs text-green-700">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Draft loaded — review and edit above
+                          </span>
+                        )}
+                        {aiStatus === 'error' && (
+                          <span className="text-xs text-destructive">Generation failed — try rephrasing your instructions.</span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        {aiStatus === 'success' && (
+                          <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => { setAiStatus(null); generateDraft(); }}>
+                            <RefreshCw className="w-3 h-3" /> Regenerate
+                          </Button>
+                        )}
+                        <Button type="button" size="sm" className="h-7 text-xs gap-1" onClick={generateDraft} disabled={aiLoading}>
+                          {aiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                          {aiLoading ? 'Generating…' : 'Generate Email'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="border border-input rounded-md overflow-hidden [&_.ql-toolbar]:border-0 [&_.ql-toolbar]:border-b [&_.ql-toolbar]:border-input [&_.ql-toolbar]:bg-muted/30 [&_.ql-container]:border-0 [&_.ql-editor]:text-sm [&_.ql-editor]:min-h-[160px]">
                   <ReactQuill
                     ref={quillRef}
