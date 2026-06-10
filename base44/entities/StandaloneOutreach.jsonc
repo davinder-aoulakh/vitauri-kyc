@@ -1,0 +1,106 @@
+{
+  "name": "StandaloneOutreach",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "description": "FK \u2192 Tenant"
+    },
+    "created_by_user_id": {
+      "type": "string",
+      "description": "FK \u2192 User"
+    },
+    "name": {
+      "type": "string",
+      "description": "Admin label for this outreach batch"
+    },
+    "template_id": {
+      "type": "string",
+      "description": "FK \u2192 OutreachFormTemplate (optional)"
+    },
+    "client_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of client IDs for bulk sending"
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "Email",
+        "Portal"
+      ],
+      "default": "Email"
+    },
+    "deadline": {
+      "type": "string",
+      "format": "date"
+    },
+    "email_subject": {
+      "type": "string"
+    },
+    "email_body_html": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "description": "Requested items \u2014 same structure as OutreachRequest.items",
+      "items": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string"
+          },
+          "item_type": {
+            "type": "string",
+            "enum": [
+              "document",
+              "data_point"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "Requested",
+              "Received",
+              "Verified",
+              "Missing"
+            ]
+          },
+          "response_text": {
+            "type": "string"
+          },
+          "file_url": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Draft",
+        "Sent",
+        "In_Progress",
+        "Complete"
+      ],
+      "default": "Draft"
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "name",
+    "channel"
+  ]
+}

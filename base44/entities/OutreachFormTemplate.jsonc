@@ -1,0 +1,83 @@
+{
+  "name": "OutreachFormTemplate",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "description": "FK \u2192 Tenant"
+    },
+    "name": {
+      "type": "string",
+      "description": "Template display name"
+    },
+    "description": {
+      "type": "string"
+    },
+    "email_template_id": {
+      "type": "string",
+      "description": "FK \u2192 EmailTemplate"
+    },
+    "items": {
+      "type": "array",
+      "description": "Ordered list of OutreachTemplate item references",
+      "items": {
+        "type": "object",
+        "properties": {
+          "outreach_template_id": {
+            "type": "string",
+            "description": "FK \u2192 OutreachTemplate"
+          },
+          "sort_order": {
+            "type": "number"
+          },
+          "is_mandatory": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    },
+    "default_deadline_days": {
+      "type": "number",
+      "default": 14
+    },
+    "default_channel": {
+      "type": "string",
+      "enum": [
+        "Email",
+        "Portal"
+      ],
+      "default": "Email"
+    },
+    "applicable_client_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "NP",
+          "ORG"
+        ]
+      }
+    },
+    "applicable_case_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "Onboarding",
+          "Periodic_Review",
+          "Event_Driven_Review",
+          "Offboarding"
+        ]
+      }
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "tenant_id",
+    "name"
+  ]
+}
