@@ -17,7 +17,32 @@
       "enum": [
         "document",
         "data_point"
-      ]
+      ],
+      "description": "Legacy field \u2014 kept for backward compatibility. Use field_type for new records."
+    },
+    "field_type": {
+      "type": "string",
+      "enum": [
+        "file_upload",
+        "text",
+        "textarea",
+        "number",
+        "date",
+        "dropdown",
+        "multi_select",
+        "checkbox",
+        "yes_no",
+        "signature",
+        "section_header"
+      ],
+      "description": "Rich field type. Defaults: 'document' \u2192 file_upload, 'data_point' \u2192 textarea"
+    },
+    "field_options": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Choices for dropdown and multi_select field types"
     },
     "client_types": {
       "type": "array",
@@ -53,11 +78,55 @@
     "sort_order": {
       "type": "number",
       "default": 0
+    },
+    "validation_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Must be completed before submission"
+    },
+    "validation_accepted_file_types": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Accepted file extensions for file_upload e.g. ['pdf','jpg','png']"
+    },
+    "validation_max_file_size_mb": {
+      "type": "number",
+      "default": 25,
+      "description": "Max file size in MB for file_upload"
+    },
+    "validation_min_length": {
+      "type": "number",
+      "description": "Minimum character length for text/textarea"
+    },
+    "validation_max_length": {
+      "type": "number",
+      "description": "Maximum character length for text/textarea"
+    },
+    "validation_min_value": {
+      "type": "number",
+      "description": "Minimum value for number fields"
+    },
+    "validation_max_value": {
+      "type": "number",
+      "description": "Maximum value for number fields"
+    },
+    "condition_depends_on_item_id": {
+      "type": "string",
+      "description": "Item ID this field conditionally depends on"
+    },
+    "condition_equals_value": {
+      "type": "string",
+      "description": "Value the dependency field must equal for this field to show"
+    },
+    "section_title": {
+      "type": "string",
+      "description": "Display title when field_type is 'section_header'"
     }
   },
   "required": [
     "tenant_id",
-    "label",
-    "item_type"
+    "label"
   ]
 }
