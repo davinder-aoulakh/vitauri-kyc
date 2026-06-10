@@ -99,6 +99,8 @@ export default function OutreachTemplatesTab({ tenant }) {
   const [modal, setModal]         = useState(null);
   const [saving, setSaving]       = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewTemplates, setPreviewTemplates] = useState(null); // null = all, otherwise [tmpl]
+  const [previewTitle, setPreviewTitle] = useState(null);
   const [aiOpen, setAiOpen] = useState(false);
   const quillRef = useRef(null);
   const { toast } = useToast();
@@ -187,7 +189,7 @@ export default function OutreachTemplatesTab({ tenant }) {
           <p className="text-xs text-muted-foreground mt-0.5">Field templates used when building outreach requests. Drag to reorder.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={() => setPreviewOpen(true)}>
+          <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={() => { setPreviewTemplates(null); setPreviewTitle(null); setPreviewOpen(true); }}>
             <Eye className="w-3.5 h-3.5" /> Preview in Portal
           </Button>
           <Button size="sm" variant="outline" className="text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/5" onClick={() => setAiOpen(true)}>
@@ -264,12 +266,16 @@ export default function OutreachTemplatesTab({ tenant }) {
                             <td className="px-4 py-3"><Switch checked={!!tmpl.is_active} onCheckedChange={() => toggleActive(tmpl)} /></td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1 justify-end">
-                                <Button size="sm" variant="ghost" className="h-7 text-xs" title="Clone" onClick={() => cloneTemplate(tmpl)}>
-                                  <Copy className="w-3 h-3" />
-                                </Button>
-                                <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setModal({ mode: 'edit', data: { ...tmpl } })}>
-                                  <Pencil className="w-3 h-3" />
-                                </Button>
+                               <Button size="sm" variant="ghost" className="h-7 text-xs" title="Preview in Portal"
+                                 onClick={() => { setPreviewTemplates([tmpl]); setPreviewTitle(`Document Request — ${tmpl.label}`); setPreviewOpen(true); }}>
+                                 <Eye className="w-3 h-3" />
+                               </Button>
+                               <Button size="sm" variant="ghost" className="h-7 text-xs" title="Clone" onClick={() => cloneTemplate(tmpl)}>
+                                 <Copy className="w-3 h-3" />
+                               </Button>
+                               <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setModal({ mode: 'edit', data: { ...tmpl } })}>
+                                 <Pencil className="w-3 h-3" />
+                               </Button>
                                 <Button size="sm" variant="ghost" className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => remove(tmpl.id)}>
                                   <Trash2 className="w-3 h-3" />
                                 </Button>
@@ -422,8 +428,9 @@ export default function OutreachTemplatesTab({ tenant }) {
       <PortalPreviewModal
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
-        templates={templates}
+        templates={previewTemplates ?? templates}
         tenant={tenant}
+        title={previewTitle}
       />
     </div>
   );
