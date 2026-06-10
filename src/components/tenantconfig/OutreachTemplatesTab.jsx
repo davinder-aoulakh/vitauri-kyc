@@ -25,6 +25,15 @@ const BLANK = {
   field_options: [], validation_accepted_file_types: [], validation_max_file_size_mb: 25,
 };
 
+const IDV_DOC_TYPES = ['Passport', 'Driving_Licence', 'National_ID', 'Residence_Permit'];
+
+const IDV_DEFAULTS = {
+  idv_accepted_doc_types: ['Passport', 'Driving_Licence', 'National_ID'],
+  idv_min_match_score: 75,
+  idv_liveness_required: true,
+  idv_auto_proceed: false,
+};
+
 const PLACEHOLDERS = [
   { group: 'Client', tokens: [
     { label: 'Full Name',       value: '{{client.full_name}}' },
@@ -249,9 +258,18 @@ export default function OutreachTemplatesTab({ tenant }) {
                               </div>
                             </td>
                             <td className="px-4 py-3">
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                                {getFieldTypeLabel(tmpl.field_type || (tmpl.item_type === 'document' ? 'file_upload' : 'textarea'))}
-                              </span>
+                              {tmpl.field_type === 'id_verification' ? (
+                                <div>
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium">
+                                    🪪 Identity Verification
+                                  </span>
+                                  <div className="text-xs text-muted-foreground mt-0.5">Min match: {tmpl.idv_min_match_score ?? 75}%</div>
+                                </div>
+                              ) : (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                  {getFieldTypeLabel(tmpl.field_type || (tmpl.item_type === 'document' ? 'file_upload' : 'textarea'))}
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex gap-1 flex-wrap">
@@ -329,15 +347,90 @@ export default function OutreachTemplatesTab({ tenant }) {
               {/* Field type picker */}
               <FieldTypePicker
                 value={modal.data.field_type || 'file_upload'}
-                onChange={v => setModal(m => ({ ...m, data: { ...m.data, field_type: v, item_type: v === 'file_upload' ? 'document' : 'data_point' } }))}
+                onChange={v => {
+                  const extra = v === 'id_verification' ? IDV_DEFAULTS : {};
+                  setModal(m => ({ ...m, data: { ...m.data, field_type: v, item_type: v === 'file_upload' ? 'document' : 'data_point', ...extra } }));
+                }}
               />
 
-              {/* Type-specific config */}
-              <FieldTypeConfig
-                fieldType={modal.data.field_type || 'file_upload'}
-                data={modal.data}
-                setData={patch => setModal(m => ({ ...m, data: typeof patch === 'function' ? patch(m.data) : { ...m.data, ...patch } }))}
-              />
+              {/* IDV-specific config */}
+              {modal.data.field_type === 'id_verification' && (
+                <div className="space-y-4 border border-indigo-100 bg-indigo-50/50 rounded-xl p-4">
+                  <div className="text-xs font-semibold text-indigo-700 flex items-center gap-1.5">🪪 Identity Verification Settings</div>
+
+                  {/* Accepted doc types */}
+                  <div>
+                    <label className="text-xs font-medium block mb-1.5">Accepted Document Types</label>
+                    <div className="flex flex-wrap gap-2">
+                      {IDV_DOC_TYPES.map(dt => {
+                        const checked = (modal.data.idv_accepted_doc_types || []).includes(dt);
+                        return (
+                          <label key={dt} className={cn(
+                            'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border cursor-pointer transition-all select-none',
+                            checked ? 'bg-indigo-100 border-indigo-400 text-indigo-700 font-medium' : 'border-border text-muted-foreground hover:border-indigo-300'
+                          )}>
+                            <input type="checkbox" className="hidden" checked={checked} onChange={() => {
+                              setModal(m => {
+                                const cur = m.data.idv_accepted_doc_types || [];
+                                return { ...m, data: { ...m.data, idv_accepted_doc_types: checked ? cur.filter(x => x !== dt) : [...cur, dt] } };
+                              });
+                            }} />
+                            {dt.replace(/_/g, ' ')}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Min match score */}
+                  <div>
+                    <label className="text-xs font-medium block mb-1.5">Minimum Match Score to Pass</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number" min={50} max={100}
+                        value={modal.data.idv_min_match_score ?? 75}
+                        onChange={e => setModal(m => ({ ...m, data: { ...m.data, idv_min_match_score: Number(e.target.value) } }))}
+                        className="h-9 text-sm w-24"
+                      />
+                      <span className="text-xs text-muted-foreground">%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Clients scoring below this threshold will be flagged for manual review</p>
+                  </div>
+
+                  {/* Liveness check */}
+                  <div className="flex items-start gap-3">
+                    <Switch
+                      checked={!!modal.data.idv_liveness_required}
+                      onCheckedChange={v => setModal(m => ({ ...m, data: { ...m.data, idv_liveness_required: v } }))}
+                    />
+                    <div>
+                      <div className="text-xs font-medium">Require Liveness Check</div>
+                      <p className="text-xs text-muted-foreground">Client must blink before the selfie is captured</p>
+                    </div>
+                  </div>
+
+                  {/* Auto-proceed */}
+                  <div className="flex items-start gap-3">
+                    <Switch
+                      checked={!!modal.data.idv_auto_proceed}
+                      onCheckedChange={v => setModal(m => ({ ...m, data: { ...m.data, idv_auto_proceed: v } }))}
+                    />
+                    <div>
+                      <div className="text-xs font-medium">Auto-complete when passed</div>
+                      <p className="text-xs text-muted-foreground">Automatically marks this item as received when the match passes</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Type-specific config (hidden for id_verification) */}
+              {modal.data.field_type !== 'id_verification' && (
+                <FieldTypeConfig
+                  fieldType={modal.data.field_type || 'file_upload'}
+                  data={modal.data}
+                  setData={patch => setModal(m => ({ ...m, data: typeof patch === 'function' ? patch(m.data) : { ...m.data, ...patch } }))}
+                />
+              )}
 
               {/* Required toggle (hidden for section header) */}
               {!isSectionHeader && (

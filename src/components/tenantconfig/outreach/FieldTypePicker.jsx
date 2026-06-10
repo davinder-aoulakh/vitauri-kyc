@@ -12,7 +12,8 @@ export const FIELD_TYPES = [
   { value: 'checkbox',       label: 'Checkbox',        icon: '✓' },
   { value: 'yes_no',         label: 'Yes / No',        icon: '◐' },
   { value: 'signature',      label: 'Signature',       icon: '✍' },
-  { value: 'section_header', label: 'Section Header',  icon: '—' },
+  { value: 'section_header',   label: 'Section Header',        icon: '—' },
+  { value: 'id_verification', label: 'Identity Verification', icon: '🪪', description: 'Client uploads ID document + takes selfie. Faces are compared automatically.' },
 ];
 
 export default function FieldTypePicker({ value, onChange }) {
