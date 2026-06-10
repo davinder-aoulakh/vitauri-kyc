@@ -62,6 +62,49 @@ function generateToken() {
   return Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
+function buildEmailHtml(tenant, client, req, portalUrl) {
+  const primaryColor = tenant?.branding_primary_color || '#1A6BFF';
+  const buttonRadius = { square: '0px', rounded: '8px', pill: '9999px' }[tenant?.branding_button_radius] || '8px';
+  const fontFamily = tenant?.branding_font_family || 'Inter, sans-serif';
+  const itemListHtml = (req.items || []).map(i => `
+    <tr>
+      <td style="padding:8px 0;border-bottom:1px solid #eee;font-size:14px;color:#374151;">
+        ${i.label}
+        <span style="font-size:12px;color:#9CA3AF;margin-left:8px;">(${i.item_type === 'file_upload' || i.item_type === 'document' ? 'Document' : 'Information'})</span>
+      </td>
+    </tr>`).join('');
+
+  return `
+    <div style="font-family:${fontFamily};max-width:620px;margin:0 auto;background:#ffffff;">
+      <div style="background:${primaryColor};padding:24px 32px;">
+        ${tenant?.branding_logo_url
+          ? `<img src="${tenant.branding_logo_url}" style="height:36px;object-fit:contain;" alt="${tenant?.name || ''}" />`
+          : `<span style="color:white;font-size:20px;font-weight:700;">${tenant?.name || ''}</span>`}
+      </div>
+      <div style="padding:32px;">
+        <p style="font-size:15px;color:#111827;margin-bottom:8px;">${req.message || `Dear ${client?.full_name || 'Client'},`}</p>
+        <p style="font-size:14px;color:#374151;margin-bottom:24px;">
+          As part of our review process, we kindly request the following information by
+          <strong>${req.deadline ? format(parseISO(req.deadline), 'd MMMM yyyy') : '—'}</strong>:
+        </p>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">${itemListHtml}</table>
+        <div style="text-align:center;margin:32px 0;">
+          <a href="${portalUrl}" style="background:${primaryColor};color:#ffffff;padding:14px 32px;border-radius:${buttonRadius};text-decoration:none;font-weight:600;font-size:15px;display:inline-block;">
+            Submit Documents →
+          </a>
+        </div>
+        <p style="font-size:12px;color:#9CA3AF;">This is a secure, personalised link. Please do not share it with others.</p>
+      </div>
+      ${tenant?.portal_footer_text
+        ? `<div style="padding:16px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#6B7280;">${tenant.portal_footer_text}</div>`
+        : ''}
+      ${!tenant?.white_label_enabled
+        ? `<div style="padding:12px 32px;background:#f3f4f6;font-size:11px;color:#9CA3AF;text-align:center;">Powered by Vitauri KYC</div>`
+        : ''}
+    </div>
+  `;
+}
+
 export default function OutreachStep({ kycCase, client, currentUser, tenant }) {
   const [requests, setRequests]   = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -211,27 +254,13 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
     if (!client?.primary_contact_email) return;
     setSending(true);
     const portalUrl = getPortalUrl(req);
-    const fromName = tenant?.name || 'KYC Compliance';
-
-    const itemListHtml = (req.items || []).map(i => `<li>${i.label}</li>`).join('');
-    const body = `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">
-        ${tenant?.branding_logo_url ? `<img src="${tenant.branding_logo_url}" style="height:40px;margin-bottom:24px;" alt="${tenant.name}" />` : `<h2 style="color:#0F1F3D;margin-bottom:24px;">${tenant?.name || 'KYC'}</h2>`}
-        <p>${req.message || `Dear ${client?.full_name || 'Client'},`}</p>
-        <p>As part of our ongoing review, we kindly request the following by <strong>${req.deadline ? format(parseISO(req.deadline), 'd MMMM yyyy') : '—'}</strong>:</p>
-        <ul>${itemListHtml}</ul>
-        <p style="margin-top:24px;">
-          <a href="${portalUrl}" style="background:#1A6BFF;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block;">
-            Submit Documents →
-          </a>
-        </p>
-        <p style="color:#888;font-size:12px;margin-top:32px;">This is a secure link for your use only. Please do not share it.</p>
-      </div>
-    `;
+    const fromName = tenant?.email_from_name || tenant?.name || 'Compliance Team';
+    const body = buildEmailHtml(tenant, client, req, portalUrl);
 
     try {
       await base44.integrations.Core.SendEmail({
         from_name: fromName,
+        ...(tenant?.email_from_address ? { from_email: tenant.email_from_address } : {}),
         to: client.primary_contact_email,
         subject: emailSubject || `Action Required: Documents needed — ${tenant?.name || 'KYC Review'}`,
         body,
