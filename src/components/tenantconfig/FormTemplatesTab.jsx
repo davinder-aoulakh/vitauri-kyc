@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
+import FormTemplatePreview from './FormTemplatePreview';
 
 const CLIENT_TYPES  = ['NP', 'ORG'];
 const CASE_TYPES    = ['Onboarding', 'Periodic_Review', 'Event_Driven_Review', 'Offboarding'];
@@ -158,6 +159,7 @@ export default function FormTemplatesTab({ tenant }) {
   const [aiDesc, setAiDesc]           = useState('');
   const [aiLoading, setAiLoading]     = useState(false);
   const [aiStatus, setAiStatus]       = useState(null);
+  const [previewTemplate, setPreviewTemplate] = useState(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -405,6 +407,10 @@ Only include items whose ids exist in the library list above. Return valid JSON 
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
+                      <Button size="sm" variant="ghost" className="h-7 text-xs gap-1"
+                        onClick={() => setPreviewTemplate(tmpl)} title="Preview in portal">
+                        <Eye className="w-3.5 h-3.5" />
+                      </Button>
                       <Button size="sm" variant="ghost" className="h-7 text-xs"
                         onClick={() => setModal({ mode: 'edit', data: { ...tmpl } })}>
                         <Pencil className="w-3 h-3" />
@@ -619,6 +625,10 @@ Only include items whose ids exist in the library list above. Return valid JSON 
               {/* Footer */}
               <div className="flex gap-2 justify-end pt-3 border-t border-border">
                 <Button variant="outline" onClick={() => setModal(null)}>Cancel</Button>
+                <Button type="button" variant="outline" className="gap-1.5"
+                  onClick={() => setPreviewTemplate(modal.data)}>
+                  <Eye className="w-3.5 h-3.5" /> Preview in Portal
+                </Button>
                 <Button onClick={save} disabled={saving || !modal.data.name} className="gap-2">
                   {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   Save Template
@@ -639,6 +649,14 @@ Only include items whose ids exist in the library list above. Return valid JSON 
           onAdd={addFieldFromLibrary}
         />
       )}
+
+      <FormTemplatePreview
+        open={!!previewTemplate}
+        template={previewTemplate}
+        tenant={tenant}
+        emailTemplates={emailTmpls}
+        onClose={() => setPreviewTemplate(null)}
+      />
     </div>
   );
 }
