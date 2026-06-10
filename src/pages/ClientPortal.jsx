@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { FileText, Upload, CheckCircle, Clock, Send, Loader2, MessageCircle, AlertTriangle, X, ChevronRight, ArrowLeft, LayoutDashboard, Shield, ToggleLeft, ToggleRight, PenLine } from 'lucide-react';
 import { portalSecureUpload } from '@/lib/securityUtils';
 import SubmissionConfirmation from '@/components/portal/SubmissionConfirmation';
+import IdVerificationField from '@/components/portal/IdVerificationField';
 import { format, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -180,6 +181,11 @@ export default function ClientPortal() {
           uploading: false,
           done: item.status === 'Received' || item.status === 'Verified',
           selected: [], // for multi_select / checkbox
+          idvResult: (item.idv_status && item.idv_status !== 'Pending') ? {
+            idv_status:           item.idv_status,
+            idv_similarity_score: item.idv_similarity_score,
+            idv_confidence:       item.idv_confidence,
+          } : null,
         };
       });
     });
@@ -286,6 +292,29 @@ export default function ClientPortal() {
     const updatedItems = (outreach.items || []).map(item => {
       const s = states[item.item_id] || {};
       const ft = item.field_type || (item.item_type === 'document' ? 'file_upload' : 'textarea');
+
+      // IDV items — spread parsed IDV fields onto the saved item
+      if (ft === 'id_verification') {
+        let idvFields = {};
+        try { idvFields = JSON.parse(s.text || '{}'); } catch {}
+        return {
+          ...item,
+          response_text: s.text || '',
+          file_url:      s.fileUrl || '',
+          status: (idvFields.idv_status === 'Pass' || idvFields.idv_status === 'Inconclusive') ? 'Received' : 'Requested',
+          idv_status:           idvFields.idv_status,
+          idv_similarity_score: idvFields.idv_similarity_score,
+          idv_confidence:       idvFields.idv_confidence,
+          idv_document_type:    idvFields.idv_document_type,
+          idv_selfie_url:       idvFields.idv_selfie_url,
+          idv_doc_url:          idvFields.idv_doc_url,
+          idv_checked_at:       idvFields.idv_checked_at,
+          idv_failure_reason:   idvFields.idv_failure_reason,
+          idv_liveness_passed:  idvFields.idv_liveness_passed,
+          idv_provider:         idvFields.idv_provider,
+        };
+      }
+
       let responseText = s.text || item.response_text || '';
       if (ft === 'multi_select' || ft === 'checkbox') responseText = (s.selected || []).join(', ');
       const isDone = isItemCompleted(item, s) || item.field_type === 'section_header';
@@ -706,8 +735,51 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
 
                 {!s.done && (
                   <div className="px-4 pb-4 mt-1">
+                    {/* id_verification */}
+                    {(() => {
+                      const isIdv   = ft === 'id_verification';
+                      const idvDone = !!s.idvResult;
+                      const tenantPrimary = branding.primary;
+                      const tenantRadius  = branding.radius;
+                      if (!isIdv) return null;
+                      if (!idvDone) return (
+                        <IdVerificationField
+                          item={item}
+                          primaryColor={tenantPrimary}
+                          buttonRadius={tenantRadius}
+                          onComplete={idvResult => {
+                            setItemStateMap(prev => ({
+                              ...prev,
+                              [outreach.id]: {
+                                ...prev[outreach.id],
+                                [item.item_id]: {
+                                  ...prev[outreach.id]?.[item.item_id],
+                                  done:    idvResult.idv_status === 'Pass' || idvResult.idv_status === 'Inconclusive',
+                                  idvResult,
+                                  text:    JSON.stringify(idvResult),
+                                  fileUrl: idvResult.idv_selfie_url || '',
+                                },
+                              },
+                            }));
+                          }}
+                        />
+                      );
+                      return (
+                        <div style={{
+                          padding: '12px 14px', borderRadius: '10px',
+                          background: s.idvResult.idv_status === 'Pass' ? '#F0FDF4' : '#FEF2F2',
+                          border: `1px solid ${s.idvResult.idv_status === 'Pass' ? '#10B981' : '#EF4444'}`,
+                          fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px',
+                        }}>
+                          {s.idvResult.idv_status === 'Pass' ? '✅' : '❌'}
+                          Identity verification {s.idvResult.idv_status === 'Pass' ? 'passed' : 'failed'}{' '}
+                          — {s.idvResult.idv_similarity_score}% face match
+                        </div>
+                      );
+                    })()}
+
                     {/* file_upload */}
-                    {ft === 'file_upload' && (
+                    {ft !== 'id_verification' && ft === 'file_upload' && (
                       s.fileUrl ? (
                         <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2.5">
                           <CheckCircle className="w-4 h-4 flex-shrink-0" />
@@ -735,7 +807,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                     )}
 
                     {/* text */}
-                    {ft === 'text' && (
+                    {ft !== 'id_verification' && ft === 'text' && (
                       <Input
                         value={s.text || ''}
                         onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
@@ -746,7 +818,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                     )}
 
                     {/* textarea (default for data_point) */}
-                    {(ft === 'textarea' || (ft !== 'file_upload' && ft !== 'text' && ft !== 'number' && ft !== 'date' && ft !== 'dropdown' && ft !== 'multi_select' && ft !== 'checkbox' && ft !== 'yes_no' && ft !== 'signature' && item.item_type === 'data_point')) && (
+                    {ft !== 'id_verification' && (ft === 'textarea' || (ft !== 'file_upload' && ft !== 'text' && ft !== 'number' && ft !== 'date' && ft !== 'dropdown' && ft !== 'multi_select' && ft !== 'checkbox' && ft !== 'yes_no' && ft !== 'signature' && item.item_type === 'data_point')) && (
                       <Textarea
                         value={s.text || ''}
                         onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
