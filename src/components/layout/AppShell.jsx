@@ -11,7 +11,7 @@ import {
   LayoutDashboard, FolderOpen, Users, Search, Shield,
   Settings, BarChart3, AlertTriangle, Calendar, Archive,
   ChevronLeft, ChevronRight, Menu, X, LogOut,
-  Building2, UserCircle, Bell, ClipboardList, ScanSearch, Mail
+  Building2, UserCircle, Bell, ClipboardList, ScanSearch, Mail, Send
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -32,10 +32,17 @@ const navItems = [
     ],
   },
   {
+    group: 'OUTREACH',
+    outreachOnly: true,
+    items: [
+      { label: 'New Outreach', icon: Send, href: '/outreach/new', permission: null },
+      { label: 'Outreach Dashboard', icon: Mail, href: '/outreach-dashboard', permission: null, badge: 'outreach' },
+    ],
+  },
+  {
     group: 'MONITORING',
     items: [
       { label: 'Screening', icon: Shield, href: '/monitoring', permission: null, badge: 'alerts' },
-      { label: 'Outreach', icon: Mail, href: '/outreach-dashboard', permission: null, badge: 'outreach' },
       { label: 'Batch Screening', icon: ScanSearch, href: '/batch-screening', permission: 'createEditClient' },
       { label: 'Review Planner', icon: Calendar, href: '/review-planner', permission: 'viewAllTenantCases' },
     ],
@@ -60,6 +67,7 @@ export default function AppShell({ children }) {
 
   const { isOpsViewing, setOpsTenantId } = useTenant();
   const userRole = currentUser?.app_role;
+  const OUTREACH_ROLES = ['Tenant Admin', 'Compliance Admin', 'Manager'];
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
 
   // Fetch outreach count for badge
@@ -100,6 +108,9 @@ export default function AppShell({ children }) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-5">
         {navItems.map((group) => {
+          // Hide Outreach section for roles that are not allowed
+          if (group.outreachOnly && !OUTREACH_ROLES.includes(userRole)) return null;
+
           const visibleItems = group.items.filter(item =>
             !item.permission || hasPermission(userRole, item.permission)
           );

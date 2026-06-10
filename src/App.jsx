@@ -31,6 +31,7 @@ import ArchiveClients from './pages/ArchiveClients';
 import AuditLogs from './pages/AuditLogs';
 import EntityMap from './pages/EntityMap';
 import OutreachDashboard from './pages/OutreachDashboard';
+import StandaloneOutreach from './pages/StandaloneOutreach';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -102,6 +103,7 @@ const AuthenticatedApp = () => {
       {/* Monitoring */}
       <Route path="/monitoring" element={<MonitoringAlerts />} />
       <Route path="/outreach-dashboard" element={<OutreachDashboard />} />
+      <Route path="/outreach/new" element={<StandaloneOutreach />} />
 
       {/* Monitoring / Planning */}
       <Route path="/review-planner" element={<ReviewPlanner />} />
