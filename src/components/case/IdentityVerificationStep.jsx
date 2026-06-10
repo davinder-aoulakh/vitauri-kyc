@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import AutoSaveIndicator from '@/components/shared/AutoSaveIndicator';
 import { base44 } from '@/api/base44Client';
@@ -275,8 +275,35 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved]   = useState(false);
   const [ocrApplied, setOcrApplied] = useState(null); // track what was OCR-applied
+  const [portalIdvResults, setPortalIdvResults] = useState([]);
 
   const set = (key, field, val) => setVerifications(v => ({ ...v, [key]: { ...v[key], [field]: val } }));
+
+  async function loadPortalIdvResults() {
+    try {
+      const outreaches = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
+      const idvItems = (outreaches || []).flatMap(req =>
+        (req.items || [])
+          .filter(item => item.field_type === 'id_verification' && item.idv_status && item.idv_status !== 'Pending')
+          .map(item => ({ ...item, outreach_req_id: req.id }))
+      );
+      setPortalIdvResults(idvItems);
+    } catch (err) {
+      console.error('Could not load portal IDV results:', err);
+    }
+  }
+
+  useEffect(() => { loadPortalIdvResults(); }, [kycCase.id]);
+
+  function applyPortalIdv(idvItem) {
+    set('primary', 'doc_type', idvItem.idv_document_type || '');
+    set('primary', 'status',   idvItem.idv_status === 'Pass' ? 'Verified' : 'Failed');
+    set('primary', 'notes',
+      `Portal IDV: ${idvItem.idv_status} — ${idvItem.idv_similarity_score}% face match ` +
+      `(${idvItem.idv_provider}). Liveness: ${idvItem.idv_liveness_passed ? 'passed' : 'not checked'}. ` +
+      `Checked: ${idvItem.idv_checked_at ? new Date(idvItem.idv_checked_at).toLocaleDateString() : '—'}.`
+    );
+  }
 
   // Auto-save verification state to AuditEvent (lightweight — just record state snapshot)
   const { autoSaving, lastSaved } = useAutoSave(
@@ -375,6 +402,61 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
             : 'Upload an identity document to auto-extract fields, then verify manually'}
         </p>
       </div>
+
+      {/* ── Portal IDV Results ── */}
+      {portalIdvResults.length > 0 && (
+        <div className="rounded-xl border overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-primary/5 border-b border-primary/20">
+            <span className="text-sm font-semibold text-primary">🪪 Portal Identity Verification Results</span>
+            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-auto">
+              Captured by client
+            </span>
+          </div>
+          {portalIdvResults.map((item, idx) => (
+            <div key={idx} className={cn(
+              'px-4 py-3 border-b border-border last:border-b-0',
+              item.idv_status === 'Pass' ? 'bg-emerald-50/40' : 'bg-red-50/40'
+            )}>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{item.idv_status === 'Pass' ? '✅' : '❌'}</span>
+                  <div>
+                    <div className="text-sm font-medium">
+                      {item.label} — {item.idv_document_type || 'ID Document'}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {item.idv_similarity_score}% match · {item.idv_confidence} confidence
+                      {item.idv_liveness_passed && ' · Liveness ✓'}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {item.idv_doc_url && item.idv_selfie_url && (
+                    <div className="flex items-center gap-1">
+                      <img src={item.idv_doc_url} alt="Doc"
+                        className="w-8 h-8 rounded-full object-cover border border-white shadow-sm" />
+                      <img src={item.idv_selfie_url} alt="Selfie"
+                        className="w-8 h-8 rounded-full object-cover border border-white shadow-sm -ml-2" />
+                    </div>
+                  )}
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                    onClick={() => applyPortalIdv(item)}>
+                    Apply ↓
+                  </Button>
+                </div>
+              </div>
+              {item.idv_failure_reason && (
+                <div className="text-xs text-red-600 mt-1">{item.idv_failure_reason}</div>
+              )}
+            </div>
+          ))}
+          {portalIdvResults.some(i => i.idv_status === 'Pass') && (
+            <div className="px-4 py-2 bg-emerald-50 text-xs text-emerald-700">
+              ✓ Click "Apply ↓" on a result to pre-fill the verification form below
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── OCR Upload Panel (NP: Passport/ID only) ── */}
       {!isOrg && (
