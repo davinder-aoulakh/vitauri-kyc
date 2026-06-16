@@ -214,7 +214,13 @@ Be specific and actionable. Reference template names like "Second Reminder" or "
                     return (
                       <tr
                         key={req.id}
-                        onClick={() => navigate(`/case/${req.case_id}`)}
+                        onClick={() => {
+                          if (req.case_id) {
+                            navigate(`/case/${req.case_id}`);
+                          } else {
+                            navigate(`/client/${req.client_id}`);
+                          }
+                        }}
                         className={cn(
                           'border-b border-border last:border-0 cursor-pointer transition-colors hover:bg-muted/40',
                           isOverdue && 'bg-red-50/50'
@@ -224,7 +230,10 @@ Be specific and actionable. Reference template names like "Second Reminder" or "
                           {client?.full_name || '—'}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
-                          {kycCase?.case_type?.replace(/_/g, ' ') || '—'}
+                          {req.case_id
+                            ? (kycCase?.case_type?.replace(/_/g, ' ') || '—')
+                            : <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">Standalone</span>
+                          }
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                           {req.case_id?.slice(-8) || '—'}
