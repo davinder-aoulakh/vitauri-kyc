@@ -6,10 +6,16 @@
       "type": "string"
     },
     "case_id": {
-      "type": "string"
+      "type": "string",
+      "description": "FK to KycCase \u2014 omitted for standalone outreach"
     },
     "client_id": {
       "type": "string"
+    },
+    "standalone": {
+      "type": "boolean",
+      "default": false,
+      "description": "True for outreach not linked to a KYC case"
     },
     "message": {
       "type": "string"
@@ -89,7 +95,6 @@
   },
   "required": [
     "tenant_id",
-    "case_id",
     "client_id"
   ]
 }
