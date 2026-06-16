@@ -245,10 +245,32 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
     const items = selectedItems.map(id => {
       const item = libraryItems.find(d => d.id === id);
       return {
-        item_id:   id,
-        item_type: item?.field_type || item?.item_type || 'document',
-        label:     item?.label || id,
-        status:    'Requested',
+        // Core fields
+        item_id:     id,
+        label:       item?.label || id,
+        description: item?.description || '',
+        status:      'Requested',
+
+        // Field type — BOTH slots so portal resolves correctly
+        field_type: item?.field_type || 'textarea',
+        item_type:  item?.item_type  || (item?.field_type === 'file_upload' ? 'document' : 'data_point'),
+
+        // Type-specific config — portal needs these to render correctly
+        field_options:                  item?.field_options               || [],
+        validation_required:            item?.validation_required         ?? false,
+        validation_accepted_file_types: item?.validation_accepted_file_types || [],
+        validation_max_file_size_mb:    item?.validation_max_file_size_mb || 25,
+        validation_min_length:          item?.validation_min_length       || null,
+        validation_max_length:          item?.validation_max_length       || null,
+
+        // IDV config — required for the identity verification flow to activate
+        idv_accepted_doc_types: item?.idv_accepted_doc_types || ['Passport', 'Driving_Licence', 'National_ID'],
+        idv_min_match_score:    item?.idv_min_match_score    ?? 75,
+        idv_liveness_required:  item?.idv_liveness_required  ?? true,
+        idv_auto_proceed:       item?.idv_auto_proceed        ?? false,
+
+        // Section header
+        section_title: item?.section_title || '',
       };
     });
 
