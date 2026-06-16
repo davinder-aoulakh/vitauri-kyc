@@ -263,9 +263,8 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
 
         const req = await base44.entities.OutreachRequest.create({
           tenant_id:        tenant.id,
-          case_id:          null,
-          standalone:       true,
           client_id:        client.id,
+          standalone:       true,
           message,
           deadline,
           delivery_channel: channel,
