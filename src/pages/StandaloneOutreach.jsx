@@ -122,14 +122,32 @@ export default function StandaloneOutreach() {
     const tmpl = formTemplates.find(t => t.id === templateId);
     if (!tmpl) return;
     setSelectedFormTemplate(templateId);
+
     if (tmpl.default_deadline_days) {
       setDeadline(format(addDays(new Date(), tmpl.default_deadline_days), 'yyyy-MM-dd'));
     }
+
     if (tmpl.default_channel) setChannel(tmpl.default_channel);
-    // Pre-fill subject from associated email template
+
+    if (tmpl.items?.length > 0) {
+      const itemIds = tmpl.items
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+        .map(i => i.outreach_template_id)
+        .filter(Boolean);
+      setSelectedItems(itemIds);
+    }
+
     if (tmpl.email_template_id) {
       const emailTmpl = emailTemplates.find(e => e.id === tmpl.email_template_id);
-      if (emailTmpl) setEmailSubject(emailTmpl.subject || '');
+      if (emailTmpl) {
+        setEmailSubject(emailTmpl.subject || '');
+        if (emailTmpl.body_html) {
+          const plain = emailTmpl.body_html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          setMessage(plain);
+        } else if (emailTmpl.body_text) {
+          setMessage(emailTmpl.body_text);
+        }
+      }
     }
   }
 
@@ -445,6 +463,12 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
                     {formTemplates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {selectedFormTemplate && (
+                  <div className="flex items-center gap-1.5 text-xs text-primary mt-1.5">
+                    <CheckCircle className="w-3 h-3" />
+                    Template applied — {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} pre-selected
+                  </div>
+                )}
               </div>
             )}
 
