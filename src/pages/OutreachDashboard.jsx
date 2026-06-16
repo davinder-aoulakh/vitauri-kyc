@@ -4,7 +4,8 @@ import { base44 } from '@/api/base44Client';
 import AppShell from '@/components/layout/AppShell';
 import { useTenant } from '@/lib/tenantContext';
 import { differenceInDays, isToday, parseISO } from 'date-fns';
-import { Mail, AlertTriangle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Sparkles, Loader2 } from 'lucide-react';
+import { Mail, AlertTriangle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Sparkles, Loader2, Copy, ExternalLink } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 
 const STATUS_STYLES = {
@@ -47,6 +48,7 @@ function aiNextAction(request) {
 export default function OutreachDashboard() {
   const navigate = useNavigate();
   const { currentUser } = useTenant();
+  const { toast } = useToast();
   const [requests, setRequests] = useState([]);
   const [clients, setClients] = useState({});
   const [cases, setCases] = useState({});
@@ -237,12 +239,13 @@ Be specific and actionable. Reference template names like "Second Reminder" or "
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Days Since</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Contact</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">AI Next Action</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Portal</th>
                   </tr>
                 </thead>
                 <tbody>
                   {requests.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="text-center py-12 text-muted-foreground text-sm">No outreach requests found</td>
+                      <td colSpan={9} className="text-center py-12 text-muted-foreground text-sm">No outreach requests found</td>
                     </tr>
                   )}
                   {paginated.map(req => {
@@ -291,6 +294,33 @@ Be specific and actionable. Reference template names like "Second Reminder" or "
                         </td>
                         <td className={cn('px-4 py-3 text-xs font-medium', action.color)}>
                           {action.label}
+                        </td>
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                          {req.access_token ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`${window.location.origin}/portal/${req.access_token}`);
+                                  toast({ description: 'Portal link copied.' });
+                                }}
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                                title="Copy portal link"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                              <a
+                                href={`${window.location.origin}/portal/${req.access_token}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:text-primary/80 transition-colors"
+                                title="Open portal"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground/40">—</span>
+                          )}
                         </td>
                       </tr>
                     );
