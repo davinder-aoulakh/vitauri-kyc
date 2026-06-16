@@ -678,6 +678,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
 
   return (
     <div className="min-h-screen pb-8" style={{ backgroundColor: branding.bg, fontFamily: branding.font, color: branding.text }}>
+      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
       <Header />
       <div className="max-w-lg mx-auto px-4 pt-6 space-y-5">
 
@@ -763,6 +764,8 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                           item={item}
                           primaryColor={tenantPrimary}
                           buttonRadius={tenantRadius}
+                          portalUrl={`${window.location.origin}/portal/${outreach.access_token}`}
+                          outreachId={outreach.id}
                           onComplete={idvResult => {
                             setItemStateMap(prev => ({
                               ...prev,

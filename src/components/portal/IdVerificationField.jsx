@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import SelfieCaptureWidget from './SelfieCaptureWidget';
 import { compareFaces, loadFaceModels, getFaceDescriptor } from '@/lib/faceComparison';
@@ -17,7 +17,16 @@ export default function IdVerificationField({
   onComplete,
   primaryColor = '#1A6BFF',
   buttonRadius = '8px',
+  portalUrl = '',
+  outreachId = '',
 }) {
+  const isMobile = typeof window !== 'undefined' && (
+    /Mobi|Android|iPhone|iPad|iPod|Touch/i.test(navigator.userAgent) ||
+    ('ontouchstart' in window) ||
+    (navigator.maxTouchPoints > 1) ||
+    window.innerWidth < 900
+  );
+
   const [phase, setPhase] = useState('consent');
   const [docType, setDocType] = useState(null);
   const [docUrl, setDocUrl] = useState(null);
@@ -25,6 +34,42 @@ export default function IdVerificationField({
   const [idvResult, setIdvResult] = useState(null);
   const [uploadError, setUploadError] = useState('');
   const [uploading, setUploading] = useState(false);
+
+  const [qrStatus, setQrStatus] = useState('waiting'); // 'waiting' | 'completed' | 'failed'
+  const pollRef = useRef(null);
+
+  // Poll for IDV completion on desktop (mobile completes it directly)
+  useEffect(() => {
+    if (isMobile || !outreachId || !item?.item_id) return;
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const reqs = await base44.entities.OutreachRequest.filter({ id: outreachId });
+        const req  = reqs?.[0];
+        if (!req) return;
+        const idvItem = (req.items || []).find(i => i.item_id === item.item_id);
+        if (idvItem?.idv_status === 'Pass' || idvItem?.idv_status === 'Fail' ||
+            idvItem?.idv_status === 'Inconclusive') {
+          clearInterval(pollRef.current);
+          setQrStatus(idvItem.idv_status === 'Pass' ? 'completed' : 'failed');
+          onComplete({
+            idv_status:           idvItem.idv_status,
+            idv_similarity_score: idvItem.idv_similarity_score,
+            idv_confidence:       idvItem.idv_confidence,
+            idv_document_type:    idvItem.idv_document_type,
+            idv_selfie_url:       idvItem.idv_selfie_url,
+            idv_doc_url:          idvItem.idv_doc_url,
+            idv_checked_at:       idvItem.idv_checked_at,
+            idv_failure_reason:   idvItem.idv_failure_reason,
+            idv_liveness_passed:  idvItem.idv_liveness_passed,
+            idv_provider:         idvItem.idv_provider || 'mobile_qr',
+          });
+        }
+      } catch { /* ignore polling errors */ }
+    }, 3000);
+
+    return () => clearInterval(pollRef.current);
+  }, [isMobile, outreachId, item?.item_id]);
 
   const minScore = item?.idv_min_match_score ?? 75;
   const acceptedDocTypes = item?.idv_accepted_doc_types ?? ['Passport', 'Driving_Licence', 'National_ID'];
@@ -169,6 +214,59 @@ Image to analyse: ${selfieUrl}`,
     setSelfieUrl(null);
     setIdvResult(null);
     setUploadError('');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // DESKTOP: show QR code + polling instead of camera flow
+  // ─────────────────────────────────────────────────────────────────────────
+  if (!isMobile) {
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(portalUrl)}&color=0F1F3D&bgcolor=FFFFFF&margin=10`;
+    return (
+      <div style={{ border: `1px solid ${primaryColor}30`, borderRadius: '14px', padding: '24px', background: '#F8FAFF', textAlign: 'center' }}>
+        <div style={{ fontSize: 28, marginBottom: 10 }}>📱</div>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#1A2332', marginBottom: 6 }}>Complete on your phone</div>
+        <div style={{ fontSize: 13, color: '#64748B', marginBottom: 20, lineHeight: 1.5 }}>
+          Identity verification requires your camera. Scan the QR code below with your phone to continue — this page will update automatically once you're done.
+        </div>
+
+        {qrStatus === 'waiting' && (
+          <div style={{ display: 'inline-block', position: 'relative' }}>
+            <img src={qrUrl} alt="Scan to verify on mobile" width={220} height={220}
+              style={{ borderRadius: 12, border: '3px solid #E2E8F2', display: 'block' }} />
+            <div style={{ position: 'absolute', inset: -8, borderRadius: 18, border: `2px solid ${primaryColor}40`, animation: 'pulse 2s ease-in-out infinite' }} />
+          </div>
+        )}
+
+        {qrStatus === 'waiting' && (
+          <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 12, color: '#64748B' }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: primaryColor, animation: 'pulse 1.5s infinite' }} />
+            Waiting for you to complete on your phone…
+          </div>
+        )}
+
+        {qrStatus === 'completed' && (
+          <div style={{ marginTop: 20, padding: '16px 20px', background: '#F0FDF4', borderRadius: 10, border: '1px solid #10B981' }}>
+            <div style={{ fontSize: 24, marginBottom: 6 }}>✅</div>
+            <div style={{ fontWeight: 600, color: '#059669', fontSize: 14 }}>Identity Verified on your phone</div>
+            <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>This page has been updated. You can continue with your submission.</div>
+          </div>
+        )}
+
+        {qrStatus === 'failed' && (
+          <div style={{ marginTop: 20, padding: '16px 20px', background: '#FEF2F2', borderRadius: 10, border: '1px solid #EF4444' }}>
+            <div style={{ fontSize: 24, marginBottom: 6 }}>❌</div>
+            <div style={{ fontWeight: 600, color: '#DC2626', fontSize: 14 }}>Verification was not successful</div>
+            <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>Please scan the QR code again on your phone to try once more.</div>
+          </div>
+        )}
+
+        <div style={{ marginTop: 16, fontSize: 11, color: '#94A3B8' }}>
+          Can't scan?{' '}
+          <a href={portalUrl} target="_blank" rel="noopener noreferrer" style={{ color: primaryColor }}>Open link on this device instead</a>
+        </div>
+        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+      </div>
+    );
   }
 
   // ─────────────────────────────────────────────────────────────────────────
