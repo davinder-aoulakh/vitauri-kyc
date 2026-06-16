@@ -55,6 +55,9 @@ export default function OutreachDashboard() {
   const [advisoryOpen, setAdvisoryOpen] = useState(true);
   const [aiAdvisory, setAiAdvisory] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('active');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     if (!currentUser?.tenant_id) return;
@@ -125,6 +128,17 @@ Be specific and actionable. Reference template names like "Second Reminder" or "
   const partial = requests.filter(r => r.status === 'Partial_Response');
   const completedToday = requests.filter(r => r.status === 'Complete' && isToday(parseISO(r.updated_date || r.created_date)));
 
+  useEffect(() => setPage(1), [statusFilter]);
+
+  const filtered = requests.filter(req => {
+    if (statusFilter === 'active')   return req.status !== 'Complete';
+    if (statusFilter === 'complete') return req.status === 'Complete';
+    if (statusFilter === 'overdue')  return req.status !== 'Complete' && req.deadline && new Date(req.deadline) < new Date();
+    return true;
+  });
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   function itemProgress(request) {
     const items = request.items || [];
     if (!items.length) return '—';
@@ -186,6 +200,31 @@ Be specific and actionable. Reference template names like "Second Reminder" or "
         <div className="flex gap-4 items-start">
           {/* Table */}
           <div className="flex-1 bg-card border border-border rounded-xl overflow-hidden min-w-0">
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/20">
+              <span className="text-xs text-muted-foreground">Show:</span>
+              {[
+                { value: 'active',   label: 'Active' },
+                { value: 'overdue',  label: 'Overdue' },
+                { value: 'complete', label: 'Completed' },
+                { value: 'all',      label: 'All' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setStatusFilter(opt.value)}
+                  className={cn(
+                    'text-xs px-3 py-1 rounded-full border transition-colors',
+                    statusFilter === opt.value
+                      ? 'bg-primary text-white border-primary'
+                      : 'border-border text-muted-foreground hover:border-primary/40'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+              <span className="ml-auto text-xs text-muted-foreground">
+                {filtered.length} request{filtered.length !== 1 ? 's' : ''}
+              </span>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -206,7 +245,7 @@ Be specific and actionable. Reference template names like "Second Reminder" or "
                       <td colSpan={8} className="text-center py-12 text-muted-foreground text-sm">No outreach requests found</td>
                     </tr>
                   )}
-                  {requests.map(req => {
+                  {paginated.map(req => {
                     const client = clients[req.client_id];
                     const kycCase = cases[req.case_id];
                     const action = aiNextAction(req);
@@ -259,6 +298,27 @@ Be specific and actionable. Reference template names like "Second Reminder" or "
                 </tbody>
               </table>
             </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 flex items-center gap-1"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" /> Prev
+                </button>
+                <span className="text-xs text-muted-foreground">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 flex items-center gap-1"
+                >
+                  Next <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* AI Advisory Panel */}
