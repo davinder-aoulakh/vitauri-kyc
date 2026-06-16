@@ -16,22 +16,6 @@ import { cn } from '@/lib/utils';
 import { format, addDays } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
 
-const ALL_ITEMS = [
-  { id: 'passport',         label: 'Passport / National ID',              type: 'document',   applies: ['NP','ORG'] },
-  { id: 'proof_address',    label: 'Proof of Address',                    type: 'document',   applies: ['NP','ORG'] },
-  { id: 'ubo_register',     label: 'UBO Register Extract',                type: 'document',   applies: ['ORG'] },
-  { id: 'articles',         label: 'Articles of Association',             type: 'document',   applies: ['ORG'] },
-  { id: 'financial_stmt',   label: 'Financial Statements (2 years)',      type: 'document',   applies: ['ORG'] },
-  { id: 'tax_return',       label: 'Tax Return',                          type: 'document',   applies: ['NP','ORG'] },
-  { id: 'source_wealth',    label: 'Source of Wealth Declaration',        type: 'document',   applies: ['NP','ORG'] },
-  { id: 'beneficial_owner', label: 'Beneficial Owner Declaration',        type: 'document',   applies: ['ORG'] },
-  { id: 'salary_slip',      label: 'Recent Salary Slips (3 months)',      type: 'document',   applies: ['NP'] },
-  { id: 'bank_statement',   label: 'Bank Statements (3 months)',          type: 'document',   applies: ['NP','ORG'] },
-  { id: 'tin_dp',           label: 'Tax Identification Number (TIN)',     type: 'data_point', applies: ['NP','ORG'] },
-  { id: 'fatca_self_cert',  label: 'FATCA / CRS Self-Certification',      type: 'data_point', applies: ['NP','ORG'] },
-  { id: 'ubo_names',        label: 'Names & ownership % of all UBOs',     type: 'data_point', applies: ['ORG'] },
-  { id: 'sof_description',  label: 'Description of Source of Funds',     type: 'data_point', applies: ['NP','ORG'] },
-];
 
 function generateToken() {
   const arr = new Uint8Array(24);
@@ -60,6 +44,7 @@ export default function StandaloneOutreach() {
   // Step 2
   const [formTemplates, setFormTemplates] = useState([]);
   const [emailTemplates, setEmailTemplates] = useState([]);
+  const [libraryItems, setLibraryItems] = useState([]);
   const [selectedFormTemplate, setSelectedFormTemplate] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
   const [message, setMessage] = useState('');
@@ -76,8 +61,15 @@ export default function StandaloneOutreach() {
 
   useEffect(() => {
     if (tenant?.id) {
-      base44.entities.OutreachFormTemplate.filter({ tenant_id: tenant.id, is_active: true }).then(d => setFormTemplates(d || []));
-      base44.entities.EmailTemplate.filter({ tenant_id: tenant.id, is_active: true }).then(d => setEmailTemplates(d || []));
+      Promise.all([
+        base44.entities.OutreachFormTemplate.filter({ tenant_id: tenant.id, is_active: true }),
+        base44.entities.EmailTemplate.filter({ tenant_id: tenant.id, is_active: true }),
+        base44.entities.OutreachTemplate.filter({ tenant_id: tenant.id, is_active: true }, 'sort_order'),
+      ]).then(([forms, emails, library]) => {
+        setFormTemplates(forms || []);
+        setEmailTemplates(emails || []);
+        setLibraryItems(library || []);
+      });
     }
   }, [tenant]);
 
@@ -141,10 +133,10 @@ export default function StandaloneOutreach() {
     }
   }
 
-  // All unique item types across selected recipients
-  const catalogueItems = ALL_ITEMS.filter(item =>
+  const catalogueItems = libraryItems.filter(item =>
+    !item.client_types?.length ||
     recipients.length === 0 ||
-    recipients.some(r => item.applies.includes(r.client_type || 'NP'))
+    recipients.some(r => item.client_types.includes(r.client_type || 'NP'))
   );
 
   function toggleItem(id) {
@@ -223,8 +215,8 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
   async function sendAll() {
     setSending(true);
     const items = selectedItems.map(id => {
-      const item = ALL_ITEMS.find(d => d.id === id);
-      return { item_id: id, item_type: item?.type || 'document', label: item?.label || id, status: 'Requested' };
+      const item = libraryItems.find(d => d.id === id);
+      return { item_id: id, item_type: item?.field_type || item?.item_type || 'document', label: item?.label || id, status: 'Requested' };
     });
 
     const results = { sent: 0, failed: [] };
@@ -503,7 +495,7 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
               {aiSuggestions && (
                 <div className="mt-2 space-y-1">
                   {aiSuggestions.recommended_item_ids?.map(id => {
-                    const item = ALL_ITEMS.find(c => c.id === id);
+                    const item = libraryItems.find(c => c.id === id);
                     return item ? (
                       <div key={id} className="flex items-start gap-1.5 text-xs text-purple-700">
                         <CheckCircle className="w-3 h-3 text-purple-500 mt-0.5 flex-shrink-0" />
@@ -518,24 +510,33 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
             {/* Items checklist */}
             <div>
               <Label className="text-xs font-medium mb-2 block">Items to Request *</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-64 overflow-y-auto pr-1">
-                {catalogueItems.map(item => {
-                  const isAiSuggested = aiSuggestions?.recommended_item_ids?.includes(item.id);
-                  return (
-                    <label key={item.id} className={cn(
-                      'flex items-start gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition-colors',
-                      selectedItems.includes(item.id) ? 'border-primary bg-primary/5' : isAiSuggested ? 'border-purple-300 bg-purple-50/40' : 'border-border hover:bg-muted/30'
-                    )}>
-                      <input type="checkbox" checked={selectedItems.includes(item.id)} onChange={() => toggleItem(item.id)} className="rounded border-border mt-0.5" />
-                      <div>
-                        <div className={cn('text-sm leading-tight', selectedItems.includes(item.id) ? 'font-medium' : '')}>{item.label}</div>
-                        <div className="text-xs text-muted-foreground">{item.type === 'document' ? 'Document' : 'Data point'}</div>
-                      </div>
-                      {isAiSuggested && <Sparkles className="w-3 h-3 text-purple-500 ml-auto mt-0.5 flex-shrink-0" />}
-                    </label>
-                  );
-                })}
-              </div>
+              {libraryItems.length === 0 ? (
+                <div className="text-xs text-muted-foreground text-center py-6">
+                  {tenant?.id ? (
+                    <>No items in your library yet. <a href="/tenant-config" className="text-primary underline">Add items in Tenant Config → Outreach Templates</a></>
+                  ) : 'Loading…'}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-64 overflow-y-auto pr-1">
+                  {catalogueItems.map(item => {
+                    const isAiSuggested = aiSuggestions?.recommended_item_ids?.includes(item.id);
+                    const fieldTypeLabel = item.field_type === 'file_upload' || item.item_type === 'document' ? 'Document' : 'Data point';
+                    return (
+                      <label key={item.id} className={cn(
+                        'flex items-start gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition-colors',
+                        selectedItems.includes(item.id) ? 'border-primary bg-primary/5' : isAiSuggested ? 'border-purple-300 bg-purple-50/40' : 'border-border hover:bg-muted/30'
+                      )}>
+                        <input type="checkbox" checked={selectedItems.includes(item.id)} onChange={() => toggleItem(item.id)} className="rounded border-border mt-0.5" />
+                        <div>
+                          <div className={cn('text-sm leading-tight', selectedItems.includes(item.id) ? 'font-medium' : '')}>{item.label}</div>
+                          <div className="text-xs text-muted-foreground">{fieldTypeLabel}</div>
+                        </div>
+                        {isAiSuggested && <Sparkles className="w-3 h-3 text-purple-500 ml-auto mt-0.5 flex-shrink-0" />}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="flex justify-between pt-4 border-t border-border">
@@ -580,7 +581,7 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
                     <div className="text-xs font-medium text-muted-foreground mb-1.5">Items requested:</div>
                     <div className="flex flex-wrap gap-1.5">
                       {selectedItems.map(id => {
-                        const item = ALL_ITEMS.find(i => i.id === id);
+                        const item = libraryItems.find(i => i.id === id);
                         return <span key={id} className="text-xs bg-muted border border-border px-2 py-0.5 rounded-full">{item?.label || id}</span>;
                       })}
                     </div>
