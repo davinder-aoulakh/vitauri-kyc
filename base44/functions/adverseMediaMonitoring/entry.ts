@@ -10,7 +10,7 @@
  *
  * Designed to be called by a daily scheduled automation (no user auth needed).
  */
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 const ADVERSE_MEDIA_PROMPT = (entityName, entityType, context) => `
 You are a compliance analyst performing adverse media screening for AML/KYC purposes.
