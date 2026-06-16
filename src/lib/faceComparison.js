@@ -2,29 +2,44 @@ import * as faceapi from 'face-api.js';
 
 let modelsLoaded = false;
 
+const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
+
 export async function loadFaceModels() {
   if (modelsLoaded) return;
-  await Promise.all([
-    faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
-    faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
-    faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
-  ]);
-  modelsLoaded = true;
+  try {
+    await Promise.all([
+      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+    ]);
+    modelsLoaded = true;
+  } catch (err) {
+    modelsLoaded = false;
+    throw new Error('Face recognition models failed to load. Please check your internet connection and try again.');
+  }
 }
 
 export async function getFaceDescriptor(imageUrl) {
-  await loadFaceModels();
-  const img = await faceapi.fetchImage(imageUrl);
-  const detection = await faceapi
-    .detectSingleFace(img)
-    .withFaceLandmarks()
-    .withFaceDescriptor();
-  if (!detection) return null;
-  return {
-    descriptor: detection.descriptor,
-    confidence: detection.detection.score,
-    boundingBox: detection.detection.box,
-  };
+  try {
+    await loadFaceModels();
+  } catch (err) {
+    return null; // caller handles null as "no face detected"
+  }
+  try {
+    const img = await faceapi.fetchImage(imageUrl);
+    const detection = await faceapi
+      .detectSingleFace(img)
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+    if (!detection) return null;
+    return {
+      descriptor: detection.descriptor,
+      confidence: detection.detection.score,
+      boundingBox: detection.detection.box,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function scoreToLabel(similarity) {
