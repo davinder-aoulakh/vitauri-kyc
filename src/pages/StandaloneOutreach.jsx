@@ -53,6 +53,7 @@ export default function StandaloneOutreach() {
   const [selectedItems, setSelectedItems] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState(null);
+  const [showItemsError, setShowItemsError] = useState(false);
 
   // Step 3
   const [sending, setSending] = useState(false);
@@ -103,6 +104,15 @@ export default function StandaloneOutreach() {
 
   async function createQuickClient() {
     if (!quickForm.full_name.trim()) return;
+
+    if (quickForm.primary_contact_email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(quickForm.primary_contact_email)) {
+        toast({ variant: 'destructive', description: 'Please enter a valid email address.' });
+        return;
+      }
+    }
+
     setCreatingClient(true);
     const created = await base44.entities.Client.create({
       tenant_id: tenant.id,
@@ -526,7 +536,7 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs font-medium mb-1.5 block">Response Deadline</Label>
-                <Input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} className="h-9 text-sm" />
+                <Input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} min={format(addDays(new Date(), 1), 'yyyy-MM-dd')} className="h-9 text-sm" />
               </div>
               <div>
                 <Label className="text-xs font-medium mb-1.5 block">Channel</Label>
@@ -597,11 +607,23 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
                   })}
                 </div>
               )}
+              {showItemsError && (
+                <p className="text-xs text-destructive mt-1">
+                  Please select at least one item to request before continuing.
+                </p>
+              )}
             </div>
 
             <div className="flex justify-between pt-4 border-t border-border">
               <Button variant="outline" onClick={() => setStep(0)}>← Back</Button>
-              <Button onClick={() => setStep(2)} disabled={!canProceedStep2} className="gap-2">
+              <Button onClick={() => {
+                if (selectedItems.length === 0) {
+                  setShowItemsError(true);
+                  return;
+                }
+                setShowItemsError(false);
+                setStep(2);
+              }} className="gap-2">
                 Next: Review & Send <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
