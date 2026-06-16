@@ -67,15 +67,16 @@ export default function AppShell({ children }) {
 
   const { isOpsViewing, setOpsTenantId } = useTenant();
   const userRole = currentUser?.app_role;
-  const OUTREACH_ROLES = ['Tenant Admin', 'Compliance Admin', 'Manager'];
+  const OUTREACH_ROLES = ['Tenant Admin', 'Compliance Admin', 'Manager', 'Analyst'];
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
 
   // Fetch outreach count for badge
   const { data: outreachCount = 0 } = useQuery({
-    queryKey: ['outreachBadgeCount'],
+    queryKey: ['outreachBadgeCount', currentUser?.tenant_id],
     queryFn: async () => {
-      const all = await base44.entities.OutreachRequest.list();
-      return all.filter(r => r.status !== 'Complete').length;
+      if (!currentUser?.tenant_id) return 0;
+      const all = await base44.entities.OutreachRequest.filter({ tenant_id: currentUser.tenant_id });
+      return (all || []).filter(r => r.status !== 'Complete').length;
     },
     staleTime: 60000,
   });
