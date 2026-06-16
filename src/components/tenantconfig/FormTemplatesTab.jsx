@@ -218,14 +218,20 @@ export default function FormTemplatesTab({ tenant }) {
 
   function addFieldFromLibrary(tmpl) {
     const newItem = {
-      outreach_template_id: tmpl.id,
-      sort_order: (modal.data.items?.length || 0),
-      is_mandatory: tmpl.is_mandatory || false,
-      // denormalised for display
-      label: tmpl.label,
-      field_type: tmpl.field_type,
-      item_type: tmpl.item_type,
-      description: tmpl.description,
+      outreach_template_id:           tmpl.id,
+      sort_order:                     (modal.data.items?.length || 0),
+      is_mandatory:                   tmpl.validation_required || tmpl.is_mandatory || false,
+      label:                          tmpl.label,
+      field_type:                     tmpl.field_type || (tmpl.item_type === 'document' ? 'file_upload' : 'textarea'),
+      item_type:                      tmpl.item_type,
+      description:                    tmpl.description || '',
+      field_options:                  tmpl.field_options || [],
+      validation_required:            tmpl.validation_required ?? false,
+      validation_accepted_file_types: tmpl.validation_accepted_file_types || [],
+      validation_max_file_size_mb:    tmpl.validation_max_file_size_mb || 25,
+      idv_accepted_doc_types:         tmpl.idv_accepted_doc_types || [],
+      idv_min_match_score:            tmpl.idv_min_match_score ?? 75,
+      idv_liveness_required:          tmpl.idv_liveness_required ?? true,
     };
     setModal(m => ({ ...m, data: { ...m.data, items: [...(m.data.items || []), newItem] } }));
   }
@@ -412,7 +418,33 @@ Only include items whose ids exist in the library list above. Return valid JSON 
                         <Eye className="w-3.5 h-3.5" />
                       </Button>
                       <Button size="sm" variant="ghost" className="h-7 text-xs"
-                        onClick={() => setModal({ mode: 'edit', data: { ...tmpl } })}>
+                        onClick={async () => {
+                          const library = await base44.entities.OutreachTemplate.filter({
+                            tenant_id: tenant.id, is_active: true
+                          });
+                          const libMap = Object.fromEntries((library || []).map(t => [t.id, t]));
+                          const hydratedItems = (tmpl.items || []).map(item => {
+                            const lib = libMap[item.outreach_template_id];
+                            if (!lib) return item;
+                            return {
+                              outreach_template_id:           item.outreach_template_id,
+                              sort_order:                     item.sort_order ?? 0,
+                              is_mandatory:                   item.is_mandatory ?? lib.validation_required ?? false,
+                              label:                          lib.label,
+                              field_type:                     lib.field_type || (lib.item_type === 'document' ? 'file_upload' : 'textarea'),
+                              item_type:                      lib.item_type,
+                              description:                    lib.description || '',
+                              field_options:                  lib.field_options || [],
+                              validation_required:            lib.validation_required ?? false,
+                              validation_accepted_file_types: lib.validation_accepted_file_types || [],
+                              validation_max_file_size_mb:    lib.validation_max_file_size_mb || 25,
+                              idv_accepted_doc_types:         lib.idv_accepted_doc_types || [],
+                              idv_min_match_score:            lib.idv_min_match_score ?? 75,
+                              idv_liveness_required:          lib.idv_liveness_required ?? true,
+                            };
+                          });
+                          setModal({ mode: 'edit', data: { ...tmpl, items: hydratedItems } });
+                        }}>
                         <Pencil className="w-3 h-3" />
                       </Button>
                       <Button size="sm" variant="ghost" className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50"
