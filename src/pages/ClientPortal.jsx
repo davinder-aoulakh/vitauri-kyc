@@ -376,6 +376,22 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
     setChatLoading(false);
   }
 
+  function inferFieldType(item) {
+    if (item.field_type) return item.field_type;
+    if (item.item_type === 'document') return 'file_upload';
+    // Infer from label for legacy items saved without field_type
+    const lbl = (item.label || '').toLowerCase();
+    if (lbl.includes('date') || lbl.includes('birth') || lbl.includes('expiry') ||
+        lbl.includes('incorporated') || lbl.includes('issued')) return 'date';
+    if (lbl.includes('email')) return 'text';
+    if (lbl.includes('id&v') || lbl.includes('identity verif') ||
+        lbl.includes('idv') || lbl.includes('passport') || lbl.includes('id verification')) return 'id_verification';
+    if (lbl.includes('upload') || lbl.includes('document') || lbl.includes('certificate') ||
+        lbl.includes('statement') || lbl.includes('accounts') || lbl.includes('register') ||
+        lbl.includes('licence') || lbl.includes('permit')) return 'file_upload';
+    return 'textarea';
+  }
+
   const branding = getBranding(tenant);
   const tenantName = tenant?.name || 'Your Financial Institution';
   const logoUrl = tenant?.branding_logo_url;
@@ -692,7 +708,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
         <div className="space-y-3">
           {(outreach.items || []).map(item => {
             const s = states[item.item_id] || {};
-            const ft = item.field_type || (item.item_type === 'document' ? 'file_upload' : 'textarea');
+            const ft = inferFieldType(item);
 
             // Conditional field visibility
             if (!isFieldVisible(item, states)) return null;
