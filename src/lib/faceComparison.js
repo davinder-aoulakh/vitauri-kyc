@@ -1,128 +1,6 @@
-import * as faceapi from 'face-api.js';
+import { base44 } from '@/api/base44Client';
 
-const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
-
-let modelsLoaded   = false;
-let tinyLoaded     = false;
-
-// ── Model loading ──────────────────────────────────────────────────────────
-
-export async function loadFaceModels() {
-  if (modelsLoaded) return;
-  try {
-    await Promise.all([
-      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-      faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-    ]);
-    modelsLoaded = true;
-  } catch (err) {
-    modelsLoaded = false;
-    throw new Error('Face models failed to load. Please check your internet connection and try again.');
-  }
-}
-
-async function loadTinyDetector() {
-  if (tinyLoaded) return;
-  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-  tinyLoaded = true;
-}
-
-// ── CORS-safe image loader ─────────────────────────────────────────────────
-// faceapi.fetchImage fails on CORS-restricted storage URLs.
-// This loads via HTMLImageElement (no CORS request) and draws to canvas
-// so face-api can use it as input.
-
-async function loadImageForDetection(url) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    // Try with crossOrigin first (works if server sends CORS headers)
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => {
-      // Retry without crossOrigin (works if server blocks CORS but allows direct load)
-      const img2 = new Image();
-      img2.onload = () => resolve(img2);
-      img2.onerror = () => reject(new Error('Could not load image'));
-      img2.src = url + (url.includes('?') ? '&' : '?') + '_nc=' + Date.now();
-    };
-    img.src = url;
-  });
-}
-
-// ── Resize helper ─────────────────────────────────────────────────────────
-// Passport scans are often 2000-3500px wide. The face occupies ~10-15% of
-// the image, making it too small for reliable detection at full resolution.
-// Resize to max 800px so the face region fills more of the detection window.
-
-function resizeImageToCanvas(img, maxSize = 800) {
-  const canvas = document.createElement('canvas');
-  const scale  = Math.min(1, maxSize / Math.max(img.width || img.naturalWidth, img.height || img.naturalHeight));
-  canvas.width  = (img.width  || img.naturalWidth)  * scale;
-  canvas.height = (img.height || img.naturalHeight) * scale;
-  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-  return canvas;
-}
-
-// ── Core face descriptor extraction ───────────────────────────────────────
-
-export async function getFaceDescriptor(imageUrl) {
-  try { await loadFaceModels(); } catch { return null; }
-
-  let rawImg;
-  try {
-    rawImg = await loadImageForDetection(imageUrl);
-  } catch {
-    // Last resort: try faceapi's own fetcher
-    try { rawImg = await faceapi.fetchImage(imageUrl); } catch { return null; }
-  }
-
-  // Resize to 800px max — critical for passport/ID document scans
-  const img = resizeImageToCanvas(rawImg, 800);
-
-  // ── Attempt 1: SSD at low threshold (0.2) — good for frontal passport faces
-  try {
-    const det = await faceapi
-      .detectSingleFace(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.2 }))
-      .withFaceLandmarks()
-      .withFaceDescriptor();
-    if (det) {
-      return { descriptor: det.descriptor, confidence: det.detection.score, boundingBox: det.detection.box };
-    }
-  } catch { /* fall through */ }
-
-  // ── Attempt 2: SSD at even lower threshold (0.1) with larger image
-  try {
-    const bigImg = resizeImageToCanvas(rawImg, 1200);
-    const det = await faceapi
-      .detectSingleFace(bigImg, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.1 }))
-      .withFaceLandmarks()
-      .withFaceDescriptor();
-    if (det) {
-      return { descriptor: det.descriptor, confidence: det.detection.score, boundingBox: det.detection.box };
-    }
-  } catch { /* fall through */ }
-
-  // ── Attempt 3: TinyFaceDetector — faster, often better for small faces in documents
-  try {
-    await loadTinyDetector();
-    // Try two input sizes — 416 and 608 catch faces at different scales
-    for (const inputSize of [416, 608]) {
-      const det = await faceapi
-        .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold: 0.3 }))
-        .withFaceLandmarks()
-        .withFaceDescriptor();
-      if (det) {
-        return { descriptor: det.descriptor, confidence: det.detection.score, boundingBox: det.detection.box };
-      }
-    }
-  } catch { /* fall through */ }
-
-  // All attempts failed
-  return null;
-}
-
-// ── Face comparison ────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 export function scoreToLabel(similarity) {
   if (similarity >= 88) return 'Very High';
@@ -131,48 +9,166 @@ export function scoreToLabel(similarity) {
   return 'Low';
 }
 
+// No-op — kept so existing useEffect(() => { loadFaceModels() }) calls don't break
+export async function loadFaceModels() { return true; }
+
+// ── Step 1: Verify a face exists in an image ─────────────────────────────────
+// Called with document image — confirms face is present before asking for selfie.
+
+export async function getFaceDescriptor(imageUrl) {
+  try {
+    const result = await base44.integrations.Core.InvokeLLM({
+      prompt: `You are an identity document analyser.
+Look at this image. It may be a passport, driving licence, or national ID card.
+
+Answer these questions:
+1. Is there a human face visible in the image?
+2. If it is an identity document, focus only on the portrait/photo section.
+3. Describe the face in detail: face shape, skin tone, approximate age range,
+   eye shape and colour, nose shape, lip shape, any distinctive features
+   (facial hair, scars, glasses, etc.).
+
+Return ONLY valid JSON:
+{
+  "face_present": boolean,
+  "is_identity_document": boolean,
+  "confidence": "High" | "Medium" | "Low",
+  "face_description": string
+}`,
+      file_urls: [imageUrl],
+      model: 'gemini_3_1_pro',
+      response_json_schema: {
+        type: 'object',
+        properties: {
+          face_present:          { type: 'boolean' },
+          is_identity_document:  { type: 'boolean' },
+          confidence:            { type: 'string' },
+          face_description:      { type: 'string' },
+        }
+      }
+    });
+
+    if (!result?.face_present) return null;
+
+    return {
+      face_present:     true,
+      confidence:       result.confidence,
+      face_description: result.face_description || '',
+      imageUrl,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── Step 2: Compare document face against a selfie ───────────────────────────
+// Uses the face description from Step 1 to compare with the selfie image.
+// Gemini sees the selfie image + the text description of the document face.
+
 export async function compareFaces(documentImageUrl, selfieImageUrl, minMatchScore = 75) {
-  await loadFaceModels();
 
-  const [docResult, selfieResult] = await Promise.allSettled([
-    getFaceDescriptor(documentImageUrl),
-    getFaceDescriptor(selfieImageUrl),
-  ]);
-
-  const docFace    = docResult.status    === 'fulfilled' ? docResult.value    : null;
-  const selfieFace = selfieResult.status === 'fulfilled' ? selfieResult.value : null;
+  // Step 1 — verify and describe the document face
+  let docFace = null;
+  try {
+    docFace = await getFaceDescriptor(documentImageUrl);
+  } catch { /* handled below */ }
 
   if (!docFace) return {
     matched: false, similarity: 0, confidence: 'Error',
-    face_in_doc_detected: false, face_in_selfie_detected: !!selfieFace,
-    reason: 'No face detected in the document. Please upload a clear, well-lit photo ' +
-            'of your document with no glare. Ensure all four corners are visible.',
-    provider: 'face_api_js_browser',
+    face_in_doc_detected:    false,
+    face_in_selfie_detected: false,
+    reason: 'No face detected in the document. Please upload a clear, '
+          + 'well-lit photo of your identity document with all four corners visible.',
+    provider: 'gemini_vision',
   };
 
-  if (!selfieFace) return {
-    matched: false, similarity: 0, confidence: 'Error',
-    face_in_doc_detected: true, face_in_selfie_detected: false,
-    reason: 'No face detected in the selfie. Please retake in good lighting with ' +
-            'your full face clearly visible.',
-    provider: 'face_api_js_browser',
-  };
+  // Step 2 — compare selfie against the document face description
+  try {
+    const result = await base44.integrations.Core.InvokeLLM({
+      prompt: `You are a biometric identity verification assistant.
 
-  const distance   = faceapi.euclideanDistance(docFace.descriptor, selfieFace.descriptor);
-  const similarity = Math.round(Math.max(0, (1 - distance / 0.9)) * 100);
-  const matched    = similarity >= minMatchScore;
+The identity document shows a person with these facial features:
+"${docFace.face_description}"
 
-  return {
-    matched,
-    similarity,
-    distance:                Math.round(distance * 1000) / 1000,
-    confidence:              scoreToLabel(similarity),
-    face_in_doc_detected:    true,
-    face_in_selfie_detected: true,
-    reason: matched
-      ? null
-      : `Match score ${similarity}% is below the required threshold of ${minMatchScore}%.`,
-    provider: 'face_api_js_browser',
-    checked_at: new Date().toISOString(),
-  };
+Now look at this selfie photo.
+
+Compare the selfie carefully against the description above:
+- Overall face shape and proportions
+- Eye shape, spacing, and colour
+- Nose shape and width  
+- Mouth and lip shape
+- Skin tone
+- Any distinctive features (facial hair, scars, marks, glasses)
+- Approximate age consistency
+
+Give a similarity score from 0 to 100:
+  90-100 = Almost certainly the same person
+  75-89  = Very likely the same person  
+  60-74  = Possibly the same person, some differences
+  40-59  = Uncertain, significant differences
+  0-39   = Likely different people
+
+Return ONLY valid JSON:
+{
+  "face_present_in_selfie": boolean,
+  "same_person": boolean,
+  "similarity_score": number,
+  "confidence": "High" | "Medium" | "Low",
+  "matching_features": [string],
+  "concerns": [string],
+  "summary": string
+}`,
+      file_urls: [selfieImageUrl],
+      model: 'gemini_3_1_pro',
+      response_json_schema: {
+        type: 'object',
+        properties: {
+          face_present_in_selfie: { type: 'boolean' },
+          same_person:            { type: 'boolean' },
+          similarity_score:       { type: 'number'  },
+          confidence:             { type: 'string'  },
+          matching_features:      { type: 'array', items: { type: 'string' } },
+          concerns:               { type: 'array', items: { type: 'string' } },
+          summary:                { type: 'string'  },
+        }
+      }
+    });
+
+    if (!result?.face_present_in_selfie) return {
+      matched: false, similarity: 0, confidence: 'Error',
+      face_in_doc_detected:    true,
+      face_in_selfie_detected: false,
+      reason: 'No face detected in the selfie. Please retake the photo '
+            + 'with your full face clearly visible in good lighting.',
+      provider: 'gemini_vision',
+    };
+
+    const score   = Math.round(result?.similarity_score ?? 0);
+    const matched = score >= minMatchScore;
+
+    return {
+      matched,
+      similarity:              score,
+      confidence:              result?.confidence || scoreToLabel(score),
+      face_in_doc_detected:    true,
+      face_in_selfie_detected: true,
+      matched_features:        result?.matching_features || [],
+      concerns:                result?.concerns          || [],
+      summary:                 result?.summary           || '',
+      reason: matched
+        ? null
+        : `Match score ${score}% is below the required threshold of ${minMatchScore}%.`,
+      provider:    'gemini_vision',
+      checked_at:  new Date().toISOString(),
+    };
+
+  } catch (err) {
+    return {
+      matched: false, similarity: 0, confidence: 'Error',
+      face_in_doc_detected:    true,
+      face_in_selfie_detected: false,
+      reason: 'Comparison failed. Please try again.',
+      provider: 'gemini_vision',
+    };
+  }
 }
