@@ -234,7 +234,12 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
     setSending(true);
     const items = selectedItems.map(id => {
       const item = libraryItems.find(d => d.id === id);
-      return { item_id: id, item_type: item?.field_type || item?.item_type || 'document', label: item?.label || id, status: 'Requested' };
+      return {
+        item_id:   id,
+        item_type: item?.field_type || item?.item_type || 'document',
+        label:     item?.label || id,
+        status:    'Requested',
+      };
     });
 
     const results = { sent: 0, failed: [] };
@@ -242,45 +247,76 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
 
     for (const client of recipients) {
       try {
-        const token = generateToken();
+        const token       = generateToken();
         const tokenExpiry = new Date(deadline);
         tokenExpiry.setDate(tokenExpiry.getDate() + 1);
 
         const req = await base44.entities.OutreachRequest.create({
-          tenant_id: tenant.id,
-          case_id: null,
-          client_id: client.id,
+          tenant_id:        tenant.id,
+          case_id:          null,
+          standalone:       true,
+          client_id:        client.id,
           message,
           deadline,
           delivery_channel: channel,
-          status: 'Draft',
-          access_token: token,
+          status:           'Draft',
+          access_token:     token,
           token_expires_at: tokenExpiry.toISOString(),
           items,
         });
 
-        created.push({ req, client });
+        let finalStatus = 'Sent';
+        let emailFailed = false;
 
-        if (channel === 'Email' && client.primary_contact_email) {
-          const portalUrl = `${window.location.origin}/portal/${token}`;
-          const body = buildEmailHtml(client, req, portalUrl);
-          const fromName = tenant?.email_from_name || tenant?.name || 'Compliance Team';
-          try {
-            await base44.integrations.Core.SendEmail({
-              from_name: fromName,
-              ...(tenant?.email_from_address ? { from_email: tenant.email_from_address } : {}),
-              to: client.primary_contact_email,
-              subject: emailSubject || `Action Required: Documents needed — ${tenant?.name || 'KYC Review'}`,
-              body,
+        if (channel === 'Email') {
+          if (!client.primary_contact_email) {
+            results.failed.push({
+              name:   client.full_name,
+              reason: 'No email address on file — portal link generated but email not sent',
             });
-            await base44.entities.OutreachRequest.update(req.id, { status: 'Sent' });
-          } catch (emailErr) {
-            console.warn('Email send failed:', emailErr);
-            await base44.entities.OutreachRequest.update(req.id, { status: 'Sent' });
+            finalStatus = 'Sent';
+          } else {
+            const portalUrl = `${window.location.origin}/portal/${token}`;
+            const body      = buildEmailHtml(client, req, portalUrl);
+            const fromName  = tenant?.email_from_name || tenant?.name || 'Compliance Team';
+            try {
+              await base44.integrations.Core.SendEmail({
+                from_name:  fromName,
+                ...(tenant?.email_from_address ? { from_email: tenant.email_from_address } : {}),
+                to:         client.primary_contact_email,
+                subject:    emailSubject || `Action Required: Documents needed — ${tenant?.name || 'KYC Review'}`,
+                body,
+              });
+            } catch (emailErr) {
+              console.error('Email send failed for', client.full_name, emailErr);
+              results.failed.push({
+                name:   client.full_name,
+                reason: `Email delivery failed: ${emailErr?.message || 'Unknown error'}`,
+              });
+              emailFailed = true;
+              finalStatus = 'Draft';
+            }
           }
         }
 
-        results.sent++;
+        await base44.entities.OutreachRequest.update(req.id, { status: finalStatus });
+
+        base44.entities.AuditEvent.create({
+          tenant_id:      tenant.id,
+          case_id:        null,
+          actor_user_id:  currentUser?.id,
+          actor_name:     currentUser?.full_name,
+          actor_type:     'User',
+          event_type:     'outreach_sent',
+          notes:          `Standalone outreach sent to ${client.full_name} via ${channel}. ` +
+                          `${items.length} item(s) requested. Deadline: ${deadline}.` +
+                          (emailFailed ? ' Email delivery failed.' : ''),
+        }).catch(console.error);
+
+        created.push({ req, client });
+
+        if (!emailFailed) results.sent++;
+
       } catch (err) {
         results.failed.push({ name: client.full_name, reason: err.message || 'Unknown error' });
       }
