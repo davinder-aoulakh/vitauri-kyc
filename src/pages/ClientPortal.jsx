@@ -132,6 +132,33 @@ export default function ClientPortal() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
   useEffect(() => { setChatMessages([{ role: 'ai', text: T[lang].chat_intro }]); }, [lang]);
 
+  // Didit callback detection — runs when tenant loads
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('didit_done') !== '1') return;
+
+    const sessionId  = params.get('verificationSessionId');
+    const outreachId = params.get('outreach_id');
+    const itemId     = params.get('item_id');
+
+    // Clean the URL so the params don't persist on refresh
+    window.history.replaceState({}, '', window.location.pathname);
+
+    if (!sessionId || !outreachId || !itemId || !tenant?.id) return;
+
+    base44.functions.invoke('getDiditSessionResult', {
+      session_id:  sessionId,
+      outreach_id: outreachId,
+      item_id:     itemId,
+      tenant_id:   tenant.id,
+    }).then(res => {
+      const data = res?.data || res;
+      if (data?.ok && data?.idv_status) {
+        loadByToken();
+      }
+    }).catch(console.error);
+  }, [tenant]);
+
   // Apply favicon + page title when tenant loads
   useEffect(() => {
     if (!tenant) return;
@@ -766,6 +793,12 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                           buttonRadius={tenantRadius}
                           portalUrl={`${window.location.origin}/portal/${outreach.access_token}`}
                           outreachId={outreach.id}
+                          clientId={client?.id || ''}
+                          tenantId={tenant?.id || ''}
+                          clientEmail={client?.primary_contact_email || ''}
+                          firstName={client?.full_name?.split(' ')[0] || ''}
+                          lastName={client?.full_name?.split(' ').slice(1).join(' ') || ''}
+                          language={lang}
                           onComplete={idvResult => {
                             setItemStateMap(prev => ({
                               ...prev,
@@ -773,10 +806,10 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                                 ...prev[outreach.id],
                                 [item.item_id]: {
                                   ...prev[outreach.id]?.[item.item_id],
-                                  done:    idvResult.idv_status === 'Pass' || idvResult.idv_status === 'Inconclusive',
+                                  done:      idvResult.idv_status === 'Pass' || idvResult.idv_status === 'Inconclusive',
                                   idvResult,
-                                  text:    JSON.stringify(idvResult),
-                                  fileUrl: idvResult.idv_selfie_url || '',
+                                  text:      JSON.stringify(idvResult),
+                                  fileUrl:   idvResult.idv_selfie_url || '',
                                 },
                               },
                             }));
