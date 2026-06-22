@@ -138,6 +138,23 @@
     "portal_subdomain": {
       "type": "string",
       "description": "Portal subdomain (lowercase, no spaces)"
+    },
+    "didit_api_key": {
+      "type": "string",
+      "description": "Didit x-api-key \u2014 entered by Tenant Admin, keep secret"
+    },
+    "didit_workflow_id": {
+      "type": "string",
+      "description": "UUID of the Didit KYC workflow"
+    },
+    "didit_min_match_score": {
+      "type": "number",
+      "default": 80,
+      "description": "Face match % below which verification result is flagged for analyst review"
+    },
+    "didit_app_id": {
+      "type": "string",
+      "description": "Optional \u2014 Didit Application UUID for console deep-links"
     }
   },
   "required": [

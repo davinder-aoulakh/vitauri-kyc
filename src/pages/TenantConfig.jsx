@@ -21,6 +21,7 @@ import OutreachTemplatesTab from '@/components/tenantconfig/OutreachTemplatesTab
 import FormTemplatesTab     from '@/components/tenantconfig/FormTemplatesTab';
 import EmailTemplatesTab    from '@/components/tenantconfig/EmailTemplatesTab';
 import IntegrationsTab      from '@/components/tenantconfig/IntegrationsTab';
+import DiditConfigTab       from '@/components/tenantconfig/DiditConfigTab';
 
 const TABS = [
   { id: 'branding',    label: 'Branding' },
@@ -34,6 +35,7 @@ const TABS = [
   { id: 'email_tmpl',  label: 'Email Templates' },
   { id: 'retention',   label: 'Audit Retention' },
   { id: 'integrations',label: 'Integrations' },
+  { id: 'didit',       label: '🪪 Identity Verification' },
 ];
 
 export default function TenantConfig() {
@@ -198,6 +200,12 @@ export default function TenantConfig() {
           <TabsContent value="integrations" className="mt-5">
             <IntegrationsTab />
           </TabsContent>
+
+          {(userRole === 'Tenant Admin' || userRole === 'Compliance Admin') && (
+            <TabsContent value="didit" className="mt-5">
+              <DiditConfigTab tenant={tenant} onSave={() => saveTenant()} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </AppShell>
