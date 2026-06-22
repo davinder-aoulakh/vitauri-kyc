@@ -276,6 +276,8 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
   const [saved, setSaved]   = useState(false);
   const [ocrApplied, setOcrApplied] = useState(null); // track what was OCR-applied
   const [portalIdvResults, setPortalIdvResults] = useState([]);
+  const [extractedData, setExtractedData]           = useState(null);
+  const [showExtractedPrompt, setShowExtractedPrompt] = useState(false);
 
   const set = (key, field, val) => setVerifications(v => ({ ...v, [key]: { ...v[key], [field]: val } }));
 
@@ -296,13 +298,31 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
   useEffect(() => { loadPortalIdvResults(); }, [kycCase.id]);
 
   function applyPortalIdv(idvItem) {
-    set('primary', 'doc_type', idvItem.idv_document_type || '');
-    set('primary', 'status',   idvItem.idv_status === 'Pass' ? 'Verified' : 'Failed');
+    set('primary', 'doc_type',   idvItem.idv_document_type || '');
+    set('primary', 'doc_number', idvItem.idv_document_number || '');
+    set('primary', 'status',     idvItem.idv_status === 'Pass' ? 'Verified' : 'Failed');
     set('primary', 'notes',
-      `Portal IDV: ${idvItem.idv_status} — ${idvItem.idv_similarity_score}% face match ` +
-      `(${idvItem.idv_provider}). Liveness: ${idvItem.idv_liveness_passed ? 'passed' : 'not checked'}. ` +
-      `Checked: ${idvItem.idv_checked_at ? new Date(idvItem.idv_checked_at).toLocaleDateString() : '—'}.`
+      `Verified via Didit — ` +
+      `${idvItem.idv_similarity_score != null ? idvItem.idv_similarity_score + '% face match' : 'result recorded'} · ` +
+      `Liveness: ${idvItem.idv_liveness_passed ? 'passed' : 'not confirmed'} · ` +
+      `Doc: ${idvItem.idv_document_type || 'unknown'} · ` +
+      `${idvItem.idv_issuing_country || ''} · ` +
+      `${idvItem.idv_checked_at ? new Date(idvItem.idv_checked_at).toLocaleDateString() : ''}`
     );
+
+    const extractedName = [idvItem.idv_extracted_first_name, idvItem.idv_extracted_last_name]
+      .filter(Boolean).join(' ');
+    const hasExtracted = extractedName || idvItem.idv_extracted_dob || idvItem.idv_extracted_nationality;
+
+    if (hasExtracted) {
+      setExtractedData({
+        full_name:     extractedName  || null,
+        date_of_birth: idvItem.idv_extracted_dob || null,
+        nationality:   idvItem.idv_extracted_nationality || null,
+        id_number:     idvItem.idv_document_number || null,
+      });
+      setShowExtractedPrompt(true);
+    }
   }
 
   // Auto-save verification state to AuditEvent (lightweight — just record state snapshot)
@@ -455,6 +475,39 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
               ✓ Click "Apply ↓" on a result to pre-fill the verification form below
             </div>
           )}
+        </div>
+      )}
+
+      {showExtractedPrompt && extractedData && (
+        <div className="border border-primary/20 bg-primary/5 rounded-xl p-3 mt-2 text-xs">
+          <div className="font-medium mb-1.5">
+            Apply Didit OCR data to client profile?
+          </div>
+          <div className="text-muted-foreground space-y-0.5 mb-3">
+            {extractedData.full_name    && <div>Name: <span className="text-foreground font-medium">{extractedData.full_name}</span></div>}
+            {extractedData.date_of_birth && <div>DOB: <span className="text-foreground font-medium">{extractedData.date_of_birth}</span></div>}
+            {extractedData.nationality  && <div>Nationality: <span className="text-foreground font-medium">{extractedData.nationality}</span></div>}
+            {extractedData.id_number    && <div>Document #: <span className="font-mono text-foreground">{extractedData.id_number}</span></div>}
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" className="h-7 text-xs" onClick={async () => {
+              if (kycCase?.client_id) {
+                const updates = {};
+                if (extractedData.full_name)     updates.full_name     = extractedData.full_name;
+                if (extractedData.date_of_birth) updates.date_of_birth = extractedData.date_of_birth;
+                if (extractedData.nationality)   updates.nationality   = extractedData.nationality;
+                if (extractedData.id_number)     updates.id_number     = extractedData.id_number;
+                await base44.entities.Client.update(kycCase.client_id, updates).catch(console.error);
+              }
+              setShowExtractedPrompt(false);
+            }}>
+              Apply to Client Profile
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs"
+              onClick={() => setShowExtractedPrompt(false)}>
+              Dismiss
+            </Button>
+          </div>
         </div>
       )}
 
