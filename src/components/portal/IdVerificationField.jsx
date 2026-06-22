@@ -17,6 +17,7 @@ export default function IdVerificationField({
 
   const [phase, setPhase]           = useState('consent');
   const [sessionUrl, setSessionUrl] = useState('');
+  const [sessionId, setSessionId]   = useState('');
   const [result, setResult]         = useState(null);
   const [error, setError]           = useState('');
   const pollRef                     = useRef(null);
@@ -112,6 +113,7 @@ export default function IdVerificationField({
       }
 
       setSessionUrl(data.session_url);
+      setSessionId(data.session_id || '');
       setPhase('ready');
       startPolling();
     } catch (err) {
@@ -122,21 +124,59 @@ export default function IdVerificationField({
 
   // ── POLLING ───────────────────────────────────────────────────────────────
   function startPolling() {
+    let attempts = 0;
+    const MAX_PASSIVE = 4;
+    const MAX_ATTEMPTS = 100;
+
     clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
+      attempts++;
+
+      if (attempts > MAX_ATTEMPTS) {
+        clearInterval(pollRef.current);
+        setPhase('error');
+        setError(
+          'Verification is taking longer than expected. ' +
+          'If you have completed it on your phone, click "Check Status" below.'
+        );
+        return;
+      }
+
+      const terminal = ['Pass', 'Fail', 'Inconclusive', 'Expired'];
+
       try {
+        // ── Passive: read from DB ─────────────────────────────────────────
         const reqs = await base44.entities.OutreachRequest.filter({ id: outreachId });
         const req  = reqs?.[0];
-        if (!req) return;
-        const idvItem = (req.items || []).find(i => i.item_id === item?.item_id);
-        const terminal = ['Pass', 'Fail', 'Inconclusive', 'Expired'];
+        const idvItem = (req?.items || []).find(i => i.item_id === item?.item_id);
+
         if (idvItem?.idv_status && terminal.includes(idvItem.idv_status)) {
           clearInterval(pollRef.current);
           setResult(idvItem);
           setPhase('result');
           onComplete?.(idvItem);
+          return;
         }
-      } catch { /* polling errors are non-fatal */ }
+
+        // ── Active: call getDiditSessionResult after passive window ────────
+        const sid = sessionId || idvItem?.didit_session_id;
+        if (attempts > MAX_PASSIVE && sid && tenantId) {
+          const res  = await base44.functions.invoke('getDiditSessionResult', {
+            session_id:  sid,
+            outreach_id: outreachId,
+            item_id:     item?.item_id,
+            tenant_id:   tenantId,
+          });
+          const data = res?.data || res;
+
+          if (data?.idv_status && terminal.includes(data.idv_status)) {
+            clearInterval(pollRef.current);
+            setResult(data);
+            setPhase('result');
+            onComplete?.(data);
+          }
+        }
+      } catch { /* polling errors are non-fatal, keep trying */ }
     }, 3000);
   }
 
@@ -205,6 +245,43 @@ export default function IdVerificationField({
                 Or open on this device instead →
               </a>
             </div>
+            <div style={{ marginTop:'14px', textAlign:'center' }}>
+              <button
+                onClick={async () => {
+                  const sid = sessionId || item?.didit_session_id;
+                  if (!sid || !tenantId) return;
+                  setPhase('creating');
+                  try {
+                    const res  = await base44.functions.invoke('getDiditSessionResult', {
+                      session_id:  sid,
+                      outreach_id: outreachId,
+                      item_id:     item?.item_id,
+                      tenant_id:   tenantId,
+                    });
+                    const data = res?.data || res;
+                    const terminal = ['Pass', 'Fail', 'Inconclusive', 'Expired'];
+                    if (data?.idv_status && terminal.includes(data.idv_status)) {
+                      clearInterval(pollRef.current);
+                      setResult(data);
+                      setPhase('result');
+                      onComplete?.(data);
+                    } else {
+                      setPhase('ready');
+                    }
+                  } catch {
+                    setPhase('ready');
+                  }
+                }}
+                style={{
+                  background: 'none', border: 'none',
+                  color: primaryColor, fontSize: '12px',
+                  cursor: 'pointer', textDecoration: 'underline',
+                  marginTop: '6px',
+                }}
+              >
+                Already completed? Check result now →
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -267,9 +344,39 @@ export default function IdVerificationField({
       <div style={{ fontSize:'13px', color:'#DC2626', marginBottom:'12px' }}>
         ⚠ {error || 'Something went wrong. Please try again.'}
       </div>
-      <button style={btn} onClick={() => { setError(''); setPhase('consent'); }}>
-        Try Again
-      </button>
+      <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+        <button style={{ ...btn, flex:1 }}
+          onClick={() => { setError(''); setSessionId(''); setPhase('consent'); }}>
+          Start Over
+        </button>
+        {sessionId && (
+          <button
+            style={{ ...btn, flex:1, background: '#6B7280' }}
+            onClick={async () => {
+              setError('');
+              setPhase('creating');
+              try {
+                const res = await base44.functions.invoke('getDiditSessionResult', {
+                  session_id: sessionId, outreach_id: outreachId,
+                  item_id: item?.item_id, tenant_id: tenantId,
+                });
+                const data = res?.data || res;
+                const terminal = ['Pass','Fail','Inconclusive','Expired'];
+                if (data?.idv_status && terminal.includes(data.idv_status)) {
+                  setResult(data); setPhase('result'); onComplete?.(data);
+                } else {
+                  setError('Verification not yet complete. Please try again in a moment.');
+                  setPhase('error');
+                }
+              } catch (err) {
+                setError(err.message || 'Could not check status.');
+                setPhase('error');
+              }
+            }}>
+            Check Status
+          </button>
+        )}
+      </div>
     </div>
   );
 
