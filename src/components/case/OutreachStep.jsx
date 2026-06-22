@@ -606,15 +606,79 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
               )}
 
               {/* Meta */}
-              <div className="text-xs text-muted-foreground space-y-1 bg-muted/30 rounded-lg p-3">
-                <div>Document type: {idvDetailItem.idv_document_type || '—'}</div>
-                <div>Liveness: {idvDetailItem.idv_liveness_passed ? '✓ Blink detected' : '—'}</div>
-                <div>Checked: {idvDetailItem.idv_checked_at
-                  ? new Date(idvDetailItem.idv_checked_at).toLocaleString() : '—'}</div>
+              <div className="text-xs space-y-1.5 bg-muted/30 rounded-lg p-3">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+
+                  <span className="text-muted-foreground">Document Type</span>
+                  <span className="font-medium">{idvDetailItem.idv_document_type || '—'}</span>
+
+                  <span className="text-muted-foreground">Document Number</span>
+                  <span className="font-mono text-xs">{idvDetailItem.idv_document_number || '—'}</span>
+
+                  <span className="text-muted-foreground">Issuing Country</span>
+                  <span>{idvDetailItem.idv_issuing_country || '—'}</span>
+
+                  <span className="text-muted-foreground">Expiry Date</span>
+                  <span className={
+                    idvDetailItem.idv_document_expiry &&
+                    new Date(idvDetailItem.idv_document_expiry) < new Date()
+                      ? 'text-red-600 font-medium'
+                      : ''
+                  }>{idvDetailItem.idv_document_expiry || '—'}</span>
+
+                  <span className="text-muted-foreground">Name (OCR)</span>
+                  <span>{[idvDetailItem.idv_extracted_first_name, idvDetailItem.idv_extracted_last_name]
+                           .filter(Boolean).join(' ') || '—'}</span>
+
+                  <span className="text-muted-foreground">Date of Birth (OCR)</span>
+                  <span>{idvDetailItem.idv_extracted_dob || '—'}</span>
+
+                  <span className="text-muted-foreground">Nationality</span>
+                  <span>{idvDetailItem.idv_extracted_nationality || '—'}</span>
+
+                  <span className="text-muted-foreground">Face Match Score</span>
+                  <span className="font-semibold">
+                    {idvDetailItem.idv_similarity_score != null
+                      ? `${idvDetailItem.idv_similarity_score}%` : '—'}
+                  </span>
+
+                  <span className="text-muted-foreground">Liveness</span>
+                  <span className={idvDetailItem.idv_liveness_passed ? 'text-emerald-700' : 'text-muted-foreground'}>
+                    {idvDetailItem.idv_liveness_passed
+                      ? `✓ Passed${idvDetailItem.idv_liveness_score != null ? ` (${idvDetailItem.idv_liveness_score}%)` : ''}`
+                      : '—'}
+                  </span>
+
+                  {(idvDetailItem.idv_aml_hits ?? 0) > 0 && <>
+                    <span className="text-muted-foreground">AML Hits</span>
+                    <span className="text-red-600 font-semibold">{idvDetailItem.idv_aml_hits}</span>
+                  </>}
+
+                  <span className="text-muted-foreground">Provider</span>
+                  <span className="capitalize">{idvDetailItem.idv_provider || '—'}</span>
+
+                  <span className="text-muted-foreground">Verified At</span>
+                  <span>{idvDetailItem.idv_checked_at
+                    ? new Date(idvDetailItem.idv_checked_at).toLocaleString() : '—'}</span>
+                </div>
+
                 {idvDetailItem.idv_failure_reason && (
-                  <div className="text-red-600">Reason: {idvDetailItem.idv_failure_reason}</div>
+                  <div className="text-red-600 text-xs pt-2 border-t border-border mt-1">
+                    <span className="font-medium">Issues: </span>
+                    {idvDetailItem.idv_failure_reason}
+                  </div>
                 )}
               </div>
+
+              {idvDetailItem.idv_provider === 'didit' && idvDetailItem.didit_session_id && (
+                <a
+                  href={`https://business.didit.me/sessions/${idvDetailItem.didit_session_id}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-primary underline inline-flex items-center gap-1 mt-1"
+                >
+                  View full session in Didit Console →
+                </a>
+              )}
 
               {/* Analyst override */}
               {['Manager','Director','Compliance Admin','Tenant Admin'].includes(currentUser?.app_role) && (
