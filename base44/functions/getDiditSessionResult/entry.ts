@@ -111,6 +111,81 @@ Deno.serve(async (req) => {
              (failureReason ? `Issues: ${failureReason}` : ''),
     }).catch(() => {});
 
+    // ── STEP 6: Enrich Client entity ─────────────────────────────────────────
+    try {
+      const outreachList6 = await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id });
+      const req6 = outreachList6?.[0];
+      const clientId = req6?.client_id;
+
+      if (clientId) {
+        const clientList = await base44.asServiceRole.entities.Client.filter({ id: clientId });
+        const client = clientList?.[0];
+
+        if (client) {
+          const updates = {};
+
+          // ── Apply Didit OCR fields (only if not already set on client) ──────
+          const diditFullName = [idvFields.idv_extracted_first_name, idvFields.idv_extracted_last_name]
+            .filter(Boolean).join(' ');
+          if (diditFullName && !client.full_name) updates.full_name = diditFullName;
+          if (idvFields.idv_extracted_dob && !client.date_of_birth) updates.date_of_birth = idvFields.idv_extracted_dob;
+          if (idvFields.idv_extracted_nationality && !client.nationality) updates.nationality = idvFields.idv_extracted_nationality;
+          if (idvFields.idv_document_number && !client.id_number) updates.id_number = idvFields.idv_document_number;
+          if (idvFields.idv_document_expiry && !client.id_expiry_date) updates.id_expiry_date = idvFields.idv_document_expiry;
+
+          if (idvFields.idv_document_type && !client.id_type) {
+            const docTypeMap = {
+              'Passport': 'Passport',
+              'Identity Card': 'National ID',
+              "Driver's License": 'Driving Licence',
+              'Driving Licence': 'Driving Licence',
+              'Residence Permit': 'Residence Permit',
+            };
+            updates.id_type = docTypeMap[idvFields.idv_document_type] || idvFields.idv_document_type;
+          }
+
+          if (idvFields.idv_issuing_country && !client.registered_country) {
+            updates.registered_country = idvFields.idv_issuing_country;
+          }
+
+          // ── Scan other outreach items for form responses ──────────────────
+          for (const itm of (req6?.items || [])) {
+            if (!itm.response_text || !['Received', 'Verified'].includes(itm.status)) continue;
+            const lbl = (itm.label || '').toLowerCase();
+            const val = itm.response_text.trim();
+            if (!val) continue;
+
+            if ((lbl.includes('email') || lbl.includes('e-mail')) && !client.primary_contact_email && !updates.primary_contact_email) updates.primary_contact_email = val;
+            if ((lbl.includes('phone') || lbl.includes('mobile') || lbl.includes('tel')) && !client.primary_contact_phone && !updates.primary_contact_phone) updates.primary_contact_phone = val;
+            if ((lbl.includes('address') || lbl.includes('residential') || lbl.includes('home address')) && !client.registered_address && !updates.registered_address) updates.registered_address = val;
+            if ((lbl.includes('contact name') || lbl.includes('representative')) && !client.primary_contact_name && !updates.primary_contact_name) updates.primary_contact_name = val;
+            if ((lbl.includes('country of residence') || lbl.includes('country')) && !client.country_of_residence && !updates.country_of_residence) updates.country_of_residence = val;
+          }
+
+          // ── Promote client status ─────────────────────────────────────────
+          if (idvFields.idv_status === 'Pass' && client.status === 'Prospect') {
+            updates.status = 'Active';
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await base44.asServiceRole.entities.Client.update(client.id, updates);
+
+            base44.asServiceRole.entities.AuditEvent.create({
+              tenant_id,
+              actor_type: 'System',
+              actor_name: 'Didit IDV',
+              event_type: 'client_enriched',
+              client_id:  client.id,
+              notes: `Client profile enriched from Didit verification. Fields updated: ${Object.keys(updates).join(', ')}.` +
+                     (updates.status ? ` Status promoted to: ${updates.status}.` : ''),
+            }).catch(() => {});
+          }
+        }
+      }
+    } catch (enrichErr) {
+      console.error('Client enrichment failed:', enrichErr);
+    }
+
     return Response.json({ ok: true, ...idvFields });
 
   } catch (error) {
