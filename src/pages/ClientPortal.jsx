@@ -122,6 +122,7 @@ export default function ClientPortal() {
 
   const [diditCallbackDone, setDiditCallbackDone] = useState(false);
   const [diditCallbackStatus, setDiditCallbackStatus] = useState('');
+  const [diditCallbackParams, setDiditCallbackParams] = useState(null);
 
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
@@ -135,30 +136,40 @@ export default function ClientPortal() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
   useEffect(() => { setChatMessages([{ role: 'ai', text: T[lang].chat_intro }]); }, [lang]);
 
-  // Didit callback detection — runs when tenant loads
+  // ── Didit step 1: capture URL params immediately on mount ─────────────────
   useEffect(() => {
-    const params     = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(window.location.search);
     if (params.get('didit_done') !== '1') return;
 
-    const sessionId  = params.get('verificationSessionId');
-    const outreachId = params.get('outreach_id');
-    const itemId     = params.get('item_id');
+    const captured = {
+      sessionId:  params.get('verificationSessionId'),
+      outreachId: params.get('outreach_id'),
+      itemId:     params.get('item_id'),
+    };
 
-    // Clean the URL immediately
     window.history.replaceState({}, '', window.location.pathname);
 
-    if (!sessionId || !outreachId || !itemId || !tenant?.id) return;
+    if (!captured.sessionId || !captured.outreachId || !captured.itemId) return;
 
-    // On phone: show the "done" screen before even fetching result
-    const isMobileCallback = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    const isMob = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
       || window.innerWidth < 900;
 
-    if (isMobileCallback) {
+    if (isMob) {
       setDiditCallbackDone(true);
       setDiditCallbackStatus('checking');
     }
 
-    // Fetch result (runs on both phone and desktop)
+    setDiditCallbackParams({ ...captured, isMobile: isMob });
+  }, []);
+
+  // ── Didit step 2: process when both params and tenant are ready ───────────
+  useEffect(() => {
+    if (!diditCallbackParams || !tenant?.id) return;
+
+    const { sessionId, outreachId, itemId, isMobile } = diditCallbackParams;
+
+    setDiditCallbackParams(null);
+
     base44.functions.invoke('getDiditSessionResult', {
       session_id:  sessionId,
       outreach_id: outreachId,
@@ -166,15 +177,15 @@ export default function ClientPortal() {
       tenant_id:   tenant.id,
     }).then(res => {
       const data = res?.data || res;
-      if (isMobileCallback) {
+      if (isMobile) {
         setDiditCallbackStatus(data?.idv_status === 'Pass' ? 'pass' : 'done');
       } else {
         if (data?.ok || data?.idv_status) loadByToken();
       }
     }).catch(() => {
-      if (isMobileCallback) setDiditCallbackStatus('done');
+      if (isMobile) setDiditCallbackStatus('done');
     });
-  }, [tenant]);
+  }, [diditCallbackParams, tenant]);
 
   // Apply favicon + page title when tenant loads
   useEffect(() => {
