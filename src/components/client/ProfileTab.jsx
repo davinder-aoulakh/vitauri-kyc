@@ -10,7 +10,29 @@ import { AlertTriangle, Save, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import OcrResultPanel from '@/components/client/OcrResultPanel';
 
-const COUNTRIES = ['Netherlands (NL)','Belgium (BE)','Germany (DE)','France (FR)','United Kingdom (GB)','United States (US)','Luxembourg (LU)','Switzerland (CH)','Curaçao (CW)','Aruba (AW)','Suriname (SR)','Other'];
+const COUNTRIES = [
+  'Netherlands (NL)','Belgium (BE)','Germany (DE)','France (FR)',
+  'United Kingdom (GB)','United States (US)','Luxembourg (LU)',
+  'Switzerland (CH)','Austria (AT)','Spain (ES)','Italy (IT)',
+  'Portugal (PT)','Sweden (SE)','Norway (NO)','Denmark (DK)',
+  'Finland (FI)','Ireland (IE)','Poland (PL)','Czech Republic (CZ)',
+  'Hungary (HU)','Romania (RO)','Bulgaria (BG)','Croatia (HR)',
+  'Greece (GR)','Cyprus (CY)','Malta (MT)','Slovakia (SK)',
+  'Slovenia (SI)','Estonia (EE)','Latvia (LV)','Lithuania (LT)',
+  'Singapore (SG)','Hong Kong (HK)','Japan (JP)','South Korea (KR)',
+  'China (CN)','India (IN)','Thailand (TH)','Malaysia (MY)',
+  'Indonesia (ID)','Philippines (PH)','Vietnam (VN)','Taiwan (TW)',
+  'United Arab Emirates (AE)','Saudi Arabia (SA)','Qatar (QA)',
+  'Kuwait (KW)','Bahrain (BH)','Oman (OM)','Israel (IL)',
+  'Turkey (TR)','South Africa (ZA)','Nigeria (NG)','Kenya (KE)',
+  'Egypt (EG)','Morocco (MA)','Ghana (GH)',
+  'Australia (AU)','New Zealand (NZ)',
+  'Canada (CA)','Mexico (MX)','Brazil (BR)','Argentina (AR)',
+  'Chile (CL)','Colombia (CO)','Peru (PE)','Venezuela (VE)',
+  'Curaçao (CW)','Aruba (AW)','Suriname (SR)',
+  'Russia (RU)','Ukraine (UA)',
+  'Other',
+];
 const SECTORS   = ['Financial Services','Real Estate','Legal Services','Consulting','Technology','Manufacturing','Trading','Healthcare','Energy','Retail','Construction','Other'];
 const LEGAL_FORMS = ['BV','NV','Ltd','SA','GmbH','LLC','Inc','PLC','SRL','AG','SARL','Other'];
 const ID_TYPES    = ['Passport','National ID Card','Driving Licence','Residence Permit','Other'];
