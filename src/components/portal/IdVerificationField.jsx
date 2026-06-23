@@ -17,7 +17,7 @@ export default function IdVerificationField({
 
   const [phase, setPhase]           = useState('consent');
   const [sessionUrl, setSessionUrl] = useState('');
-  const [sessionId, setSessionId]   = useState('');
+  const sessionIdRef = useRef('');
   const [result, setResult]         = useState(null);
   const [error, setError]           = useState('');
   const pollRef                     = useRef(null);
@@ -113,7 +113,7 @@ export default function IdVerificationField({
       }
 
       setSessionUrl(data.session_url);
-      setSessionId(data.session_id || '');
+      if (data?.session_id) sessionIdRef.current = data.session_id;
       setPhase('ready');
       startPolling();
     } catch (err) {
@@ -125,8 +125,7 @@ export default function IdVerificationField({
   // ── POLLING ───────────────────────────────────────────────────────────────
   function startPolling() {
     let attempts = 0;
-    const MAX_PASSIVE = 4;
-    const MAX_ATTEMPTS = 100;
+    const MAX_ATTEMPTS = 120; // 6 minutes max (120 × 3s)
 
     clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
@@ -136,31 +135,18 @@ export default function IdVerificationField({
         clearInterval(pollRef.current);
         setPhase('error');
         setError(
-          'Verification is taking longer than expected. ' +
-          'If you have completed it on your phone, click "Check Status" below.'
+          'Verification timed out. If you have completed it on your phone, ' +
+          'tap "Check Status" below.'
         );
         return;
       }
 
       const terminal = ['Pass', 'Fail', 'Inconclusive', 'Expired'];
+      const sid = sessionIdRef.current;
 
       try {
-        // ── Passive: read from DB ─────────────────────────────────────────
-        const reqs = await base44.entities.OutreachRequest.filter({ id: outreachId });
-        const req  = reqs?.[0];
-        const idvItem = (req?.items || []).find(i => i.item_id === item?.item_id);
-
-        if (idvItem?.idv_status && terminal.includes(idvItem.idv_status)) {
-          clearInterval(pollRef.current);
-          setResult(idvItem);
-          setPhase('result');
-          onComplete?.(idvItem);
-          return;
-        }
-
-        // ── Active: call getDiditSessionResult after passive window ────────
-        const sid = sessionId || idvItem?.didit_session_id;
-        if (attempts > MAX_PASSIVE && sid && tenantId) {
+        if (sid && tenantId) {
+          // ── ACTIVE: call Didit directly every poll ────────────────────────
           const res  = await base44.functions.invoke('getDiditSessionResult', {
             session_id:  sid,
             outreach_id: outreachId,
@@ -174,9 +160,26 @@ export default function IdVerificationField({
             setResult(data);
             setPhase('result');
             onComplete?.(data);
+            return;
+          }
+          // still_processing / Pending → keep polling
+        } else {
+          // ── PASSIVE FALLBACK: no sessionId yet, just check DB ─────────────
+          const reqs    = await base44.entities.OutreachRequest.filter({ id: outreachId });
+          const idvItem = reqs?.[0]?.items?.find(i => i.item_id === item?.item_id);
+
+          if (idvItem?.didit_session_id && !sessionIdRef.current) {
+            sessionIdRef.current = idvItem.didit_session_id;
+          }
+
+          if (idvItem?.idv_status && terminal.includes(idvItem.idv_status)) {
+            clearInterval(pollRef.current);
+            setResult(idvItem);
+            setPhase('result');
+            onComplete?.(idvItem);
           }
         }
-      } catch { /* polling errors are non-fatal, keep trying */ }
+      } catch { /* non-fatal, keep polling */ }
     }, 3000);
   }
 
@@ -233,11 +236,16 @@ export default function IdVerificationField({
                             display:'inline-block' }} />
             </div>
             <div style={{ display:'flex', alignItems:'center',
-                          justifyContent:'center', gap:'8px',
-                          fontSize:'13px', color:'#6B7280', marginBottom:'14px' }}>
-              <span style={{ width:'8px', height:'8px', borderRadius:'50%',
-                             background: primaryColor, display:'inline-block' }} />
-              Waiting for you to complete on your phone…
+                         justifyContent:'center', gap:'8px',
+                         fontSize:'13px', color:'#6B7280', marginBottom:'14px' }}>
+              <style>{`
+                @keyframes idv-pulse { 0%,100%{opacity:1;transform:scale(1)}
+                                        50%{opacity:0.4;transform:scale(0.85)} }
+              `}</style>
+              <span style={{ width:'10px', height:'10px', borderRadius:'50%',
+                             background: primaryColor, display:'inline-block',
+                             animation:'idv-pulse 1.4s ease-in-out infinite' }} />
+              <span style={{ marginLeft:'4px' }}>Checking status…</span>
             </div>
             <div style={{ textAlign:'center' }}>
               <a href={sessionUrl} target="_blank" rel="noopener noreferrer"
@@ -248,7 +256,7 @@ export default function IdVerificationField({
             <div style={{ marginTop:'14px', textAlign:'center' }}>
               <button
                 onClick={async () => {
-                  const sid = sessionId || item?.didit_session_id;
+                  const sid = sessionIdRef.current || item?.didit_session_id;
                   if (!sid || !tenantId) return;
                   setPhase('creating');
                   try {
@@ -346,10 +354,10 @@ export default function IdVerificationField({
       </div>
       <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
         <button style={{ ...btn, flex:1 }}
-          onClick={() => { setError(''); setSessionId(''); setPhase('consent'); }}>
+          onClick={() => { setError(''); sessionIdRef.current = ''; setPhase('consent'); }}>
           Start Over
         </button>
-        {sessionId && (
+        {sessionIdRef.current && (
           <button
             style={{ ...btn, flex:1, background: '#6B7280' }}
             onClick={async () => {
@@ -357,7 +365,7 @@ export default function IdVerificationField({
               setPhase('creating');
               try {
                 const res = await base44.functions.invoke('getDiditSessionResult', {
-                  session_id: sessionId, outreach_id: outreachId,
+                  session_id: sessionIdRef.current, outreach_id: outreachId,
                   item_id: item?.item_id, tenant_id: tenantId,
                 });
                 const data = res?.data || res;
