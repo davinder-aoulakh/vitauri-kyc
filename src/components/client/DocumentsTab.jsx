@@ -45,6 +45,7 @@ function ReviewStatusBadge({ status }) {
 
 export default function DocumentsTab({ client, documents, onRefresh, onOcrExtracted }) {
   const { currentUser } = useTenant();
+  const [diditResult, setDiditResult] = useState(null);
   const [uploadOpen, setUploadOpen]       = useState(false);
   const [reviewOpen, setReviewOpen]       = useState(null);
   const [viewerDoc, setViewerDoc]         = useState(null);
@@ -54,6 +55,22 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
   const [deleteConfirm, setDeleteConfirm] = useState(null); // doc to confirm delete
   const [deletedExpanded, setDeletedExpanded] = useState(false);
   const [actionLoading, setActionLoading] = useState(null); // doc id
+
+  useEffect(() => {
+    if (!client?.id) return;
+    base44.entities.OutreachRequest.filter({ client_id: client.id })
+      .then(reqs => {
+        for (const req of (reqs || [])) {
+          for (const item of (req.items || [])) {
+            if (item.field_type === 'id_verification' && item.idv_status &&
+                item.idv_status !== 'Pending' && item.didit_session_id) {
+              setDiditResult(item);
+              return;
+            }
+          }
+        }
+      }).catch(() => {});
+  }, [client?.id]);
 
   const userRole = currentUser?.app_role;
   const canDeleteAny = hasPermission(userRole, 'deleteAnyDocument');
@@ -166,6 +183,81 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
           </Button>
         </div>
       </div>
+
+      {diditResult && (
+        <div className={cn(
+          'rounded-xl border p-4 m-4',
+          diditResult.idv_status === 'Pass' ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'
+        )}>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">{diditResult.idv_status === 'Pass' ? '✅' : '⚠'}</span>
+              <div>
+                <div className="text-sm font-semibold text-foreground">
+                  Didit Identity Verification —{' '}
+                  <span className={diditResult.idv_status === 'Pass' ? 'text-emerald-700' : 'text-amber-700'}>
+                    {diditResult.idv_status}
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {diditResult.idv_checked_at ? new Date(diditResult.idv_checked_at).toLocaleString() : '—'}
+                  {' · '}{diditResult.idv_document_type || '—'}
+                  {diditResult.idv_issuing_country ? ` · ${diditResult.idv_issuing_country}` : ''}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {diditResult.idv_similarity_score != null && (
+                <div className="text-center bg-white rounded-lg border px-3 py-1.5 min-w-[72px]">
+                  <div className="text-lg font-bold text-foreground">{diditResult.idv_similarity_score}%</div>
+                  <div className="text-xs text-muted-foreground">Face Match</div>
+                </div>
+              )}
+              {diditResult.idv_liveness_score != null && (
+                <div className="text-center bg-white rounded-lg border px-3 py-1.5 min-w-[72px]">
+                  <div className="text-lg font-bold text-foreground">{diditResult.idv_liveness_score}%</div>
+                  <div className="text-xs text-muted-foreground">Liveness</div>
+                </div>
+              )}
+              <div className="text-center bg-white rounded-lg border px-3 py-1.5 min-w-[72px]">
+                <div className={cn('text-lg font-bold', (diditResult.idv_aml_hits ?? 0) > 0 ? 'text-amber-600' : 'text-emerald-600')}>
+                  {diditResult.idv_aml_hits ?? 0}
+                </div>
+                <div className="text-xs text-muted-foreground">AML Hits</div>
+              </div>
+            </div>
+          </div>
+          {(diditResult.idv_extracted_first_name || diditResult.idv_extracted_dob) && (
+            <div className="mt-3 pt-3 border-t border-border/40 grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+              {(diditResult.idv_extracted_first_name || diditResult.idv_extracted_last_name) && (
+                <><span className="text-muted-foreground">Verified Name</span>
+                <span>{[diditResult.idv_extracted_first_name, diditResult.idv_extracted_last_name].filter(Boolean).join(' ')}</span></>
+              )}
+              {diditResult.idv_extracted_dob && (
+                <><span className="text-muted-foreground">Date of Birth</span>
+                <span>{diditResult.idv_extracted_dob}</span></>
+              )}
+              {diditResult.idv_extracted_nationality && (
+                <><span className="text-muted-foreground">Nationality (ISO)</span>
+                <span>{diditResult.idv_extracted_nationality}</span></>
+              )}
+              {diditResult.idv_document_number && (
+                <><span className="text-muted-foreground">Document Number</span>
+                <span className="font-mono">{diditResult.idv_document_number}</span></>
+              )}
+              {diditResult.idv_document_expiry && (
+                <><span className="text-muted-foreground">Document Expiry</span>
+                <span className={new Date(diditResult.idv_document_expiry) < new Date() ? 'text-red-600 font-medium' : ''}>
+                  {diditResult.idv_document_expiry}
+                </span></>
+              )}
+            </div>
+          )}
+          {diditResult.idv_failure_reason && (
+            <div className="mt-2 text-xs text-red-600">Issues: {diditResult.idv_failure_reason}</div>
+          )}
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="py-12 text-center text-muted-foreground text-sm">
