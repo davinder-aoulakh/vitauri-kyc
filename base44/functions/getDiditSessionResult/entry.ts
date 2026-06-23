@@ -215,12 +215,13 @@ Deno.serve(async (req) => {
 
       if (clientId7) {
 
-        // ── GUARD: skip if Didit documents already exist ──────────────────
+        // ── GUARD: skip if documents for THIS session already exist ──────────
         const allDocs = await base44.asServiceRole.entities.Document.filter({ client_id: clientId7 });
-        const hasDiditDocs = (allDocs || []).some(d =>
-          d.file_name?.startsWith('Didit_') || d.source === 'didit'
+        const reportName = `Didit_Verification_Report_${new Date().toISOString().split('T')[0]}.html`;
+        const hasThisSessionDocs = (allDocs || []).some(d =>
+          d.source === 'didit' && d.file_name === reportName
         );
-        if (hasDiditDocs) {
+        if (hasThisSessionDocs) {
           return Response.json({ ok: true, ...idvFields });
         }
 

@@ -62,15 +62,18 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
     if (!client?.id) return;
     base44.entities.OutreachRequest.filter({ client_id: client.id })
       .then(reqs => {
+        // Find the most recent completed IDV item across all outreach requests
+        let best = null;
         for (const req of (reqs || [])) {
           for (const item of (req.items || [])) {
-            if (item.field_type === 'id_verification' && item.idv_status &&
-                item.idv_status !== 'Pending' && item.didit_session_id) {
-              setDiditResult(item);
-              return;
+            if (item.didit_session_id && item.idv_status && item.idv_status !== 'Pending') {
+              if (!best || (item.idv_checked_at || '') > (best.idv_checked_at || '')) {
+                best = item;
+              }
             }
           }
         }
+        if (best) setDiditResult(best);
       }).catch(() => {});
   }, [client?.id]);
 
