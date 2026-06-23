@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { X, ExternalLink, RefreshCw, AlertTriangle } from 'lucide-react';
+import { X, ExternalLink, RefreshCw, AlertTriangle, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -40,6 +40,7 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
   const [mainImage, setMainImage] = useState('front');
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -56,6 +57,31 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
       setError(e.message || 'Failed to load verification details');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function downloadPdf() {
+    setPdfLoading(true);
+    try {
+      const res = await base44.functions.invoke('getDiditSessionDetails', {
+        session_id: sessionId,
+        tenant_id:  tenantId,
+        action:     'generate_pdf',
+      });
+      const d = res?.data || res;
+      if (d?.error) { alert('PDF failed: ' + d.error); return; }
+      if (d?.pdf_data_url) {
+        const a = document.createElement('a');
+        a.href     = d.pdf_data_url;
+        a.download = d.filename || `Didit_Report_${sessionId.substring(0, 8)}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+    } catch (e) {
+      alert('Could not generate PDF: ' + e.message);
+    } finally {
+      setPdfLoading(false);
     }
   }
 
@@ -96,6 +122,13 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
               onClick={load} disabled={loading}>
               <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
               Refresh
+            </Button>
+            <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs"
+              onClick={downloadPdf} disabled={pdfLoading || loading}>
+              {pdfLoading
+                ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                : <Download className="w-3.5 h-3.5" />}
+              PDF Report
             </Button>
             <a href={`https://business.didit.me/sessions/${sessionId}`}
                target="_blank" rel="noopener noreferrer">
@@ -163,6 +196,54 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
                 )}
               </div>
             </div>
+
+            {/* Face Comparison */}
+            {(data.front_image || data.back_image) && data.portrait_image && (
+              <div className="bg-card border border-border rounded-xl p-4">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                  Face Comparison
+                </div>
+                <div className="flex gap-4 items-start">
+                  <div className="flex-1 text-center">
+                    <div className="bg-muted rounded-xl overflow-hidden mb-2" style={{ height: 160 }}>
+                      <img
+                        src={data.front_image || data.back_image}
+                        alt="ID Document"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="text-xs text-muted-foreground">Identity Document</div>
+                  </div>
+                  <div className="flex flex-col items-center justify-center pt-12 gap-2">
+                    <div className={cn(
+                      'text-2xl font-bold px-3 py-1 rounded-lg',
+                      (data.face_score ?? 0) >= 80
+                        ? 'text-emerald-600 bg-emerald-50'
+                        : 'text-red-600 bg-red-50'
+                    )}>
+                      {data.face_score != null ? Math.round(data.face_score) + '%' : '—'}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Match</div>
+                    {data.face_status && (
+                      <div className={cn('text-xs font-semibold',
+                        data.face_status === 'Approved' ? 'text-emerald-600' : 'text-red-600')}>
+                        {data.face_status}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-none text-center" style={{ width: 130 }}>
+                    <div className="bg-muted rounded-xl overflow-hidden mb-2" style={{ height: 160 }}>
+                      <img
+                        src={data.portrait_image}
+                        alt="Selfie"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="text-xs text-muted-foreground">Live Selfie</div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Biometric scores */}
             <div className="bg-card border border-border rounded-xl p-4">
@@ -235,6 +316,63 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* AML Details */}
+            {data.aml_total_hits > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    <div className="text-xs font-semibold text-amber-800 uppercase tracking-wide">
+                      AML Screening — {data.aml_total_hits} Hit{data.aml_total_hits !== 1 ? 's' : ''} Found
+                    </div>
+                  </div>
+                  <span className={cn(
+                    'text-xs px-2 py-0.5 rounded-full font-semibold border',
+                    data.aml_status === 'Approved'
+                      ? 'bg-amber-100 text-amber-700 border-amber-300'
+                      : 'bg-red-100 text-red-700 border-red-300'
+                  )}>
+                    {data.aml_status || '—'}
+                  </span>
+                </div>
+                {data.aml_hits?.length > 0 ? (
+                  <div className="space-y-3">
+                    {data.aml_hits.map((hit, idx) => (
+                      <div key={idx} className="bg-white border border-amber-200 rounded-lg p-3 text-xs">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="font-semibold text-amber-900 text-sm">
+                            {hit.entity_name || hit.name || hit.full_name || `Hit ${idx + 1}`}
+                          </div>
+                          {(hit.score || hit.similarity_score) != null && (
+                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
+                              {Math.round((hit.score || hit.similarity_score) * 100)}% match
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-muted-foreground">
+                          {hit.match_type && <><span>Match Type</span><span className="text-foreground font-medium">{hit.match_type}</span></>}
+                          {hit.categories?.length > 0 && <><span>Categories</span><span className="text-foreground">{Array.isArray(hit.categories) ? hit.categories.join(', ') : hit.categories}</span></>}
+                          {hit.datasets?.length > 0 && <><span>Lists / Sources</span><span className="text-foreground">{Array.isArray(hit.datasets) ? hit.datasets.join(', ') : hit.datasets}</span></>}
+                          {hit.country && <><span>Country</span><span className="text-foreground">{hit.country}</span></>}
+                          {hit.date_of_birth && <><span>Date of Birth</span><span className="text-foreground">{hit.date_of_birth}</span></>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white border border-amber-200 rounded-lg p-3 text-xs">
+                    <div className="text-amber-800 font-medium mb-1">{data.aml_total_hits} screening hit(s) detected</div>
+                    <div className="text-amber-700">View full AML details in Didit Console → Sessions → this session → AML tab.</div>
+                    {data.aml_raw && (
+                      <pre className="mt-2 text-xs text-muted-foreground overflow-auto max-h-32 bg-muted rounded p-2">
+                        {JSON.stringify(data.aml_raw, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
