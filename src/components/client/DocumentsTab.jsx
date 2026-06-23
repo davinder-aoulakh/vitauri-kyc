@@ -22,14 +22,14 @@ import OcrResultPanel from '@/components/client/OcrResultPanel';
 const OCR_SUPPORTED = ['Passport', 'ID_Card', 'Articles_of_Association', 'UBO_Register', 'KYC_Report'];
 
 const DOC_TYPES = [
-  'Passport','ID_Card','UBO_Register','Articles_of_Association','KYC_Report',
+  'Passport','ID_Card','Selfie','UBO_Register','Articles_of_Association','KYC_Report',
   'Outreach_Response','Financial_Statement','Tax_Return','Salary_Slip','Other'
 ];
 
 const REVIEW_STATUS_CONFIG = {
-  Approved:       { icon: CheckCircle, color: 'bg-emerald-100 text-emerald-700', label: 'Approved' },
-  Rejected:       { icon: XCircle,     color: 'bg-red-100 text-red-700',         label: 'Rejected' },
-  Pending_Review: { icon: Clock,       color: 'bg-amber-100 text-amber-700',     label: 'Pending Review' },
+  Approved:       { icon: CheckCircle, color: 'bg-emerald-50 text-emerald-700 border border-emerald-200', label: '✓ Approved' },
+  Rejected:       { icon: XCircle,     color: 'bg-red-100 text-red-700',                                   label: 'Rejected' },
+  Pending_Review: { icon: Clock,       color: 'bg-amber-50 text-amber-700 border border-amber-200',        label: 'Pending Review' },
 };
 
 function ReviewStatusBadge({ status }) {
@@ -214,6 +214,11 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
                                 <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">Latest</span>
                               )}
                               <ReviewStatusBadge status={doc.review_status || 'Pending_Review'} />
+                              {doc?.source === 'didit' && (
+                                <span className="ml-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium">
+                                  🪪 Didit
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-muted-foreground mt-0.5">
                               {doc.is_ai_generated && <span className="text-purple-600 mr-1">AI Generated · </span>}
