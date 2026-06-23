@@ -69,6 +69,20 @@ Deno.serve(async (req) => {
     const live = decision?.liveness_checks?.[0]    || {};
     const aml  = decision?.aml_screenings?.[0]     || {};
 
+    // Log all top-level keys to help debug
+    console.log('Didit decision keys:', Object.keys(decision || {}));
+    if (decision?.decision) {
+      console.log('Didit decision.decision keys:', Object.keys(decision.decision));
+    }
+    // Log image fields available
+    console.log('IDV images:', {
+      front: !!idv.front_image,
+      back: !!idv.back_image,
+      portrait: !!idv.portrait_image
+    });
+    console.log('Liveness fields:', Object.keys(live));
+    console.log('Face match fields:', Object.keys(face));
+
     return Response.json({
       ok:          true,
       session_id,
@@ -105,10 +119,17 @@ Deno.serve(async (req) => {
       face_score:        face.score    ?? null,
       face_status:       face.status   || null,
       face_warnings:     face.warnings || [],
+      face_selfie_image: face.face_image || face.selfie_image  || face.selfie ||
+                         face.target_image || face.source_image || null,
+      face_raw:          face,
 
       liveness_score:    live.score    ?? null,
       liveness_status:   live.status   || null,
       liveness_warnings: live.warnings || [],
+      // Selfie image — try every common field name Didit might use
+      liveness_image:    live.face_image  || live.selfie_image || live.image ||
+                         live.portrait    || live.selfie       || null,
+      liveness_raw:      live,
 
       // AML
       aml_total_hits: aml.total_hits ?? 0,
