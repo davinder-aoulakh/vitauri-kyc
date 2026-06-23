@@ -7,6 +7,15 @@ import { X, Download, FileText } from 'lucide-react';
 function detectFileType(url, fileName) {
   if (!url) return 'unknown';
 
+  // Check filename extension first — most reliable signal
+  const nameLower = (fileName || '').toLowerCase().split('?')[0];
+  if (nameLower) {
+    if (/\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff?)$/.test(nameLower)) return 'image';
+    if (/\.html?$/.test(nameLower))                                   return 'html';
+    if (/\.pdf$/.test(nameLower))                                     return 'pdf';
+    if (/\.txt$/.test(nameLower))                                     return 'text';
+  }
+
   // data: URLs — check MIME type
   if (url.startsWith('data:')) {
     if (url.startsWith('data:image/'))          return 'image';
@@ -16,12 +25,12 @@ function detectFileType(url, fileName) {
     return 'data';
   }
 
-  // Regular URLs — check extension
-  const lower = (fileName || url).toLowerCase().split('?')[0];
-  if (/\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff?)$/.test(lower)) return 'image';
-  if (/\.html?$/.test(lower))                                   return 'html';
-  if (/\.pdf$/.test(lower))                                     return 'pdf';
-  if (/\.txt$/.test(lower))                                     return 'text';
+  // Regular URLs — check URL extension
+  const urlLower = url.toLowerCase().split('?')[0];
+  if (/\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff?)$/.test(urlLower)) return 'image';
+  if (/\.html?$/.test(urlLower))                                   return 'html';
+  if (/\.pdf$/.test(urlLower))                                     return 'pdf';
+  if (/\.txt$/.test(urlLower))                                     return 'text';
   return 'other';
 }
 
@@ -55,16 +64,31 @@ export default function DocumentViewer({ fileUrl, fileName, onClose }) {
         );
 
       case 'html': {
-        const htmlContent = fileUrl.startsWith('data:') ? decodeDataHtml(fileUrl) : null;
-        return htmlContent ? (
-          <iframe
-            srcDoc={htmlContent}
-            title={fileName}
-            className="w-full border-0"
-            style={{ height: 'calc(100vh - 80px)' }}
-            sandbox="allow-same-origin"
-          />
-        ) : (
+        if (fileUrl.startsWith('data:')) {
+          const htmlContent = decodeDataHtml(fileUrl);
+          if (htmlContent) {
+            return (
+              <iframe
+                srcDoc={htmlContent}
+                title={fileName}
+                className="w-full border-0"
+                style={{ height: 'calc(100vh - 80px)' }}
+                sandbox="allow-same-origin"
+              />
+            );
+          }
+          // data: URL present but couldn't decode — show download prompt
+          return (
+            <div className="flex flex-col items-center justify-center min-h-[300px] gap-4">
+              <FileText className="w-12 h-12 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Preview unavailable. Please download the file.</p>
+              <a href={fileUrl} download={fileName}>
+                <Button size="sm" className="gap-2"><Download className="w-4 h-4" /> Download File</Button>
+              </a>
+            </div>
+          );
+        }
+        return (
           <iframe
             src={fileUrl}
             title={fileName}
