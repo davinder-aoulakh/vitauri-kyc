@@ -29,7 +29,13 @@ Deno.serve(async (req) => {
         if (!pdfResp.ok) return Response.json({ error: `PDF generation failed: ${pdfResp.status}` });
 
         const arrBuf = await pdfResp.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
+        const bytes = new Uint8Array(arrBuf);
+        let binary = '';
+        const chunkSize = 8192;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+        }
+        const base64 = btoa(binary);
         return Response.json({
           ok:          true,
           pdf_data_url: `data:application/pdf;base64,${base64}`,
