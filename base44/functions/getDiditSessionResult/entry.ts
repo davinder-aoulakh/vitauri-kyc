@@ -221,16 +221,6 @@ Deno.serve(async (req) => {
 
       if (clientId7) {
 
-        // ── GUARD: skip if documents for THIS session already exist ──────────
-        const allDocs = await base44.asServiceRole.entities.Document.filter({ client_id: clientId7 });
-        const reportName = `Didit_Verification_Report_${new Date().toISOString().split('T')[0]}.html`;
-        const hasThisSessionDocs = (allDocs || []).some(d =>
-          d.source === 'didit' && d.file_name === reportName
-        );
-        if (hasThisSessionDocs) {
-          return Response.json({ ok: true, ...idvFields });
-        }
-
         function mapToDocType(diditType) {
           if (!diditType) return 'ID_Card';
           const t = diditType.toLowerCase();
@@ -238,6 +228,16 @@ Deno.serve(async (req) => {
           return 'ID_Card';
         }
         const docType = mapToDocType(idvFields.idv_document_type);
+
+        // ── GUARD: skip if documents for THIS session already exist ──────────
+        const allDocs = await base44.asServiceRole.entities.Document.filter({ client_id: clientId7 });
+        const frontName = `Didit_${docType}_Front.jpg`;
+        const hasThisSessionDocs = (allDocs || []).some(d =>
+          d.source === 'didit' && d.file_name === frontName
+        );
+        if (hasThisSessionDocs) {
+          return Response.json({ ok: true, ...idvFields });
+        }
 
         // ── A: ID document front image (Didit signed URL) ─────────────────
         if (idv.front_image) {
@@ -290,77 +290,6 @@ Deno.serve(async (req) => {
             review_status: 'Pending_Review', source: 'portal',
           }).catch(() => {});
         }
-
-        // ── E: Verification report (HTML, base64-encoded) ─────────────────
-        const amlHits    = aml?.total_hits ?? 0;
-        const reportHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>Didit Verification Report</title>
-<style>
-  body{font-family:Arial,sans-serif;max-width:640px;margin:32px auto;padding:0 16px;color:#1a2332;background:#f4f6fa}
-  .card{background:#fff;border-radius:12px;padding:20px 24px;margin-bottom:16px;border:1px solid #e2e8f2}
-  h1{font-size:18px;color:#0f1f3d;margin:0 0 4px}
-  h2{font-size:11px;letter-spacing:1px;color:#94a3b8;text-transform:uppercase;margin:0 0 10px;border-bottom:1px solid #e2e8f2;padding-bottom:6px}
-  table{width:100%;border-collapse:collapse}
-  td{padding:5px 0;font-size:13px;border-bottom:1px solid #f0f4f8}
-  td:first-child{color:#64748b;width:48%}
-  .big{font-size:26px;font-weight:700;color:#0f1f3d}
-  .sub{font-size:11px;color:#94a3b8;margin-top:2px}
-  .pass{color:#059669}.fail{color:#dc2626}.warn{color:#d97706}
-  .badge{padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600}
-  .bp{background:#f0fdf4;color:#059669;border:1px solid #10b981}
-  .bf{background:#fef2f2;color:#dc2626;border:1px solid #ef4444}
-  .scores{display:flex;gap:12px;margin-top:4px}
-  .score-box{background:#f4f6fa;border-radius:8px;padding:10px 16px;text-align:center;flex:1;border:1px solid #e2e8f2}
-</style></head><body>
-<div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between">
-    <div><h1>🪪 Didit Verification Report</h1><div class="sub">Session: ${session_id?.substring(0,18)}…</div></div>
-    <span class="badge ${decision.status === 'Approved' ? 'bp' : 'bf'}">${decision.status}</span>
-  </div>
-  <div class="sub" style="margin-top:6px">${new Date().toLocaleString()}</div>
-</div>
-<div class="card">
-  <h2>Biometric Scores</h2>
-  <div class="scores">
-    <div class="score-box"><div class="big ${face.status === 'Approved' ? 'pass' : 'fail'}">${face.score != null ? Math.round(face.score) + '%' : '—'}</div><div class="sub">Face Match</div></div>
-    <div class="score-box"><div class="big ${live.status === 'Approved' ? 'pass' : 'fail'}">${live.score != null ? Math.round(live.score) + '%' : '—'}</div><div class="sub">Liveness</div></div>
-    <div class="score-box"><div class="big ${amlHits > 0 ? 'warn' : 'pass'}">${amlHits}</div><div class="sub">AML Hits</div></div>
-  </div>
-</div>
-<div class="card">
-  <h2>Identity Document</h2>
-  <table>
-    <tr><td>Type</td><td>${idv.document_type || '—'}</td></tr>
-    <tr><td>Number</td><td><code>${idv.document_number || '—'}</code></td></tr>
-    <tr><td>Issuing Country</td><td>${idv.issuing_state_name || idv.issuing_state || '—'}</td></tr>
-    <tr><td>Expiry</td><td>${idv.expiration_date || '—'}</td></tr>
-  </table>
-</div>
-<div class="card">
-  <h2>OCR Extracted Identity</h2>
-  <table>
-    <tr><td>Full Name</td><td><b>${idv.full_name || [idv.first_name, idv.last_name].filter(Boolean).join(' ') || '—'}</b></td></tr>
-    <tr><td>Date of Birth</td><td>${idv.date_of_birth || '—'}</td></tr>
-    <tr><td>Nationality (ISO-3)</td><td>${idv.nationality || '—'}</td></tr>
-    <tr><td>Gender</td><td>${idv.gender || '—'}</td></tr>
-  </table>
-</div>
-${warnings.length > 0 ? `<div class="card"><h2>⚠ Warnings</h2><table>${warnings.map(w => `<tr><td class="warn">${w.risk || '—'}</td><td>${w.short_description || '—'}</td></tr>`).join('')}</table></div>` : ''}
-<div style="text-align:center;font-size:11px;color:#94a3b8;margin-top:24px;padding-bottom:32px">
-  Verified by Didit (didit.me) · SOC 2 Type 1 · ISO 27001 · EU Data Processing
-</div>
-</body></html>`;
-
-        const reportB64 = btoa(unescape(encodeURIComponent(reportHtml)));
-        await base44.asServiceRole.entities.Document.create({
-          tenant_id, client_id: clientId7,
-          doc_type: 'KYC_Report',
-          file_name: `Didit_Verification_Report_${new Date().toISOString().split('T')[0]}.html`,
-          file_url: `data:text/html;base64,${reportB64}`,
-          version: 1, is_ai_generated: true,
-          review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review',
-          source: 'didit',
-        }).catch(e => console.error('report doc failed:', e));
       }
     } catch (docErr) {
       console.error('Document step failed (non-fatal):', docErr?.message);
