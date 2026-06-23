@@ -17,6 +17,7 @@ import DocumentViewer from '@/components/shared/DocumentViewer';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import OcrResultPanel from '@/components/client/OcrResultPanel';
+import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
 
 // Doc types that support OCR extraction
 const OCR_SUPPORTED = ['Passport', 'ID_Card', 'Articles_of_Association', 'UBO_Register', 'KYC_Report'];
@@ -55,6 +56,7 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
   const [deleteConfirm, setDeleteConfirm] = useState(null); // doc to confirm delete
   const [deletedExpanded, setDeletedExpanded] = useState(false);
   const [actionLoading, setActionLoading] = useState(null); // doc id
+  const [diditPanelOpen, setDiditPanelOpen] = useState(false);
 
   useEffect(() => {
     if (!client?.id) return;
@@ -207,6 +209,13 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                size="sm"
+                className="gap-1.5 h-8 text-xs"
+                onClick={() => setDiditPanelOpen(true)}
+              >
+                View Full Verification →
+              </Button>
               {diditResult.idv_similarity_score != null && (
                 <div className="text-center bg-white rounded-lg border px-3 py-1.5 min-w-[72px]">
                   <div className="text-lg font-bold text-foreground">{diditResult.idv_similarity_score}%</div>
@@ -459,6 +468,15 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
         currentUser={currentUser}
         onSaved={onRefresh}
       />
+
+      {diditPanelOpen && diditResult?.didit_session_id && (
+        <DiditVerificationPanel
+          sessionId={diditResult.didit_session_id}
+          tenantId={client?.tenant_id}
+          clientName={client?.full_name}
+          onClose={() => setDiditPanelOpen(false)}
+        />
+      )}
     </div>
   );
 }
