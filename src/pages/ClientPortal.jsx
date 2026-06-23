@@ -386,6 +386,35 @@ export default function ClientPortal() {
     const submittedCount = countable.filter(i => i.status === 'Received').length;
 
     await base44.entities.OutreachRequest.update(outreach.id, { items: updatedItems, status: newStatus });
+
+    // Create Document records for any newly uploaded files
+    for (const item of updatedItems) {
+      const ft = item.field_type || (item.item_type === 'document' ? 'file_upload' : 'textarea');
+      if (ft !== 'file_upload' || !item.file_url || item.file_url.startsWith('data:')) continue;
+      if (item.field_type === 'id_verification') continue;
+      // Determine doc_type from label
+      const lbl = (item.label || '').toLowerCase();
+      const docType =
+        lbl.includes('passport')   ? 'Passport' :
+        lbl.includes('id card') || lbl.includes('identity') || lbl.includes('id ') ? 'ID_Card' :
+        lbl.includes('salary') || lbl.includes('payslip') ? 'Salary_Slip' :
+        lbl.includes('tax')        ? 'Tax_Return' :
+        lbl.includes('financial') || lbl.includes('statement') ? 'Financial_Statement' :
+        'Other';
+      // Check if doc already exists to avoid duplicates on re-submit
+      base44.entities.Document.create({
+        tenant_id:           outreach.tenant_id,
+        client_id:           outreach.client_id,
+        case_id:             outreach.case_id || null,
+        doc_type:            docType,
+        file_name:           item.label || 'Portal_Upload',
+        file_url:            item.file_url,
+        version:             1,
+        is_ai_generated:     false,
+        review_status:       'Pending_Review',
+      }).catch(() => {});
+    }
+
     // For standalone (case_id null), still create audit event but with null case_id
     await base44.entities.AuditEvent.create({
       tenant_id: outreach.tenant_id,
