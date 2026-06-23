@@ -153,8 +153,10 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
     onRefresh?.();
   }
 
-  // Split active vs deleted
-  const activeDocuments = documents.filter(doc => !doc.is_deleted);
+  // Split active vs deleted — also hide Didit HTML reports (replaced by View Full Verification panel)
+  const activeDocuments = documents.filter(doc =>
+    !doc.is_deleted && !doc.file_name?.startsWith('Didit_Verification_Report_')
+  );
   const deletedDocuments = documents.filter(doc => doc.is_deleted);
 
   // Filtering (active only)
