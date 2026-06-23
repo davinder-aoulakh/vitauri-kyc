@@ -120,6 +120,9 @@ export default function ClientPortal() {
   const [submittedIds, setSubmittedIds] = useState(new Set());
   const [confirmedOutreach, setConfirmedOutreach] = useState(null);
 
+  const [diditCallbackDone, setDiditCallbackDone] = useState(false);
+  const [diditCallbackStatus, setDiditCallbackStatus] = useState('');
+
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
@@ -134,18 +137,28 @@ export default function ClientPortal() {
 
   // Didit callback detection — runs when tenant loads
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params     = new URLSearchParams(window.location.search);
     if (params.get('didit_done') !== '1') return;
 
     const sessionId  = params.get('verificationSessionId');
     const outreachId = params.get('outreach_id');
     const itemId     = params.get('item_id');
 
-    // Clean the URL so the params don't persist on refresh
+    // Clean the URL immediately
     window.history.replaceState({}, '', window.location.pathname);
 
     if (!sessionId || !outreachId || !itemId || !tenant?.id) return;
 
+    // On phone: show the "done" screen before even fetching result
+    const isMobileCallback = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+      || window.innerWidth < 900;
+
+    if (isMobileCallback) {
+      setDiditCallbackDone(true);
+      setDiditCallbackStatus('checking');
+    }
+
+    // Fetch result (runs on both phone and desktop)
     base44.functions.invoke('getDiditSessionResult', {
       session_id:  sessionId,
       outreach_id: outreachId,
@@ -153,10 +166,14 @@ export default function ClientPortal() {
       tenant_id:   tenant.id,
     }).then(res => {
       const data = res?.data || res;
-      if (data?.ok && data?.idv_status) {
-        loadByToken();
+      if (isMobileCallback) {
+        setDiditCallbackStatus(data?.idv_status === 'Pass' ? 'pass' : 'done');
+      } else {
+        if (data?.ok || data?.idv_status) loadByToken();
       }
-    }).catch(console.error);
+    }).catch(() => {
+      if (isMobileCallback) setDiditCallbackStatus('done');
+    });
   }, [tenant]);
 
   // Apply favicon + page title when tenant loads
@@ -417,6 +434,88 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
         lbl.includes('statement') || lbl.includes('accounts') || lbl.includes('register') ||
         lbl.includes('licence') || lbl.includes('permit')) return 'file_upload';
     return 'textarea';
+  }
+
+  if (diditCallbackDone) {
+    const passed = diditCallbackStatus === 'pass';
+    const checking = diditCallbackStatus === 'checking';
+    return (
+      <div style={{
+        minHeight: '100vh', background: '#F4F6FA',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
+      }}>
+        <div style={{
+          background: '#FFFFFF', borderRadius: '20px', padding: '40px 32px',
+          textAlign: 'center', maxWidth: '360px', width: '100%',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+        }}>
+          {checking ? (
+            <>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔄</div>
+              <div style={{ fontWeight: 700, fontSize: '18px', color: '#1A2332', marginBottom: '8px' }}>
+                Confirming verification…
+              </div>
+              <div style={{ fontSize: '14px', color: '#64748B', lineHeight: 1.5 }}>
+                Just a moment while we confirm your result.
+              </div>
+            </>
+          ) : passed ? (
+            <>
+              <div style={{ fontSize: '56px', marginBottom: '16px' }}>✅</div>
+              <div style={{ fontWeight: 700, fontSize: '20px', color: '#059669', marginBottom: '10px' }}>
+                Identity Verified!
+              </div>
+              <div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>
+                Your identity has been successfully verified.
+              </div>
+              <div style={{
+                background: '#F0FDF4', border: '1px solid #10B981', borderRadius: '12px',
+                padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left',
+              }}>
+                <span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: '#065F46', marginBottom: '4px' }}>
+                    Continue on your laptop
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#047857', lineHeight: 1.5 }}>
+                    Return to your laptop or desktop — it has already updated
+                    with your verification result. You can close this tab.
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: '56px', marginBottom: '16px' }}>🪪</div>
+              <div style={{ fontWeight: 700, fontSize: '18px', color: '#1A2332', marginBottom: '10px' }}>
+                Verification Complete
+              </div>
+              <div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>
+                Thank you for completing the verification step.
+              </div>
+              <div style={{
+                background: '#EEF4FF', border: '1px solid #BFDBFE', borderRadius: '12px',
+                padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left',
+              }}>
+                <span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: '#1E40AF', marginBottom: '4px' }}>
+                    Return to your laptop
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#3B82F6', lineHeight: 1.5 }}>
+                    Please return to your laptop or desktop to see your result
+                    and continue your application. You can close this tab.
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+          <div style={{ marginTop: '24px', fontSize: '11px', color: '#9CA3AF' }}>
+            Powered by Didit · Secure identity verification
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const branding = getBranding(tenant);
