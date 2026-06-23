@@ -6,7 +6,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { session_id, tenant_id } = await req.json();
+    const { session_id, tenant_id, action = 'details' } = await req.json();
 
     if (!session_id || !tenant_id) {
       return Response.json({ error: 'session_id and tenant_id are required' });
@@ -18,6 +18,28 @@ Deno.serve(async (req) => {
     if (!tenant?.didit_api_key) {
       return Response.json({ error: 'Didit not configured for this tenant' });
     }
+
+    // ── PDF generation ──────────────────────────────────────────────────────
+    if (action === 'generate_pdf') {
+      try {
+        const pdfResp = await fetch(
+          `https://verification.didit.me/v3/session/${session_id}/generate-pdf`,
+          { headers: { 'x-api-key': tenant.didit_api_key } }
+        );
+        if (!pdfResp.ok) return Response.json({ error: `PDF generation failed: ${pdfResp.status}` });
+
+        const arrBuf = await pdfResp.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
+        return Response.json({
+          ok:          true,
+          pdf_data_url: `data:application/pdf;base64,${base64}`,
+          filename:    `Didit_Report_${session_id.substring(0, 8)}.pdf`,
+        });
+      } catch (err) {
+        return Response.json({ error: `PDF error: ${err.message}` });
+      }
+    }
+    // ── end PDF branch ───────────────────────────────────────────────────────
 
     // Fetch full session decision from Didit
     // Fresh call = fresh signed image URLs (valid for 1 hour each)
@@ -85,6 +107,8 @@ Deno.serve(async (req) => {
       // AML
       aml_total_hits: aml.total_hits ?? 0,
       aml_status:     aml.status     || null,
+      aml_hits:       aml.hits       || [],
+      aml_raw:        aml,
 
       // All warnings combined
       warnings: [
