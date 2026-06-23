@@ -129,19 +129,41 @@ Deno.serve(async (req) => {
             .filter(Boolean).join(' ');
           if (diditFullName && !client.full_name) updates.full_name = diditFullName;
           if (idvFields.idv_extracted_dob && !client.date_of_birth) updates.date_of_birth = idvFields.idv_extracted_dob;
-          if (idvFields.idv_extracted_nationality && !client.nationality) updates.nationality = idvFields.idv_extracted_nationality;
+          if (idvFields.idv_extracted_nationality && !client.nationality) {
+            const ISO3_MAP = {
+              'AUS':'Australia (AU)','NLD':'Netherlands (NL)','BEL':'Belgium (BE)',
+              'DEU':'Germany (DE)','FRA':'France (FR)','GBR':'United Kingdom (GB)',
+              'USA':'United States (US)','LUX':'Luxembourg (LU)','CHE':'Switzerland (CH)',
+              'CAN':'Canada (CA)','NZL':'New Zealand (NZ)','SGP':'Singapore (SG)',
+              'ZAF':'South Africa (ZA)','IND':'India (IN)','CHN':'China (CN)',
+              'JPN':'Japan (JP)','ARE':'United Arab Emirates (AE)','BRA':'Brazil (BR)',
+              'ARG':'Argentina (AR)','MYS':'Malaysia (MY)','PHL':'Philippines (PH)',
+              'IDN':'Indonesia (ID)','THA':'Thailand (TH)','KOR':'South Korea (KR)',
+              'PAK':'Pakistan (PK)','BGD':'Bangladesh (BD)','NGA':'Nigeria (NG)',
+              'KEN':'Kenya (KE)','GHA':'Ghana (GH)','EGY':'Egypt (EG)',
+              'TUR':'Turkey (TR)','ISR':'Israel (IL)','SAU':'Saudi Arabia (SA)',
+              'QAT':'Qatar (QA)','KWT':'Kuwait (KW)','PRT':'Portugal (PT)',
+              'ESP':'Spain (ES)','ITA':'Italy (IT)','SWE':'Sweden (SE)',
+              'NOR':'Norway (NO)','DNK':'Denmark (DK)','FIN':'Finland (FI)',
+              'IRL':'Ireland (IE)','POL':'Poland (PL)','CZE':'Czech Republic (CZ)',
+              'HUN':'Hungary (HU)','ROU':'Romania (RO)','GRC':'Greece (GR)',
+            };
+            const mapped = ISO3_MAP[idvFields.idv_extracted_nationality];
+            updates.nationality = mapped || 'Other';
+          }
           if (idvFields.idv_document_number && !client.id_number) updates.id_number = idvFields.idv_document_number;
           if (idvFields.idv_document_expiry && !client.id_expiry_date) updates.id_expiry_date = idvFields.idv_document_expiry;
 
           if (idvFields.idv_document_type && !client.id_type) {
-            const docTypeMap = {
-              'Passport': 'Passport',
-              'Identity Card': 'National ID',
-              "Driver's License": 'Driving Licence',
-              'Driving Licence': 'Driving Licence',
-              'Residence Permit': 'Residence Permit',
+            const ID_TYPE_MAP = {
+              'Passport':          'Passport',
+              'Identity Card':     'National ID Card',
+              'National ID':       'National ID Card',
+              "Driver's License":  'Driving Licence',
+              'Driving Licence':   'Driving Licence',
+              'Residence Permit':  'Residence Permit',
             };
-            updates.id_type = docTypeMap[idvFields.idv_document_type] || idvFields.idv_document_type;
+            updates.id_type = ID_TYPE_MAP[idvFields.idv_document_type] || 'Other';
           }
 
           if (idvFields.idv_issuing_country && !client.registered_country) {
@@ -186,112 +208,154 @@ Deno.serve(async (req) => {
       console.error('Client enrichment failed:', enrichErr);
     }
 
-    // ── STEP 7: Download Didit images and create Document records ────────────
+    // ── STEP 7: Create Document records ──────────────────────────────────────
     try {
-      const outreachList7 = await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id });
-      const clientId7     = outreachList7?.[0]?.client_id;
+      const req7      = (await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id }))?.[0];
+      const clientId7 = req7?.client_id;
 
-      if (clientId7 && idvFields.idv_status !== 'Pending') {
+      if (clientId7) {
 
-        async function fetchAndUpload(imageUrl, filename) {
+        async function toBase64DataUrl(imageUrl) {
           if (!imageUrl) return null;
           try {
             const resp = await fetch(imageUrl);
             if (!resp.ok) return null;
-            const arrayBuffer = await resp.arrayBuffer();
-            const uint8 = new Uint8Array(arrayBuffer);
-            const blob = new Blob([uint8], { type: 'image/jpeg' });
-            const formData = new FormData();
-            formData.append('file', blob, filename);
-            // Use base44 SDK upload via integrations
-            const result = await base44.asServiceRole.integrations.Core.UploadFile({ file: blob });
-            return result?.file_url || null;
-          } catch {
-            return null;
-          }
+            const arrBuf = await resp.arrayBuffer();
+            const b64    = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
+            return `data:image/jpeg;base64,${b64}`;
+          } catch { return null; }
         }
 
-        function mapDocType(diditType) {
+        function mapToDocType(diditType) {
           if (!diditType) return 'ID_Card';
           const t = diditType.toLowerCase();
-          if (t.includes('passport')) return 'Passport';
+          if (t.includes('passport'))                                    return 'Passport';
+          if (t.includes('identity') || t.includes('id card') || t.includes('national')) return 'ID_Card';
+          if (t.includes('driver'))                                      return 'ID_Card';
+          if (t.includes('residence'))                                   return 'ID_Card';
           return 'ID_Card';
         }
 
-        const docType    = mapDocType(idvFields.idv_document_type);
-        const reviewStat = idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review';
-        const sidShort   = session_id.substring(0, 8);
+        const docType = mapToDocType(idvFields.idv_document_type);
 
-        const imageUploads = await Promise.all([
-          fetchAndUpload(idv.front_image,    `didit_${docType.toLowerCase()}_front_${sidShort}.jpg`),
-          fetchAndUpload(idv.back_image,     `didit_${docType.toLowerCase()}_back_${sidShort}.jpg`),
-          fetchAndUpload(idv.portrait_image, `didit_selfie_${sidShort}.jpg`),
-        ]);
-
-        const docRecords = [];
-        if (imageUploads[0]) docRecords.push({ doc_type: docType,    file_name: `${docType}_front.jpg`,       file_url: imageUploads[0], review_status: reviewStat, is_ai_generated: false });
-        if (imageUploads[1]) docRecords.push({ doc_type: docType,    file_name: `${docType}_back.jpg`,        file_url: imageUploads[1], review_status: reviewStat, is_ai_generated: false });
-        if (imageUploads[2]) docRecords.push({ doc_type: 'KYC_Report', file_name: 'Selfie_Verification.jpg', file_url: imageUploads[2], review_status: 'Approved',  is_ai_generated: false });
-
-        for (const doc of docRecords) {
+        // ── A: Didit front image ──────────────────────────────────────────────
+        const frontB64 = await toBase64DataUrl(idv.front_image);
+        if (frontB64) {
           await base44.asServiceRole.entities.Document.create({
-            tenant_id, client_id: clientId7, version: 1, ...doc,
-          }).catch(e => console.error('Could not create Document record:', e));
+            tenant_id, client_id: clientId7,
+            doc_type: docType, file_name: `Didit_${docType}_Front.jpg`,
+            file_url: frontB64, version: 1, is_ai_generated: false,
+            review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review',
+            source: 'didit',
+          }).catch(() => {});
         }
 
-        // ── KYC Verification text report ─────────────────────────────────────
-        const reportLines = [
-          '=== DIDIT IDENTITY VERIFICATION REPORT ===',
-          `Session ID: ${session_id}`,
-          `Decision:   ${decision.status}`,
-          `Checked at: ${new Date().toISOString()}`,
-          '',
-          '--- DOCUMENT ---',
-          `Type:        ${idv.document_type || '—'}`,
-          `Number:      ${idv.document_number || '—'}`,
-          `Issuing:     ${idv.issuing_state_name || idv.issuing_state || '—'}`,
-          `Expiry:      ${idv.expiration_date || '—'}`,
-          '',
-          '--- OCR EXTRACTED IDENTITY ---',
-          `Full Name:   ${[idv.first_name, idv.last_name].filter(Boolean).join(' ') || '—'}`,
-          `Date of Birth: ${idv.date_of_birth || '—'}`,
-          `Nationality: ${idv.nationality || '—'}`,
-          `Gender:      ${idv.gender || '—'}`,
-          '',
-          '--- BIOMETRIC SCORES ---',
-          `Face Match:  ${face.score != null ? Math.round(face.score) + '%' : '—'} (${face.status || '—'})`,
-          `Liveness:    ${live.score != null ? Math.round(live.score) + '%' : '—'} (${live.status || '—'})`,
-          '',
-          '--- AML SCREENING ---',
-          `Total Hits:  ${aml.total_hits != null ? aml.total_hits : '—'}`,
-          `Status:      ${aml.status || '—'}`,
-          '',
-          '--- WARNINGS ---',
-          ...(warnings.length > 0
-            ? warnings.map(w => `• ${w.risk || '—'}: ${w.short_description || '—'}`)
-            : ['None']),
-        ].join('\n');
-
-        const encoder     = new TextEncoder();
-        const reportBytes = encoder.encode(reportLines);
-        const reportBlob  = new Blob([reportBytes], { type: 'text/plain' });
-        const reportUpload = await base44.asServiceRole.integrations.Core.UploadFile({ file: reportBlob }).catch(() => null);
-
-        if (reportUpload?.file_url) {
+        // ── B: Didit back image ───────────────────────────────────────────────
+        const backB64 = await toBase64DataUrl(idv.back_image);
+        if (backB64) {
           await base44.asServiceRole.entities.Document.create({
-            tenant_id,
-            client_id:    clientId7,
-            doc_type:     'KYC_Report',
-            file_name:    `Didit_Verification_Report_${new Date().toISOString().split('T')[0]}.txt`,
-            file_url:     reportUpload.file_url,
-            version:      1,
-            is_ai_generated: true,
-            review_status:   reviewStat,
-          }).catch(e => console.error('Could not create KYC Report document:', e));
+            tenant_id, client_id: clientId7,
+            doc_type: docType, file_name: `Didit_${docType}_Back.jpg`,
+            file_url: backB64, version: 1, is_ai_generated: false,
+            review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review',
+            source: 'didit',
+          }).catch(() => {});
         }
+
+        // ── C: Selfie ─────────────────────────────────────────────────────────
+        const selfiB64 = await toBase64DataUrl(idv.portrait_image);
+        if (selfiB64) {
+          await base44.asServiceRole.entities.Document.create({
+            tenant_id, client_id: clientId7,
+            doc_type: 'KYC_Report', file_name: 'Didit_Selfie.jpg',
+            file_url: selfiB64, version: 1, is_ai_generated: false,
+            review_status: 'Approved', source: 'didit',
+          }).catch(() => {});
+        }
+
+        // ── D: Portal-uploaded files ──────────────────────────────────────────
+        for (const item of (req7?.items || [])) {
+          if (!item.file_url || item.file_url.startsWith('data:')) continue;
+          if (item.field_type === 'id_verification') continue;
+          if (!['Received', 'Verified'].includes(item.status)) continue;
+
+          const portalDocType =
+            item.label?.toLowerCase().includes('passport') ? 'Passport' :
+            item.label?.toLowerCase().includes('identity') || item.label?.toLowerCase().includes('id') ? 'ID_Card' :
+            'KYC_Report';
+
+          await base44.asServiceRole.entities.Document.create({
+            tenant_id, client_id: clientId7,
+            doc_type: portalDocType, file_name: item.label || 'Portal_Upload',
+            file_url: item.file_url, version: 1, is_ai_generated: false,
+            review_status: 'Pending_Review', source: 'portal',
+          }).catch(() => {});
+        }
+
+        // ── E: HTML Verification Report ───────────────────────────────────────
+        const amlHits = aml.total_hits ?? 0;
+        const reportHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Didit Verification Report</title>
+<style>
+  body{font-family:Arial,sans-serif;max-width:600px;margin:32px auto;color:#1a2332}
+  h1{font-size:20px;color:#0f1f3d;border-bottom:2px solid #0f1f3d;padding-bottom:8px}
+  h2{font-size:14px;color:#64748b;margin-top:20px;margin-bottom:6px;text-transform:uppercase}
+  table{width:100%;border-collapse:collapse}
+  td{padding:6px 8px;border-bottom:1px solid #e2e8f2;font-size:13px}
+  td:first-child{color:#64748b;width:45%}
+  .score{font-size:18px;font-weight:700;color:#0f1f3d}
+  .badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px}
+  .b-pass{background:#f0fdf4;color:#059669;border:1px solid #10b981}
+  .b-fail{background:#fef2f2;color:#dc2626;border:1px solid #ef4444}
+  .b-warn{background:#fef3c7;color:#d97706;border:1px solid #f59e0b}
+</style></head><body>
+<h1>🪪 Didit Identity Verification Report</h1>
+<table>
+  <tr><td>Session ID</td><td><code>${session_id}</code></td></tr>
+  <tr><td>Decision</td><td><span class="${decision.status === 'Approved' ? 'b-pass' : 'b-fail'} badge">${decision.status}</span></td></tr>
+  <tr><td>Verified At</td><td>${new Date().toLocaleString()}</td></tr>
+</table>
+<h2>Identity Document</h2>
+<table>
+  <tr><td>Document Type</td><td>${idv.document_type || '—'}</td></tr>
+  <tr><td>Document Number</td><td>${idv.document_number || '—'}</td></tr>
+  <tr><td>Issuing Country</td><td>${idv.issuing_state_name || idv.issuing_state || '—'}</td></tr>
+  <tr><td>Expiry Date</td><td>${idv.expiration_date || '—'}</td></tr>
+</table>
+<h2>OCR Extracted Identity</h2>
+<table>
+  <tr><td>Full Name</td><td><b>${idv.full_name || [idv.first_name, idv.last_name].filter(Boolean).join(' ') || '—'}</b></td></tr>
+  <tr><td>Date of Birth</td><td>${idv.date_of_birth || '—'}</td></tr>
+  <tr><td>Nationality</td><td>${idv.nationality || '—'}</td></tr>
+  <tr><td>Gender</td><td>${idv.gender || '—'}</td></tr>
+</table>
+<h2>Biometric Verification Scores</h2>
+<table>
+  <tr><td>Face Match Score</td><td><span class="score">${face.score != null ? Math.round(face.score) + '%' : '—'}</span> &nbsp; <span class="${face.status === 'Approved' ? 'b-pass' : 'b-fail'} badge">${face.status || '—'}</span></td></tr>
+  <tr><td>Liveness Score</td><td><span class="score">${live.score != null ? Math.round(live.score) + '%' : '—'}</span> &nbsp; <span class="${live.status === 'Approved' ? 'b-pass' : 'b-fail'} badge">${live.status || '—'}</span></td></tr>
+</table>
+<h2>AML Screening</h2>
+<table>
+  <tr><td>Total Hits</td><td>${amlHits > 0 ? '<span class="b-warn badge">' + amlHits + ' hit(s)</span>' : '<span class="b-pass badge">No hits</span>'}</td></tr>
+  <tr><td>Status</td><td>${aml.status || '—'}</td></tr>
+</table>
+${warnings.length > 0 ? `<h2>⚠ Warnings</h2><table>${warnings.map(w => `<tr><td>${w.risk || '—'}</td><td>${w.short_description || '—'}</td></tr>`).join('')}</table>` : ''}
+<p style="margin-top:32px;font-size:11px;color:#94a3b8">Generated by Vitauri Platform · Verified by Didit (didit.me) · EU Data Processing</p>
+</body></html>`;
+
+        const reportB64 = btoa(unescape(encodeURIComponent(reportHtml)));
+        await base44.asServiceRole.entities.Document.create({
+          tenant_id, client_id: clientId7,
+          doc_type: 'KYC_Report',
+          file_name: `Didit_Verification_Report_${new Date().toISOString().split('T')[0]}.html`,
+          file_url: `data:text/html;base64,${reportB64}`,
+          version: 1, is_ai_generated: true,
+          review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review',
+          source: 'didit',
+        }).catch(() => {});
       }
     } catch (docErr) {
-      console.error('Document creation step failed:', docErr);
+      console.error('Document creation failed (non-fatal):', docErr?.message || docErr);
     }
 
     return Response.json({ ok: true, ...idvFields });
