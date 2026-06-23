@@ -165,7 +165,7 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
             {/* Document images */}
             <div className="bg-muted/30 rounded-xl p-4">
               <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                ID Document Images
+                Identity Document
               </div>
               {currentImg && (
                 <div className="bg-black rounded-xl overflow-hidden mb-3 flex items-center justify-center" style={{ minHeight: 220 }}>
@@ -187,63 +187,111 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
                     <img src={data.back_image} alt="Back" className="w-full h-full object-cover" />
                   </button>
                 )}
-                {data.portrait_image && (
-                  <button onClick={() => setMainImage('portrait')}
-                    className={cn('rounded-lg overflow-hidden border-2 w-12 h-12',
-                      mainImage === 'portrait' ? 'border-primary' : 'border-transparent opacity-60')}>
-                    <img src={data.portrait_image} alt="Selfie" className="w-full h-full object-cover" />
-                  </button>
-                )}
+                {/* Portrait removed from here — shown in Face Comparison section below */}
               </div>
             </div>
 
-            {/* Face Comparison */}
-            {(data.front_image || data.back_image) && data.portrait_image && (
-              <div className="bg-card border border-border rounded-xl p-4">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                  Face Comparison
-                </div>
-                <div className="flex gap-4 items-start">
-                  <div className="flex-1 text-center">
-                    <div className="bg-muted rounded-xl overflow-hidden mb-2" style={{ height: 160 }}>
-                      <img
-                        src={data.front_image || data.back_image}
-                        alt="ID Document"
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <div className="text-xs text-muted-foreground">Identity Document</div>
+            {/* ── Face Comparison ── */}
+            {(() => {
+              const docFace = data.portrait_image;
+
+              const findSelfie = (raw) => {
+                if (!raw || typeof raw !== 'object') return null;
+                const knownFields = ['face_image','selfie_image','selfie','image',
+                                     'target_image','source_image','portrait',
+                                     'live_image','capture_image','user_image'];
+                for (const f of knownFields) {
+                  if (raw[f] && typeof raw[f] === 'string' &&
+                      (raw[f].startsWith('http') || raw[f].startsWith('data:'))) {
+                    return raw[f];
+                  }
+                }
+                for (const [, v] of Object.entries(raw)) {
+                  if (typeof v === 'string' && v.length > 20 &&
+                      (v.startsWith('http') || v.startsWith('data:image'))) {
+                    return v;
+                  }
+                }
+                return null;
+              };
+
+              const liveSelfie =
+                data.liveness_image      ||
+                data.face_selfie_image   ||
+                findSelfie(data.liveness_raw) ||
+                findSelfie(data.face_raw);
+
+              if (!docFace && !liveSelfie) return null;
+
+              return (
+                <div className="bg-card border border-border rounded-xl p-4">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                    Face Comparison
                   </div>
-                  <div className="flex flex-col items-center justify-center pt-12 gap-2">
-                    <div className={cn(
-                      'text-2xl font-bold px-3 py-1 rounded-lg',
-                      (data.face_score ?? 0) >= 80
-                        ? 'text-emerald-600 bg-emerald-50'
-                        : 'text-red-600 bg-red-50'
-                    )}>
-                      {data.face_score != null ? Math.round(data.face_score) + '%' : '—'}
+                  <div className="flex items-center gap-4">
+                    <div className="flex-none text-center" style={{ width: 130 }}>
+                      {docFace ? (
+                        <div className="bg-muted rounded-xl overflow-hidden mb-2" style={{ height: 160 }}>
+                          <img src={docFace} alt="Document portrait" className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="bg-muted rounded-xl flex items-center justify-center mb-2 text-muted-foreground text-xs" style={{ height: 160 }}>
+                          Not available
+                        </div>
+                      )}
+                      <div className="text-xs text-muted-foreground">Document Photo</div>
                     </div>
-                    <div className="text-xs text-muted-foreground">Match</div>
-                    {data.face_status && (
-                      <div className={cn('text-xs font-semibold',
-                        data.face_status === 'Approved' ? 'text-emerald-600' : 'text-red-600')}>
-                        {data.face_status}
+
+                    <div className="flex-1 flex flex-col items-center justify-center gap-2">
+                      <div className={cn(
+                        'text-3xl font-bold px-4 py-2 rounded-xl',
+                        (data.face_score ?? 0) >= 80
+                          ? 'text-emerald-600 bg-emerald-50 border border-emerald-200'
+                          : 'text-red-600 bg-red-50 border border-red-200'
+                      )}>
+                        {data.face_score != null ? Math.round(data.face_score) + '%' : '—'}
                       </div>
-                    )}
-                  </div>
-                  <div className="flex-none text-center" style={{ width: 130 }}>
-                    <div className="bg-muted rounded-xl overflow-hidden mb-2" style={{ height: 160 }}>
-                      <img
-                        src={data.portrait_image}
-                        alt="Selfie"
-                        className="w-full h-full object-cover"
-                      />
+                      <div className="text-xs text-muted-foreground">Match</div>
+                      {data.face_status && (
+                        <div className={cn(
+                          'text-xs font-semibold px-2 py-0.5 rounded-full',
+                          data.face_status === 'Approved' ? 'text-emerald-700 bg-emerald-50' : 'text-red-700 bg-red-50'
+                        )}>
+                          {data.face_status}
+                        </div>
+                      )}
                     </div>
-                    <div className="text-xs text-muted-foreground">Live Selfie</div>
+
+                    <div className="flex-none text-center" style={{ width: 130 }}>
+                      {liveSelfie ? (
+                        <div className="bg-muted rounded-xl overflow-hidden mb-2" style={{ height: 160 }}>
+                          <img src={liveSelfie} alt="Live selfie" className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="bg-muted rounded-xl flex items-center justify-center mb-2 text-center text-xs text-muted-foreground p-3" style={{ height: 160 }}>
+                          <div>
+                            <div className="text-2xl mb-2">📸</div>
+                            Selfie image not<br/>returned by Didit API
+                          </div>
+                        </div>
+                      )}
+                      <div className="text-xs text-muted-foreground">Live Selfie</div>
+                    </div>
                   </div>
+
+                  {!liveSelfie && data.liveness_raw && (
+                    <details className="mt-3">
+                      <summary className="text-xs text-muted-foreground cursor-pointer">
+                        Debug: available liveness fields
+                      </summary>
+                      <pre className="text-xs mt-1 p-2 bg-muted rounded overflow-auto max-h-32">
+                        {JSON.stringify(Object.keys(data.liveness_raw || {}), null, 2)}
+                      </pre>
+                    </details>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Biometric scores */}
             <div className="bg-card border border-border rounded-xl p-4">
