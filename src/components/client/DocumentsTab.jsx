@@ -60,9 +60,9 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
 
   useEffect(() => {
     if (!client?.id) return;
+    // First try OutreachRequest items (new flow with idv_status written back)
     base44.entities.OutreachRequest.filter({ client_id: client.id })
       .then(reqs => {
-        // Find the most recent completed IDV item across all outreach requests
         let best = null;
         for (const req of (reqs || [])) {
           for (const item of (req.items || [])) {
@@ -73,7 +73,32 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
             }
           }
         }
-        if (best) setDiditResult(best);
+        if (best) {
+          setDiditResult(best);
+          return;
+        }
+        // Fallback: check Document records for a Didit KYC report and parse session_id from it
+        base44.entities.Document.filter({ client_id: client.id })
+          .then(docs => {
+            const diditReport = (docs || [])
+              .filter(d => d.source === 'didit' && d.file_url?.includes('base64'))
+              .sort((a, b) => (b.created_date || '').localeCompare(a.created_date || ''))[0];
+            if (diditReport) {
+              // Extract session ID from the base64 HTML content
+              try {
+                const b64 = diditReport.file_url.split(',')[1];
+                const html = atob(b64);
+                const match = html.match(/Session:\s*([a-f0-9-]{36})/i);
+                if (match) {
+                  setDiditResult({
+                    didit_session_id: match[1],
+                    idv_status: diditReport.review_status === 'Approved' ? 'Pass' : 'Inconclusive',
+                    idv_checked_at: diditReport.created_date,
+                  });
+                }
+              } catch {}
+            }
+          }).catch(() => {});
       }).catch(() => {});
   }, [client?.id]);
 

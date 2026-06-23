@@ -89,9 +89,15 @@ Deno.serve(async (req) => {
       const outreachList = await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id });
       const outreachReq  = outreachList?.[0];
       if (outreachReq) {
-        const updatedItems = (outreachReq.items || []).map(it =>
-          it.item_id === item_id ? { ...it, ...idvFields } : it
-        );
+        // Match by item_id, or by field_type/item_type for IDV items if item_id not found
+        const updatedItems = (outreachReq.items || []).map(it => {
+          if (it.item_id === item_id) return { ...it, ...idvFields };
+          if (!item_id && (it.field_type === 'id_verification' ||
+              (it.item_type === 'data_point' && (it.label || '').toLowerCase().includes('id')))) {
+            return { ...it, ...idvFields };
+          }
+          return it;
+        });
         await base44.asServiceRole.entities.OutreachRequest.update(outreach_id, { items: updatedItems });
       }
     } catch (err) {
