@@ -130,12 +130,7 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
                 : <Download className="w-3.5 h-3.5" />}
               PDF Report
             </Button>
-            <a href={`https://business.didit.me/sessions/${sessionId}`}
-               target="_blank" rel="noopener noreferrer">
-              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs">
-                <ExternalLink className="w-3.5 h-3.5" /> Didit Console
-              </Button>
-            </a>
+
             <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={onClose}>
               <X className="w-4 h-4" />
             </Button>
