@@ -208,80 +208,72 @@ Deno.serve(async (req) => {
       console.error('Client enrichment failed:', enrichErr);
     }
 
-    // ── STEP 7: Create Document records ──────────────────────────────────────
+    // ── STEP 7: Create Document records (run once only) ──────────────────────
     try {
       const req7      = (await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id }))?.[0];
       const clientId7 = req7?.client_id;
 
       if (clientId7) {
 
-        async function toBase64DataUrl(imageUrl) {
-          if (!imageUrl) return null;
-          try {
-            const resp = await fetch(imageUrl);
-            if (!resp.ok) return null;
-            const arrBuf = await resp.arrayBuffer();
-            const b64    = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
-            return `data:image/jpeg;base64,${b64}`;
-          } catch { return null; }
+        // ── GUARD: skip if Didit documents already exist ──────────────────
+        const allDocs = await base44.asServiceRole.entities.Document.filter({ client_id: clientId7 });
+        const hasDiditDocs = (allDocs || []).some(d =>
+          d.file_name?.startsWith('Didit_') || d.source === 'didit'
+        );
+        if (hasDiditDocs) {
+          return Response.json({ ok: true, ...idvFields });
         }
 
         function mapToDocType(diditType) {
           if (!diditType) return 'ID_Card';
           const t = diditType.toLowerCase();
-          if (t.includes('passport'))                                    return 'Passport';
-          if (t.includes('identity') || t.includes('id card') || t.includes('national')) return 'ID_Card';
-          if (t.includes('driver'))                                      return 'ID_Card';
-          if (t.includes('residence'))                                   return 'ID_Card';
+          if (t.includes('passport')) return 'Passport';
           return 'ID_Card';
         }
-
         const docType = mapToDocType(idvFields.idv_document_type);
 
-        // ── A: Didit front image ──────────────────────────────────────────────
-        const frontB64 = await toBase64DataUrl(idv.front_image);
-        if (frontB64) {
+        // ── A: ID document front image (Didit signed URL) ─────────────────
+        if (idv.front_image) {
           await base44.asServiceRole.entities.Document.create({
             tenant_id, client_id: clientId7,
             doc_type: docType, file_name: `Didit_${docType}_Front.jpg`,
-            file_url: frontB64, version: 1, is_ai_generated: false,
+            file_url: idv.front_image, version: 1, is_ai_generated: false,
             review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review',
             source: 'didit',
-          }).catch(() => {});
+          }).catch(e => console.error('front_image doc failed:', e));
         }
 
-        // ── B: Didit back image ───────────────────────────────────────────────
-        const backB64 = await toBase64DataUrl(idv.back_image);
-        if (backB64) {
+        // ── B: ID document back image ─────────────────────────────────────
+        if (idv.back_image) {
           await base44.asServiceRole.entities.Document.create({
             tenant_id, client_id: clientId7,
             doc_type: docType, file_name: `Didit_${docType}_Back.jpg`,
-            file_url: backB64, version: 1, is_ai_generated: false,
+            file_url: idv.back_image, version: 1, is_ai_generated: false,
             review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review',
             source: 'didit',
-          }).catch(() => {});
+          }).catch(e => console.error('back_image doc failed:', e));
         }
 
-        // ── C: Selfie ─────────────────────────────────────────────────────────
-        const selfiB64 = await toBase64DataUrl(idv.portrait_image);
-        if (selfiB64) {
+        // ── C: Selfie / portrait ──────────────────────────────────────────
+        if (idv.portrait_image) {
           await base44.asServiceRole.entities.Document.create({
             tenant_id, client_id: clientId7,
             doc_type: 'KYC_Report', file_name: 'Didit_Selfie.jpg',
-            file_url: selfiB64, version: 1, is_ai_generated: false,
+            file_url: idv.portrait_image, version: 1, is_ai_generated: false,
             review_status: 'Approved', source: 'didit',
-          }).catch(() => {});
+          }).catch(e => console.error('portrait doc failed:', e));
         }
 
-        // ── D: Portal-uploaded files ──────────────────────────────────────────
+        // ── D: Portal-uploaded files ──────────────────────────────────────
         for (const item of (req7?.items || [])) {
           if (!item.file_url || item.file_url.startsWith('data:')) continue;
-          if (item.field_type === 'id_verification') continue;
-          if (!['Received', 'Verified'].includes(item.status)) continue;
+          if (item.field_type === 'id_verification')                continue;
+          if (!['Received', 'Verified'].includes(item.status))      continue;
 
           const portalDocType =
-            item.label?.toLowerCase().includes('passport') ? 'Passport' :
-            item.label?.toLowerCase().includes('identity') || item.label?.toLowerCase().includes('id') ? 'ID_Card' :
+            item.label?.toLowerCase().includes('passport')   ? 'Passport' :
+            item.label?.toLowerCase().includes('identity') ||
+            item.label?.toLowerCase().includes('proof')      ? 'ID_Card'  :
             'KYC_Report';
 
           await base44.asServiceRole.entities.Document.create({
@@ -292,55 +284,64 @@ Deno.serve(async (req) => {
           }).catch(() => {});
         }
 
-        // ── E: HTML Verification Report ───────────────────────────────────────
-        const amlHits = aml.total_hits ?? 0;
+        // ── E: Verification report (HTML, base64-encoded) ─────────────────
+        const amlHits    = aml?.total_hits ?? 0;
         const reportHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>Didit Verification Report</title>
 <style>
-  body{font-family:Arial,sans-serif;max-width:600px;margin:32px auto;color:#1a2332}
-  h1{font-size:20px;color:#0f1f3d;border-bottom:2px solid #0f1f3d;padding-bottom:8px}
-  h2{font-size:14px;color:#64748b;margin-top:20px;margin-bottom:6px;text-transform:uppercase}
+  body{font-family:Arial,sans-serif;max-width:640px;margin:32px auto;padding:0 16px;color:#1a2332;background:#f4f6fa}
+  .card{background:#fff;border-radius:12px;padding:20px 24px;margin-bottom:16px;border:1px solid #e2e8f2}
+  h1{font-size:18px;color:#0f1f3d;margin:0 0 4px}
+  h2{font-size:11px;letter-spacing:1px;color:#94a3b8;text-transform:uppercase;margin:0 0 10px;border-bottom:1px solid #e2e8f2;padding-bottom:6px}
   table{width:100%;border-collapse:collapse}
-  td{padding:6px 8px;border-bottom:1px solid #e2e8f2;font-size:13px}
-  td:first-child{color:#64748b;width:45%}
-  .score{font-size:18px;font-weight:700;color:#0f1f3d}
-  .badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px}
-  .b-pass{background:#f0fdf4;color:#059669;border:1px solid #10b981}
-  .b-fail{background:#fef2f2;color:#dc2626;border:1px solid #ef4444}
-  .b-warn{background:#fef3c7;color:#d97706;border:1px solid #f59e0b}
+  td{padding:5px 0;font-size:13px;border-bottom:1px solid #f0f4f8}
+  td:first-child{color:#64748b;width:48%}
+  .big{font-size:26px;font-weight:700;color:#0f1f3d}
+  .sub{font-size:11px;color:#94a3b8;margin-top:2px}
+  .pass{color:#059669}.fail{color:#dc2626}.warn{color:#d97706}
+  .badge{padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600}
+  .bp{background:#f0fdf4;color:#059669;border:1px solid #10b981}
+  .bf{background:#fef2f2;color:#dc2626;border:1px solid #ef4444}
+  .scores{display:flex;gap:12px;margin-top:4px}
+  .score-box{background:#f4f6fa;border-radius:8px;padding:10px 16px;text-align:center;flex:1;border:1px solid #e2e8f2}
 </style></head><body>
-<h1>🪪 Didit Identity Verification Report</h1>
-<table>
-  <tr><td>Session ID</td><td><code>${session_id}</code></td></tr>
-  <tr><td>Decision</td><td><span class="${decision.status === 'Approved' ? 'b-pass' : 'b-fail'} badge">${decision.status}</span></td></tr>
-  <tr><td>Verified At</td><td>${new Date().toLocaleString()}</td></tr>
-</table>
-<h2>Identity Document</h2>
-<table>
-  <tr><td>Document Type</td><td>${idv.document_type || '—'}</td></tr>
-  <tr><td>Document Number</td><td>${idv.document_number || '—'}</td></tr>
-  <tr><td>Issuing Country</td><td>${idv.issuing_state_name || idv.issuing_state || '—'}</td></tr>
-  <tr><td>Expiry Date</td><td>${idv.expiration_date || '—'}</td></tr>
-</table>
-<h2>OCR Extracted Identity</h2>
-<table>
-  <tr><td>Full Name</td><td><b>${idv.full_name || [idv.first_name, idv.last_name].filter(Boolean).join(' ') || '—'}</b></td></tr>
-  <tr><td>Date of Birth</td><td>${idv.date_of_birth || '—'}</td></tr>
-  <tr><td>Nationality</td><td>${idv.nationality || '—'}</td></tr>
-  <tr><td>Gender</td><td>${idv.gender || '—'}</td></tr>
-</table>
-<h2>Biometric Verification Scores</h2>
-<table>
-  <tr><td>Face Match Score</td><td><span class="score">${face.score != null ? Math.round(face.score) + '%' : '—'}</span> &nbsp; <span class="${face.status === 'Approved' ? 'b-pass' : 'b-fail'} badge">${face.status || '—'}</span></td></tr>
-  <tr><td>Liveness Score</td><td><span class="score">${live.score != null ? Math.round(live.score) + '%' : '—'}</span> &nbsp; <span class="${live.status === 'Approved' ? 'b-pass' : 'b-fail'} badge">${live.status || '—'}</span></td></tr>
-</table>
-<h2>AML Screening</h2>
-<table>
-  <tr><td>Total Hits</td><td>${amlHits > 0 ? '<span class="b-warn badge">' + amlHits + ' hit(s)</span>' : '<span class="b-pass badge">No hits</span>'}</td></tr>
-  <tr><td>Status</td><td>${aml.status || '—'}</td></tr>
-</table>
-${warnings.length > 0 ? `<h2>⚠ Warnings</h2><table>${warnings.map(w => `<tr><td>${w.risk || '—'}</td><td>${w.short_description || '—'}</td></tr>`).join('')}</table>` : ''}
-<p style="margin-top:32px;font-size:11px;color:#94a3b8">Generated by Vitauri Platform · Verified by Didit (didit.me) · EU Data Processing</p>
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div><h1>🪪 Didit Verification Report</h1><div class="sub">Session: ${session_id?.substring(0,18)}…</div></div>
+    <span class="badge ${decision.status === 'Approved' ? 'bp' : 'bf'}">${decision.status}</span>
+  </div>
+  <div class="sub" style="margin-top:6px">${new Date().toLocaleString()}</div>
+</div>
+<div class="card">
+  <h2>Biometric Scores</h2>
+  <div class="scores">
+    <div class="score-box"><div class="big ${face.status === 'Approved' ? 'pass' : 'fail'}">${face.score != null ? Math.round(face.score) + '%' : '—'}</div><div class="sub">Face Match</div></div>
+    <div class="score-box"><div class="big ${live.status === 'Approved' ? 'pass' : 'fail'}">${live.score != null ? Math.round(live.score) + '%' : '—'}</div><div class="sub">Liveness</div></div>
+    <div class="score-box"><div class="big ${amlHits > 0 ? 'warn' : 'pass'}">${amlHits}</div><div class="sub">AML Hits</div></div>
+  </div>
+</div>
+<div class="card">
+  <h2>Identity Document</h2>
+  <table>
+    <tr><td>Type</td><td>${idv.document_type || '—'}</td></tr>
+    <tr><td>Number</td><td><code>${idv.document_number || '—'}</code></td></tr>
+    <tr><td>Issuing Country</td><td>${idv.issuing_state_name || idv.issuing_state || '—'}</td></tr>
+    <tr><td>Expiry</td><td>${idv.expiration_date || '—'}</td></tr>
+  </table>
+</div>
+<div class="card">
+  <h2>OCR Extracted Identity</h2>
+  <table>
+    <tr><td>Full Name</td><td><b>${idv.full_name || [idv.first_name, idv.last_name].filter(Boolean).join(' ') || '—'}</b></td></tr>
+    <tr><td>Date of Birth</td><td>${idv.date_of_birth || '—'}</td></tr>
+    <tr><td>Nationality (ISO-3)</td><td>${idv.nationality || '—'}</td></tr>
+    <tr><td>Gender</td><td>${idv.gender || '—'}</td></tr>
+  </table>
+</div>
+${warnings.length > 0 ? `<div class="card"><h2>⚠ Warnings</h2><table>${warnings.map(w => `<tr><td class="warn">${w.risk || '—'}</td><td>${w.short_description || '—'}</td></tr>`).join('')}</table></div>` : ''}
+<div style="text-align:center;font-size:11px;color:#94a3b8;margin-top:24px;padding-bottom:32px">
+  Verified by Didit (didit.me) · SOC 2 Type 1 · ISO 27001 · EU Data Processing
+</div>
 </body></html>`;
 
         const reportB64 = btoa(unescape(encodeURIComponent(reportHtml)));
@@ -352,10 +353,10 @@ ${warnings.length > 0 ? `<h2>⚠ Warnings</h2><table>${warnings.map(w => `<tr><t
           version: 1, is_ai_generated: true,
           review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review',
           source: 'didit',
-        }).catch(() => {});
+        }).catch(e => console.error('report doc failed:', e));
       }
     } catch (docErr) {
-      console.error('Document creation failed (non-fatal):', docErr?.message || docErr);
+      console.error('Document step failed (non-fatal):', docErr?.message);
     }
 
     return Response.json({ ok: true, ...idvFields });
