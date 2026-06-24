@@ -145,7 +145,11 @@
     },
     "didit_workflow_id": {
       "type": "string",
-      "description": "UUID of the Didit KYC workflow"
+      "description": "UUID of the default Didit KYC workflow \u2014 kept in sync with the default entry in didit_workflows"
+    },
+    "didit_workflows": {
+      "type": "string",
+      "description": "JSON array of Didit workflow configurations. Each entry: { id, name, workflow_id, description, is_default }. Default: empty string treated as []."
     },
     "didit_min_match_score": {
       "type": "number",
