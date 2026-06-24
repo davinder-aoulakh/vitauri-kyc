@@ -126,9 +126,7 @@ export default function OutreachTemplatesTab({ tenant }) {
 
   async function loadDiditWorkflows() {
     try {
-      // Fetch fresh from DB so we always have the latest Ops-configured workflows
-      const tenants = await base44.entities.Tenant.filter({ id: tenant.id });
-      const freshTenant = tenants?.[0];
+      const freshTenant = await base44.entities.Tenant.get(tenant.id);
       const wfs = JSON.parse(freshTenant?.didit_workflows || '[]');
       setDiditWorkflows(Array.isArray(wfs) ? wfs : []);
     } catch { setDiditWorkflows([]); }
