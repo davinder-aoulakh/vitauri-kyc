@@ -89,15 +89,16 @@ export default function IdVerificationField({
     setError('');
     try {
       const res = await base44.functions.invoke('createDiditSession', {
-        outreach_id:  outreachId,
-        item_id:      item?.item_id,
-        client_id:    clientId,
-        tenant_id:    tenantId,
-        portal_url:   portalUrl,
+        outreach_id:     outreachId,
+        item_id:         item?.item_id,
+        client_id:       clientId,
+        tenant_id:       tenantId,
+        portal_url:      portalUrl,
         language,
-        client_email: clientEmail,
-        first_name:   firstName,
-        last_name:    lastName,
+        client_email:    clientEmail,
+        first_name:      firstName,
+        last_name:       lastName,
+        idv_workflow_id: item?.idv_workflow_id || '',
       });
 
       const data = res?.data || res;

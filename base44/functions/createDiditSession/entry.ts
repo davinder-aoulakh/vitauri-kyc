@@ -9,6 +9,7 @@ Deno.serve(async (req) => {
       outreach_id, item_id, client_id, tenant_id,
       portal_url, language = 'en',
       client_email, first_name, last_name,
+      idv_workflow_id,
       _test_only, api_key: testApiKey, workflow_id: testWorkflowId,
     } = params;
 
@@ -32,10 +33,31 @@ Deno.serve(async (req) => {
     // 1. Load tenant credentials (service role — portal user is unauthenticated)
     const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
     const tenant  = tenants?.[0];
-    if (!tenant?.didit_api_key || !tenant?.didit_workflow_id) {
+    if (!tenant?.didit_api_key) {
       return Response.json({
-        error: 'Identity verification is not configured for this institution. Please contact support.'
+        error: 'Identity verification is not configured for this institution. Contact support.'
       });
+    }
+
+    // Priority 1: item-level workflow ID (set on the OutreachTemplate field)
+    let resolvedWorkflowId = idv_workflow_id || '';
+
+    // Priority 2: tenant default workflow from didit_workflows array
+    if (!resolvedWorkflowId && tenant?.didit_workflows) {
+      try {
+        const workflows = JSON.parse(tenant.didit_workflows);
+        const defaultWf = workflows.find(w => w.is_default) || workflows[0];
+        if (defaultWf?.workflow_id) resolvedWorkflowId = defaultWf.workflow_id;
+      } catch { /* invalid JSON — skip */ }
+    }
+
+    // Priority 3: legacy single workflow_id field
+    if (!resolvedWorkflowId && tenant?.didit_workflow_id) {
+      resolvedWorkflowId = tenant.didit_workflow_id;
+    }
+
+    if (!resolvedWorkflowId) {
+      return Response.json({ error: 'No Didit workflow configured. Ask your administrator to configure workflows.' });
     }
 
     // 2. Build callback URL
@@ -43,7 +65,7 @@ Deno.serve(async (req) => {
 
     // 3. Build request body
     const body = {
-      workflow_id:     tenant.didit_workflow_id,
+      workflow_id:     resolvedWorkflowId,
       vendor_data:     client_id,
       callback:        callbackUrl,
       callback_method: 'both',
@@ -52,6 +74,7 @@ Deno.serve(async (req) => {
         outreach_id,
         item_id,
         tenant_id,
+        workflow_used: resolvedWorkflowId,
         platform: 'vitauri_kyc',
       },
     };
