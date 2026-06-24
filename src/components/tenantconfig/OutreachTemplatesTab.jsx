@@ -120,12 +120,19 @@ export default function OutreachTemplatesTab({ tenant }) {
   useEffect(() => {
     if (tenant?.id) {
       load();
-      try {
-        const wfs = JSON.parse(tenant?.didit_workflows || '[]');
-        setDiditWorkflows(Array.isArray(wfs) ? wfs : []);
-      } catch { setDiditWorkflows([]); }
+      loadDiditWorkflows();
     }
-  }, [tenant]);
+  }, [tenant?.id]);
+
+  async function loadDiditWorkflows() {
+    try {
+      // Fetch fresh from DB so we always have the latest Ops-configured workflows
+      const tenants = await base44.entities.Tenant.filter({ id: tenant.id });
+      const freshTenant = tenants?.[0];
+      const wfs = JSON.parse(freshTenant?.didit_workflows || '[]');
+      setDiditWorkflows(Array.isArray(wfs) ? wfs : []);
+    } catch { setDiditWorkflows([]); }
+  }
 
   async function load() {
     const data = await base44.entities.OutreachTemplate.filter({ tenant_id: tenant.id }, 'sort_order');
