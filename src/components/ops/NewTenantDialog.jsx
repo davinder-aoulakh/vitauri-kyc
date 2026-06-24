@@ -5,12 +5,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Building2, Loader2, Mail, CheckCircle } from 'lucide-react';
+import { Building2, Loader2, Mail, CheckCircle, Copy, Check } from 'lucide-react';
+
+function generateToken() {
+  // 48-char cryptographically random hex token
+  const arr = new Uint8Array(24);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 export default function NewTenantDialog({ open, onClose, onCreated }) {
   const [step, setStep] = useState('form'); // 'form' | 'success'
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [onboardingLink, setOnboardingLink] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const [form, setForm] = useState({
     name: '',
@@ -24,7 +33,6 @@ export default function NewTenantDialog({ open, onClose, onCreated }) {
   function updateForm(field, value) {
     setForm(prev => {
       const next = { ...prev, [field]: value };
-      // Auto-generate slug from name if slug not manually edited
       if (field === 'name') {
         next.slug = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       }
@@ -42,7 +50,11 @@ export default function NewTenantDialog({ open, onClose, onCreated }) {
 
     setSaving(true);
     try {
-      // 1. Create the Tenant record
+      const token = generateToken();
+      const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(); // 72 hours
+      const link = `${window.location.origin}/onboard/${token}`;
+
+      // 1. Create the Tenant record with the secure token
       await base44.entities.Tenant.create({
         name: form.name.trim(),
         slug: form.slug.trim(),
@@ -50,11 +62,39 @@ export default function NewTenantDialog({ open, onClose, onCreated }) {
         default_language: form.default_language,
         branding_primary_color: form.branding_primary_color,
         pending_admin_email: form.admin_email.trim().toLowerCase(),
+        onboarding_token: token,
+        onboarding_token_expires_at: expiresAt,
       });
 
-      // 2. Invite the admin user (platform-level invite, role=admin)
+      // 2. Send the platform invite email so they can create their login
       await base44.users.inviteUser(form.admin_email.trim(), 'admin');
 
+      // 3. Send a branded onboarding email with the secure link
+      await base44.integrations.Core.SendEmail({
+        to: form.admin_email.trim(),
+        subject: `You've been invited to manage ${form.name.trim()} on Vitauri KYC`,
+        body: `
+Hi,
+
+You have been set up as the Tenant Administrator for <strong>${form.name.trim()}</strong> on the Vitauri KYC platform.
+
+<strong>Step 1:</strong> Accept your login invite from the separate email you received from Vitauri KYC.
+
+<strong>Step 2:</strong> Once signed in, click the secure setup link below to activate your admin account:
+
+<a href="${link}" style="display:inline-block;margin:16px 0;padding:12px 24px;background:#1A6BFF;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Activate Admin Account →</a>
+
+Or copy this link: ${link}
+
+<strong>This link expires in 72 hours.</strong>
+
+If you did not expect this invitation, please ignore this email or contact support.
+
+— The Vitauri KYC Team
+        `.trim(),
+      });
+
+      setOnboardingLink(link);
       setStep('success');
     } catch (e) {
       setError(e.message || 'Something went wrong. Please try again.');
@@ -63,11 +103,19 @@ export default function NewTenantDialog({ open, onClose, onCreated }) {
     }
   }
 
+  async function copyLink() {
+    await navigator.clipboard.writeText(onboardingLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   function handleClose() {
     if (step === 'success') onCreated?.();
     setStep('form');
     setForm({ name: '', slug: '', status: 'Active', default_language: 'en', branding_primary_color: '#1A6BFF', admin_email: '' });
     setError('');
+    setOnboardingLink('');
+    setCopied(false);
     onClose();
   }
 
@@ -82,14 +130,31 @@ export default function NewTenantDialog({ open, onClose, onCreated }) {
         </DialogHeader>
 
         {step === 'success' ? (
-          <div className="py-6 text-center space-y-3">
-            <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto" />
-            <div className="font-semibold text-base">{form.name} created</div>
-            <p className="text-sm text-muted-foreground">
-              An invitation has been sent to <strong>{form.admin_email}</strong>.<br />
-              When they accept and sign in, they will be automatically linked to this tenant as <strong>Tenant Admin</strong>.
-            </p>
-            <Button className="w-full mt-2" onClick={handleClose}>Done</Button>
+          <div className="py-4 space-y-4">
+            <div className="text-center space-y-2">
+              <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto" />
+              <div className="font-semibold text-base">{form.name} created</div>
+              <p className="text-sm text-muted-foreground">
+                A platform invite + onboarding email has been sent to <strong>{form.admin_email}</strong>.
+              </p>
+            </div>
+
+            {/* Onboarding link — for Ops to share manually if needed */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Secure Onboarding Link</div>
+              <p className="text-xs text-muted-foreground">Share this link with the admin if the email doesn't arrive. Expires in 72 hours. Single-use.</p>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-white border border-slate-200 rounded px-2 py-1.5 flex-1 truncate text-slate-700">
+                  {onboardingLink}
+                </code>
+                <Button size="sm" variant="outline" className="h-7 gap-1 flex-shrink-0 text-xs" onClick={copyLink}>
+                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+            </div>
+
+            <Button className="w-full" onClick={handleClose}>Done</Button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -151,8 +216,13 @@ export default function NewTenantDialog({ open, onClose, onCreated }) {
                   onChange={e => updateForm('admin_email', e.target.value)}
                   placeholder="admin@meridiantrust.nl" className="h-9 text-sm" />
               </div>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
-                <strong>How it works:</strong> The admin will receive an invite email. When they accept and sign in for the first time, they are automatically linked to this tenant and granted the <strong>Tenant Admin</strong> application role.
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 space-y-1">
+                <div><strong>What happens:</strong></div>
+                <ol className="list-decimal list-inside space-y-0.5 ml-1">
+                  <li>Admin receives a platform login invite</li>
+                  <li>Admin receives a secure onboarding link (72h expiry)</li>
+                  <li>On clicking the link after sign-in, they're auto-linked as <strong>Tenant Admin</strong></li>
+                </ol>
               </div>
             </div>
 

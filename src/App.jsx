@@ -32,6 +32,7 @@ import AuditLogs from './pages/AuditLogs';
 import EntityMap from './pages/EntityMap';
 import OutreachDashboard from './pages/OutreachDashboard';
 import StandaloneOutreach from './pages/StandaloneOutreach';
+import TenantOnboarding from './pages/TenantOnboarding';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -131,6 +132,8 @@ function App() {
           <Routes>
             {/* Public client portal — no auth required, token-only */}
             <Route path="/portal/:token" element={<ClientPortal />} />
+            {/* Public onboarding — token-gated, handles its own auth redirect */}
+            <Route path="/onboard/:token" element={<TenantOnboarding />} />
             {/* All other routes require auth */}
             <Route path="/*" element={
               <TenantProvider>

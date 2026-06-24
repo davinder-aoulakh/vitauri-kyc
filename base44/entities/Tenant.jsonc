@@ -145,16 +145,16 @@
     },
     "didit_workflow_id": {
       "type": "string",
-      "description": "UUID of the default Didit KYC workflow \u2014 kept in sync with the default entry in didit_workflows"
+      "description": "UUID of the default Didit KYC workflow"
     },
     "didit_workflows": {
       "type": "string",
-      "description": "JSON array of Didit workflow configurations. Each entry: { id, name, workflow_id, description, is_default }. Default: empty string treated as []."
+      "description": "JSON array of Didit workflow configurations."
     },
     "didit_min_match_score": {
       "type": "number",
       "default": 80,
-      "description": "Face match % below which verification result is flagged for analyst review"
+      "description": "Face match % threshold"
     },
     "didit_app_id": {
       "type": "string",
@@ -162,7 +162,16 @@
     },
     "pending_admin_email": {
       "type": "string",
-      "description": "Email of the invited Tenant Admin \u2014 cleared automatically after first login and tenant linkage"
+      "description": "Email of the invited Tenant Admin \u2014 cleared after onboarding is complete"
+    },
+    "onboarding_token": {
+      "type": "string",
+      "description": "Secure random token for the admin onboarding link \u2014 single-use, cleared after use"
+    },
+    "onboarding_token_expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Expiry timestamp for the onboarding token (72 hours from creation)"
     }
   },
   "required": [
