@@ -32,6 +32,8 @@ const IDV_DEFAULTS = {
   idv_min_match_score: 75,
   idv_liveness_required: true,
   idv_auto_proceed: false,
+  idv_workflow_id:   '',
+  idv_workflow_name: '',
 };
 
 const PLACEHOLDERS = [
@@ -103,9 +105,10 @@ function getFieldTypeIcon(ft) {
 }
 
 export default function OutreachTemplatesTab({ tenant }) {
-  const [templates, setTemplates] = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [modal, setModal]         = useState(null);
+  const [templates, setTemplates]       = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [modal, setModal]               = useState(null);
+  const [diditWorkflows, setDiditWorkflows] = useState([]);
   const [saving, setSaving]       = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewTemplates, setPreviewTemplates] = useState(null); // null = all, otherwise [tmpl]
@@ -114,7 +117,15 @@ export default function OutreachTemplatesTab({ tenant }) {
   const quillRef = useRef(null);
   const { toast } = useToast();
 
-  useEffect(() => { if (tenant?.id) load(); }, [tenant]);
+  useEffect(() => {
+    if (tenant?.id) {
+      load();
+      try {
+        const wfs = JSON.parse(tenant?.didit_workflows || '[]');
+        setDiditWorkflows(Array.isArray(wfs) ? wfs : []);
+      } catch { setDiditWorkflows([]); }
+    }
+  }, [tenant]);
 
   async function load() {
     const data = await base44.entities.OutreachTemplate.filter({ tenant_id: tenant.id }, 'sort_order');
@@ -264,6 +275,11 @@ export default function OutreachTemplatesTab({ tenant }) {
                                     🪪 Identity Verification
                                   </span>
                                   <div className="text-xs text-muted-foreground mt-0.5">Min match: {tmpl.idv_min_match_score ?? 75}%</div>
+                                  {tmpl.idv_workflow_name ? (
+                                    <div className="text-xs text-muted-foreground">Workflow: {tmpl.idv_workflow_name}</div>
+                                  ) : (
+                                    <div className="text-xs text-muted-foreground">Workflow: tenant default</div>
+                                  )}
                                 </div>
                               ) : (
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
@@ -357,6 +373,38 @@ export default function OutreachTemplatesTab({ tenant }) {
               {modal.data.field_type === 'id_verification' && (
                 <div className="space-y-4 border border-indigo-100 bg-indigo-50/50 rounded-xl p-4">
                   <div className="text-xs font-semibold text-indigo-700 flex items-center gap-1.5">🪪 Identity Verification Settings</div>
+
+                  {/* Didit Workflow selector */}
+                  {diditWorkflows.length > 0 && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium block">Didit Workflow</label>
+                      <select
+                        value={modal.data.idv_workflow_id || ''}
+                        onChange={e => setModal(m => ({
+                          ...m,
+                          data: {
+                            ...m.data,
+                            idv_workflow_id:   e.target.value,
+                            idv_workflow_name: diditWorkflows.find(w => w.workflow_id === e.target.value)?.name || '',
+                          }
+                        }))}
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        <option value="">Use tenant default workflow</option>
+                        {diditWorkflows.map(wf => (
+                          <option key={wf.id} value={wf.workflow_id}>
+                            {wf.name}{wf.is_default ? ' (default)' : ''}{wf.description ? ` — ${wf.description}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-muted-foreground">Select the Didit workflow for this verification field. Leave blank to use the tenant default.</p>
+                    </div>
+                  )}
+                  {diditWorkflows.length === 0 && (
+                    <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                      ⚠ No Didit workflows configured. Ask your Vitauri Ops administrator to configure workflows in the platform console.
+                    </div>
+                  )}
 
                   {/* Accepted doc types */}
                   <div>
