@@ -159,6 +159,10 @@
     "didit_app_id": {
       "type": "string",
       "description": "Optional \u2014 Didit Application UUID for console deep-links"
+    },
+    "pending_admin_email": {
+      "type": "string",
+      "description": "Email of the invited Tenant Admin \u2014 cleared automatically after first login and tenant linkage"
     }
   },
   "required": [

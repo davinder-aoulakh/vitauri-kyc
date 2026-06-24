@@ -29,6 +29,30 @@ export function TenantProvider({ children }) {
         if (user?.tenant_id) {
           const tenants = await base44.entities.Tenant.filter({ id: user.tenant_id });
           if (tenants?.length > 0) setTenant(tenants[0]);
+        } else if (user?.email && user?.app_role !== 'Vitauri Ops') {
+          // Auto-link: check if this user was invited as a pending tenant admin
+          const matchedTenants = await base44.asServiceRole.entities.Tenant.filter({
+            pending_admin_email: user.email.toLowerCase(),
+          }).catch(() => []);
+
+          if (matchedTenants?.length > 0) {
+            const matchedTenant = matchedTenants[0];
+            // Link the user to the tenant and grant Tenant Admin role
+            await base44.auth.updateMe({
+              tenant_id: matchedTenant.id,
+              app_role: 'Tenant Admin',
+            });
+            // Clear the pending slot on the tenant
+            await base44.asServiceRole.entities.Tenant.update(matchedTenant.id, {
+              pending_admin_email: '',
+            });
+            // Re-fetch user and tenant to reflect the new state
+            const updatedUser = await base44.auth.me();
+            if (updatedUser && !updatedUser.app_role && updatedUser.data?.app_role) updatedUser.app_role = updatedUser.data.app_role;
+            if (updatedUser && !updatedUser.tenant_id && updatedUser.data?.tenant_id) updatedUser.tenant_id = updatedUser.data.tenant_id;
+            setCurrentUser(updatedUser);
+            setTenant(matchedTenant);
+          }
         }
       } catch (e) {
         // not authenticated

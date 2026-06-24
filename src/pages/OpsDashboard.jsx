@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import OpsDiditPanel from '@/components/ops/OpsDiditPanel';
+import NewTenantDialog from '@/components/ops/NewTenantDialog';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import {
@@ -34,6 +35,7 @@ export default function OpsDashboard() {
   const [deactivating, setDeactivating] = useState(null);
   const [expandedTenant, setExpandedTenant] = useState(null);
   const [diditTenant, setDiditTenant] = useState(null);
+  const [newTenantOpen, setNewTenantOpen] = useState(false);
 
   useEffect(() => {
     if (currentUser && currentUser.app_role !== 'Vitauri Ops') { navigate('/'); return; }
@@ -187,7 +189,12 @@ export default function OpsDashboard() {
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <h2 className="font-semibold text-sm">Tenant Overview</h2>
-              <span className="text-xs text-muted-foreground">{filteredTenants.length} tenants</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">{filteredTenants.length} tenants</span>
+                <Button size="sm" className="h-7 text-xs gap-1" onClick={() => setNewTenantOpen(true)}>
+                  <Building2 className="w-3.5 h-3.5" /> Add Tenant
+                </Button>
+              </div>
             </div>
             {loading ? (
               <div className="p-8 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
@@ -503,6 +510,12 @@ export default function OpsDashboard() {
           </div>
         )}
       </div>
+
+      <NewTenantDialog
+        open={newTenantOpen}
+        onClose={() => setNewTenantOpen(false)}
+        onCreated={() => { setNewTenantOpen(false); loadData(); }}
+      />
 
       {diditTenant && (
         <OpsDiditPanel
