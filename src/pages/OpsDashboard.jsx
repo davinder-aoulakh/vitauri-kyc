@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import OpsDiditPanel from '@/components/ops/OpsDiditPanel';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import {
@@ -32,6 +33,7 @@ export default function OpsDashboard() {
   const [activeTab, setActiveTab] = useState('tenants'); // 'tenants' | 'users' | 'health'
   const [deactivating, setDeactivating] = useState(null);
   const [expandedTenant, setExpandedTenant] = useState(null);
+  const [diditTenant, setDiditTenant] = useState(null);
 
   useEffect(() => {
     if (currentUser && currentUser.app_role !== 'Vitauri Ops') { navigate('/'); return; }
@@ -251,6 +253,9 @@ export default function OpsDashboard() {
                                   <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', isExpanded && 'rotate-180')} />
                                   Users
                                 </button>
+                                <Button variant="outline" size="sm" className="text-xs gap-1 h-7" onClick={() => setDiditTenant(t)}>
+                                  🪪 Didit
+                                </Button>
                                 <Button variant="outline" size="sm" className="text-xs gap-1 h-7" onClick={() => handleViewTenant(t)}>
                                   View <ExternalLink className="w-3 h-3" />
                                 </Button>
@@ -498,6 +503,14 @@ export default function OpsDashboard() {
           </div>
         )}
       </div>
+
+      {diditTenant && (
+        <OpsDiditPanel
+          tenant={diditTenant}
+          onClose={() => setDiditTenant(null)}
+          onSaved={() => { setDiditTenant(null); loadData(); }}
+        />
+      )}
     </div>
   );
 }
