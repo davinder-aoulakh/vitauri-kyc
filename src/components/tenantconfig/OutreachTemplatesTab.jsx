@@ -125,20 +125,17 @@ export default function OutreachTemplatesTab({ tenant }) {
   }, [tenant?.id]);
 
   async function loadDiditWorkflows() {
-    // First try from the prop (already loaded in context)
-    try {
-      const fromProp = JSON.parse(tenant?.didit_workflows || '[]');
-      if (Array.isArray(fromProp) && fromProp.length > 0) {
-        setDiditWorkflows(fromProp);
-        return;
-      }
-    } catch { /* fall through */ }
-    // Fallback: fetch fresh from DB
     try {
       const freshTenant = await base44.entities.Tenant.get(tenant.id);
       const wfs = JSON.parse(freshTenant?.didit_workflows || '[]');
       setDiditWorkflows(Array.isArray(wfs) ? wfs : []);
-    } catch { setDiditWorkflows([]); }
+    } catch {
+      // fallback to prop if get fails
+      try {
+        const wfs = JSON.parse(tenant?.didit_workflows || '[]');
+        setDiditWorkflows(Array.isArray(wfs) ? wfs : []);
+      } catch { setDiditWorkflows([]); }
+    }
   }
 
   async function load() {
@@ -229,7 +226,7 @@ export default function OutreachTemplatesTab({ tenant }) {
           <Button size="sm" variant="outline" className="text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/5" onClick={() => setAiOpen(true)}>
             <Sparkles className="w-3.5 h-3.5" /> Generate with AI
           </Button>
-          <Button size="sm" className="text-xs gap-1.5" onClick={() => setModal({ mode: 'add', data: { ...BLANK } })}>
+          <Button size="sm" className="text-xs gap-1.5" onClick={() => { loadDiditWorkflows(); setModal({ mode: 'add', data: { ...BLANK } }); }}>
             <Plus className="w-3.5 h-3.5" /> Add Template
           </Button>
         </div>
@@ -321,9 +318,9 @@ export default function OutreachTemplatesTab({ tenant }) {
                                <Button size="sm" variant="ghost" className="h-7 text-xs" title="Clone" onClick={() => cloneTemplate(tmpl)}>
                                  <Copy className="w-3 h-3" />
                                </Button>
-                               <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setModal({ mode: 'edit', data: { ...tmpl } })}>
-                                 <Pencil className="w-3 h-3" />
-                               </Button>
+                               <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => { loadDiditWorkflows(); setModal({ mode: 'edit', data: { ...tmpl } }); }}>
+                                  <Pencil className="w-3 h-3" />
+                                </Button>
                                 <Button size="sm" variant="ghost" className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => remove(tmpl.id)}>
                                   <Trash2 className="w-3 h-3" />
                                 </Button>
