@@ -125,6 +125,15 @@ export default function OutreachTemplatesTab({ tenant }) {
   }, [tenant?.id]);
 
   async function loadDiditWorkflows() {
+    // First try from the prop (already loaded in context)
+    try {
+      const fromProp = JSON.parse(tenant?.didit_workflows || '[]');
+      if (Array.isArray(fromProp) && fromProp.length > 0) {
+        setDiditWorkflows(fromProp);
+        return;
+      }
+    } catch { /* fall through */ }
+    // Fallback: fetch fresh from DB
     try {
       const freshTenant = await base44.entities.Tenant.get(tenant.id);
       const wfs = JSON.parse(freshTenant?.didit_workflows || '[]');

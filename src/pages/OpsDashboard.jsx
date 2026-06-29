@@ -21,7 +21,7 @@ const statusColor = {
 };
 
 export default function OpsDashboard() {
-  const { currentUser, setOpsTenantId } = useTenant();
+  const { currentUser, setOpsTenantId, refreshOpsTenant } = useTenant();
   const navigate = useNavigate();
 
   const [tenants, setTenants]   = useState([]);
@@ -521,7 +521,7 @@ export default function OpsDashboard() {
         <OpsDiditPanel
           tenant={diditTenant}
           onClose={() => setDiditTenant(null)}
-          onSaved={() => { setDiditTenant(null); loadData(); }}
+          onSaved={() => { setDiditTenant(null); loadData(); refreshOpsTenant?.(); }}
         />
       )}
     </div>

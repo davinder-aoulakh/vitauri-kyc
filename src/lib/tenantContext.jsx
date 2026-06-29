@@ -41,13 +41,18 @@ export function TenantProvider({ children }) {
 
   // When Vitauri Ops selects a tenant to view, load it
   useEffect(() => {
-    async function loadOpsTenant() {
-      if (!opsTenantId) { setOpsTenant(null); return; }
-      const tenants = await base44.entities.Tenant.filter({ id: opsTenantId });
-      setOpsTenant(tenants?.[0] || null);
-    }
     loadOpsTenant();
   }, [opsTenantId]);
+
+  async function loadOpsTenant() {
+    if (!opsTenantId) { setOpsTenant(null); return; }
+    const tenants = await base44.entities.Tenant.filter({ id: opsTenantId });
+    setOpsTenant(tenants?.[0] || null);
+  }
+
+  async function refreshOpsTenant() {
+    await loadOpsTenant();
+  }
 
   // The effective tenant to use throughout the app:
   // If Vitauri Ops is viewing a tenant → use that tenant; otherwise use own tenant
@@ -61,7 +66,7 @@ export function TenantProvider({ children }) {
       currentUser, tenant: effectiveTenant, loading,
       setCurrentUser, setTenant,
       opsTenantId, setOpsTenantId,
-      opsTenant, isOpsViewing,
+      opsTenant, setOpsTenant, refreshOpsTenant, isOpsViewing,
       lang,
     }}>
       {children}
