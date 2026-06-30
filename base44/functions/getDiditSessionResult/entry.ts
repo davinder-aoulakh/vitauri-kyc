@@ -242,7 +242,7 @@ Deno.serve(async (req) => {
         if (idv.front_image) {
           await base44.asServiceRole.entities.Document.create({
             tenant_id, client_id: clientId7,
-            doc_type: docType, file_name: `Didit_${docType}_Front.jpg`,
+            doc_type: docType, file_name: `Didit_${docType}_Front_${session_id.substring(0, 8)}.jpg`,
             file_url: idv.front_image, version: 1, is_ai_generated: false,
             review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review',
             source: 'didit', didit_session_id: session_id,
@@ -253,7 +253,7 @@ Deno.serve(async (req) => {
         if (idv.back_image) {
           await base44.asServiceRole.entities.Document.create({
             tenant_id, client_id: clientId7,
-            doc_type: docType, file_name: `Didit_${docType}_Back.jpg`,
+            doc_type: docType, file_name: `Didit_${docType}_Back_${session_id.substring(0, 8)}.jpg`,
             file_url: idv.back_image, version: 1, is_ai_generated: false,
             review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review',
             source: 'didit', didit_session_id: session_id,
@@ -264,7 +264,7 @@ Deno.serve(async (req) => {
         if (idv.portrait_image) {
           await base44.asServiceRole.entities.Document.create({
             tenant_id, client_id: clientId7,
-            doc_type: 'Selfie', file_name: 'Didit_Selfie.jpg',
+            doc_type: 'Selfie', file_name: `Didit_Selfie_${session_id.substring(0, 8)}.jpg`,
             file_url: idv.portrait_image, version: 1, is_ai_generated: false,
             review_status: 'Approved', source: 'didit', didit_session_id: session_id,
           }).catch(e => console.error('portrait doc failed:', e));
