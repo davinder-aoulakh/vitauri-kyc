@@ -408,6 +408,19 @@ export default function OutreachTemplatesTab({ tenant }) {
                           </option>
                         ))}
                       </select>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const fresh = await base44.entities.Tenant.filter({ id: tenant.id });
+                            const wfs = JSON.parse(fresh?.[0]?.didit_workflows || '[]');
+                            setDiditWorkflows(Array.isArray(wfs) ? wfs : []);
+                          } catch { /* ignore */ }
+                        }}
+                        className="text-xs text-primary underline mt-1"
+                      >
+                        ↻ Refresh workflow list
+                      </button>
                       <p className="text-xs text-muted-foreground">Select the Didit workflow for this verification field. Leave blank to use the tenant default.</p>
                     </div>
                   )}
