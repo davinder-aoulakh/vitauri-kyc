@@ -60,46 +60,53 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
 
   useEffect(() => {
     if (!client?.id) return;
-    // First try OutreachRequest items (new flow with idv_status written back)
-    base44.entities.OutreachRequest.filter({ client_id: client.id })
-      .then(reqs => {
-        let best = null;
+
+    async function resolveLatestDiditSession() {
+      // 1. Scan OutreachRequest items for IDV results (newest idv_checked_at wins)
+      let bestItem = null;
+      try {
+        const reqs = await base44.entities.OutreachRequest.filter({ client_id: client.id });
         for (const req of (reqs || [])) {
           for (const item of (req.items || [])) {
             if (item.didit_session_id && item.idv_status && item.idv_status !== 'Pending') {
-              if (!best || (item.idv_checked_at || '') > (best.idv_checked_at || '')) {
-                best = item;
+              if (!bestItem || (item.idv_checked_at || '') > (bestItem.idv_checked_at || '')) {
+                bestItem = item;
               }
             }
           }
         }
-        if (best) {
-          setDiditResult(best);
-          return;
+      } catch {}
+
+      // 2. Also check Document records for the latest Didit session_id (most recently created)
+      let latestDocSession = null;
+      let latestDocDate = '';
+      try {
+        const docs = await base44.entities.Document.filter({ client_id: client.id });
+        for (const d of (docs || [])) {
+          if (d.source === 'didit' && d.didit_session_id && (d.created_date || '') > latestDocDate) {
+            latestDocDate = d.created_date || '';
+            latestDocSession = d.didit_session_id;
+          }
         }
-        // Fallback: check Document records for a Didit KYC report and parse session_id from it
-        base44.entities.Document.filter({ client_id: client.id })
-          .then(docs => {
-            const diditReport = (docs || [])
-              .filter(d => d.file_name?.startsWith('Didit_') && d.file_url?.startsWith('data:'))
-              .sort((a, b) => (b.created_date || '').localeCompare(a.created_date || ''))[0];
-            if (diditReport) {
-              // Extract session ID from the base64 HTML content
-              try {
-                const b64 = diditReport.file_url.split(',')[1];
-                const html = atob(b64);
-                const match = html.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/);
-                if (match) {
-                  setDiditResult({
-                    didit_session_id: match[1],
-                    idv_status: diditReport.review_status === 'Approved' ? 'Pass' : 'Inconclusive',
-                    idv_checked_at: diditReport.created_date,
-                  });
-                }
-              } catch {}
-            }
-          }).catch(() => {});
-      }).catch(() => {});
+      } catch {}
+
+      // 3. Use whichever is newer — doc records are the ground truth for the actual session used
+      if (latestDocSession && latestDocDate > (bestItem?.idv_checked_at || '')) {
+        // The doc record is newer — use its session_id but merge metadata from the matching outreach item if available
+        const matchingItem = bestItem?.didit_session_id === latestDocSession ? bestItem : null;
+        setDiditResult({
+          didit_session_id: latestDocSession,
+          idv_status: matchingItem?.idv_status || 'Pass',
+          idv_checked_at: latestDocDate,
+          ...(matchingItem || {}),
+          didit_session_id: latestDocSession, // ensure session id is always from the latest doc
+        });
+      } else if (bestItem) {
+        setDiditResult(bestItem);
+      }
+    }
+
+    resolveLatestDiditSession();
   }, [client?.id]);
 
   const userRole = currentUser?.app_role;
