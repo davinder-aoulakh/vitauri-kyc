@@ -11,6 +11,7 @@ import {
   AlertTriangle, Sparkles, Eye, Copy, ExternalLink, ShieldCheck, Mail, ChevronDown, LibraryBig
 } from 'lucide-react';
 import DocumentViewer from '@/components/shared/DocumentViewer';
+import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
 
 const SITUATION_LABELS = {
   Welcome: 'Welcome',
@@ -96,6 +97,7 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [viewerDoc, setViewerDoc] = useState(null); // { url, name }
   const [idvDetailItem, setIdvDetailItem] = useState(null);
+  const [diditPanelOpen, setDiditPanelOpen] = useState(false);
 
   // Builder state
   const [selectedItems, setSelectedItems] = useState([]);
@@ -671,13 +673,17 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
               </div>
 
               {idvDetailItem.idv_provider === 'didit' && idvDetailItem.didit_session_id && (
-                <a
-                  href={`https://business.didit.me/sessions/${idvDetailItem.didit_session_id}`}
-                  target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-primary underline inline-flex items-center gap-1 mt-1"
-                >
-                  View full session in Didit Console →
-                </a>
+                <div className="flex items-center gap-3 mt-2">
+                  <Button size="sm" className="h-7 text-xs gap-1.5"
+                    onClick={() => setDiditPanelOpen(true)}>
+                    View Full Verification →
+                  </Button>
+                  <a href={`https://business.didit.me/sessions/${idvDetailItem.didit_session_id}`}
+                     target="_blank" rel="noopener noreferrer"
+                     className="text-xs text-muted-foreground underline">
+                    Open in Didit Console
+                  </a>
+                </div>
               )}
 
               {/* Analyst override */}
@@ -966,6 +972,15 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
           </div>
         </DialogContent>
       </Dialog>
+
+      {diditPanelOpen && idvDetailItem?.didit_session_id && (
+        <DiditVerificationPanel
+          sessionId={idvDetailItem.didit_session_id}
+          tenantId={kycCase?.tenant_id}
+          clientName={kycCase?.client_name || 'Client'}
+          onClose={() => setDiditPanelOpen(false)}
+        />
+      )}
 
       {/* ── Preview Dialog ── */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
