@@ -64,10 +64,13 @@ Deno.serve(async (req) => {
     }
 
     // Extract and structure all the data for the frontend
-    const idv  = decision?.id_verifications?.[0]  || {};
-    const face = decision?.face_matches?.[0]       || {};
-    const live = decision?.liveness_checks?.[0]    || {};
-    const aml  = decision?.aml_screenings?.[0]     || {};
+    // Didit V3 returns arrays as top-level flat fields — no nested "decision" wrapper.
+    // Support both shapes defensively in case the response format ever changes.
+    const root = decision?.decision || decision || {};
+    const idv  = root.id_verifications?.[0]  || {};
+    const face = root.face_matches?.[0]       || {};
+    const live = root.liveness_checks?.[0]    || {};
+    const aml  = root.aml_screenings?.[0]     || {};
 
     // Log all top-level keys to help debug
     console.log('Didit decision keys:', Object.keys(decision || {}));

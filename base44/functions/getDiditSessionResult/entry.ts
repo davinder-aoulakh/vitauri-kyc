@@ -41,10 +41,13 @@ Deno.serve(async (req) => {
     }
 
     // 4. Map Didit decision → our IDV fields
-    const idv  = (decision.id_verifications || [])[0]  || {};
-    const face = (decision.face_matches      || [])[0]  || {};
-    const live = (decision.liveness_checks   || [])[0]  || {};
-    const aml  = (decision.aml_screenings    || [])[0]  || {};
+    // Didit V3 returns arrays as top-level flat fields — no nested "decision" wrapper.
+    // Support both shapes defensively in case the response format ever changes.
+    const root = decision?.decision || decision || {};
+    const idv  = root.id_verifications?.[0]  || {};
+    const face = root.face_matches?.[0]       || {};
+    const live = root.liveness_checks?.[0]    || {};
+    const aml  = root.aml_screenings?.[0]     || {};
 
     const statusMap = {
       Approved:    'Pass',
