@@ -4,6 +4,26 @@ import { X, ExternalLink, RefreshCw, AlertTriangle, Download } from 'lucide-reac
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
+const ISO3_TO_NAME = {
+  AUS:'Australia', NLD:'Netherlands', BEL:'Belgium', DEU:'Germany',
+  FRA:'France', GBR:'United Kingdom', USA:'United States',
+  LUX:'Luxembourg', CHE:'Switzerland', CAN:'Canada', NZL:'New Zealand',
+  SGP:'Singapore', ZAF:'South Africa', IND:'India', CHN:'China',
+  JPN:'Japan', ARE:'United Arab Emirates', BRA:'Brazil', ARG:'Argentina',
+  MYS:'Malaysia', PHL:'Philippines', IDN:'Indonesia', THA:'Thailand',
+  KOR:'South Korea', PAK:'Pakistan', BGD:'Bangladesh', NGA:'Nigeria',
+  KEN:'Kenya', GHA:'Ghana', EGY:'Egypt', TUR:'Turkey', ISR:'Israel',
+  SAU:'Saudi Arabia', QAT:'Qatar', KWT:'Kuwait', PRT:'Portugal',
+  ESP:'Spain', ITA:'Italy', SWE:'Sweden', NOR:'Norway', DNK:'Denmark',
+  FIN:'Finland', IRL:'Ireland', POL:'Poland', CZE:'Czech Republic',
+  HUN:'Hungary', ROU:'Romania', GRC:'Greece',
+};
+
+function formatNationality(iso3) {
+  if (!iso3) return null;
+  return ISO3_TO_NAME[iso3] ? `${ISO3_TO_NAME[iso3]} (${iso3})` : iso3;
+}
+
 function ScoreRing({ score, status, label }) {
   if (score == null) return null;
   const passed = status === 'Approved';
@@ -327,7 +347,7 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
                   ['Expiry Date',     data.expiration_date],
                   ['Full Name',       data.full_name || [data.first_name, data.last_name].filter(Boolean).join(' ')],
                   ['Date of Birth',   data.date_of_birth],
-                  ['Nationality',     data.nationality],
+                  ['Nationality',     formatNationality(data.nationality)],
                   ['Gender',          data.gender],
                   ['Address',         data.address],
                 ].filter(([, v]) => v).map(([label, value]) => (
