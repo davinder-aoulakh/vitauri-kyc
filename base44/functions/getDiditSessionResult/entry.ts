@@ -232,13 +232,24 @@ Deno.serve(async (req) => {
         }
         const docType = mapToDocType(idvFields.idv_document_type);
 
-        // ── GUARD: skip if documents for THIS specific session already exist ──
-        const allDocs = await base44.asServiceRole.entities.Document.filter({ client_id: clientId7 });
-        const hasThisSessionDocs = (allDocs || []).some(d =>
-          d.source === 'didit' && d.didit_session_id === session_id
-        );
-        if (hasThisSessionDocs) {
+        // ── GUARD: atomic flag on the OutreachRequest item to prevent duplicate docs ──
+        // Checking Document.filter() has a race window because two near-simultaneous
+        // calls can both read "no docs yet" before either writes. An item-level flag
+        // set via update() closes that window to near-zero.
+        const reqForGuard = (await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id }))?.[0];
+        const guardItem = (reqForGuard?.items || []).find(i => i.item_id === item_id);
+
+        if (guardItem?.idv_docs_created_for_session === session_id) {
+          // Already processed this exact session — skip entirely
           return Response.json({ ok: true, ...idvFields });
+        }
+
+        // Immediately mark this session as "claimed" before any async document work.
+        if (reqForGuard) {
+          const claimedItems = (reqForGuard.items || []).map(i =>
+            i.item_id === item_id ? { ...i, idv_docs_created_for_session: session_id } : i
+          );
+          await base44.asServiceRole.entities.OutreachRequest.update(outreach_id, { items: claimedItems });
         }
 
         // ── A: ID document front image (Didit signed URL) ─────────────────
@@ -292,6 +303,81 @@ Deno.serve(async (req) => {
             review_status: 'Pending_Review', source: 'portal',
           }).catch(() => {});
         }
+
+        // ── E: Verification report (HTML with plain-text fallback) ────────
+        const reportDate = new Date().toISOString().split('T')[0];
+        const reportBaseName = `Didit_Verification_Report_${session_id.substring(0, 8)}_${reportDate}`;
+        const reportHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Didit Verification Report</title>
+<style>body{font-family:sans-serif;max-width:700px;margin:32px auto;color:#1a2332}h1{font-size:18px}table{width:100%;border-collapse:collapse;margin:16px 0}td{padding:6px 12px;border-bottom:1px solid #e5e7eb;font-size:13px}.label{color:#6b7280;width:40%}.pass{color:#059669;font-weight:600}.fail{color:#dc2626;font-weight:600}</style>
+</head><body>
+<h1>Identity Verification Report</h1>
+<p>Session: ${session_id} &nbsp;|&nbsp; Decision: <strong>${decision.status}</strong> &nbsp;|&nbsp; Date: ${new Date().toISOString()}</p>
+<table>
+<tr><td class="label">Document Type</td><td>${idv.document_type || '-'}</td></tr>
+<tr><td class="label">Document Number</td><td>${idv.document_number || '-'}</td></tr>
+<tr><td class="label">Issuing Country</td><td>${idv.issuing_state_name || idv.issuing_state || '-'}</td></tr>
+<tr><td class="label">Expiry Date</td><td>${idv.expiration_date || '-'}</td></tr>
+<tr><td class="label">Full Name</td><td>${idv.full_name || [idv.first_name, idv.last_name].filter(Boolean).join(' ') || '-'}</td></tr>
+<tr><td class="label">Date of Birth</td><td>${idv.date_of_birth || '-'}</td></tr>
+<tr><td class="label">Nationality</td><td>${idv.nationality || '-'}</td></tr>
+<tr><td class="label">Face Match</td><td class="${(face.score ?? 0) >= 75 ? 'pass' : 'fail'}">${face.score != null ? Math.round(face.score) + '%' : '-'} (${face.status || '-'})</td></tr>
+<tr><td class="label">Liveness</td><td class="${live.status === 'Approved' ? 'pass' : 'fail'}">${live.score != null ? Math.round(live.score) + '%' : '-'} (${live.status || '-'})</td></tr>
+<tr><td class="label">AML Hits</td><td>${aml.total_hits ?? 0} (${aml.status || '-'})</td></tr>
+</table>
+</body></html>`;
+
+        let reportCreated = false;
+        try {
+          const reportB64 = btoa(unescape(encodeURIComponent(reportHtml)));
+          await base44.asServiceRole.entities.Document.create({
+            tenant_id, client_id: clientId7,
+            doc_type: 'KYC_Report',
+            file_name: `${reportBaseName}.html`,
+            file_url: `data:text/html;base64,${reportB64}`,
+            version: 1, is_ai_generated: true,
+            review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review',
+            source: 'didit', didit_session_id: session_id,
+          });
+          reportCreated = true;
+        } catch (reportErr) {
+          console.error('PRIMARY report creation failed:', reportErr?.message);
+          // Fallback: plain-text report in case the HTML was too large
+          try {
+            const plainReport = [
+              'DIDIT IDENTITY VERIFICATION REPORT',
+              `Session: ${session_id}`,
+              `Decision: ${decision.status}`,
+              `Date: ${new Date().toISOString()}`,
+              '',
+              `Document Type: ${idv.document_type || '-'}`,
+              `Document Number: ${idv.document_number || '-'}`,
+              `Issuing Country: ${idv.issuing_state_name || idv.issuing_state || '-'}`,
+              `Expiry: ${idv.expiration_date || '-'}`,
+              '',
+              `Name: ${idv.full_name || [idv.first_name, idv.last_name].filter(Boolean).join(' ') || '-'}`,
+              `DOB: ${idv.date_of_birth || '-'}`,
+              `Nationality: ${idv.nationality || '-'}`,
+              '',
+              `Face Match: ${face.score != null ? Math.round(face.score) + '%' : '-'} (${face.status || '-'})`,
+              `Liveness: ${live.score != null ? Math.round(live.score) + '%' : '-'} (${live.status || '-'})`,
+              `AML Hits: ${aml.total_hits ?? 0} (${aml.status || '-'})`,
+            ].join('\n');
+            const plainB64 = btoa(unescape(encodeURIComponent(plainReport)));
+            await base44.asServiceRole.entities.Document.create({
+              tenant_id, client_id: clientId7,
+              doc_type: 'KYC_Report',
+              file_name: `${reportBaseName}.txt`,
+              file_url: `data:text/plain;base64,${plainB64}`,
+              version: 1, is_ai_generated: true,
+              review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review',
+              source: 'didit', didit_session_id: session_id,
+            });
+            reportCreated = true;
+          } catch (fallbackErr) {
+            console.error('FALLBACK plain-text report also failed:', fallbackErr?.message);
+          }
+        }
+        console.log(`Report creation for session ${session_id}: ${reportCreated ? 'SUCCESS' : 'FAILED — check logs above'}`);
       }
     } catch (docErr) {
       console.error('Document step failed (non-fatal):', docErr?.message);
