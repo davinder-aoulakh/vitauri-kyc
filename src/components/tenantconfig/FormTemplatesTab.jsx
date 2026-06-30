@@ -232,6 +232,8 @@ export default function FormTemplatesTab({ tenant }) {
       idv_accepted_doc_types:         tmpl.idv_accepted_doc_types || [],
       idv_min_match_score:            tmpl.idv_min_match_score ?? 75,
       idv_liveness_required:          tmpl.idv_liveness_required ?? true,
+      idv_workflow_id:                tmpl.idv_workflow_id   || '',
+      idv_workflow_name:              tmpl.idv_workflow_name || '',
     };
     setModal(m => ({ ...m, data: { ...m.data, items: [...(m.data.items || []), newItem] } }));
   }
@@ -441,6 +443,8 @@ Only include items whose ids exist in the library list above. Return valid JSON 
                               idv_accepted_doc_types:         lib.idv_accepted_doc_types || [],
                               idv_min_match_score:            lib.idv_min_match_score ?? 75,
                               idv_liveness_required:          lib.idv_liveness_required ?? true,
+                              idv_workflow_id:                lib.idv_workflow_id   || '',
+                              idv_workflow_name:              lib.idv_workflow_name || '',
                             };
                           });
                           setModal({ mode: 'edit', data: { ...tmpl, items: hydratedItems } });
