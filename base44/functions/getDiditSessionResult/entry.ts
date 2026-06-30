@@ -229,11 +229,10 @@ Deno.serve(async (req) => {
         }
         const docType = mapToDocType(idvFields.idv_document_type);
 
-        // ── GUARD: skip if documents for THIS session already exist ──────────
+        // ── GUARD: skip if documents for THIS specific session already exist ──
         const allDocs = await base44.asServiceRole.entities.Document.filter({ client_id: clientId7 });
-        const frontName = `Didit_${docType}_Front.jpg`;
         const hasThisSessionDocs = (allDocs || []).some(d =>
-          d.source === 'didit' && d.file_name === frontName
+          d.source === 'didit' && d.didit_session_id === session_id
         );
         if (hasThisSessionDocs) {
           return Response.json({ ok: true, ...idvFields });
@@ -246,7 +245,7 @@ Deno.serve(async (req) => {
             doc_type: docType, file_name: `Didit_${docType}_Front.jpg`,
             file_url: idv.front_image, version: 1, is_ai_generated: false,
             review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review',
-            source: 'didit',
+            source: 'didit', didit_session_id: session_id,
           }).catch(e => console.error('front_image doc failed:', e));
         }
 
@@ -257,7 +256,7 @@ Deno.serve(async (req) => {
             doc_type: docType, file_name: `Didit_${docType}_Back.jpg`,
             file_url: idv.back_image, version: 1, is_ai_generated: false,
             review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review',
-            source: 'didit',
+            source: 'didit', didit_session_id: session_id,
           }).catch(e => console.error('back_image doc failed:', e));
         }
 
@@ -265,9 +264,9 @@ Deno.serve(async (req) => {
         if (idv.portrait_image) {
           await base44.asServiceRole.entities.Document.create({
             tenant_id, client_id: clientId7,
-            doc_type: 'KYC_Report', file_name: 'Didit_Selfie.jpg',
+            doc_type: 'Selfie', file_name: 'Didit_Selfie.jpg',
             file_url: idv.portrait_image, version: 1, is_ai_generated: false,
-            review_status: 'Approved', source: 'didit',
+            review_status: 'Approved', source: 'didit', didit_session_id: session_id,
           }).catch(e => console.error('portrait doc failed:', e));
         }
 

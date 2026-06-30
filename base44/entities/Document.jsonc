@@ -17,6 +17,7 @@
       "enum": [
         "Passport",
         "ID_Card",
+        "Selfie",
         "UBO_Register",
         "Articles_of_Association",
         "KYC_Report",
@@ -68,6 +69,14 @@
     "reviewed_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "source": {
+      "type": "string",
+      "description": "e.g. didit, portal, manual"
+    },
+    "didit_session_id": {
+      "type": "string",
+      "description": "Didit session UUID \u2014 used for per-session deduplication"
     },
     "is_deleted": {
       "type": "boolean",
