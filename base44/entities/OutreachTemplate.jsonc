@@ -33,7 +33,8 @@
         "checkbox",
         "yes_no",
         "signature",
-        "section_header"
+        "section_header",
+        "id_verification"
       ],
       "description": "Rich field type. Defaults: 'document' \u2192 file_upload, 'data_point' \u2192 textarea"
     },
@@ -123,6 +124,36 @@
     "section_title": {
       "type": "string",
       "description": "Display title when field_type is 'section_header'"
+    },
+    "idv_workflow_id": {
+      "type": "string",
+      "description": "Didit workflow UUID override for this IDV field"
+    },
+    "idv_workflow_name": {
+      "type": "string",
+      "description": "Display name of the selected Didit workflow"
+    },
+    "idv_accepted_doc_types": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Accepted document types for identity verification"
+    },
+    "idv_min_match_score": {
+      "type": "number",
+      "default": 75,
+      "description": "Minimum face match % to pass"
+    },
+    "idv_liveness_required": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether liveness check is required"
+    },
+    "idv_auto_proceed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Auto-complete item when IDV passes"
     }
   },
   "required": [
