@@ -44,7 +44,7 @@ export default function NewClient() {
 
   useEffect(() => {
     if (currentUser?.tenant_id) {
-      base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }).then(d => setAllClients(d || []));
+      base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }).then(d => setAllClients((d || []).filter(c => !c.is_deleted)));
     }
   }, [currentUser]);
 
