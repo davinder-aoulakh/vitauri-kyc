@@ -268,6 +268,8 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
         idv_min_match_score:    item?.idv_min_match_score    ?? 75,
         idv_liveness_required:  item?.idv_liveness_required  ?? true,
         idv_auto_proceed:       item?.idv_auto_proceed        ?? false,
+        idv_workflow_id:        item?.idv_workflow_id         || '',
+        idv_workflow_name:      item?.idv_workflow_name       || '',
 
         // Section header
         section_title: item?.section_title || '',
