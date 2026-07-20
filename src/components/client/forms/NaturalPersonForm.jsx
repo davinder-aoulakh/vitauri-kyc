@@ -2,12 +2,7 @@ import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-
-const COUNTRIES = [
-  'Netherlands (NL)','Belgium (BE)','Germany (DE)','France (FR)',
-  'United Kingdom (GB)','United States (US)','Luxembourg (LU)',
-  'Switzerland (CH)','Curaçao (CW)','Aruba (AW)','Suriname (SR)','Other'
-];
+import { COUNTRIES } from '@/lib/countries';
 const ID_TYPES = ['Passport','National ID Card','Drivers Licence','Residence Permit','Other'];
 const SOURCE_CHANNELS = ['Manual','Batch','API_CRM'];
 
