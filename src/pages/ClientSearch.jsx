@@ -33,7 +33,7 @@ export default function ClientSearch() {
   useEffect(() => {
     if (currentUser?.tenant_id) {
       base44.entities.Client.filter({ tenant_id: currentUser.tenant_id })
-        .then(d => setAllClients(d || []))
+        .then(d => setAllClients((d || []).filter(c => !c.is_deleted)))
         .catch(err => console.error('ClientSearch load clients error:', err));
       base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id })
         .then(cases => {

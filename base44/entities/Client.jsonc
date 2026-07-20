@@ -127,6 +127,24 @@
     },
     "fatca_reporting_status": {
       "type": "string"
+    },
+    "is_deleted": {
+      "type": "boolean",
+      "default": false,
+      "description": "Soft-delete flag"
+    },
+    "deleted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of deletion"
+    },
+    "deleted_by_user_id": {
+      "type": "string",
+      "description": "FK to User who deleted"
+    },
+    "deletion_reason": {
+      "type": "string",
+      "description": "Reason provided at time of deletion"
     }
   },
   "required": [

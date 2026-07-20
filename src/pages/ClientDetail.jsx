@@ -14,7 +14,8 @@ import RelatedPartiesTab from '@/components/client/RelatedPartiesTab';
 import CasesTab         from '@/components/client/CasesTab';
 import DocumentsTab     from '@/components/client/DocumentsTab';
 import AuditTrailTab    from '@/components/client/AuditTrailTab';
-import { Network, ChevronRight, User, Building2, UserCog, GitFork, AlertTriangle } from 'lucide-react';
+import { Network, ChevronRight, User, Building2, UserCog, GitFork, AlertTriangle, Trash2 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CLIENT_STATUS_COLORS } from '@/lib/riskColors';
@@ -35,11 +36,16 @@ export default function ClientDetail() {
   const [error, setError]             = useState(null);
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignTo, setReassignTo]   = useState('');
+  const [deleteOpen, setDeleteOpen]   = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleting, setDeleting]       = useState(false);
   const [pendingOcr, setPendingOcr]   = useState(null);
   const [activeTab, setActiveTab]     = useState('profile');
 
   const userRole = currentUser?.app_role;
   const canReassign = hasPermission(userRole, 'viewAllTenantCases');
+  const canDelete = hasPermission(userRole, 'deleteClient');
 
   useEffect(() => { loadAll(); }, [id]);
 
@@ -75,6 +81,28 @@ export default function ClientDetail() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleDelete() {
+    if (deleteConfirm !== 'DELETE') return;
+    setDeleting(true);
+    await base44.entities.Client.update(id, {
+      is_deleted: true,
+      deleted_at: new Date().toISOString(),
+      deleted_by_user_id: currentUser.id,
+      deletion_reason: deleteReason,
+    });
+    await base44.entities.AuditEvent.create({
+      tenant_id: client.tenant_id,
+      client_id: id,
+      actor_user_id: currentUser.id,
+      actor_name: currentUser.full_name,
+      actor_type: 'User',
+      event_type: 'client_deleted',
+      notes: `Client soft-deleted. Reason: ${deleteReason || 'No reason provided.'}`,
+    });
+    setDeleting(false);
+    navigate('/client-search');
   }
 
   async function handleReassign() {
@@ -165,6 +193,11 @@ export default function ClientDetail() {
             </div>
 
             <div className="flex flex-wrap gap-2 flex-shrink-0">
+              {canDelete && (
+                <Button variant="outline" size="sm" className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/5" onClick={() => setDeleteOpen(true)}>
+                  <Trash2 className="w-3.5 h-3.5" /> Delete Client
+                </Button>
+              )}
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => navigate(`/org-chart/${id}`)}>
                 <Network className="w-3.5 h-3.5" /> Org Chart
               </Button>
@@ -258,6 +291,53 @@ export default function ClientDetail() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Delete Client Dialog */}
+      <Dialog open={deleteOpen} onOpenChange={open => { setDeleteOpen(open); setDeleteConfirm(''); setDeleteReason(''); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="w-4 h-4" /> Delete Client
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 text-sm text-destructive">
+              This will soft-delete <strong>{client?.full_name}</strong> and all associated data will be hidden from active workflows. This action is logged and can be reviewed by admins.
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1.5 block">Reason for deletion</label>
+              <Textarea
+                placeholder="Enter a reason (e.g. duplicate record, data entry error)…"
+                value={deleteReason}
+                onChange={e => setDeleteReason(e.target.value)}
+                className="text-sm"
+                rows={3}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1.5 block">
+                Type <strong>DELETE</strong> to confirm
+              </label>
+              <input
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                placeholder="DELETE"
+                value={deleteConfirm}
+                onChange={e => setDeleteConfirm(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deleteConfirm !== 'DELETE' || deleting}
+              >
+                {deleting ? 'Deleting…' : 'Delete Client'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Reassign Dialog */}
       <Dialog open={reassignOpen} onOpenChange={setReassignOpen}>
