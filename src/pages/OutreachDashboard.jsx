@@ -71,7 +71,6 @@ export default function OutreachDashboard() {
     setError(null);
     try {
       const reqs = await base44.entities.OutreachRequest.filter({ tenant_id: currentUser.tenant_id });
-      setRequests(reqs);
 
       // Build client & case lookup maps
       const clientIds = [...new Set(reqs.map(r => r.client_id).filter(Boolean))];
@@ -82,7 +81,10 @@ export default function OutreachDashboard() {
         caseIds.length ? base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }) : Promise.resolve([]),
       ]);
 
-      setClients(Object.fromEntries(clientList.map(c => [c.id, c])));
+      // Filter out soft-deleted clients
+      const activeClientIds = new Set(clientList.filter(c => !c.is_deleted).map(c => c.id));
+      setRequests(reqs.filter(r => !r.client_id || activeClientIds.has(r.client_id)));
+      setClients(Object.fromEntries(clientList.filter(c => !c.is_deleted).map(c => [c.id, c])));
       setCases(Object.fromEntries(caseList.map(c => [c.id, c])));
     } catch (e) {
       setError(e.message);

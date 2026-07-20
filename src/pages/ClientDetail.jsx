@@ -135,7 +135,20 @@ export default function ClientDetail() {
       </div>
     </AppShell>
   );
-  if (!client)  return <AppShell><div className="p-8 text-center text-muted-foreground">Client not found.</div></AppShell>;
+  if (!client || client.is_deleted) return (
+    <AppShell>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-5 h-5 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium text-foreground">Client not found</p>
+          <p className="text-xs text-muted-foreground">This client has been deleted or does not exist.</p>
+          <Button size="sm" variant="outline" onClick={() => navigate('/client-search')}>Back to Search</Button>
+        </div>
+      </div>
+    </AppShell>
+  );
 
   const activeCase = cases.find(c => !['Approved','Closed','Rejected'].includes(c.status));
   const lastReview = cases.filter(c => c.status === 'Approved' || c.completed_at).sort((a,b) => (b.completed_at||b.updated_date||'') > (a.completed_at||a.updated_date||'') ? 1 : -1)[0];
