@@ -50,9 +50,10 @@ const STEPS = [
 const STATUS_ORDER = ['Draft','In_Progress','Outreach_Pending','Screening','Assessment','QC','Compliance_Review','Sign_Off_Pending','Approved','Rejected','Closed'];
 
 function StepIcon({ status }) {
-  if (status === 'complete')     return <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />;
-  if (status === 'in_progress')  return <Clock className="w-4 h-4 text-blue-500 flex-shrink-0" />;
-  if (status === 'flagged')      return <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />;
+  if (status === 'complete')      return <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />;
+  if (status === 'in_progress')   return <Clock className="w-4 h-4 text-blue-500 flex-shrink-0" />;
+  if (status === 'flagged')       return <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />;
+  if (status === 'not_required')  return <span className="w-4 h-4 flex-shrink-0 text-center text-xs text-muted-foreground/40 leading-4">N/A</span>;
   return <Circle className="w-4 h-4 text-muted-foreground/30 flex-shrink-0" />;
 }
 
@@ -222,6 +223,26 @@ export default function CaseWorkspace() {
     });
     setKycCase(prev => ({ ...prev, status: 'In_Progress', step_8_status: 'in_progress' }));
     setReopenConfirmOpen(false);
+  }
+
+  async function toggleStepRequired(stepId) {
+    const field = `step_${stepId}_not_required`;
+    const current = kycCase?.[field] || false;
+    const newVal = !current;
+    await base44.entities.KycCase.update(id, { [field]: newVal });
+    await base44.entities.AuditEvent.create({
+      tenant_id: kycCase.tenant_id,
+      case_id: id,
+      actor_user_id: currentUser?.id,
+      actor_name: currentUser?.full_name,
+      actor_type: 'User',
+      event_type: newVal ? `step_${stepId}_marked_not_required` : `step_${stepId}_reinstated`,
+      notes: newVal
+        ? `Step ${stepId} marked as Not Required by ${currentUser?.full_name}`
+        : `Step ${stepId} reinstated as Required by ${currentUser?.full_name}`,
+    });
+    const fresh = await base44.entities.KycCase.filter({ id });
+    if (fresh?.[0]) setKycCase(fresh[0]);
   }
 
   const canReopen = kycCase?.status === 'Approved' && (userRole === 'Director' || userRole === 'Compliance Admin');
@@ -405,20 +426,39 @@ export default function CaseWorkspace() {
                 <div className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-widest px-2 mb-2">Steps</div>
                 {STEPS.map(step => {
                   const s = getStepStatus(kycCase, step.id);
+                  const canToggle = [2, 5, 7].includes(step.id);
                   return (
-                    <button
-                      key={step.id}
-                      onClick={() => setActiveStep(step.id)}
-                      className={cn(
-                        'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors group text-xs',
-                        activeStep === step.id
-                          ? 'bg-primary/10 text-primary font-medium'
-                          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                    <div key={step.id} className="relative group/step">
+                      <button
+                        onClick={() => s !== 'not_required' && setActiveStep(step.id)}
+                        className={cn(
+                          'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors text-xs',
+                          s === 'not_required'
+                            ? 'opacity-40 cursor-default'
+                            : activeStep === step.id
+                              ? 'bg-primary/10 text-primary font-medium'
+                              : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                        )}
+                      >
+                        <StepIcon status={s} />
+                        <span className="leading-tight truncate">{step.label}</span>
+                      </button>
+                      {canToggle && (
+                        <button
+                          onClick={() => toggleStepRequired(step.id)}
+                          title={s === 'not_required' ? 'Reinstate this step' : 'Mark as Not Required'}
+                          className={cn(
+                            'absolute right-1 top-1/2 -translate-y-1/2 text-xs px-1 rounded',
+                            'hidden group-hover/step:flex items-center',
+                            s === 'not_required'
+                              ? 'text-primary hover:bg-primary/10'
+                              : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted'
+                          )}
+                        >
+                          {s === 'not_required' ? '↩' : '⊘'}
+                        </button>
                       )}
-                    >
-                      <StepIcon status={s} />
-                      <span className="leading-tight truncate">{step.label}</span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -446,39 +486,45 @@ export default function CaseWorkspace() {
                     <h2 className="text-lg font-semibold text-foreground">{activeStepData?.label}</h2>
                   </div>
                   <div className="flex items-center gap-2">
-                    {stepStatus !== 'in_progress' && stepStatus !== 'complete' && (
-                      <Button
-                        variant="outline" size="sm" className="text-xs gap-1"
-                        onClick={() => updateStepStatus(activeStepData.stepKey, 'in_progress')}
-                      >
-                        <Clock className="w-3 h-3" /> Start
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      className={cn('text-xs gap-1', stepStatus === 'complete' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : '')}
-                      variant={stepStatus === 'complete' ? 'default' : 'outline'}
-                      onClick={() => updateStepStatus(activeStepData.stepKey, stepStatus === 'complete' ? 'in_progress' : 'complete')}
-                    >
-                      <CheckCircle className="w-3 h-3" />
-                      {stepStatus === 'complete' ? '✓ Complete' : 'Mark Complete'}
-                    </Button>
-                    {stepStatus === 'flagged' ? (
-                      <Button
-                        size="sm" variant="ghost" className="text-xs gap-1 text-amber-600"
-                        onClick={() => updateStepStatus(activeStepData.stepKey, 'in_progress')}
-                        title="Remove flag and resume this step"
-                      >
-                        <AlertTriangle className="w-3 h-3" /> Un-flag
-                      </Button>
+                    {stepStatus === 'not_required' ? (
+                      <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-md">Not Required</span>
                     ) : (
-                      <Button
-                        size="sm" variant="ghost" className="text-xs gap-1 text-amber-600"
-                        onClick={() => { setFlagReason(''); setFlagNote(''); setFlagPopoverOpen(true); }}
-                        title="Flag this step to mark it for QC review or follow-up"
-                      >
-                        <AlertTriangle className="w-3 h-3" /> Flag
-                      </Button>
+                      <>
+                        {stepStatus !== 'in_progress' && stepStatus !== 'complete' && (
+                          <Button
+                            variant="outline" size="sm" className="text-xs gap-1"
+                            onClick={() => updateStepStatus(activeStepData.stepKey, 'in_progress')}
+                          >
+                            <Clock className="w-3 h-3" /> Start
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          className={cn('text-xs gap-1', stepStatus === 'complete' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : '')}
+                          variant={stepStatus === 'complete' ? 'default' : 'outline'}
+                          onClick={() => updateStepStatus(activeStepData.stepKey, stepStatus === 'complete' ? 'in_progress' : 'complete')}
+                        >
+                          <CheckCircle className="w-3 h-3" />
+                          {stepStatus === 'complete' ? '✓ Complete' : 'Mark Complete'}
+                        </Button>
+                        {stepStatus === 'flagged' ? (
+                          <Button
+                            size="sm" variant="ghost" className="text-xs gap-1 text-amber-600"
+                            onClick={() => updateStepStatus(activeStepData.stepKey, 'in_progress')}
+                            title="Remove flag and resume this step"
+                          >
+                            <AlertTriangle className="w-3 h-3" /> Un-flag
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm" variant="ghost" className="text-xs gap-1 text-amber-600"
+                            onClick={() => { setFlagReason(''); setFlagNote(''); setFlagPopoverOpen(true); }}
+                            title="Flag this step to mark it for QC review or follow-up"
+                          >
+                            <AlertTriangle className="w-3 h-3" /> Flag
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

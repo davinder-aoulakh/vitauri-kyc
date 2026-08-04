@@ -83,6 +83,11 @@
       ],
       "default": "not_started"
     },
+    "step_2_not_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Identity Verification \u2014 waived for existing/returning clients"
+    },
     "step_3_status": {
       "type": "string",
       "enum": [
@@ -113,6 +118,11 @@
       ],
       "default": "not_started"
     },
+    "step_5_not_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Source of Funds/Wealth \u2014 conditional on risk level"
+    },
     "step_6_status": {
       "type": "string",
       "enum": [
@@ -132,6 +142,11 @@
         "flagged"
       ],
       "default": "not_started"
+    },
+    "step_7_not_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Control Measures \u2014 conditional on risk outcome"
     },
     "step_8_status": {
       "type": "string",
