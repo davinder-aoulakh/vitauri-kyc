@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { hasPermission } from '@/lib/permissions';
-import { getStepStatus, isStepNotRequired } from '@/lib/caseUtils';
+import { getStepStatus, isStepNotRequired, isStepComplete } from '@/lib/caseUtils';
 import AppShell from '@/components/layout/AppShell';
 import RiskBadge from '@/components/shared/RiskBadge';
 import StatusBadge from '@/components/shared/StatusBadge';
@@ -36,16 +36,19 @@ import {
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 
-const STEPS = [
-  { id: 1, label: 'Outreach & Documents', icon: MessageSquare, stepKey: 'step_1_status' },
-  { id: 2, label: 'Identity Verification', icon: User,          stepKey: 'step_2_status' },
-  { id: 3, label: 'Screening',             icon: Shield,        stepKey: 'step_3_status' },
-  { id: 4, label: 'Client Profile',        icon: User,          stepKey: 'step_4_status' },
-  { id: 5, label: 'Source of Funds/Wealth',icon: FileText,      stepKey: 'step_5_status' },
-  { id: 6, label: 'Risk Assessment',       icon: BarChart3,     stepKey: 'step_6_status' },
-  { id: 7, label: 'Control Measures',      icon: ClipboardCheck,stepKey: 'step_7_status' },
-  { id: 8, label: 'Sign-Off & Report',     icon: CheckCircle,   stepKey: 'step_8_status' },
-];
+function getSteps(clientType) {
+  const isORG = clientType === 'ORG';
+  return [
+    { id: 1, label: 'Outreach & Documents',                             icon: MessageSquare,  stepKey: 'step_1_status' },
+    { id: 2, label: isORG ? 'Entity Verification' : 'Identity Verification', icon: User,      stepKey: 'step_2_status' },
+    { id: 3, label: 'Screening',                                         icon: Shield,         stepKey: 'step_3_status' },
+    { id: 4, label: isORG ? 'Entity Profile' : 'Client Profile',         icon: User,          stepKey: 'step_4_status' },
+    { id: 5, label: 'Source of Funds/Wealth',                            icon: FileText,       stepKey: 'step_5_status' },
+    { id: 6, label: 'Risk Assessment',                                   icon: BarChart3,      stepKey: 'step_6_status' },
+    { id: 7, label: 'Control Measures',                                  icon: ClipboardCheck, stepKey: 'step_7_status' },
+    { id: 8, label: 'Sign-Off & Report',                                 icon: CheckCircle,    stepKey: 'step_8_status' },
+  ];
+}
 
 const STATUS_ORDER = ['Draft','In_Progress','Outreach_Pending','Screening','Assessment','QC','Compliance_Review','Sign_Off_Pending','Approved','Rejected','Closed'];
 
@@ -245,6 +248,8 @@ export default function CaseWorkspace() {
     if (fresh?.[0]) setKycCase(fresh[0]);
   }
 
+  const STEPS = React.useMemo(() => getSteps(client?.client_type), [client?.client_type]);
+
   const canReopen = kycCase?.status === 'Approved' && (userRole === 'Director' || userRole === 'Compliance Admin');
 
   if (loading) return (
@@ -275,7 +280,7 @@ export default function CaseWorkspace() {
 
   const daysOpen = kycCase.created_date ? differenceInDays(new Date(), new Date(kycCase.created_date)) : 0;
   const analysts = users.filter(u => u.app_role === 'Analyst');
-  const activeStepData = STEPS[activeStep - 1];
+  const activeStepData = STEPS[activeStep - 1];  // STEPS is memoised above early returns
   const stepStatus = getStepStatus(kycCase, activeStep);
 
   return (
@@ -424,6 +429,44 @@ export default function CaseWorkspace() {
             <aside className="w-52 bg-card border-r border-border flex-shrink-0 flex flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto p-2 pt-3">
                 <div className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-widest px-2 mb-2">Steps</div>
+
+                {/* Progress bar */}
+                {(() => {
+                  const total    = STEPS.length;
+                  const complete = STEPS.filter(s => isStepComplete(kycCase, s.id)).length;
+                  const pct = Math.round((complete / total) * 100);
+                  return (
+                    <div className="px-2 mb-3">
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span>{complete}/{total} complete</span>
+                        <span>{pct}%</span>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full transition-all"
+                             style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Sign-off readiness */}
+                {(() => {
+                  const incomplete = STEPS
+                    .filter(s => s.id !== 8)
+                    .filter(s => !isStepComplete(kycCase, s.id))
+                    .map(s => s.label);
+                  if (incomplete.length === 0) return (
+                    <div className="px-2 mb-2 text-xs text-emerald-700 font-medium">
+                      ✓ Ready for Sign-Off
+                    </div>
+                  );
+                  return (
+                    <div className="px-2 mb-2 text-xs text-muted-foreground">
+                      {incomplete.length} step{incomplete.length !== 1 ? 's' : ''} pending
+                    </div>
+                  );
+                })()}
+
                 {STEPS.map(step => {
                   const s = getStepStatus(kycCase, step.id);
                   const canToggle = [2, 5, 7].includes(step.id);
