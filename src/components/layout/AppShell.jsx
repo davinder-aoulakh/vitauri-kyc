@@ -20,16 +20,16 @@ const navItems = [
   {
     group: 'OVERVIEW',
     items: [
-      { label: 'Dashboard', icon: LayoutDashboard, href: '/', permission: null },
-      { label: 'My Cases', icon: FolderOpen, href: '/my-cases', permission: null, badge: 'myCases' },
-      { label: 'All Cases', icon: FolderOpen, href: '/all-cases', permission: 'viewAllTenantCases' },
+      { label: 'Dashboard', icon: LayoutDashboard, href: '/', permission: null, featureKey: 'dashboard' },
+      { label: 'My Cases', icon: FolderOpen, href: '/my-cases', permission: null, badge: 'myCases', featureKey: 'my_cases' },
+      { label: 'All Cases', icon: FolderOpen, href: '/all-cases', permission: 'viewAllTenantCases', featureKey: 'all_cases' },
     ],
   },
   {
     group: 'CLIENTS',
     items: [
-      { label: 'New Client', icon: Users, href: '/new-client', permission: 'createEditClient' },
-      { label: 'Client Search', icon: Search, href: '/client-search', permission: null },
+      { label: 'New Client', icon: Users, href: '/new-client', permission: 'createEditClient', featureKey: 'new_client' },
+      { label: 'Client Search', icon: Search, href: '/client-search', permission: null, featureKey: 'client_search' },
     ],
   },
   {
@@ -55,8 +55,8 @@ const navItems = [
       { label: 'MI Dashboard', icon: BarChart3, href: '/mi-dashboard', permission: 'viewMIDashboard', featureKey: 'mi_dashboard' },
       { label: 'Audit Log', icon: ClipboardList, href: '/audit-logs', permission: 'tenantConfig', featureKey: 'audit_logs' },
       { label: 'Archive', icon: Archive, href: '/archive', permission: 'viewArchive', featureKey: 'archive' },
-      { label: 'Tenant Config', icon: Settings, href: '/tenant-config', permission: 'tenantConfig' },
-      { label: 'User Management', icon: UserCircle, href: '/user-management', permission: 'userManagement' },
+      { label: 'Tenant Config', icon: Settings, href: '/tenant-config', permission: 'tenantConfig', featureKey: 'tenant_config' },
+      { label: 'User Management', icon: UserCircle, href: '/user-management', permission: 'userManagement', featureKey: 'user_management' },
     ],
   },
 ];
