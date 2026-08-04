@@ -23,3 +23,22 @@ export function isStepComplete(kycCase, stepId) {
 export function isStepNotRequired(kycCase, stepId) {
   return getStepStatus(kycCase, stepId) === 'not_required';
 }
+
+/**
+ * Returns default not_required flags for a new case based on client and case type.
+ * Steps 2, 5, 7 are the only ones that can be not_required.
+ */
+export function getDefaultStepConfig(clientType, caseType) {
+  const isORG = clientType === 'ORG';
+
+  return {
+    // Step 2 — IDV: ORG uses KYB/company registry, not personal Didit IDV
+    step_2_not_required: isORG,
+
+    // Step 5 — SoF/Wealth: required for everyone at creation; analyst can waive after risk assessment
+    step_5_not_required: false,
+
+    // Step 7 — Control Measures: required for everyone; analyst can waive if Acceptable risk outcome
+    step_7_not_required: false,
+  };
+}

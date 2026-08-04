@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Building2, User, ChevronRight, ChevronLeft, CheckCircle, AlertTriangle, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { addDays, format } from 'date-fns';
+import { getDefaultStepConfig } from '@/lib/caseUtils';
 import { findDuplicates, DEDUP_THRESHOLD } from '@/lib/dedup';
 import RestrictedClientGate from '@/components/archive/RestrictedClientGate';
 import { NaturalPersonStep2A, NaturalPersonStep2B } from '@/components/client/forms/NaturalPersonForm';
@@ -106,6 +107,7 @@ export default function NewClient() {
       assigned_analyst_id: currentUser.id,
       due_date: format(dueDate, 'yyyy-MM-dd'),
       created_by_user_id: currentUser.id,
+      ...getDefaultStepConfig(clientType, 'Onboarding'),
     });
 
     navigate(`/case/${kycCase.id}`);

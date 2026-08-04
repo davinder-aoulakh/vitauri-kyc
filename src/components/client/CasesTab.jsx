@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Plus, Loader2 } from 'lucide-react';
+import { getDefaultStepConfig } from '@/lib/caseUtils';
 import { format, addDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +44,7 @@ export default function CasesTab({ client, cases, users, onRefresh }) {
       due_date: dueDate,
       trigger_reason: triggerReason || undefined,
       created_by_user_id: currentUser.id,
+      ...getDefaultStepConfig(client.client_type, caseType),
     });
     await base44.entities.AuditEvent.create({
       tenant_id: client.tenant_id,

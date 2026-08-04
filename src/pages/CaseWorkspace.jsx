@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { hasPermission } from '@/lib/permissions';
-import { getStepStatus } from '@/lib/caseUtils';
+import { getStepStatus, isStepNotRequired } from '@/lib/caseUtils';
 import AppShell from '@/components/layout/AppShell';
 import RiskBadge from '@/components/shared/RiskBadge';
 import StatusBadge from '@/components/shared/StatusBadge';
@@ -533,20 +533,43 @@ export default function CaseWorkspace() {
                 <CaseTypeBanner kycCase={kycCase} client={client} />
 
                 {/* Step content */}
-                {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} />}
-                {activeStep === 2 && <IdentityVerificationStep kycCase={kycCase} client={client} currentUser={currentUser} />}
-                {activeStep === 3 && <ScreeningStep caseId={id} tenantId={currentUser?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} />}
-                {activeStep === 4 && <ClientProfileStep kycCase={kycCase} client={client} currentUser={currentUser} onRegisterOsintAdd={cb => setOsintAddCallback(() => cb)} />}
-                {activeStep === 5 && <SoFSoWStep kycCase={kycCase} client={client} currentUser={currentUser} />}
-                {activeStep === 6 && <RiskAssessmentStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />}
-                {activeStep === 7 && <ControlMeasuresStep kycCase={kycCase} currentUser={currentUser} />}
-                {activeStep === 8 && (
-                  <div className="space-y-8">
-                    <SignOffStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />
-                    <div className="border-t border-border pt-6">
-                      <KycReportStep kycCase={kycCase} client={client} currentUser={currentUser} />
+                {isStepNotRequired(kycCase, activeStep) ? (
+                  <div className="flex items-center justify-center p-8">
+                    <div className="text-center max-w-sm">
+                      <div className="text-4xl mb-4">
+                        {activeStep === 2 ? '🏢' : activeStep === 5 ? '💰' : '🛡'}
+                      </div>
+                      <div className="text-lg font-semibold text-foreground mb-2">
+                        Step Not Required for This Case
+                      </div>
+                      <div className="text-sm text-muted-foreground mb-6">
+                        {activeStep === 2 && 'Identity Verification via Didit is not required for organisation cases. Entity verification is managed through the KYB process and company registry checks in Step 4.'}
+                        {activeStep === 5 && 'Source of Funds / Wealth documentation is not required for this case based on its risk profile. If circumstances change, an analyst can reinstate this step.'}
+                        {activeStep === 7 && 'Control Measures are not required for this case. If the Risk Assessment (Step 6) identifies Medium or High risk, this step should be reinstated.'}
+                      </div>
+                      <Button variant="outline" size="sm" className="gap-2" onClick={() => toggleStepRequired(activeStep)}>
+                        ↩ Reinstate This Step
+                      </Button>
                     </div>
                   </div>
+                ) : (
+                  <>
+                    {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} />}
+                    {activeStep === 2 && <IdentityVerificationStep kycCase={kycCase} client={client} currentUser={currentUser} />}
+                    {activeStep === 3 && <ScreeningStep caseId={id} tenantId={currentUser?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} />}
+                    {activeStep === 4 && <ClientProfileStep kycCase={kycCase} client={client} currentUser={currentUser} onRegisterOsintAdd={cb => setOsintAddCallback(() => cb)} />}
+                    {activeStep === 5 && <SoFSoWStep kycCase={kycCase} client={client} currentUser={currentUser} />}
+                    {activeStep === 6 && <RiskAssessmentStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />}
+                    {activeStep === 7 && <ControlMeasuresStep kycCase={kycCase} currentUser={currentUser} />}
+                    {activeStep === 8 && (
+                      <div className="space-y-8">
+                        <SignOffStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />
+                        <div className="border-t border-border pt-6">
+                          <KycReportStep kycCase={kycCase} client={client} currentUser={currentUser} />
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </main>
