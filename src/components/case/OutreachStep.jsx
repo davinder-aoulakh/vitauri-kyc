@@ -98,6 +98,8 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant }) {
   const [viewerDoc, setViewerDoc] = useState(null); // { url, name }
   const [idvDetailItem, setIdvDetailItem] = useState(null);
   const [diditPanelOpen, setDiditPanelOpen] = useState(false);
+  const [diditSummary, setDiditSummary] = useState(null);
+  const [diditPanelItem, setDiditPanelItem] = useState(null);
 
   // Builder state
   const [selectedItems, setSelectedItems] = useState([]);
@@ -132,9 +134,32 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant }) {
   useEffect(() => { load(); loadTemplates(); }, [kycCase.id]);
 
   async function load() {
-    const data = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
-    setRequests(data || []);
+    const reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
+    setRequests(reqs || []);
     setLoading(false);
+
+    // Build consolidated Didit summary from all verified IDV items
+    const allIDVItems = [];
+    for (const req of (reqs || [])) {
+      for (const item of (req.items || [])) {
+        if (item.field_type === 'id_verification' &&
+            item.idv_status && item.idv_status !== 'Pending') {
+          allIDVItems.push({ ...item, outreach_id: req.id });
+        }
+      }
+    }
+    if (allIDVItems.length > 0) {
+      const passed   = allIDVItems.filter(i => i.idv_status === 'Pass').length;
+      const failed   = allIDVItems.filter(i => i.idv_status === 'Fail').length;
+      const scored   = allIDVItems.filter(i => i.idv_similarity_score != null);
+      const avgScore = scored.length > 0
+        ? Math.round(scored.reduce((sum, i) => sum + i.idv_similarity_score, 0) / scored.length)
+        : 0;
+      const amlHits  = allIDVItems.reduce((sum, i) => sum + (i.idv_aml_hits || 0), 0);
+      setDiditSummary({ items: allIDVItems, passed, failed, avgScore, amlHits });
+    } else {
+      setDiditSummary(null);
+    }
   }
 
   async function loadTemplates() {
@@ -363,6 +388,92 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
 
   return (
     <div className="space-y-4">
+      {diditSummary && (
+        <div className={cn(
+          'rounded-xl border p-4',
+          diditSummary.failed > 0
+            ? 'bg-red-50 border-red-200'
+            : diditSummary.amlHits > 0
+              ? 'bg-amber-50 border-amber-200'
+              : 'bg-emerald-50 border-emerald-200'
+        )}>
+          {/* Header row */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🪪</span>
+              <div>
+                <div className="text-sm font-semibold">
+                  Didit Identity Verification
+                  {diditSummary.passed > 0 && diditSummary.failed === 0 &&
+                    <span className="ml-2 text-emerald-700">— All Passed</span>}
+                  {diditSummary.failed > 0 &&
+                    <span className="ml-2 text-red-700">— {diditSummary.failed} Failed</span>}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {diditSummary.items.length} verification{diditSummary.items.length !== 1 ? 's' : ''} completed via client portal
+                </div>
+              </div>
+            </div>
+
+            {/* Score chips */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {diditSummary.avgScore > 0 && (
+                <div className="bg-white border rounded-lg px-3 py-1.5 text-center min-w-[64px]">
+                  <div className="text-base font-bold text-foreground">{diditSummary.avgScore}%</div>
+                  <div className="text-xs text-muted-foreground">Avg Match</div>
+                </div>
+              )}
+              <div className={cn('bg-white border rounded-lg px-3 py-1.5 text-center min-w-[64px]',
+                diditSummary.amlHits > 0 ? 'border-amber-300' : '')}>
+                <div className={cn('text-base font-bold',
+                  diditSummary.amlHits > 0 ? 'text-amber-600' : 'text-emerald-600')}>
+                  {diditSummary.amlHits}
+                </div>
+                <div className="text-xs text-muted-foreground">AML Hits</div>
+              </div>
+              <div className="bg-white border rounded-lg px-3 py-1.5 text-center min-w-[64px]">
+                <div className="text-base font-bold text-emerald-600">{diditSummary.passed}</div>
+                <div className="text-xs text-muted-foreground">Passed</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Per-verification rows */}
+          <div className="mt-3 pt-3 border-t border-border/40 space-y-2">
+            {diditSummary.items.map((item, i) => (
+              <div key={i} className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <span>{item.idv_status === 'Pass' ? '✅' : '❌'}</span>
+                  <span className="font-medium">{item.label || 'ID Verification'}</span>
+                  <span className="text-muted-foreground">
+                    {item.idv_document_type || '—'}
+                    {item.idv_similarity_score != null && ` · ${item.idv_similarity_score}% match`}
+                    {item.idv_liveness_passed && ' · Liveness ✓'}
+                  </span>
+                </div>
+                {item.didit_session_id && (
+                  <button
+                    onClick={() => setDiditPanelItem(item)}
+                    className="text-primary underline text-xs hover:no-underline"
+                  >
+                    View →
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {diditPanelItem?.didit_session_id && (
+        <DiditVerificationPanel
+          sessionId={diditPanelItem.didit_session_id}
+          tenantId={kycCase?.tenant_id}
+          clientName={client?.full_name}
+          onClose={() => setDiditPanelItem(null)}
+        />
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h3 className="font-semibold text-sm">Outreach & Document Collection</h3>
