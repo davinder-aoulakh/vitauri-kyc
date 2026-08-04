@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import OcrResultPanel from '@/components/client/OcrResultPanel';
+import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
 import {
   CheckCircle, XCircle, AlertTriangle, User, Building2, Loader2,
   Upload, Sparkles, ScanLine, FileText, Paperclip
@@ -278,6 +279,8 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
   const [portalIdvResults, setPortalIdvResults] = useState([]);
   const [extractedData, setExtractedData]           = useState(null);
   const [showExtractedPrompt, setShowExtractedPrompt] = useState(false);
+  const [diditPanelOpen, setDiditPanelOpen]   = useState(false);
+  const [selectedDiditItem, setSelectedDiditItem] = useState(null);
 
   const set = (key, field, val) => setVerifications(v => ({ ...v, [key]: { ...v[key], [field]: val } }));
 
@@ -423,60 +426,142 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
         </p>
       </div>
 
-      {/* ── Portal IDV Results ── */}
-      {portalIdvResults.length > 0 && (
-        <div className="rounded-xl border overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-primary/5 border-b border-primary/20">
-            <span className="text-sm font-semibold text-primary">🪪 Portal Identity Verification Results</span>
-            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-auto">
-              Captured by client
-            </span>
-          </div>
-          {portalIdvResults.map((item, idx) => (
-            <div key={idx} className={cn(
-              'px-4 py-3 border-b border-border last:border-b-0',
-              item.idv_status === 'Pass' ? 'bg-emerald-50/40' : 'bg-red-50/40'
-            )}>
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">{item.idv_status === 'Pass' ? '✅' : '❌'}</span>
-                  <div>
-                    <div className="text-sm font-medium">
-                      {item.label} — {item.idv_document_type || 'ID Document'}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {item.idv_similarity_score}% match · {item.idv_confidence} confidence
-                      {item.idv_liveness_passed && ' · Liveness ✓'}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  {item.idv_doc_url && item.idv_selfie_url && (
-                    <div className="flex items-center gap-1">
-                      <img src={item.idv_doc_url} alt="Doc"
-                        className="w-8 h-8 rounded-full object-cover border border-white shadow-sm" />
-                      <img src={item.idv_selfie_url} alt="Selfie"
-                        className="w-8 h-8 rounded-full object-cover border border-white shadow-sm -ml-2" />
-                    </div>
-                  )}
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
-                    onClick={() => applyPortalIdv(item)}>
-                    Apply ↓
-                  </Button>
-                </div>
-              </div>
-              {item.idv_failure_reason && (
-                <div className="text-xs text-red-600 mt-1">{item.idv_failure_reason}</div>
+      {/* ── Portal IDV Results (primary dashboard cards) ── */}
+      {portalIdvResults.length > 0 && portalIdvResults.map((item, idx) => {
+        const passed = item.idv_status === 'Pass';
+        const score  = item.idv_similarity_score;
+        const lScore = item.idv_liveness_score;
+
+        function ScoreRing({ value, color, label, subLabel }) {
+          if (value == null) return null;
+          const r   = 26;
+          const c   = 2 * Math.PI * r;
+          const arc = (value / 100) * c;
+          return (
+            <div className="flex flex-col items-center gap-1">
+              <svg width="66" height="66" viewBox="0 0 66 66">
+                <circle cx="33" cy="33" r={r} fill="none" stroke="#E5E7EB" strokeWidth="5.5" />
+                <circle cx="33" cy="33" r={r} fill="none" stroke={color} strokeWidth="5.5"
+                        strokeLinecap="round"
+                        strokeDasharray={`${arc} ${c}`}
+                        transform="rotate(-90 33 33)" />
+                <text x="33" y="37" textAnchor="middle" fontSize="13" fontWeight="700" fill={color}>
+                  {Math.round(value)}%
+                </text>
+              </svg>
+              <span className="text-xs font-medium text-foreground">{label}</span>
+              {subLabel && (
+                <span className={cn('text-xs font-semibold',
+                  subLabel === 'Approved' ? 'text-emerald-600' : 'text-red-600')}>
+                  {subLabel}
+                </span>
               )}
             </div>
-          ))}
-          {portalIdvResults.some(i => i.idv_status === 'Pass') && (
-            <div className="px-4 py-2 bg-emerald-50 text-xs text-emerald-700">
-              ✓ Click "Apply ↓" on a result to pre-fill the verification form below
+          );
+        }
+
+        return (
+          <div key={idx} className={cn(
+            'rounded-xl border-2 overflow-hidden',
+            passed ? 'border-emerald-200' : 'border-red-200'
+          )}>
+            {/* Header */}
+            <div className={cn(
+              'flex items-center justify-between px-4 py-3 gap-3 flex-wrap',
+              passed ? 'bg-emerald-50' : 'bg-red-50'
+            )}>
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{passed ? '✅' : '❌'}</span>
+                <div>
+                  <div className="font-semibold text-sm">
+                    {item.label || 'Identity Verification'}
+                    <span className={cn('ml-2 text-xs font-bold px-2 py-0.5 rounded-full',
+                      passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')}>
+                      {item.idv_status}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {item.idv_document_type || '—'}
+                    {item.idv_issuing_country && ` · ${item.idv_issuing_country}`}
+                    {item.idv_checked_at && ` · ${new Date(item.idv_checked_at).toLocaleDateString()}`}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {item.didit_session_id && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                    onClick={() => { setSelectedDiditItem(item); setDiditPanelOpen(true); }}>
+                    🪪 Full Didit Report →
+                  </Button>
+                )}
+                <Button size="sm" className="h-7 text-xs gap-1"
+                  onClick={() => applyPortalIdv(item)}
+                  variant={passed ? 'default' : 'outline'}>
+                  Apply to Case ↓
+                </Button>
+              </div>
             </div>
-          )}
-        </div>
-      )}
+
+            {/* Biometric scores */}
+            <div className="px-4 py-4 bg-card border-b border-border">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Biometric Verification
+              </div>
+              <div className="flex gap-8 items-start">
+                <ScoreRing value={score} color={passed ? '#10B981' : '#EF4444'}
+                           label="Face Match"
+                           subLabel={score != null ? (score >= 75 ? 'Approved' : 'Below Threshold') : null} />
+                <ScoreRing value={lScore || (item.idv_liveness_passed ? 100 : null)}
+                           color="#3B82F6"
+                           label="Liveness"
+                           subLabel={item.idv_liveness_passed ? 'Approved' : 'Not Confirmed'} />
+                <div className="flex flex-col items-center gap-1">
+                  <div className={cn('text-2xl font-bold',
+                    (item.idv_aml_hits || 0) > 0 ? 'text-amber-600' : 'text-emerald-600')}>
+                    {item.idv_aml_hits || 0}
+                  </div>
+                  <span className="text-xs font-medium text-foreground">AML Hits</span>
+                  <span className={cn('text-xs font-semibold',
+                    (item.idv_aml_hits || 0) > 0 ? 'text-amber-600' : 'text-emerald-600')}>
+                    {(item.idv_aml_hits || 0) > 0 ? 'Review Required' : 'Clear'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* OCR Extracted Data */}
+            {(item.idv_extracted_first_name || item.idv_extracted_dob || item.idv_document_number) && (
+              <div className="px-4 py-3 bg-muted/20 border-b border-border">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  OCR Extracted Data
+                </div>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs">
+                  {[
+                    ['Verified Name',   [item.idv_extracted_first_name, item.idv_extracted_last_name].filter(Boolean).join(' ')],
+                    ['Date of Birth',   item.idv_extracted_dob],
+                    ['Nationality',     item.idv_extracted_nationality],
+                    ['Document #',      item.idv_document_number],
+                    ['Expiry Date',     item.idv_document_expiry],
+                    ['Issuing Country', item.idv_issuing_country],
+                  ].filter(([, v]) => v).map(([label, value]) => (
+                    <div key={label}>
+                      <span className="text-muted-foreground">{label}: </span>
+                      <span className="font-medium text-foreground">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Failure reason */}
+            {item.idv_failure_reason && (
+              <div className="px-4 py-2 bg-red-50 text-xs text-red-700">
+                Issue: {item.idv_failure_reason}
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       {showExtractedPrompt && extractedData && (
         <div className="border border-primary/20 bg-primary/5 rounded-xl p-3 mt-2 text-xs">
@@ -646,6 +731,15 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
         </Button>
         {saved && <span className="text-xs text-emerald-600 font-medium">✓ Saved</span>}
       </div>
+
+      {diditPanelOpen && selectedDiditItem?.didit_session_id && (
+        <DiditVerificationPanel
+          sessionId={selectedDiditItem.didit_session_id}
+          tenantId={kycCase?.tenant_id}
+          clientName={client?.full_name || 'Client'}
+          onClose={() => { setDiditPanelOpen(false); setSelectedDiditItem(null); }}
+        />
+      )}
     </div>
   );
 }
