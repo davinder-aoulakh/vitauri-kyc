@@ -172,6 +172,10 @@
       "type": "string",
       "format": "date-time",
       "description": "Expiry timestamp for the onboarding token (72 hours from creation)"
+    },
+    "features_enabled": {
+      "type": "string",
+      "description": "JSON object of feature flag overrides per tenant. Missing key = feature ON. e.g. {\"outreach\": false, \"batch_screening\": false}"
     }
   },
   "required": [

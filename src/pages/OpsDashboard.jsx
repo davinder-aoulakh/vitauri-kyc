@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import OpsDiditPanel from '@/components/ops/OpsDiditPanel';
 import NewTenantDialog from '@/components/ops/NewTenantDialog';
+import TenantFeaturesPanel from '@/components/ops/TenantFeaturesPanel';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import {
   Shield, Building2, AlertTriangle, FolderOpen, Activity,
   ExternalLink, Users, Cpu, Database, TrendingUp, Ban,
-  RefreshCw, Search, ChevronDown, Loader2
+  RefreshCw, Search, ChevronDown, Loader2, ToggleLeft
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +36,7 @@ export default function OpsDashboard() {
   const [deactivating, setDeactivating] = useState(null);
   const [expandedTenant, setExpandedTenant] = useState(null);
   const [diditTenant, setDiditTenant] = useState(null);
+  const [featuresTenant, setFeaturesTenant] = useState(null);
   const [newTenantOpen, setNewTenantOpen] = useState(false);
 
   useEffect(() => {
@@ -260,6 +262,9 @@ export default function OpsDashboard() {
                                   <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', isExpanded && 'rotate-180')} />
                                   Users
                                 </button>
+                                <Button variant="outline" size="sm" className="text-xs gap-1 h-7" onClick={() => setFeaturesTenant(t)}>
+                                  <ToggleLeft className="w-3 h-3" /> Features
+                                </Button>
                                 <Button variant="outline" size="sm" className="text-xs gap-1 h-7" onClick={() => setDiditTenant(t)}>
                                   🪪 Didit
                                 </Button>
@@ -522,6 +527,18 @@ export default function OpsDashboard() {
           tenant={diditTenant}
           onClose={() => setDiditTenant(null)}
           onSaved={() => { setDiditTenant(null); loadData(); refreshOpsTenant?.(); }}
+        />
+      )}
+
+      {featuresTenant && (
+        <TenantFeaturesPanel
+          tenant={featuresTenant}
+          onClose={() => setFeaturesTenant(null)}
+          onSaved={() => {
+            setFeaturesTenant(null);
+            loadData();
+            refreshOpsTenant?.();
+          }}
         />
       )}
     </div>

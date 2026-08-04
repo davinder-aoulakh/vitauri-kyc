@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTenant } from '@/lib/tenantContext';
 import { base44 } from '@/api/base44Client';
 import { hasPermission, isVitauriOps } from '@/lib/permissions';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 import NotificationBell from '@/components/layout/NotificationBell';
 import OpsBanner from '@/components/layout/OpsBanner';
 import SessionWatcher from '@/components/layout/SessionWatcher';
@@ -34,6 +35,7 @@ const navItems = [
   {
     group: 'OUTREACH',
     outreachOnly: true,
+    featureKey: 'outreach',
     items: [
       { label: 'New Outreach', icon: Send, href: '/outreach/new', permission: null },
       { label: 'Outreach Dashboard', icon: Mail, href: '/outreach-dashboard', permission: null, badge: 'outreach' },
@@ -42,17 +44,17 @@ const navItems = [
   {
     group: 'MONITORING',
     items: [
-      { label: 'Screening', icon: Shield, href: '/monitoring', permission: null, badge: 'alerts' },
-      { label: 'Batch Screening', icon: ScanSearch, href: '/batch-screening', permission: 'createEditClient' },
-      { label: 'Review Planner', icon: Calendar, href: '/review-planner', permission: 'viewAllTenantCases' },
+      { label: 'Screening', icon: Shield, href: '/monitoring', permission: null, badge: 'alerts', featureKey: 'monitoring' },
+      { label: 'Batch Screening', icon: ScanSearch, href: '/batch-screening', permission: 'createEditClient', featureKey: 'batch_screening' },
+      { label: 'Review Planner', icon: Calendar, href: '/review-planner', permission: 'viewAllTenantCases', featureKey: 'review_planner' },
     ],
   },
   {
     group: 'REPORTS & ADMIN',
     items: [
-      { label: 'MI Dashboard', icon: BarChart3, href: '/mi-dashboard', permission: 'viewMIDashboard' },
-      { label: 'Audit Log', icon: ClipboardList, href: '/audit-logs', permission: 'tenantConfig' },
-      { label: 'Archive', icon: Archive, href: '/archive', permission: 'viewArchive' },
+      { label: 'MI Dashboard', icon: BarChart3, href: '/mi-dashboard', permission: 'viewMIDashboard', featureKey: 'mi_dashboard' },
+      { label: 'Audit Log', icon: ClipboardList, href: '/audit-logs', permission: 'tenantConfig', featureKey: 'audit_logs' },
+      { label: 'Archive', icon: Archive, href: '/archive', permission: 'viewArchive', featureKey: 'archive' },
       { label: 'Tenant Config', icon: Settings, href: '/tenant-config', permission: 'tenantConfig' },
       { label: 'User Management', icon: UserCircle, href: '/user-management', permission: 'userManagement' },
     ],
@@ -111,9 +113,12 @@ export default function AppShell({ children }) {
         {navItems.map((group) => {
           // Hide Outreach section for roles that are not allowed
           if (group.outreachOnly && !OUTREACH_ROLES.includes(userRole)) return null;
+          // Hide entire group if its feature flag is disabled
+          if (group.featureKey && !isFeatureEnabled(tenant, group.featureKey)) return null;
 
           const visibleItems = group.items.filter(item =>
-            !item.permission || hasPermission(userRole, item.permission)
+            (!item.permission || hasPermission(userRole, item.permission)) &&
+            (!item.featureKey || isFeatureEnabled(tenant, item.featureKey))
           );
           if (visibleItems.length === 0) return null;
 
