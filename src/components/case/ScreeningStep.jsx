@@ -31,6 +31,11 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
   const [submitting, setSubmitting] = useState(false);
   const [confirmedOnboardingHits, setConfirmedOnboardingHits] = useState([]);
 
+  // Didit AML
+  const [diditAmlItems, setDiditAmlItems] = useState([]);
+  const [importingAml, setImportingAml]   = useState(false);
+  const [amlImported, setAmlImported]     = useState(false);
+
   useEffect(() => { loadAll(); }, [caseId]);
 
   async function loadAll() {
@@ -41,6 +46,64 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
     setHits(hitsData || []);
     setMonitoringAlerts(alertsData || []);
     setLoading(false);
+
+    // Load Didit AML results from completed outreach IDV items
+    try {
+      const outreaches = await base44.entities.OutreachRequest.filter({ case_id: caseId });
+      const amlItems = [];
+      for (const req of (outreaches || [])) {
+        for (const item of (req.items || [])) {
+          if (item.field_type === 'id_verification' &&
+              item.idv_status !== 'Pending' &&
+              (item.idv_aml_hits || 0) > 0) {
+            amlItems.push(item);
+          }
+        }
+      }
+      setDiditAmlItems(amlItems);
+      setAmlImported((hitsData || []).some(h => h.source === 'Didit_AML'));
+    } catch { /* non-fatal */ }
+  }
+
+  async function importDiditAmlHits() {
+    setImportingAml(true);
+    try {
+      for (const item of diditAmlItems) {
+        await base44.entities.ScreeningHit.create({
+          tenant_id:        kycCase?.tenant_id || tenantId,
+          case_id:          caseId,
+          client_id:        kycCase?.client_id,
+          entity_name:      client?.full_name || 'Client',
+          entity_type:      'Client',
+          source:           'Didit_AML',
+          hit_name:         `Didit AML Alert — ${item.idv_aml_hits} hit(s) detected`,
+          confidence_score: 85,
+          status:           'New',
+          hit_details: {
+            didit_session_id: item.didit_session_id,
+            aml_hits:         item.idv_aml_hits,
+            aml_status:       item.idv_aml_status || 'Flagged',
+            document_type:    item.idv_document_type,
+            document_number:  item.idv_document_number,
+            full_name:        [item.idv_extracted_first_name, item.idv_extracted_last_name].filter(Boolean).join(' '),
+            nationality:      item.idv_extracted_nationality,
+          },
+          ai_recommendation: 'Review Required',
+          ai_rationale: `Didit identity verification returned ${item.idv_aml_hits} AML screening hit(s) during the client portal verification session. Open the full Didit session report for individual hit details.`,
+        });
+      }
+      await base44.entities.AuditEvent.create({
+        tenant_id:     kycCase?.tenant_id || tenantId,
+        case_id:       caseId,
+        actor_user_id: currentUser?.id,
+        actor_name:    currentUser?.full_name,
+        actor_type:    'User',
+        event_type:    'didit_aml_imported',
+        notes:         `Didit AML results imported: ${diditAmlItems.length} alert(s) from portal verification.`,
+      });
+      setAmlImported(true);
+      await loadAll();
+    } finally { setImportingAml(false); }
   }
 
   async function batchScreen() {
@@ -233,6 +296,57 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
 
   return (
     <div className="space-y-4 relative">
+      {/* Didit AML Alerts Banner */}
+      {diditAmlItems.length > 0 && (
+        <div className={cn(
+          'rounded-xl border p-4',
+          amlImported ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'
+        )}>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">⚠</span>
+              <div>
+                <div className="text-sm font-semibold text-amber-900">
+                  Didit AML Alerts
+                  {amlImported && (
+                    <span className="ml-2 text-emerald-700 text-xs font-normal">(imported to screening hits)</span>
+                  )}
+                </div>
+                <div className="text-xs text-amber-700">
+                  {diditAmlItems.length} Didit verification session{diditAmlItems.length !== 1 ? 's' : ''} returned AML hits.
+                  {!amlImported && ' Import them below to review alongside other screening results.'}
+                </div>
+              </div>
+            </div>
+            {!amlImported && (
+              <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white gap-2"
+                onClick={importDiditAmlHits} disabled={importingAml}>
+                {importingAml
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Importing…</>
+                  : '+ Import Didit AML Hits'}
+              </Button>
+            )}
+          </div>
+          <div className="mt-3 pt-3 border-t border-amber-200/60 space-y-1.5">
+            {diditAmlItems.map((item, i) => (
+              <div key={i} className="flex items-center justify-between text-xs">
+                <span className="text-amber-900">
+                  {item.label || 'ID Verification'} —{' '}
+                  <span className="font-semibold">{item.idv_aml_hits} hit(s)</span>
+                  {item.idv_extracted_first_name &&
+                    ` · ${[item.idv_extracted_first_name, item.idv_extracted_last_name].filter(Boolean).join(' ')}`}
+                </span>
+                {item.didit_session_id && (
+                  <span className="text-muted-foreground font-mono">
+                    Session: {item.didit_session_id.substring(0, 12)}…
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Controls Row */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
