@@ -286,12 +286,44 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
 
   async function loadPortalIdvResults() {
     try {
-      const outreaches = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
-      const idvItems = (outreaches || []).flatMap(req =>
-        (req.items || [])
-          .filter(item => item.field_type === 'id_verification' && item.idv_status && item.idv_status !== 'Pending')
-          .map(item => ({ ...item, outreach_req_id: req.id }))
+      // Search 1: outreach requests directly linked to this case
+      const caseOutreaches = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
+
+      // Search 2: ALL outreach requests for this client (catches standalone outreach
+      // where case_id is null — sent before a case was created).
+      // Filter out anything already found in Search 1 to avoid duplicates.
+      const caseOutreachIds = new Set((caseOutreaches || []).map(r => r.id));
+      const clientOutreaches = await base44.entities.OutreachRequest.filter({
+        client_id: kycCase.client_id
+      });
+      const standaloneOutreaches = (clientOutreaches || []).filter(r =>
+        !caseOutreachIds.has(r.id)
       );
+
+      const allOutreaches = [...(caseOutreaches || []), ...standaloneOutreaches];
+
+      // Extract all completed IDV items across all outreach requests, most recent first
+      const idvItems = allOutreaches
+        .flatMap(req =>
+          (req.items || [])
+            .filter(item =>
+              item.field_type === 'id_verification' &&
+              item.idv_status &&
+              item.idv_status !== 'Pending'
+            )
+            .map(item => ({
+              ...item,
+              outreach_req_id: req.id,
+              _source: req.case_id ? 'case_outreach' : 'standalone_outreach',
+            }))
+        )
+        .sort((a, b) => {
+          if (!a.idv_checked_at && !b.idv_checked_at) return 0;
+          if (!a.idv_checked_at) return 1;
+          if (!b.idv_checked_at) return -1;
+          return new Date(b.idv_checked_at) - new Date(a.idv_checked_at);
+        });
+
       setPortalIdvResults(idvItems);
     } catch (err) {
       console.error('Could not load portal IDV results:', err);
