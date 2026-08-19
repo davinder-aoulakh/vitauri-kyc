@@ -281,6 +281,7 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
   const [showExtractedPrompt, setShowExtractedPrompt] = useState(false);
   const [diditPanelOpen, setDiditPanelOpen]   = useState(false);
   const [selectedDiditItem, setSelectedDiditItem] = useState(null);
+  const [showManualOcr, setShowManualOcr] = useState(false);
 
   const set = (key, field, val) => setVerifications(v => ({ ...v, [key]: { ...v[key], [field]: val } }));
 
@@ -307,7 +308,11 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
         .flatMap(req =>
           (req.items || [])
             .filter(item =>
-              item.field_type === 'id_verification' &&
+              // Accept if explicitly typed as id_verification
+              (item.field_type === 'id_verification' ||
+               // OR accept if Didit processed it (didit_session_id is proof)
+               item.didit_session_id) &&
+              // Must have a terminal IDV status
               item.idv_status &&
               item.idv_status !== 'Pending'
             )
@@ -325,6 +330,21 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
         });
 
       setPortalIdvResults(idvItems);
+
+      // Auto-apply most recent Didit result so form fields are pre-filled
+      if (idvItems.length > 0 && idvItems[0].idv_status === 'Pass') {
+        const best = idvItems[0];
+        set('primary', 'doc_type',   best.idv_document_type  || '');
+        set('primary', 'doc_number', best.idv_document_number || '');
+        set('primary', 'status',     'Verified');
+        set('primary', 'notes',
+          `Verified via Didit — ${best.idv_similarity_score ?? '?'}% face match · ` +
+          `Liveness: ${best.idv_liveness_passed ? 'passed' : 'not confirmed'} · ` +
+          `Doc: ${best.idv_document_type || 'unknown'} · ` +
+          `${best.idv_issuing_country || ''} · ` +
+          `${best.idv_checked_at ? new Date(best.idv_checked_at).toLocaleDateString() : ''}`
+        );
+      }
     } catch (err) {
       console.error('Could not load portal IDV results:', err);
     }
@@ -628,14 +648,44 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
         </div>
       )}
 
-      {/* ── OCR Upload Panel (NP: Passport/ID only) ── */}
-      {!isOrg && (
+      {/* ── OCR Upload Panel: only show when Didit has NOT verified ── */}
+      {!isOrg && portalIdvResults.length === 0 && (
         <OcrUploadPanel
           kycCase={kycCase}
           client={client}
           currentUser={currentUser}
           onOcrApplied={handleOcrApplied}
         />
+      )}
+
+      {/* ── When Didit verified: show a collapsed OCR section as fallback only ── */}
+      {!isOrg && portalIdvResults.length > 0 && (
+        <div className="border border-border rounded-xl">
+          <button
+            className="w-full flex items-center justify-between px-4 py-3 text-xs
+                       text-muted-foreground hover:bg-muted/30 transition-colors"
+            onClick={() => setShowManualOcr(s => !s)}
+          >
+            <span className="flex items-center gap-2">
+              <span>📋</span>
+              <span className="font-medium">Manual OCR / Upload</span>
+              <span className="text-muted-foreground/60">
+                (optional — Didit already extracted document data)
+              </span>
+            </span>
+            <span>{showManualOcr ? '▲' : '▼'}</span>
+          </button>
+          {showManualOcr && (
+            <div className="border-t border-border">
+              <OcrUploadPanel
+                kycCase={kycCase}
+                client={client}
+                currentUser={currentUser}
+                onOcrApplied={handleOcrApplied}
+              />
+            </div>
+          )}
+        </div>
       )}
 
       {/* OCR applied confirmation */}
@@ -675,6 +725,20 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
 
       {/* Upload supporting documents */}
       <SimpleDocUpload kycCase={kycCase} currentUser={currentUser} />
+
+      {/* Analyst case record — required regardless of Didit */}
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          {portalIdvResults.length > 0
+            ? '📝 Analyst Verification Record'
+            : '📝 Primary ID Document'}
+        </div>
+        {portalIdvResults.length > 0 && (
+          <span className="text-xs text-muted-foreground italic">
+            Pre-filled from Didit · please confirm and save
+          </span>
+        )}
+      </div>
 
       {/* Verification forms */}
       {[
