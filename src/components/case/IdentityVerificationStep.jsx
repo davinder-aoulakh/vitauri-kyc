@@ -11,9 +11,10 @@ import OcrResultPanel from '@/components/client/OcrResultPanel';
 import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
 import {
   CheckCircle, XCircle, AlertTriangle, User, Building2, Loader2,
-  Upload, Sparkles, ScanLine, FileText, Paperclip
+  Upload, Sparkles, ScanLine, FileText, Paperclip, Send, Copy, Mail, Pencil
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { format, addDays } from 'date-fns';
 
 const VERIFICATION_STATUS = ['Pending', 'In Progress', 'Verified', 'Failed', 'Unable to Verify'];
 const ID_TYPES_NP  = ['Passport', 'National ID Card', 'Driving Licence', 'Residence Permit', 'Other'];
@@ -266,8 +267,224 @@ function SimpleDocUpload({ kycCase, currentUser, onUploaded }) {
   );
 }
 
+function generateAccessToken() {
+  const arr = new Uint8Array(24);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ── Send Didit Verification (empty-state primary action) ───────────────────────
+function SendDiditCard({ kycCase, client, currentUser, tenant, onSent }) {
+  const [loading, setLoading]   = useState(true);
+  const [template, setTemplate] = useState(null);   // matching OutreachTemplate (id_verification)
+  const [pending, setPending]   = useState(null);    // { req, item } — already-outstanding request
+  const [sending, setSending]   = useState(false);
+  const [result, setResult]     = useState(null);    // { portalUrl, emailSent }
+  const [copied, setCopied]     = useState(false);
+
+  useEffect(() => { load(); }, [kycCase.id, client?.id]);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [templates, requests] = await Promise.all([
+        base44.entities.OutreachTemplate.filter({ tenant_id: kycCase.tenant_id, field_type: 'id_verification', is_active: true }),
+        base44.entities.OutreachRequest.filter({ case_id: kycCase.id }),
+      ]);
+      const npTemplates = (templates || []).filter(t => !t.client_types?.length || t.client_types.includes('NP'));
+      setTemplate(npTemplates[0] || null);
+
+      for (const req of (requests || [])) {
+        const item = (req.items || []).find(i =>
+          i.field_type === 'id_verification' && (!i.idv_status || i.idv_status === 'Pending')
+        );
+        if (item) { setPending({ req, item }); break; }
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function getPortalUrl(req) {
+    return `${window.location.origin}/portal/${req.access_token}`;
+  }
+
+  function copyLink(url) {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function sendRequest() {
+    if (!template) return;
+    setSending(true);
+    try {
+      const token = generateAccessToken();
+      const tokenExpiry = addDays(new Date(), 14);
+      const item = {
+        item_id:              template.id,
+        item_type:            'data_point',
+        field_type:           'id_verification',
+        label:                template.label || 'Identity Verification',
+        description:          template.description || '',
+        idv_workflow_id:      template.idv_workflow_id || '',
+        idv_workflow_name:    template.idv_workflow_name || '',
+        idv_min_match_score:  template.idv_min_match_score ?? 75,
+        status:               'Requested',
+      };
+      const hasEmail = !!client?.primary_contact_email;
+
+      const req = await base44.entities.OutreachRequest.create({
+        tenant_id:         kycCase.tenant_id,
+        case_id:           kycCase.id,
+        client_id:         kycCase.client_id,
+        message:           `Dear ${client?.full_name || 'Client'}, please complete a short identity verification.`,
+        deadline:          format(addDays(new Date(), 14), 'yyyy-MM-dd'),
+        delivery_channel:  hasEmail ? 'Email' : 'Portal',
+        status:            'Draft',
+        access_token:       token,
+        token_expires_at:   tokenExpiry.toISOString(),
+        items:              [item],
+      });
+
+      const portalUrl = getPortalUrl(req);
+      let emailSent = false;
+
+      if (hasEmail) {
+        const primaryColor = tenant?.branding_primary_color || '#1A6BFF';
+        try {
+          await base44.integrations.Core.SendEmail({
+            from_name: tenant?.email_from_name || tenant?.name || 'Compliance Team',
+            ...(tenant?.email_from_address ? { from_email: tenant.email_from_address } : {}),
+            to: client.primary_contact_email,
+            subject: `Action Required: Identity Verification — ${tenant?.name || 'KYC Review'}`,
+            body: `
+              <div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;">
+                <p style="font-size:15px;color:#111827;">Dear ${client?.full_name || 'Client'},</p>
+                <p style="font-size:14px;color:#374151;">As part of our review, please complete a short identity
+                  verification — it takes about 2 minutes and requires your ID document and a selfie.</p>
+                <div style="text-align:center;margin:28px 0;">
+                  <a href="${portalUrl}" style="background:${primaryColor};color:#fff;padding:14px 32px;
+                     border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;display:inline-block;">
+                    Verify My Identity →
+                  </a>
+                </div>
+                <p style="font-size:12px;color:#9CA3AF;">This is a secure, personalised link. Please do not share it with others.</p>
+              </div>`,
+          });
+          emailSent = true;
+        } catch (err) {
+          console.warn('Email send failed (external email not supported), link still generated:', err);
+        }
+      }
+
+      await base44.entities.OutreachRequest.update(req.id, { status: 'Sent' });
+      await base44.entities.AuditEvent.create({
+        tenant_id:     kycCase.tenant_id,
+        case_id:       kycCase.id,
+        client_id:     kycCase.client_id,
+        actor_user_id: currentUser?.id,
+        actor_name:    currentUser?.full_name,
+        actor_type:    'User',
+        event_type:    'outreach_sent',
+        notes: `Didit identity verification request sent${emailSent ? ` via email to ${client.primary_contact_email}` : ' (portal link generated)'} from the Identity Verification step.`,
+      });
+
+      setResult({ portalUrl, emailSent });
+      onSent?.();
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="border border-border rounded-xl p-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking verification status…
+      </div>
+    );
+  }
+
+  // No id_verification field configured in this tenant's outreach library
+  if (!template) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800">
+        <div className="font-medium mb-1">Didit identity verification isn't set up yet</div>
+        <div>
+          Ask your tenant admin to add an "Identity Verification" field (field type <code className="font-mono">id_verification</code>) to{' '}
+          <a href="/tenant-config" className="underline font-medium">Tenant Config → Outreach Templates</a>. Until then, verification
+          can only be recorded manually below.
+        </div>
+      </div>
+    );
+  }
+
+  // Result of a just-sent request
+  if (result) {
+    return (
+      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-2">
+        <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800">
+          <CheckCircle className="w-4 h-4" />
+          Verification request sent{result.emailSent ? ` — emailed to ${client.primary_contact_email}` : ''}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <code className="text-xs bg-white border border-emerald-200 rounded-lg px-2.5 py-1.5 flex-1 min-w-0 truncate">{result.portalUrl}</code>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => copyLink(result.portalUrl)}>
+            <Copy className="w-3 h-3" /> {copied ? 'Copied' : 'Copy Link'}
+          </Button>
+        </div>
+        <p className="text-xs text-emerald-700">This card updates automatically once the client completes verification.</p>
+      </div>
+    );
+  }
+
+  // An outstanding (already sent, not yet completed) request exists
+  if (pending) {
+    const portalUrl = getPortalUrl(pending.req);
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+        <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+          🪪 Verification link already sent — awaiting client
+        </div>
+        <div className="text-xs text-amber-700">
+          Status: {pending.req.status} · sent for {pending.item.label || 'Identity Verification'}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <code className="text-xs bg-white border border-amber-200 rounded-lg px-2.5 py-1.5 flex-1 min-w-0 truncate">{portalUrl}</code>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => copyLink(portalUrl)}>
+            <Copy className="w-3 h-3" /> {copied ? 'Copied' : 'Copy Link'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Default: primary CTA
+  return (
+    <div className="bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20 rounded-xl p-5">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+          <span className="text-lg">🪪</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-foreground">Verify identity via Didit</div>
+          <p className="text-xs text-muted-foreground mt-0.5 mb-3">
+            {client?.primary_contact_email
+              ? `Sends a secure verification link to ${client.primary_contact_email} — document scan + selfie, ~2 minutes.`
+              : 'Generates a secure verification link to share with the client — document scan + selfie, ~2 minutes.'}
+          </p>
+          <Button size="sm" onClick={sendRequest} disabled={sending} className="gap-1.5">
+            {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : client?.primary_contact_email ? <Mail className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+            {sending ? 'Sending…' : client?.primary_contact_email ? 'Send Verification Email' : 'Generate Verification Link'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
-export default function IdentityVerificationStep({ kycCase, client, currentUser }) {
+export default function IdentityVerificationStep({ kycCase, client, currentUser, tenant }) {
   const isOrg = client?.client_type === 'ORG';
   const [verifications, setVerifications] = useState({
     primary: { status: 'Pending', doc_type: '', doc_number: '', issue_date: '', expiry_date: '', notes: '' },
@@ -282,6 +499,7 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
   const [diditPanelOpen, setDiditPanelOpen]   = useState(false);
   const [selectedDiditItem, setSelectedDiditItem] = useState(null);
   const [showManualOcr, setShowManualOcr] = useState(false);
+  const [showPrimaryOverride, setShowPrimaryOverride] = useState(false);
 
   const set = (key, field, val) => setVerifications(v => ({ ...v, [key]: { ...v[key], [field]: val } }));
 
@@ -353,6 +571,7 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
   useEffect(() => { loadPortalIdvResults(); }, [kycCase.id]);
 
   function applyPortalIdv(idvItem) {
+    setShowPrimaryOverride(false);
     set('primary', 'doc_type',   idvItem.idv_document_type || '');
     set('primary', 'doc_number', idvItem.idv_document_number || '');
     set('primary', 'status',     idvItem.idv_status === 'Pass' ? 'Verified' : 'Failed');
@@ -648,18 +867,20 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
         </div>
       )}
 
-      {/* ── OCR Upload Panel: only show when Didit has NOT verified ── */}
+      {/* ── Send Didit Verification: primary empty-state action ── */}
       {!isOrg && portalIdvResults.length === 0 && (
-        <OcrUploadPanel
+        <SendDiditCard
           kycCase={kycCase}
           client={client}
           currentUser={currentUser}
-          onOcrApplied={handleOcrApplied}
+          tenant={tenant}
+          onSent={loadPortalIdvResults}
         />
       )}
 
-      {/* ── When Didit verified: show a collapsed OCR section as fallback only ── */}
-      {!isOrg && portalIdvResults.length > 0 && (
+      {/* ── Manual OCR / Upload: collapsed fallback, either as the exception path
+           before Didit runs, or as an optional re-check once Didit has ── */}
+      {!isOrg && (
         <div className="border border-border rounded-xl">
           <button
             className="w-full flex items-center justify-between px-4 py-3 text-xs
@@ -670,7 +891,9 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
               <span>📋</span>
               <span className="font-medium">Manual OCR / Upload</span>
               <span className="text-muted-foreground/60">
-                (optional — Didit already extracted document data)
+                {portalIdvResults.length > 0
+                  ? '(optional — Didit already extracted document data)'
+                  : "(client can't complete Didit? enter manually instead)"}
               </span>
             </span>
             <span>{showManualOcr ? '▲' : '▼'}</span>
@@ -744,7 +967,41 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
       {[
         { key: 'primary',   label: isOrg ? 'Primary Registration Document' : 'Primary ID Document' },
         { key: 'secondary', label: isOrg ? 'Secondary Supporting Document' : 'Secondary Document / Proof of Address' },
-      ].map(({ key, label }) => (
+      ].map(({ key, label }) => {
+        // A Didit Pass already fully populated this — show a confirmed, read-only
+        // summary instead of an editable form, so nothing here reads as if
+        // re-entry is expected. "Edit / Override" expands the full form.
+        const isConfirmedDidit = key === 'primary' && portalIdvResults.length > 0 &&
+          verifications.primary.status === 'Verified' && !showPrimaryOverride;
+
+        if (isConfirmedDidit) {
+          const v = verifications.primary;
+          return (
+            <div key={key} className="bg-card border border-emerald-200 rounded-xl p-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm flex items-center gap-1.5">
+                  <CheckCircle className="w-4 h-4 text-emerald-500" />
+                  {label} — Confirmed via Didit
+                </h4>
+                <button
+                  className="text-xs text-muted-foreground hover:text-foreground underline flex items-center gap-1"
+                  onClick={() => setShowPrimaryOverride(true)}
+                >
+                  <Pencil className="w-3 h-3" /> Edit / Override
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+                <div><span className="text-muted-foreground">Document Type: </span><span className="font-medium">{v.doc_type || '—'}</span></div>
+                <div><span className="text-muted-foreground">Document Number: </span><span className="font-medium">{v.doc_number || '—'}</span></div>
+                {v.expiry_date && <div><span className="text-muted-foreground">Expiry: </span><span className="font-medium">{v.expiry_date}</span></div>}
+              </div>
+              {v.notes && <p className="text-xs text-muted-foreground">{v.notes}</p>}
+              <p className="text-xs text-muted-foreground/70">No changes needed — click "Save Verification" below to record this.</p>
+            </div>
+          );
+        }
+
+        return (
         <div key={key} className="bg-card border border-border rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="font-medium text-sm">{label}</h4>
@@ -818,7 +1075,8 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser 
             </div>
           </div>
         </div>
-      ))}
+        );
+      })}
 
       <div className="flex items-center gap-3">
         <Button onClick={saveVerification} disabled={saving} className="gap-2">
