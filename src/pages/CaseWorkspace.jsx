@@ -469,7 +469,7 @@ export default function CaseWorkspace() {
 
                 {STEPS.map(step => {
                   const s = getStepStatus(kycCase, step.id);
-                  const canToggle = [2, 5, 7].includes(step.id);
+                  const canToggle = [5, 7].includes(step.id);
                   return (
                     <div key={step.id} className="relative group/step">
                       <button
@@ -586,7 +586,7 @@ export default function CaseWorkspace() {
                         Step Not Required for This Case
                       </div>
                       <div className="text-sm text-muted-foreground mb-6">
-                        {activeStep === 2 && 'Identity Verification via Didit is not required for organisation cases. Entity verification is managed through the KYB process and company registry checks in Step 4.'}
+                        {activeStep === 2 && 'This step has been marked as Not Required.'}
                         {activeStep === 5 && 'Source of Funds / Wealth documentation is not required for this case based on its risk profile. If circumstances change, an analyst can reinstate this step.'}
                         {activeStep === 7 && 'Control Measures are not required for this case. If the Risk Assessment (Step 6) identifies Medium or High risk, this step should be reinstated.'}
                       </div>
@@ -598,7 +598,15 @@ export default function CaseWorkspace() {
                 ) : (
                   <>
                     {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} />}
-                    {activeStep === 2 && <IdentityVerificationStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} />}
+                    {activeStep === 2 && (
+                      <IdentityVerificationStep
+                        kycCase={kycCase}
+                        client={client}
+                        currentUser={currentUser}
+                        tenant={tenant}
+                        onStepComplete={() => updateStepStatus('step_2_status', 'complete')}
+                      />
+                    )}
                     {activeStep === 3 && <ScreeningStep caseId={id} tenantId={currentUser?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} />}
                     {activeStep === 4 && <ClientProfileStep kycCase={kycCase} client={client} currentUser={currentUser} onRegisterOsintAdd={cb => setOsintAddCallback(() => cb)} />}
                     {activeStep === 5 && <SoFSoWStep kycCase={kycCase} client={client} currentUser={currentUser} />}

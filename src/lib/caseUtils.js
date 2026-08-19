@@ -4,7 +4,8 @@
  */
 
 // Steps that can be marked as not required
-const NOT_REQUIRED_STEPS = [2, 5, 7];
+// Step 2 removed — Didit now covers both NP and ORG, so it is always required
+const NOT_REQUIRED_STEPS = [5, 7];
 
 export function getStepStatus(kycCase, stepId) {
   if (NOT_REQUIRED_STEPS.includes(stepId) && kycCase?.[`step_${stepId}_not_required`] === true) {
@@ -32,8 +33,8 @@ export function getDefaultStepConfig(clientType, caseType) {
   const isORG = clientType === 'ORG';
 
   return {
-    // Step 2 — IDV: ORG uses KYB/company registry, not personal Didit IDV
-    step_2_not_required: isORG,
+    // Step 2 — Didit handles both NP and ORG verification
+    step_2_not_required: false,
 
     // Step 5 — SoF/Wealth: required for everyone at creation; analyst can waive after risk assessment
     step_5_not_required: false,
