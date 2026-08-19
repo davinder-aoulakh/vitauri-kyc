@@ -70,7 +70,9 @@ export default function DiditConfigTab({ tenant, onSave }) {
           className="h-9 text-sm font-mono"
         />
         <p className="text-xs text-muted-foreground">
-          From Didit Console → API Keys. Keep this secret.
+          From Didit Console → API Keys. Keep this secret. This key also powers
+          PEP/Sanctions/Adverse Media screening (Screening step and Batch
+          Screening) via Didit's standalone AML API — no separate key needed.
         </p>
       </div>
 
