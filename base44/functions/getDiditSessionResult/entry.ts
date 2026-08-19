@@ -40,6 +40,20 @@ Deno.serve(async (req) => {
       return Response.json({ idv_status: 'Pending', still_processing: true });
     }
 
+    // Helper: normalise Didit date strings to YYYY-MM-DD
+    function normaliseDateString(raw) {
+      if (!raw) return null;
+      const s = String(raw).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      if (/^\d{8}$/.test(s)) return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+      const dmyMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (dmyMatch) {
+        const [, d, m, y] = dmyMatch;
+        return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+      }
+      return null;
+    }
+
     // 4. Map Didit decision → our IDV fields
     // Didit V3 returns arrays as top-level flat fields — no nested "decision" wrapper.
     // Support both shapes defensively in case the response format ever changes.
@@ -75,10 +89,10 @@ Deno.serve(async (req) => {
       idv_liveness_score:         live.score    != null ? Math.round(live.score) : null,
       idv_document_type:          idv.document_type     || null,
       idv_document_number:        idv.document_number   || null,
-      idv_document_expiry:        idv.expiration_date   || null,
+      idv_document_expiry:        normaliseDateString(idv.expiration_date)   || null,
       idv_extracted_first_name:   idv.first_name        || null,
       idv_extracted_last_name:    idv.last_name         || null,
-      idv_extracted_dob:          idv.date_of_birth     || null,
+      idv_extracted_dob:          normaliseDateString(idv.date_of_birth)     || null,
       idv_extracted_nationality:  idv.nationality       || null,
       idv_issuing_country:        idv.issuing_state     || null,
       idv_failure_reason:         failureReason,
@@ -196,6 +210,15 @@ Deno.serve(async (req) => {
           // ── Promote client status ─────────────────────────────────────────
           if (idvFields.idv_status === 'Pass' && client.status === 'Prospect') {
             updates.status = 'Active';
+          }
+
+          // Remediate any previously stored malformed date_of_birth values
+          if (client.date_of_birth) {
+            const normalisedDob = normaliseDateString(client.date_of_birth);
+            if (normalisedDob && normalisedDob !== client.date_of_birth) {
+              updates.date_of_birth = normalisedDob;
+              console.log(`Corrected date_of_birth: ${client.date_of_birth} → ${normalisedDob}`);
+            }
           }
 
           if (Object.keys(updates).length > 0) {
