@@ -49,11 +49,22 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
 
     // Load Didit AML results from completed outreach IDV items
     try {
-      const outreaches = await base44.entities.OutreachRequest.filter({ case_id: caseId });
+      // Search 1: case-linked outreach
+      const caseOutreaches = await base44.entities.OutreachRequest.filter({ case_id: caseId });
+      const caseIds = new Set((caseOutreaches || []).map(r => r.id));
+
+      // Search 2: standalone outreach for this client (case_id: null)
+      const clientOutreaches = await base44.entities.OutreachRequest.filter({ client_id: kycCase?.client_id });
+      const standaloneOnes   = (clientOutreaches || []).filter(r => !caseIds.has(r.id));
+
+      const allOutreaches = [...(caseOutreaches || []), ...standaloneOnes];
+
       const amlItems = [];
-      for (const req of (outreaches || [])) {
+      for (const req of allOutreaches) {
         for (const item of (req.items || [])) {
-          if (item.field_type === 'id_verification' &&
+          // Accept id_verification items OR any item that Didit processed (has session_id)
+          const isIdv = item.field_type === 'id_verification' || item.didit_session_id;
+          if (isIdv &&
               item.idv_status !== 'Pending' &&
               (item.idv_aml_hits || 0) > 0) {
             amlItems.push(item);
