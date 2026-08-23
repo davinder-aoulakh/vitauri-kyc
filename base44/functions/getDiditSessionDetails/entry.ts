@@ -36,7 +36,12 @@ Deno.serve(async (req) => {
         if (!pdfResp.ok) {
           const errText = await pdfResp.text().catch(() => '');
           console.log('PDF error body:', errText);
-          return Response.json({ error: `PDF generation failed: ${pdfResp.status} — ${errText || 'no detail'}` });
+          const hint = pdfResp.status === 403
+            ? 'The session may still be pending — PDF is only available once the session reaches Approved, Declined, or In Review status.'
+            : pdfResp.status === 404
+            ? 'Session not found — the session ID may be invalid or belong to a different Didit application.'
+            : '';
+          return Response.json({ error: `PDF generation failed (${pdfResp.status})${hint ? ': ' + hint : ' — ' + (errText || 'no detail')}` });
         }
 
         // Stream binary PDF bytes → base64 data URL for the frontend to download
