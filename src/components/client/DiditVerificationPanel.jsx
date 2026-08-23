@@ -81,116 +81,23 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
   }
 
   async function downloadPdf() {
-    if (!data) return;
     setPdfLoading(true);
     try {
-      const { jsPDF } = await import('jspdf');
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const margin = 15;
-      let y = 20;
-
-      const line = (text, size = 10, bold = false, color = [30, 30, 30]) => {
-        doc.setFontSize(size);
-        doc.setFont('helvetica', bold ? 'bold' : 'normal');
-        doc.setTextColor(...color);
-        doc.text(String(text ?? ''), margin, y);
-        y += size * 0.5 + 2;
-      };
-
-      const gap = (n = 4) => { y += n; };
-
-      const section = (title) => {
-        if (y > 260) { doc.addPage(); y = 20; }
-        gap(2);
-        doc.setFillColor(240, 244, 255);
-        doc.rect(margin, y - 4, 180, 8, 'F');
-        line(title, 9, true, [40, 60, 120]);
-        gap(1);
-      };
-
-      // Title
-      line('Didit Identity Verification Report', 16, true, [20, 40, 100]);
-      line(`Generated: ${new Date().toLocaleString()}`, 8, false, [100, 100, 100]);
-      line(`Session: ${sessionId}`, 8, false, [100, 100, 100]);
-      gap();
-
-      // Overall result
-      const passed = data.status === 'Approved';
-      doc.setFillColor(passed ? 220 : 255, passed ? 255 : 220, passed ? 220 : 220);
-      doc.rect(margin, y - 1, 180, 10, 'F');
-      line(`Overall Result: ${data.status || '—'}  |  Face Match: ${data.face_score != null ? Math.round(data.face_score) + '%' : '—'}  |  Liveness: ${data.liveness_score != null ? Math.round(data.liveness_score) + '%' : '—'}  |  AML Hits: ${data.aml_total_hits ?? 0}`, 10, true, passed ? [20, 120, 60] : [180, 30, 30]);
-      gap(6);
-
-      // Personal Data
-      section('Personal Data');
-      const fields = [
-        ['Full Name',       data.full_name || [data.first_name, data.last_name].filter(Boolean).join(' ')],
-        ['Date of Birth',   data.date_of_birth],
-        ['Nationality',     formatNationality(data.nationality)],
-        ['Document Type',   data.document_type],
-        ['Document Number', data.document_number],
-        ['Expiry Date',     data.expiration_date],
-        ['Issuing State',   data.issuing_state_name || data.issuing_state],
-        ['Gender',          data.gender],
-      ].filter(([, v]) => v);
-      for (const [label, value] of fields) {
-        if (y > 270) { doc.addPage(); y = 20; }
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(80, 80, 80);
-        doc.text(label + ':', margin, y);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(30, 30, 30);
-        doc.text(String(value), margin + 45, y);
-        y += 6;
+      const res = await base44.functions.invoke('getDiditSessionDetails', {
+        session_id: sessionId,
+        tenant_id:  tenantId,
+        action:     'generate_pdf',
+      });
+      const d = res?.data || res;
+      if (d?.error) { alert('PDF failed: ' + d.error); return; }
+      if (d?.pdf_data_url) {
+        const a = document.createElement('a');
+        a.href     = d.pdf_data_url;
+        a.download = d.filename || `Didit_Report_${sessionId.substring(0, 8)}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
       }
-
-      // Biometric
-      section('Biometric Verification');
-      const bio = [
-        ['Face Match Score', data.face_score != null ? Math.round(data.face_score) + '%' : '—'],
-        ['Face Status',      data.face_status],
-        ['Liveness Score',   data.liveness_score != null ? Math.round(data.liveness_score) + '%' : '—'],
-        ['Liveness Status',  data.liveness_status],
-      ].filter(([, v]) => v);
-      for (const [label, value] of bio) {
-        if (y > 270) { doc.addPage(); y = 20; }
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'bold'); doc.setTextColor(80, 80, 80);
-        doc.text(label + ':', margin, y);
-        doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 30, 30);
-        doc.text(String(value), margin + 45, y);
-        y += 6;
-      }
-
-      // AML
-      section('AML Screening');
-      line(`Total Hits: ${data.aml_total_hits ?? 0}  |  Status: ${data.aml_status || '—'}`, 9);
-      if (data.aml_hits?.length > 0) {
-        for (const hit of data.aml_hits) {
-          if (y > 265) { doc.addPage(); y = 20; }
-          gap(2);
-          line(`• ${hit.entity_name || hit.name || 'Unknown Entity'}`, 9, true, [160, 80, 0]);
-          if (hit.match_type) line(`  Match Type: ${hit.match_type}`, 8, false, [100, 100, 100]);
-          if (hit.categories?.length) line(`  Categories: ${hit.categories.join(', ')}`, 8, false, [100, 100, 100]);
-        }
-      }
-
-      // Warnings
-      if (data.warnings?.length > 0) {
-        section('Warnings / Issues');
-        for (const w of data.warnings) {
-          if (y > 270) { doc.addPage(); y = 20; }
-          line(`• ${w.risk || '—'}${w.short_description ? ': ' + w.short_description : ''}`, 9, false, [160, 80, 0]);
-        }
-      }
-
-      // Footer
-      gap(6);
-      doc.setFontSize(7); doc.setTextColor(150, 150, 150);
-      doc.text('Verified by Didit (didit.me) · This report is generated from Vitauri KYC', margin, y);
-
-      doc.save(`Didit_Report_${clientName?.replace(/\s+/g, '_')}_${sessionId.substring(0, 8)}.pdf`);
     } catch (e) {
       alert('Could not generate PDF: ' + e.message);
     } finally {

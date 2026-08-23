@@ -20,45 +20,26 @@ Deno.serve(async (req) => {
     }
 
     // ── PDF generation ──────────────────────────────────────────────────────
+    // Didit API: GET /v3/session/{sessionId}/generate-pdf/ returns raw binary PDF
+    // Session must be Approved, Declined, or In Review — otherwise 403
     if (action === 'generate_pdf') {
       try {
         const pdfResp = await fetch(
-          `https://verification.didit.me/v3/sessions/${session_id}/generate-pdf/`,
-          {
-            method: 'POST',
-            headers: { 'x-api-key': tenant.didit_api_key, 'Content-Type': 'application/json' },
-          }
+          `https://verification.didit.me/v3/session/${session_id}/generate-pdf/`,
+          { headers: { 'x-api-key': tenant.didit_api_key } }
         );
-        if (!pdfResp.ok) return Response.json({ error: `PDF generation failed: ${pdfResp.status}` });
-
-        // Some Didit endpoints return { pdf_url: '...' } instead of raw bytes
-        const contentType = pdfResp.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const json = await pdfResp.json();
-          if (json.pdf_url) {
-            const fileResp = await fetch(json.pdf_url);
-            const arrBuf2  = await fileResp.arrayBuffer();
-            const bytes2   = new Uint8Array(arrBuf2);
-            let binary2 = '';
-            const chunkSize2 = 8192;
-            for (let i = 0; i < bytes2.length; i += chunkSize2) {
-              binary2 += String.fromCharCode(...bytes2.subarray(i, i + chunkSize2));
-            }
-            return Response.json({
-              ok: true,
-              pdf_data_url: `data:application/pdf;base64,${btoa(binary2)}`,
-              filename: `Didit_Report_${session_id.substring(0, 8)}.pdf`,
-            });
-          }
+        if (!pdfResp.ok) {
+          const errText = await pdfResp.text().catch(() => '');
+          return Response.json({ error: `PDF generation failed: ${pdfResp.status}${errText ? ' — ' + errText : ''}` });
         }
 
-        // Raw PDF bytes path
+        // Stream binary PDF bytes → base64 data URL for the frontend to download
         const arrBuf = await pdfResp.arrayBuffer();
-        const bytes = new Uint8Array(arrBuf);
+        const bytes  = new Uint8Array(arrBuf);
+        // Use btoa-safe chunked encoding
         let binary = '';
-        const chunkSize = 8192;
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-          binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+        for (let i = 0; i < bytes.length; i += 8192) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
         }
         return Response.json({
           ok:           true,
