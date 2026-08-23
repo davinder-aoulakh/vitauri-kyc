@@ -337,40 +337,114 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
             </div>
           </div>
 
-          {/* AML hit details if any */}
+          {/* AML hit details — Didit V3 aml_screenings[].hits[] */}
           {diditAmlSummary.total_hits > 0 && diditAmlSummary.screenings && (() => {
-            // screenings is root.aml_screenings — each screening has a .hits[] array
             const screenings = Array.isArray(diditAmlSummary.screenings) ? diditAmlSummary.screenings : [diditAmlSummary.screenings];
-            const allHits = screenings.flatMap(s => {
-              const hits = s.hits || s.results || [];
-              // If no nested hits array, treat the screening itself as a hit
-              return hits.length > 0 ? hits : [s];
-            });
-            if (allHits.length === 0) return null;
+            const screening = screenings[0] || {};
+            const allHits = screening.hits || [];
+            const screenedData = screening.screened_data;
+
             return (
-              <div className="px-4 py-3 bg-card space-y-3">
-                {allHits.map((hit, idx) => (
-                  <div key={idx} className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="font-semibold text-amber-900 text-sm">
-                        {hit.entity_name || hit.name || hit.full_name || `Hit ${idx + 1}`}
-                      </div>
-                      {(hit.score || hit.similarity_score) != null && (
-                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
-                          {Math.round((hit.score || hit.similarity_score) * (hit.score <= 1 ? 100 : 1))}% match
-                        </span>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-muted-foreground">
-                      {hit.match_type && <><span>Match Type</span><span className="text-foreground font-medium">{hit.match_type}</span></>}
-                      {hit.match_types?.length > 0 && <><span>Match Types</span><span className="text-foreground">{Array.isArray(hit.match_types) ? hit.match_types.join(', ') : hit.match_types}</span></>}
-                      {hit.categories?.length > 0 && <><span>Categories</span><span className="text-foreground">{Array.isArray(hit.categories) ? hit.categories.join(', ') : hit.categories}</span></>}
-                      {hit.datasets?.length > 0 && <><span>Lists / Sources</span><span className="text-foreground">{Array.isArray(hit.datasets) ? hit.datasets.join(', ') : hit.datasets}</span></>}
-                      {hit.country && <><span>Country</span><span className="text-foreground">{hit.country}</span></>}
-                      {hit.date_of_birth && <><span>Date of Birth</span><span className="text-foreground">{hit.date_of_birth}</span></>}
+              <div className="px-4 pb-4 bg-card space-y-3">
+                {/* Screened data summary */}
+                {screenedData && (
+                  <div className="bg-muted/40 border border-border rounded-lg px-4 py-3">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Screened Data</div>
+                    <div className="grid grid-cols-4 gap-4 text-xs">
+                      {screenedData.full_name && <div><div className="text-muted-foreground">Full name</div><div className="font-semibold">{screenedData.full_name}</div></div>}
+                      {screenedData.nationality && <div><div className="text-muted-foreground">Nationality</div><div className="font-semibold">{screenedData.nationality}</div></div>}
+                      {screenedData.date_of_birth && <div><div className="text-muted-foreground">Date of birth</div><div className="font-semibold">{screenedData.date_of_birth}</div></div>}
+                      {screenedData.document_number && <div><div className="text-muted-foreground">Document Number</div><div className="font-semibold">{screenedData.document_number}</div></div>}
                     </div>
                   </div>
-                ))}
+                )}
+
+                {/* Hits header */}
+                {allHits.length > 0 && (
+                  <div className="text-xs font-semibold text-muted-foreground">
+                    Matches ({allHits.length})
+                  </div>
+                )}
+
+                {/* Hit rows */}
+                {allHits.length > 0 ? (
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-muted/40 border-b border-border text-muted-foreground uppercase tracking-wide">
+                          <th className="text-left px-3 py-2">Name</th>
+                          <th className="text-left px-3 py-2">Match Status</th>
+                          <th className="text-left px-3 py-2">Match Score</th>
+                          <th className="text-left px-3 py-2">Risk Score</th>
+                          <th className="text-left px-3 py-2">Appears On</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border bg-card">
+                        {allHits.map((hit, idx) => {
+                          const matchScore = hit.match_score ?? (hit.score != null ? Math.round(hit.score * 100) : null);
+                          const riskScore  = hit.risk_score ?? null;
+                          const reviewStatus = hit.review_status || 'Unreviewed';
+                          const isFalsePositive = reviewStatus === 'False Positive';
+                          return (
+                            <tr key={hit.id || idx} className="hover:bg-muted/20">
+                              <td className="px-3 py-2.5 font-medium text-foreground">
+                                {hit.caption || hit.name || `Hit ${idx + 1}`}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <span className={cn(
+                                  'px-2 py-0.5 rounded-full font-medium text-xs',
+                                  isFalsePositive ? 'bg-slate-100 text-slate-600' :
+                                  reviewStatus === 'Confirmed Match' ? 'bg-red-100 text-red-700' :
+                                  'bg-blue-100 text-blue-700'
+                                )}>
+                                  {reviewStatus.toUpperCase().replace(' ', '_') === 'FALSE_POSITIVE' ? 'FALSE POSITIVE' : reviewStatus.toUpperCase()}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5">
+                                {matchScore != null ? (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-20 bg-muted rounded-full h-1.5">
+                                      <div
+                                        className={cn('h-1.5 rounded-full', matchScore >= 93 ? 'bg-primary' : 'bg-slate-400')}
+                                        style={{ width: `${matchScore}%` }}
+                                      />
+                                    </div>
+                                    <span className="font-medium">{matchScore}%</span>
+                                  </div>
+                                ) : '—'}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                {riskScore != null ? (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-20 bg-muted rounded-full h-1.5">
+                                      <div
+                                        className={cn('h-1.5 rounded-full', riskScore >= 86 ? 'bg-red-500' : riskScore >= 40 ? 'bg-amber-400' : 'bg-slate-400')}
+                                        style={{ width: `${riskScore}%` }}
+                                      />
+                                    </div>
+                                    <span className="font-medium">{riskScore}%</span>
+                                  </div>
+                                ) : '—'}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <div className="flex flex-wrap gap-1">
+                                  {(hit.datasets || []).map((ds, i) => (
+                                    <span key={i} className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-xs font-medium">
+                                      {ds.length > 4 ? ds.substring(0, 3).toUpperCase() : ds}
+                                    </span>
+                                  ))}
+                                  {(!hit.datasets || hit.datasets.length === 0) && <span className="text-muted-foreground">—</span>}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground italic px-1">No detailed hit records available.</div>
+                )}
               </div>
             );
           })()}
