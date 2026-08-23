@@ -6,9 +6,17 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { session_id, tenant_id, didit_api_key: directApiKey, action = 'details' } = await req.json();
+    const body = await req.json();
+    const { session_id, tenant_id, didit_api_key: directApiKey, action = 'details' } = body;
+
+    console.log('=== getDiditSessionDetails called ===');
+    console.log('action:', action);
+    console.log('session_id:', session_id);
+    console.log('tenant_id:', tenant_id);
+    console.log('direct_api_key provided:', !!directApiKey, 'length:', directApiKey?.length ?? 0);
 
     if (!session_id) {
+      console.log('ERROR: session_id missing');
       return Response.json({ error: 'session_id is required' });
     }
 
@@ -18,8 +26,12 @@ Deno.serve(async (req) => {
       if (!tenant_id) return Response.json({ error: 'Either didit_api_key or tenant_id is required' });
       const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
       apiKey = tenants?.[0]?.didit_api_key?.trim();
+      console.log('API key from tenant lookup:', !!apiKey, 'length:', apiKey?.length ?? 0);
+    } else {
+      console.log('API key from direct param: length', apiKey.length, 'prefix:', apiKey.substring(0, 8));
     }
     if (!apiKey) {
+      console.log('ERROR: no API key found');
       return Response.json({ error: 'Didit not configured for this tenant' });
     }
 
