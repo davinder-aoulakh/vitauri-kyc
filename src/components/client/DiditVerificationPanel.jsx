@@ -91,8 +91,8 @@ export default function DiditVerificationPanel({ sessionId, tenantId, diditApiKe
         didit_api_key: diditApiKey,
         action:        'generate_pdf',
       });
-      const d = res?.data || res;
-      console.log('PDF response from backend:', d);
+      // base44.functions.invoke returns body directly — no .data wrapper
+      const d = res;
       if (d?.pdf_data_url) {
         const a = document.createElement('a');
         a.href     = d.pdf_data_url;
@@ -101,12 +101,12 @@ export default function DiditVerificationPanel({ sessionId, tenantId, diditApiKe
         a.click();
         document.body.removeChild(a);
       } else {
-        console.error('Didit PDF failed:', d?.error, 'session:', sessionId);
-        alert(`PDF generation failed: ${d?.error || 'Unknown error'}`);
+        // Fallback to client-side PDF if backend fails
+        await generateClientSidePdf();
       }
     } catch (e) {
-      console.error('PDF invoke error:', e);
-      alert(`PDF request error: ${e.message}`);
+      // Fallback to client-side PDF on any error
+      try { await generateClientSidePdf(); } catch {}
     } finally {
       setPdfLoading(false);
     }
