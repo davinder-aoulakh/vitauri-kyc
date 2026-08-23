@@ -100,7 +100,8 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
         document.body.removeChild(a);
         return;
       }
-      // Fallback: generate client-side PDF from loaded session data
+      // Didit PDF not available on this plan/endpoint — fall back to client-side
+      console.warn('Didit PDF unavailable:', d?.error);
       await generateClientSidePdf();
     } catch (e) {
       // Fallback on any error
