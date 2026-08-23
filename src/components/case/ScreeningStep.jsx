@@ -338,17 +338,42 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
           </div>
 
           {/* AML hit details if any */}
-          {diditAmlSummary.total_hits > 0 && diditAmlSummary.screenings && (
-            <div className="px-4 py-3 bg-card divide-y divide-border">
-              {(Array.isArray(diditAmlSummary.screenings) ? diditAmlSummary.screenings : [diditAmlSummary.screenings]).map((s, i) => (
-                <div key={i} className="py-2 text-xs">
-                  <div className="font-medium text-foreground">{s.name || s.entity_name || `Hit ${i + 1}`}</div>
-                  {s.match_types && <div className="text-muted-foreground mt-0.5">{Array.isArray(s.match_types) ? s.match_types.join(', ') : s.match_types}</div>}
-                  {s.score != null && <div className="text-muted-foreground">Score: {Math.round(s.score)}%</div>}
-                </div>
-              ))}
-            </div>
-          )}
+          {diditAmlSummary.total_hits > 0 && diditAmlSummary.screenings && (() => {
+            // screenings is root.aml_screenings — each screening has a .hits[] array
+            const screenings = Array.isArray(diditAmlSummary.screenings) ? diditAmlSummary.screenings : [diditAmlSummary.screenings];
+            const allHits = screenings.flatMap(s => {
+              const hits = s.hits || s.results || [];
+              // If no nested hits array, treat the screening itself as a hit
+              return hits.length > 0 ? hits : [s];
+            });
+            if (allHits.length === 0) return null;
+            return (
+              <div className="px-4 py-3 bg-card space-y-3">
+                {allHits.map((hit, idx) => (
+                  <div key={idx} className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="font-semibold text-amber-900 text-sm">
+                        {hit.entity_name || hit.name || hit.full_name || `Hit ${idx + 1}`}
+                      </div>
+                      {(hit.score || hit.similarity_score) != null && (
+                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
+                          {Math.round((hit.score || hit.similarity_score) * (hit.score <= 1 ? 100 : 1))}% match
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-muted-foreground">
+                      {hit.match_type && <><span>Match Type</span><span className="text-foreground font-medium">{hit.match_type}</span></>}
+                      {hit.match_types?.length > 0 && <><span>Match Types</span><span className="text-foreground">{Array.isArray(hit.match_types) ? hit.match_types.join(', ') : hit.match_types}</span></>}
+                      {hit.categories?.length > 0 && <><span>Categories</span><span className="text-foreground">{Array.isArray(hit.categories) ? hit.categories.join(', ') : hit.categories}</span></>}
+                      {hit.datasets?.length > 0 && <><span>Lists / Sources</span><span className="text-foreground">{Array.isArray(hit.datasets) ? hit.datasets.join(', ') : hit.datasets}</span></>}
+                      {hit.country && <><span>Country</span><span className="text-foreground">{hit.country}</span></>}
+                      {hit.date_of_birth && <><span>Date of Birth</span><span className="text-foreground">{hit.date_of_birth}</span></>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
 
