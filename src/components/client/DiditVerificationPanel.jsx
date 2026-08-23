@@ -82,7 +82,6 @@ export default function DiditVerificationPanel({ sessionId, tenantId, diditApiKe
   }
 
   async function downloadPdf() {
-    if (!data) return;
     setPdfLoading(true);
     try {
       const res = await base44.functions.invoke('getDiditSessionDetails', {
@@ -256,7 +255,7 @@ export default function DiditVerificationPanel({ sessionId, tenantId, diditApiKe
               Refresh
             </Button>
             <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs"
-              onClick={downloadPdf} disabled={pdfLoading || loading}>
+              onClick={downloadPdf} disabled={pdfLoading}>
               {pdfLoading
                 ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                 : <Download className="w-3.5 h-3.5" />}
