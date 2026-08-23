@@ -28,24 +28,53 @@ Deno.serve(async (req) => {
     // Session must be Approved, Declined, or In Review — otherwise 403
     if (action === 'generate_pdf') {
       try {
-        // Didit PDF — exact curl equivalent: GET /v3/session/{id}/generate-pdf/ with x-api-key header
-        const pdfUrl = `https://verification.didit.me/v3/session/${session_id}/generate-pdf/`;
-        console.log('PDF request — url:', pdfUrl, 'api_key_length:', apiKey?.length, 'api_key_prefix:', apiKey?.substring(0, 8));
-        const pdfResp = await fetch(pdfUrl, {
-          method: 'GET',
-          headers: { 'x-api-key': apiKey },
+        // Log all inputs for debugging
+        console.log('PDF request inputs:', {
+          session_id,
+          session_id_length: session_id?.length,
+          api_key_length: apiKey?.length,
+          api_key_prefix: apiKey?.substring(0, 12),
+          api_key_suffix: apiKey?.slice(-4),
+          tenant_id,
+          direct_key_provided: !!directApiKey,
         });
-        console.log('PDF response — status:', pdfResp.status, 'content-type:', pdfResp.headers.get('content-type'));
-        if (!pdfResp.ok) {
-          const errText = await pdfResp.text().catch(() => '');
-          console.log('PDF error body:', errText);
-          const hint = pdfResp.status === 403
-            ? 'The session may still be pending — PDF is only available once the session reaches Approved, Declined, or In Review status.'
-            : pdfResp.status === 404
-            ? 'Session not found — the session ID may be invalid or belong to a different Didit application.'
-            : '';
-          return Response.json({ error: `PDF generation failed (${pdfResp.status})${hint ? ': ' + hint : ' — ' + (errText || 'no detail')}` });
+
+        // Try multiple known Didit PDF endpoint variants
+        const urlsToTry = [
+          `https://verification.didit.me/v3/session/${session_id}/generate-pdf/`,
+          `https://verification.didit.me/v3/session/${session_id}/generate-pdf`,
+          `https://verification.didit.me/v2/session/${session_id}/generate-pdf/`,
+          `https://verification.didit.me/v1/session/${session_id}/generate-pdf/`,
+        ];
+
+        let pdfResp: Response | null = null;
+        let usedUrl = '';
+        for (const url of urlsToTry) {
+          console.log('Trying PDF URL:', url);
+          const resp = await fetch(url, {
+            method: 'GET',
+            headers: { 'x-api-key': apiKey },
+          });
+          console.log(`  → status: ${resp.status}, content-type: ${resp.headers.get('content-type')}`);
+          if (resp.ok) {
+            pdfResp = resp;
+            usedUrl = url;
+            break;
+          }
+          // Log error body for each failed attempt
+          const errBody = await resp.text().catch(() => '');
+          console.log(`  → error body: ${errBody.substring(0, 200)}`);
+          // Keep trying on 404; stop on auth errors
+          if (resp.status === 401 || resp.status === 403) {
+            return Response.json({ error: `PDF auth failed (${resp.status}): ${errBody || 'check API key'}` });
+          }
         }
+
+        if (!pdfResp) {
+          return Response.json({ error: `PDF generation failed: 404 on all endpoint variants. Session ID: ${session_id}. Check Didit console that this session exists and PDF feature is enabled.` });
+        }
+
+        console.log('PDF success — used URL:', usedUrl);
 
         // Stream binary PDF bytes → base64 data URL for the frontend to download
         const arrBuf = await pdfResp.arrayBuffer();
