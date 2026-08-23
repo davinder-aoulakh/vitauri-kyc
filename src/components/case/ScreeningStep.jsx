@@ -57,10 +57,15 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
       for (const req of allOutreaches) {
         for (const item of (req.items || [])) {
           const isIdv = item.field_type === 'id_verification' || item.didit_session_id ||
-            (item.item_type === 'data_point' && (item.label || '').toLowerCase().match(/id[&\s]?v|identity\s*verif|idv/i));
+            (item.item_type === 'data_point' && (item.label || '').toLowerCase().match(/id[&\s]?v|identity\s*verif|idv/i)) ||
+            (item.response_text && (() => { try { return JSON.parse(item.response_text)?.didit_session_id; } catch { return false; } })());
           if (!isIdv) continue;
-          const hasTerminal = item.idv_status && item.idv_status !== 'Pending';
-          const hasSession  = item.didit_session_id || item.response_text;
+          // Check terminal status — also look inside response_text JSON
+          let hasTerminal = item.idv_status && item.idv_status !== 'Pending';
+          if (!hasTerminal && item.response_text) {
+            try { const p = JSON.parse(item.response_text); hasTerminal = p?.idv_status && p.idv_status !== 'Pending'; } catch {}
+          }
+          const hasSession = item.didit_session_id || item.response_text;
           if (!hasTerminal && hasSession) pendingIdvItems.push({ req, item });
         }
       }
@@ -88,11 +93,25 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
       ];
 
       // Collect AML summary from all IDV items with terminal status
+      // Also parse response_text JSON if direct fields are missing (legacy portal submission bug)
       let amlSummary = null;
       for (const req of refreshedAll) {
-        for (const item of (req.items || [])) {
-          const isIdv = item.field_type === 'id_verification' || item.didit_session_id;
-          if (!isIdv || !item.idv_status || item.idv_status === 'Pending') continue;
+        for (const rawItem of (req.items || [])) {
+          const isIdv = rawItem.field_type === 'id_verification' || rawItem.didit_session_id ||
+            (rawItem.item_type === 'data_point' && (rawItem.label || '').toLowerCase().match(/id[&\s]?v|identity\s*verif|idv/i)) ||
+            (rawItem.response_text && (() => { try { return JSON.parse(rawItem.response_text)?.didit_session_id; } catch { return false; } })());
+          if (!isIdv) continue;
+
+          // Unpack response_text if direct idv_* fields missing
+          let item = rawItem;
+          if (!item.idv_status && item.response_text) {
+            try {
+              const parsed = JSON.parse(item.response_text);
+              if (parsed?.idv_status) item = { ...parsed, ...item, ...parsed };
+            } catch {}
+          }
+
+          if (!item.idv_status || item.idv_status === 'Pending') continue;
           if (item.idv_aml_hits != null) {
             if (!amlSummary || new Date(item.idv_checked_at) > new Date(amlSummary.synced_at)) {
               amlSummary = {

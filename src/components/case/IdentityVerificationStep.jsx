@@ -107,9 +107,24 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
               const isIdv = item.field_type === 'id_verification' || item.didit_session_id ||
                 (item.item_type === 'data_point' && (item.label || '').toLowerCase().match(/id[&\s]?v|identity\s*verif|idv/i)) ||
                 (item.response_text && (() => { try { return JSON.parse(item.response_text)?.didit_session_id; } catch { return false; } })());
-              return isIdv && item.idv_status && item.idv_status !== 'Pending';
+              if (!isIdv) return false;
+              // Accept items with direct idv_status OR with idv data embedded in response_text
+              if (item.idv_status && item.idv_status !== 'Pending') return true;
+              try {
+                const parsed = JSON.parse(item.response_text || '');
+                return parsed?.idv_status && parsed.idv_status !== 'Pending';
+              } catch { return false; }
             })
-            .map(item => ({ ...item, _req_id: req.id }))
+            .map(item => {
+              // Unpack response_text JSON fields onto the item if direct fields are missing
+              if (!item.idv_status && item.response_text) {
+                try {
+                  const parsed = JSON.parse(item.response_text);
+                  if (parsed?.idv_status) return { ...parsed, ...item, ...parsed, _req_id: req.id };
+                } catch {}
+              }
+              return { ...item, _req_id: req.id };
+            })
         )
         .sort((a, b) => {
           if (!a.idv_checked_at && !b.idv_checked_at) return 0;
