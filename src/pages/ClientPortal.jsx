@@ -344,48 +344,67 @@ export default function ClientPortal() {
     setValidationErrors({});
     setSubmitting(true);
 
-    const updatedItems = (outreach.items || []).map(item => {
-      const s = states[item.item_id] || {};
-      const ft = item.field_type || (item.item_type === 'document' ? 'file_upload' : 'textarea');
+    // Read the freshest version from DB to avoid clobbering backend (webhook) writes
+    const freshOutreachList = await base44.entities.OutreachRequest.filter({ id: outreach.id });
+    const freshOutreach = freshOutreachList?.[0] || outreach;
 
-      // IDV items — spread parsed IDV fields onto the saved item
+    // Merge: start from fresh DB items, patch response fields from client state
+    const mergedItems = (freshOutreach.items || []).map(item => {
+      const s = states[item.item_id] || {};
+      const ft = inferFieldType(item);
+
+      // IDV items — use the full idvFields set, including all structured fields
       if (ft === 'id_verification') {
+        // If backend already wrote structured idv_status, preserve it
+        if (item.idv_status && item.idv_status !== 'Pending') return item;
         let idvFields = {};
         try { idvFields = JSON.parse(s.text || '{}'); } catch {}
+        if (!idvFields.idv_status) return item; // nothing to write yet
         return {
           ...item,
-          response_text: s.text || '',
-          file_url:      s.fileUrl || '',
+          response_text:              s.text || '',
+          file_url:                   s.fileUrl || item.file_url || '',
           status: (idvFields.idv_status === 'Pass' || idvFields.idv_status === 'Inconclusive') ? 'Received' : 'Requested',
-          idv_status:           idvFields.idv_status,
-          idv_similarity_score: idvFields.idv_similarity_score,
-          idv_confidence:       idvFields.idv_confidence,
-          idv_document_type:    idvFields.idv_document_type,
-          idv_selfie_url:       idvFields.idv_selfie_url,
-          idv_doc_url:          idvFields.idv_doc_url,
-          idv_checked_at:       idvFields.idv_checked_at,
-          idv_failure_reason:   idvFields.idv_failure_reason,
-          idv_liveness_passed:  idvFields.idv_liveness_passed,
-          idv_provider:         idvFields.idv_provider,
+          didit_session_id:           idvFields.didit_session_id           || item.didit_session_id,
+          didit_session_status:       idvFields.didit_session_status       || item.didit_session_status,
+          idv_status:                 idvFields.idv_status,
+          idv_similarity_score:       idvFields.idv_similarity_score       ?? item.idv_similarity_score,
+          idv_liveness_passed:        idvFields.idv_liveness_passed        ?? item.idv_liveness_passed,
+          idv_liveness_score:         idvFields.idv_liveness_score         ?? item.idv_liveness_score,
+          idv_document_type:          idvFields.idv_document_type          || item.idv_document_type,
+          idv_document_number:        idvFields.idv_document_number        || item.idv_document_number,
+          idv_document_expiry:        idvFields.idv_document_expiry        || item.idv_document_expiry,
+          idv_extracted_first_name:   idvFields.idv_extracted_first_name   || item.idv_extracted_first_name,
+          idv_extracted_last_name:    idvFields.idv_extracted_last_name    || item.idv_extracted_last_name,
+          idv_extracted_dob:          idvFields.idv_extracted_dob          || item.idv_extracted_dob,
+          idv_extracted_nationality:  idvFields.idv_extracted_nationality  || item.idv_extracted_nationality,
+          idv_issuing_country:        idvFields.idv_issuing_country        || item.idv_issuing_country,
+          idv_failure_reason:         idvFields.idv_failure_reason         || item.idv_failure_reason,
+          idv_aml_hits:               idvFields.idv_aml_hits               ?? item.idv_aml_hits,
+          idv_aml_status:             idvFields.idv_aml_status             || item.idv_aml_status,
+          idv_checked_at:             idvFields.idv_checked_at             || item.idv_checked_at,
+          idv_provider:               idvFields.idv_provider               || item.idv_provider,
         };
       }
 
       let responseText = s.text || item.response_text || '';
       if (ft === 'multi_select' || ft === 'checkbox') responseText = (s.selected || []).join(', ');
-      const isDone = isItemCompleted(item, s) || item.field_type === 'section_header';
+      const isDone = isItemCompleted(item, s) || ft === 'section_header';
       return {
         ...item,
         response_text: responseText,
         file_url: s.fileUrl || item.file_url || '',
-        status: isDone ? 'Received' : 'Requested',
+        status: isDone ? 'Received' : (item.status || 'Requested'),
       };
     });
-    const countable = updatedItems.filter(i => i.field_type !== 'section_header');
+
+    const countable = mergedItems.filter(i => inferFieldType(i) !== 'section_header');
     const allDone = countable.every(i => i.status === 'Received' || i.status === 'Verified');
     const newStatus = allDone ? 'Complete' : 'Partial_Response';
     const submittedCount = countable.filter(i => i.status === 'Received').length;
 
-    await base44.entities.OutreachRequest.update(outreach.id, { items: updatedItems, status: newStatus });
+    await base44.entities.OutreachRequest.update(outreach.id, { items: mergedItems, status: newStatus });
+    const updatedItems = mergedItems;
 
     // Create Document records for any newly uploaded files
     for (const item of updatedItems) {

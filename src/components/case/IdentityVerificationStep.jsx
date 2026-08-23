@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
-import { CheckCircle, XCircle, AlertTriangle, Loader2, Clock } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Loader2, Clock, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ── Score Ring ────────────────────────────────────────────────────────────────
@@ -35,19 +35,23 @@ function ScoreRing({ value, color, label, subLabel }) {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export default function IdentityVerificationStep({ kycCase, client, currentUser, onStepComplete }) {
+export default function IdentityVerificationStep({ kycCase, client, currentUser, onStepComplete, onCaseChanged }) {
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [idvResults, setIdvResults] = useState([]);
   const [extractedData, setExtractedData] = useState(null);
   const [showExtractedPrompt, setShowExtractedPrompt] = useState(false);
   const [diditPanelOpen, setDiditPanelOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [autoCompleted, setAutoCompleted] = useState(false);
+  const [lastSynced, setLastSynced] = useState(null);
 
   useEffect(() => { loadResults(); }, [kycCase.id]);
 
-  async function loadResults() {
-    setLoading(true);
+  async function loadResults(opts = {}) {
+    if (opts.sync) setSyncing(true);
+    else setLoading(true);
+
     try {
       const caseOutreaches = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
       const caseIds = new Set((caseOutreaches || []).map(r => r.id));
@@ -55,11 +59,51 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
       const standalone = (clientOutreaches || []).filter(r => !caseIds.has(r.id));
       const all = [...(caseOutreaches || []), ...standalone];
 
-      const items = all
+      // On-demand pull: find items that have a session but no terminal status yet
+      const pendingItems = [];
+      for (const req of all) {
+        for (const item of (req.items || [])) {
+          const isIdvItem = item.field_type === 'id_verification' || item.didit_session_id ||
+            (item.item_type === 'data_point' && (item.label || '').toLowerCase().match(/id[&\s]?v|identity\s*verif|idv/i));
+
+          if (!isIdvItem) continue;
+          const hasTerminalStatus = item.idv_status && item.idv_status !== 'Pending';
+          const hasSessionOrResponse = item.didit_session_id || item.response_text;
+
+          if (!hasTerminalStatus && hasSessionOrResponse) {
+            pendingItems.push({ req, item });
+          }
+        }
+      }
+
+      // Pull from Didit for pending items
+      if (pendingItems.length > 0) {
+        setSyncing(true);
+        for (const { req, item } of pendingItems) {
+          try {
+            await base44.functions.invoke('getDiditSessionResult', {
+              session_id:  item.didit_session_id || null,
+              outreach_id: req.id,
+              item_id:     item.item_id,
+              tenant_id:   kycCase.tenant_id,
+            });
+          } catch {}
+        }
+        setLastSynced(new Date());
+      }
+
+      // Re-fetch outreaches after potential sync
+      const refreshedCaseOutreaches = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
+      const refreshedClientOutreaches = await base44.entities.OutreachRequest.filter({ client_id: kycCase.client_id });
+      const refreshedStandalone = (refreshedClientOutreaches || []).filter(r => !new Set((refreshedCaseOutreaches || []).map(r => r.id)).has(r.id));
+      const refreshedAll = [...(refreshedCaseOutreaches || []), ...refreshedStandalone];
+
+      const items = refreshedAll
         .flatMap(req =>
           (req.items || [])
             .filter(item =>
-              (item.field_type === 'id_verification' || item.didit_session_id) &&
+              (item.field_type === 'id_verification' || item.didit_session_id ||
+               (item.item_type === 'data_point' && (item.label || '').toLowerCase().match(/id[&\s]?v|identity\s*verif|idv/i))) &&
               item.idv_status && item.idv_status !== 'Pending'
             )
             .map(item => ({ ...item, _req_id: req.id }))
@@ -73,7 +117,7 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
 
       setIdvResults(items);
 
-      // Auto-complete on Pass — write directly to DB so it persists regardless of parent state
+      // Auto-complete Step 2 on Pass
       const best = items[0];
       if (best?.idv_status === 'Pass' && kycCase.step_2_status !== 'complete') {
         await base44.entities.KycCase.update(kycCase.id, { step_2_status: 'complete' });
@@ -88,7 +132,26 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
           notes:         `Step 2 auto-completed: Didit returned Pass (score: ${best.idv_similarity_score ?? '?'}%).`,
         });
         onStepComplete?.();
+        onCaseChanged?.();
         setAutoCompleted(true);
+      }
+
+      // Auto-complete Step 1 if all case outreach items are done + IDV passed
+      if (best?.idv_status === 'Pass' && kycCase.step_1_status !== 'complete') {
+        const allItemsDone = (refreshedCaseOutreaches || []).every(req => {
+          const countable = (req.items || []).filter(i => i.field_type !== 'section_header');
+          return countable.length > 0 && countable.every(i => ['Received', 'Verified'].includes(i.status));
+        });
+        if (allItemsDone && refreshedCaseOutreaches.length > 0) {
+          await base44.entities.KycCase.update(kycCase.id, { step_1_status: 'complete' });
+          await base44.entities.AuditEvent.create({
+            tenant_id: kycCase.tenant_id, case_id: kycCase.id, client_id: kycCase.client_id,
+            actor_type: 'System', actor_name: 'System',
+            event_type: 'step_1_autocompleted',
+            notes: 'Step 1 auto-completed: all outreach items received and IDV passed.',
+          });
+          onCaseChanged?.();
+        }
       }
 
       // Prompt to apply OCR data to client profile
@@ -109,6 +172,7 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
       console.error('IDV load error:', err);
     } finally {
       setLoading(false);
+      setSyncing(false);
     }
   }
 
@@ -130,8 +194,9 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
           No completed Didit verification session found for this client yet.
           Check Step 1 to confirm an outreach request with Identity Verification has been sent and completed.
         </div>
-        <Button size="sm" variant="outline" onClick={loadResults} className="gap-1.5">
-          <Loader2 className="w-3 h-3" /> Refresh
+        <Button size="sm" variant="outline" onClick={() => loadResults({ sync: true })} className="gap-1.5" disabled={syncing}>
+          {syncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+          {syncing ? 'Syncing from Didit…' : 'Sync from Didit'}
         </Button>
       </div>
     );
@@ -213,6 +278,7 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
                     {item.idv_document_type || '—'}
                     {item.idv_issuing_country && ` · ${item.idv_issuing_country}`}
                     {item.idv_checked_at && ` · ${new Date(item.idv_checked_at).toLocaleDateString()}`}
+                    {lastSynced && <span className="ml-2 opacity-60">· Synced {lastSynced.toLocaleTimeString()}</span>}
                   </div>
                 </div>
               </div>
@@ -291,10 +357,16 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
         );
       })}
 
-      {/* Refresh */}
+      {/* Refresh / Sync */}
       <div className="flex justify-end">
-        <Button size="sm" variant="ghost" className="text-xs gap-1.5 text-muted-foreground" onClick={loadResults}>
-          <Loader2 className="w-3 h-3" /> Refresh results
+        <Button
+          size="sm" variant="ghost"
+          className="text-xs gap-1.5 text-muted-foreground"
+          onClick={() => loadResults({ sync: true })}
+          disabled={syncing}
+        >
+          {syncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+          {syncing ? 'Syncing…' : 'Sync from Didit'}
         </Button>
       </div>
 

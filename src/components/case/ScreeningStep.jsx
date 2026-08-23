@@ -9,22 +9,25 @@ import { addDays, format } from 'date-fns';
 import HitsTable from '@/components/case/screening/HitsTable';
 import HitDetailPanel from '@/components/case/screening/HitDetailPanel';
 
-export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, client }) {
+export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, client, onCaseChanged }) {
   const navigate = useNavigate();
 
   const [hits, setHits] = useState([]);
   const [monitoringAlerts, setMonitoringAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [selectedHit, setSelectedHit] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmedOnboardingHits, setConfirmedOnboardingHits] = useState([]);
   const [sourceFilter, setSourceFilter] = useState('all');
-  const [autoImportDone, setAutoImportDone] = useState(false);
+  const [diditAmlSummary, setDiditAmlSummary] = useState(null); // { status, total_hits, items, synced_at }
 
   useEffect(() => { loadAll(); }, [caseId]);
 
-  async function loadAll() {
-    setLoading(true);
+  async function loadAll(opts = {}) {
+    if (opts.sync) setSyncing(true);
+    else setLoading(true);
+
     const [hitsData, alertsData] = await Promise.all([
       base44.entities.ScreeningHit.filter({ case_id: caseId }, '-created_date'),
       tenantId ? base44.entities.MonitoringAlert.filter({ tenant_id: tenantId }, '-created_date', 50) : Promise.resolve([]),
@@ -32,75 +35,117 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
     setHits(hitsData || []);
     setMonitoringAlerts(alertsData || []);
 
-    // Auto-import Didit AML hits (once per session, guarded by existing records)
-    const existingDiditHit = (hitsData || []).some(h => h.source === 'Didit_AML');
-    if (!existingDiditHit) {
-      await autoImportDiditAml(hitsData || []);
-    } else {
-      setAutoImportDone(true);
-    }
+    // Pull latest Didit AML results for any pending IDV items
+    await syncDiditAml(hitsData || [], opts.sync);
 
-    setLoading(false);
+    if (!opts.sync) setLoading(false);
+    setSyncing(false);
   }
 
-  async function autoImportDiditAml(existingHits) {
+  async function syncDiditAml(existingHits, forcePull = false) {
     try {
       const caseOutreaches = await base44.entities.OutreachRequest.filter({ case_id: caseId });
       const caseIds = new Set((caseOutreaches || []).map(r => r.id));
       const clientOutreaches = await base44.entities.OutreachRequest.filter({ client_id: kycCase?.client_id });
-      const standalone = (clientOutreaches || []).filter(r => !caseIds.has(r.id));
-      const allOutreaches = [...(caseOutreaches || []), ...standalone];
+      const allOutreaches = [
+        ...(caseOutreaches || []),
+        ...(clientOutreaches || []).filter(r => !caseIds.has(r.id)),
+      ];
 
-      const amlItems = [];
+      // Find IDV items — pull from Didit for any that have no terminal status yet
+      const pendingIdvItems = [];
       for (const req of allOutreaches) {
         for (const item of (req.items || [])) {
+          const isIdv = item.field_type === 'id_verification' || item.didit_session_id ||
+            (item.item_type === 'data_point' && (item.label || '').toLowerCase().match(/id[&\s]?v|identity\s*verif|idv/i));
+          if (!isIdv) continue;
+          const hasTerminal = item.idv_status && item.idv_status !== 'Pending';
+          const hasSession  = item.didit_session_id || item.response_text;
+          if (!hasTerminal && hasSession) pendingIdvItems.push({ req, item });
+        }
+      }
+
+      if (pendingIdvItems.length > 0 || forcePull) {
+        setSyncing(true);
+        for (const { req, item } of pendingIdvItems) {
+          try {
+            await base44.functions.invoke('getDiditSessionResult', {
+              session_id:  item.didit_session_id || null,
+              outreach_id: req.id,
+              item_id:     item.item_id,
+              tenant_id:   tenantId,
+            });
+          } catch {}
+        }
+      }
+
+      // Re-fetch after potential pull
+      const refreshedCaseOutreaches = await base44.entities.OutreachRequest.filter({ case_id: caseId });
+      const refreshedClientOutreaches = await base44.entities.OutreachRequest.filter({ client_id: kycCase?.client_id });
+      const refreshedAll = [
+        ...(refreshedCaseOutreaches || []),
+        ...(refreshedClientOutreaches || []).filter(r => !new Set((refreshedCaseOutreaches || []).map(r => r.id)).has(r.id)),
+      ];
+
+      // Collect AML summary from all IDV items with terminal status
+      let amlSummary = null;
+      for (const req of refreshedAll) {
+        for (const item of (req.items || [])) {
           const isIdv = item.field_type === 'id_verification' || item.didit_session_id;
-          if (isIdv && item.idv_status !== 'Pending' && (item.idv_aml_hits || 0) > 0) {
-            amlItems.push(item);
+          if (!isIdv || !item.idv_status || item.idv_status === 'Pending') continue;
+          if (item.idv_aml_hits != null) {
+            if (!amlSummary || new Date(item.idv_checked_at) > new Date(amlSummary.synced_at)) {
+              amlSummary = {
+                status:     item.idv_aml_status || (item.idv_aml_hits === 0 ? 'Clear' : 'Flagged'),
+                total_hits: item.idv_aml_hits,
+                screenings: item.idv_aml_screenings || null,
+                synced_at:  item.idv_checked_at,
+                session_id: item.didit_session_id,
+              };
+            }
           }
         }
       }
+      setDiditAmlSummary(amlSummary);
 
-      if (amlItems.length > 0) {
-        for (const item of amlItems) {
-          await base44.entities.ScreeningHit.create({
-            tenant_id:        kycCase?.tenant_id || tenantId,
-            case_id:          caseId,
-            client_id:        kycCase?.client_id,
-            entity_name:      client?.full_name || 'Client',
-            entity_type:      'Client',
-            source:           'Didit_AML',
-            hit_name:         `Didit AML Alert — ${item.idv_aml_hits} hit(s) detected`,
-            confidence_score: 85,
-            status:           'New',
-            hit_details: {
-              didit_session_id: item.didit_session_id,
-              aml_hits:         item.idv_aml_hits,
-              aml_status:       item.idv_aml_status || 'Flagged',
-              document_type:    item.idv_document_type,
-              document_number:  item.idv_document_number,
-              full_name:        [item.idv_extracted_first_name, item.idv_extracted_last_name].filter(Boolean).join(' '),
-              nationality:      item.idv_extracted_nationality,
-            },
-            ai_recommendation: 'Review Required',
-            ai_rationale: `Didit identity verification returned ${item.idv_aml_hits} AML screening hit(s) during the client portal verification session.`,
-          });
-        }
-        await base44.entities.AuditEvent.create({
-          tenant_id:     kycCase?.tenant_id || tenantId,
-          case_id:       caseId,
-          actor_user_id: currentUser?.id,
-          actor_name:    currentUser?.full_name,
-          actor_type:    'System',
-          event_type:    'didit_aml_auto_imported',
-          notes:         `Didit AML results auto-imported: ${amlItems.length} alert(s) from portal verification.`,
+      // Auto-import Didit AML hits as ScreeningHit records (if hits exist)
+      const existingDiditHit = existingHits.some(h => h.source === 'Didit_AML');
+      if (!existingDiditHit && amlSummary?.total_hits > 0) {
+        await base44.entities.ScreeningHit.create({
+          tenant_id:        tenantId,
+          case_id:          caseId,
+          client_id:        kycCase?.client_id,
+          entity_name:      client?.full_name || 'Client',
+          entity_type:      'Client',
+          source:           'Didit_AML',
+          hit_name:         `Didit AML Alert — ${amlSummary.total_hits} hit(s) detected`,
+          confidence_score: 85,
+          status:           'New',
+          hit_details: { didit_session_id: amlSummary.session_id, aml_hits: amlSummary.total_hits, aml_status: amlSummary.status },
+          ai_recommendation: 'Review Required',
+          ai_rationale:  `Didit identity verification returned ${amlSummary.total_hits} AML screening hit(s).`,
         });
-        // Refresh hits after import
         const fresh = await base44.entities.ScreeningHit.filter({ case_id: caseId }, '-created_date');
         setHits(fresh || []);
       }
-      setAutoImportDone(true);
-    } catch { setAutoImportDone(true); }
+
+      // Step 3 auto-complete: AML clear + no active ScreeningHits
+      const currentHits = await base44.entities.ScreeningHit.filter({ case_id: caseId }, '-created_date');
+      const activeHits = (currentHits || []).filter(h => !['Discounted'].includes(h.status));
+      if (amlSummary?.total_hits === 0 && activeHits.length === 0 && kycCase?.step_3_status !== 'complete') {
+        await base44.entities.KycCase.update(caseId, { step_3_status: 'complete' });
+        await base44.entities.AuditEvent.create({
+          tenant_id: tenantId, case_id: caseId, client_id: kycCase?.client_id,
+          actor_type: 'System', actor_name: 'System',
+          event_type: 'step_3_autocompleted',
+          notes: 'Step 3 auto-completed: Didit AML returned 0 hits and no active screening hits.',
+        });
+        onCaseChanged?.();
+      }
+
+    } catch (err) {
+      console.error('syncDiditAml error:', err);
+    }
   }
 
   async function handleDecision(hit, decision, justification) {
@@ -208,13 +253,10 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
             </p>
             <p className="text-xs text-amber-700">
               This hit is being handled within this onboarding case and elevated as a <strong>HIGH risk indicator in Step 6</strong>.
-              An EDR case will be created automatically post-onboarding if the client is accepted.
             </p>
             <ul className="mt-1 space-y-0.5">
               {confirmedOnboardingHits.map(h => (
-                <li key={h.id} className="text-xs text-amber-700 font-medium">
-                  • {h.hit_name} ({h.source?.replace(/_/g, ' ')})
-                </li>
+                <li key={h.id} className="text-xs text-amber-700 font-medium">• {h.hit_name} ({h.source?.replace(/_/g, ' ')})</li>
               ))}
             </ul>
           </div>
@@ -229,10 +271,67 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
             Results sourced automatically from Didit verification sessions
           </p>
         </div>
-        <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={loadAll} disabled={loading}>
-          <RefreshCw className="w-3 h-3" /> Refresh
+        <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => loadAll({ sync: true })} disabled={loading || syncing}>
+          {syncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+          {syncing ? 'Syncing…' : 'Sync from Didit'}
         </Button>
       </div>
+
+      {/* Didit AML Summary card — shown when a Didit session has been processed */}
+      {diditAmlSummary && (
+        <div className={cn(
+          'rounded-xl border-2 overflow-hidden',
+          diditAmlSummary.total_hits === 0 ? 'border-emerald-200' : 'border-amber-300'
+        )}>
+          <div className={cn(
+            'flex items-center justify-between px-4 py-3 gap-3',
+            diditAmlSummary.total_hits === 0 ? 'bg-emerald-50' : 'bg-amber-50'
+          )}>
+            <div className="flex items-center gap-2">
+              <span className="text-xl">{diditAmlSummary.total_hits === 0 ? '✅' : '⚠️'}</span>
+              <div>
+                <div className="font-semibold text-sm">
+                  Didit AML Screening
+                  <span className={cn('ml-2 text-xs font-bold px-2 py-0.5 rounded-full',
+                    diditAmlSummary.total_hits === 0
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-amber-100 text-amber-700'
+                  )}>
+                    {diditAmlSummary.status || (diditAmlSummary.total_hits === 0 ? 'Clear' : 'Flagged')}
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {diditAmlSummary.total_hits} hit{diditAmlSummary.total_hits !== 1 ? 's' : ''} detected
+                  {diditAmlSummary.synced_at && (
+                    <span className="ml-2 opacity-60">
+                      · Synced from Didit {new Date(diditAmlSummary.synced_at).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className={cn(
+              'text-3xl font-bold',
+              diditAmlSummary.total_hits === 0 ? 'text-emerald-600' : 'text-amber-600'
+            )}>
+              {diditAmlSummary.total_hits}
+            </div>
+          </div>
+
+          {/* AML hit details if any */}
+          {diditAmlSummary.total_hits > 0 && diditAmlSummary.screenings && (
+            <div className="px-4 py-3 bg-card divide-y divide-border">
+              {(Array.isArray(diditAmlSummary.screenings) ? diditAmlSummary.screenings : [diditAmlSummary.screenings]).map((s, i) => (
+                <div key={i} className="py-2 text-xs">
+                  <div className="font-medium text-foreground">{s.name || s.entity_name || `Hit ${i + 1}`}</div>
+                  {s.match_types && <div className="text-muted-foreground mt-0.5">{Array.isArray(s.match_types) ? s.match_types.join(', ') : s.match_types}</div>}
+                  {s.score != null && <div className="text-muted-foreground">Score: {Math.round(s.score)}%</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-16">
@@ -262,11 +361,11 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
           {/* Case Screening Tab */}
           <TabsContent value="case" className="mt-3">
             {hits.length === 0 ? (
-              <div className="bg-card border border-border rounded-xl py-16 text-center">
+              <div className="bg-card border border-border rounded-xl py-12 text-center">
                 <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
                 <p className="text-sm font-medium text-muted-foreground">No AML hits found</p>
                 <p className="text-xs text-muted-foreground/60 mt-1">
-                  {autoImportDone
+                  {diditAmlSummary
                     ? 'Didit returned no AML screening hits for this client.'
                     : 'Awaiting Didit verification results from Step 1 outreach.'}
                 </p>
@@ -292,12 +391,11 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                   </div>
                 </div>
 
-                {/* Pending alert */}
                 {pendingCount > 0 && (
                   <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
                     <span className="text-sm text-red-700 font-medium">
-                      {pendingCount} hit{pendingCount !== 1 ? 's' : ''} require analyst review. Click any row to open the detail panel.
+                      {pendingCount} hit{pendingCount !== 1 ? 's' : ''} require analyst review.
                     </span>
                   </div>
                 )}

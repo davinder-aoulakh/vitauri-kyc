@@ -617,9 +617,10 @@ export default function CaseWorkspace() {
                         currentUser={currentUser}
                         tenant={tenant}
                         onStepComplete={() => updateStepStatus('step_2_status', 'complete')}
+                        onCaseChanged={loadAll}
                       />
                     )}
-                    {activeStep === 3 && <ScreeningStep caseId={id} tenantId={currentUser?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} />}
+                    {activeStep === 3 && <ScreeningStep caseId={id} tenantId={currentUser?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} onCaseChanged={loadAll} />}
                     {activeStep === 4 && <ClientProfileStep kycCase={kycCase} client={client} currentUser={currentUser} onRegisterOsintAdd={cb => setOsintAddCallback(() => cb)} />}
                     {activeStep === 5 && <SoFSoWStep kycCase={kycCase} client={client} currentUser={currentUser} />}
                     {activeStep === 6 && <RiskAssessmentStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />}
