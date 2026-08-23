@@ -84,13 +84,13 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
     if (!data) return;
     setPdfLoading(true);
     try {
-      // Try Didit's native PDF first
       const res = await base44.functions.invoke('getDiditSessionDetails', {
         session_id: sessionId,
         tenant_id:  tenantId,
         action:     'generate_pdf',
       });
       const d = res?.data || res;
+      console.log('PDF response from backend:', d);
       if (d?.pdf_data_url) {
         const a = document.createElement('a');
         a.href     = d.pdf_data_url;
@@ -98,14 +98,13 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        return;
+      } else {
+        // Show the actual error instead of silently falling back
+        alert(`Didit PDF failed: ${d?.error || 'Unknown error'}. Session ID: ${sessionId}`);
       }
-      // Didit PDF not available on this plan/endpoint — fall back to client-side
-      console.warn('Didit PDF unavailable:', d?.error);
-      await generateClientSidePdf();
     } catch (e) {
-      // Fallback on any error
-      await generateClientSidePdf();
+      console.error('PDF invoke error:', e);
+      alert(`PDF request error: ${e.message}`);
     } finally {
       setPdfLoading(false);
     }
