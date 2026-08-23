@@ -23,8 +23,6 @@ import ClientProfileStep    from '@/components/case/ClientProfileStep';
 import CaseTypeBanner       from '@/components/case/views/CaseTypeBanner';
 import CaseAssignmentPicker from '@/components/case/CaseAssignmentPicker';
 import CaseNoteThread       from '@/components/case/CaseNoteThread';
-import DeleteCaseConfirmDialog from '@/components/case/DeleteCaseConfirmDialog';
-import { deleteCase } from '@/lib/caseDelete';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -33,7 +31,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ChevronLeft, CheckCircle, Circle, AlertTriangle, Clock,
   MessageSquare, User, Shield, BarChart3, ClipboardCheck,
-  FileText, Loader2, Trash2
+  FileText, Loader2
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -88,7 +86,6 @@ export default function CaseWorkspace() {
   const [flagReason, setFlagReason] = useState('');
   const [flagNote, setFlagNote] = useState('');
   const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
-  const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
 
   const FLAG_REASONS = ['Missing document', 'Awaiting client response', 'QC query', 'Other'];
 
@@ -340,15 +337,6 @@ export default function CaseWorkspace() {
                   Reopen Case
                 </button>
               )}
-              {hasPermission(userRole, 'deleteCase') && (
-                <button
-                  className="text-xs text-red-500 font-medium hover:text-red-700 flex items-center gap-1"
-                  onClick={() => setDeleteCaseOpen(true)}
-                  title="Permanently delete this case"
-                >
-                  <Trash2 className="w-3 h-3" /> Delete Case
-                </button>
-              )}
               {canOverrideStatus && (
                 <button
                   className="text-xs text-primary font-medium hover:text-primary/80"
@@ -481,7 +469,7 @@ export default function CaseWorkspace() {
 
                 {STEPS.map(step => {
                   const s = getStepStatus(kycCase, step.id);
-                  const canToggle = [5, 7].includes(step.id);
+                  const canToggle = [2, 5, 7].includes(step.id);
                   return (
                     <div key={step.id} className="relative group/step">
                       <button
@@ -598,7 +586,7 @@ export default function CaseWorkspace() {
                         Step Not Required for This Case
                       </div>
                       <div className="text-sm text-muted-foreground mb-6">
-                        {activeStep === 2 && 'This step has been marked as Not Required.'}
+                        {activeStep === 2 && 'Identity Verification via Didit is not required for organisation cases. Entity verification is managed through the KYB process and company registry checks in Step 4.'}
                         {activeStep === 5 && 'Source of Funds / Wealth documentation is not required for this case based on its risk profile. If circumstances change, an analyst can reinstate this step.'}
                         {activeStep === 7 && 'Control Measures are not required for this case. If the Risk Assessment (Step 6) identifies Medium or High risk, this step should be reinstated.'}
                       </div>
@@ -609,17 +597,9 @@ export default function CaseWorkspace() {
                   </div>
                 ) : (
                   <>
-                    {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} />}
-                    {activeStep === 2 && (
-                      <IdentityVerificationStep
-                        kycCase={kycCase}
-                        client={client}
-                        currentUser={currentUser}
-                        tenant={tenant}
-                        onStepComplete={() => updateStepStatus('step_2_status', 'complete')}
-                      />
-                    )}
-                    {activeStep === 3 && <ScreeningStep caseId={id} tenantId={currentUser?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} />}
+                    {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} onAutoComplete={() => updateStepStatus('step_1_status', 'complete')} />}
+                    {activeStep === 2 && <IdentityVerificationStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} onAutoComplete={() => updateStepStatus('step_2_status', 'complete')} />}
+                    {activeStep === 3 && <ScreeningStep caseId={id} tenantId={currentUser?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} onAutoComplete={() => updateStepStatus('step_3_status', 'complete')} />}
                     {activeStep === 4 && <ClientProfileStep kycCase={kycCase} client={client} currentUser={currentUser} onRegisterOsintAdd={cb => setOsintAddCallback(() => cb)} />}
                     {activeStep === 5 && <SoFSoWStep kycCase={kycCase} client={client} currentUser={currentUser} />}
                     {activeStep === 6 && <RiskAssessmentStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />}
@@ -736,18 +716,6 @@ export default function CaseWorkspace() {
           </div>
         </div>
       )}
-
-      {/* Delete Case Dialog */}
-      <DeleteCaseConfirmDialog
-        open={deleteCaseOpen}
-        kycCase={kycCase}
-        clientName={client?.full_name}
-        onClose={() => setDeleteCaseOpen(false)}
-        onConfirm={async () => {
-          await deleteCase(kycCase, currentUser);
-          navigate('/all-cases');
-        }}
-      />
 
       {/* Status Override Modal */}
       {statusOverrideOpen && (
