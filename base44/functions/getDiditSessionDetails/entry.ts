@@ -24,23 +24,18 @@ Deno.serve(async (req) => {
     // Session must be Approved, Declined, or In Review — otherwise 403
     if (action === 'generate_pdf') {
       try {
-        // Try both known Didit PDF endpoints — the management API uses api.didit.me
-        let pdfResp: Response | null = null;
-        const pdfUrls = [
-          `https://api.didit.me/v1/session/${session_id}/generate-pdf/`,
-          `https://verification.didit.me/v3/session/${session_id}/generate-pdf/`,
-          `https://api.didit.me/v3/session/${session_id}/generate-pdf/`,
-        ];
-        for (const pdfUrl of pdfUrls) {
-          console.log('Trying PDF URL:', pdfUrl);
-          const r = await fetch(pdfUrl, { headers: { 'x-api-key': tenant.didit_api_key } });
-          console.log('PDF response status:', r.status, 'content-type:', r.headers.get('content-type'));
-          if (r.ok) { pdfResp = r; break; }
-          const errText = await r.text().catch(() => '');
+        // Didit PDF endpoint — same base URL and auth as the decision endpoint that works
+        const pdfUrl = `https://verification.didit.me/v3/session/${session_id}/generate-pdf`;
+        console.log('PDF URL:', pdfUrl, 'session_id:', session_id);
+        const pdfResp = await fetch(pdfUrl, {
+          method: 'GET',
+          headers: { 'x-api-key': tenant.didit_api_key, 'Accept': 'application/pdf' }
+        });
+        console.log('PDF response status:', pdfResp.status, 'content-type:', pdfResp.headers.get('content-type'));
+        if (!pdfResp.ok) {
+          const errText = await pdfResp.text().catch(() => '');
           console.log('PDF error body:', errText);
-        }
-        if (!pdfResp) {
-          return Response.json({ error: 'PDF generation failed: Didit returned 404 on all known endpoints. The session may not support PDF export on this plan.' });
+          return Response.json({ error: `PDF generation failed: ${pdfResp.status} — ${errText || 'no body'}` });
         }
 
         // Stream binary PDF bytes → base64 data URL for the frontend to download
