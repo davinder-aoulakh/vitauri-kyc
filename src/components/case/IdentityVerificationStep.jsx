@@ -73,9 +73,10 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
 
       setIdvResults(items);
 
-      // Auto-complete on Pass
+      // Auto-complete on Pass — write directly to DB so it persists regardless of parent state
       const best = items[0];
       if (best?.idv_status === 'Pass' && kycCase.step_2_status !== 'complete') {
+        await base44.entities.KycCase.update(kycCase.id, { step_2_status: 'complete' });
         await base44.entities.AuditEvent.create({
           tenant_id:     kycCase.tenant_id,
           case_id:       kycCase.id,
