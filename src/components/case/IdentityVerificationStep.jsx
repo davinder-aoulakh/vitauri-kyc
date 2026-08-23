@@ -63,7 +63,7 @@ function ApplyOcrButton({ extractedData, clientId, onDone }) {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export default function IdentityVerificationStep({ kycCase, client, currentUser, onStepComplete, onCaseChanged }) {
+export default function IdentityVerificationStep({ kycCase, client, currentUser, tenant, onStepComplete, onCaseChanged }) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [idvResults, setIdvResults] = useState([]);
