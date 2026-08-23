@@ -469,6 +469,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
         <DiditVerificationPanel
           sessionId={diditPanelItem.didit_session_id}
           tenantId={kycCase?.tenant_id}
+          diditApiKey={tenant?.didit_api_key}
           clientName={client?.full_name}
           onClose={() => setDiditPanelItem(null)}
         />
@@ -1088,7 +1089,8 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
         <DiditVerificationPanel
           sessionId={idvDetailItem.didit_session_id}
           tenantId={kycCase?.tenant_id}
-          clientName={kycCase?.client_name || 'Client'}
+          diditApiKey={tenant?.didit_api_key}
+          clientName={kycCase?.client_name || client?.full_name || 'Client'}
           onClose={() => setDiditPanelOpen(false)}
         />
       )}

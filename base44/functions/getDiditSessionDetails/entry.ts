@@ -6,16 +6,20 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { session_id, tenant_id, action = 'details' } = await req.json();
+    const { session_id, tenant_id, didit_api_key: directApiKey, action = 'details' } = await req.json();
 
-    if (!session_id || !tenant_id) {
-      return Response.json({ error: 'session_id and tenant_id are required' });
+    if (!session_id) {
+      return Response.json({ error: 'session_id is required' });
     }
 
-    // Load tenant API key
-    const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
-    const tenant  = tenants?.[0];
-    if (!tenant?.didit_api_key) {
+    // Use directly-passed API key, or fall back to tenant lookup
+    let apiKey = directApiKey?.trim();
+    if (!apiKey) {
+      if (!tenant_id) return Response.json({ error: 'Either didit_api_key or tenant_id is required' });
+      const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
+      apiKey = tenants?.[0]?.didit_api_key?.trim();
+    }
+    if (!apiKey) {
       return Response.json({ error: 'Didit not configured for this tenant' });
     }
 
@@ -26,11 +30,10 @@ Deno.serve(async (req) => {
       try {
         // Didit PDF — exact curl equivalent: GET /v3/session/{id}/generate-pdf/ with x-api-key header
         const pdfUrl = `https://verification.didit.me/v3/session/${session_id}/generate-pdf/`;
-        const apiKey = tenant.didit_api_key;
-        console.log('PDF request — url:', pdfUrl, 'session_id:', session_id, 'api_key_length:', apiKey?.length, 'api_key_prefix:', apiKey?.substring(0, 8), 'api_key_suffix:', apiKey?.slice(-4));
+        console.log('PDF request — url:', pdfUrl, 'api_key_length:', apiKey?.length, 'api_key_prefix:', apiKey?.substring(0, 8));
         const pdfResp = await fetch(pdfUrl, {
           method: 'GET',
-          headers: { 'x-api-key': tenant.didit_api_key },
+          headers: { 'x-api-key': apiKey },
         });
         console.log('PDF response — status:', pdfResp.status, 'content-type:', pdfResp.headers.get('content-type'));
         if (!pdfResp.ok) {
@@ -69,7 +72,7 @@ Deno.serve(async (req) => {
     try {
       const resp = await fetch(
         `https://verification.didit.me/v3/session/${session_id}/decision/`,
-        { headers: { 'x-api-key': tenant.didit_api_key } }
+        { headers: { 'x-api-key': apiKey } }
       );
       if (!resp.ok) {
         return Response.json({ error: `Didit API error: ${resp.status}` });

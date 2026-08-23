@@ -55,7 +55,7 @@ function ScoreRing({ score, status, label }) {
   );
 }
 
-export default function DiditVerificationPanel({ sessionId, tenantId, clientName, onClose }) {
+export default function DiditVerificationPanel({ sessionId, tenantId, diditApiKey, clientName, onClose }) {
   const [data, setData]           = useState(null);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
@@ -67,8 +67,9 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
     setError('');
     try {
       const res = await base44.functions.invoke('getDiditSessionDetails', {
-        session_id: sessionId,
-        tenant_id:  tenantId,
+        session_id:    sessionId,
+        tenant_id:     tenantId,
+        didit_api_key: diditApiKey,
       });
       const d = res?.data || res;
       if (d?.error) { setError(d.error); }
@@ -85,9 +86,10 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
     setPdfLoading(true);
     try {
       const res = await base44.functions.invoke('getDiditSessionDetails', {
-        session_id: sessionId,
-        tenant_id:  tenantId,
-        action:     'generate_pdf',
+        session_id:    sessionId,
+        tenant_id:     tenantId,
+        didit_api_key: diditApiKey,
+        action:        'generate_pdf',
       });
       const d = res?.data || res;
       console.log('PDF response from backend:', d);

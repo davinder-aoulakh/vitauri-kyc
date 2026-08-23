@@ -421,6 +421,7 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
         <DiditVerificationPanel
           sessionId={selectedItem.didit_session_id}
           tenantId={kycCase?.tenant_id}
+          diditApiKey={tenant?.didit_api_key}
           clientName={client?.full_name || 'Client'}
           onClose={() => { setDiditPanelOpen(false); setSelectedItem(null); }}
         />
