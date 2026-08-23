@@ -207,18 +207,18 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
         }
       }
 
-      // Prompt to apply OCR data to client profile — only once per page load
+      // Prompt to apply OCR data only if client is missing the fields
       if (best?.idv_status === 'Pass' && !promptShownRef.current) {
+        promptShownRef.current = true;
+        const currentClient = (await base44.entities.Client.filter({ id: kycCase.client_id }))?.[0];
         const extractedName = [best.idv_extracted_first_name, best.idv_extracted_last_name].filter(Boolean).join(' ');
-        const hasExtracted = extractedName || best.idv_extracted_dob || best.idv_extracted_nationality;
-        if (hasExtracted) {
-          promptShownRef.current = true;
-          setExtractedData({
-            full_name:     extractedName || null,
-            date_of_birth: best.idv_extracted_dob || null,
-            nationality:   best.idv_extracted_nationality || null,
-            id_number:     best.idv_document_number || null,
-          });
+        const updates = {};
+        if (extractedName && !currentClient?.full_name)     updates.full_name     = extractedName;
+        if (best.idv_extracted_dob && !currentClient?.date_of_birth) updates.date_of_birth = best.idv_extracted_dob;
+        if (best.idv_extracted_nationality && !currentClient?.nationality) updates.nationality = best.idv_extracted_nationality;
+        if (best.idv_document_number && !currentClient?.id_number) updates.id_number = best.idv_document_number;
+        if (Object.keys(updates).length > 0) {
+          setExtractedData(updates);
           setShowExtractedPrompt(true);
         }
       }
