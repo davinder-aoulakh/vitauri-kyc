@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import DocumentViewer from '@/components/shared/DocumentViewer';
 import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
-import { resolvePendingDiditSessions } from '@/lib/diditResolve';
 
 const SITUATION_LABELS = {
   Welcome: 'Welcome',
@@ -91,7 +90,7 @@ function buildEmailHtml(tenant, client, req, portalUrl) {
   `;
 }
 
-export default function OutreachStep({ kycCase, client, currentUser, tenant, onAutoComplete }) {
+export default function OutreachStep({ kycCase, client, currentUser, tenant }) {
   const [requests, setRequests]   = useState([]);
   const [loading, setLoading]     = useState(true);
   const [newOpen, setNewOpen]     = useState(false);
@@ -135,24 +134,9 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onA
   useEffect(() => { load(); loadTemplates(); }, [kycCase.id]);
 
   async function load() {
-    let reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
-
-    // Reliability backstop: pick up any Didit session that finished after the
-    // client's browser stopped polling it (tab closed early, etc.) instead of
-    // leaving it stuck at idv_status: 'Pending' until someone happens to
-    // manually re-check it.
-    const resolvedAny = await resolvePendingDiditSessions(reqs, kycCase.tenant_id);
-    if (resolvedAny) reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
-
+    const reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
     setRequests(reqs || []);
     setLoading(false);
-
-    // All requested items submitted by the client — the client's side of
-    // this step is done, so complete it instead of requiring a separate
-    // manual click. Analysts can still verify individual items afterward.
-    if (kycCase?.step_1_status !== 'complete' && (reqs || []).some(r => r.status === 'Complete')) {
-      onAutoComplete?.();
-    }
 
     // Build consolidated Didit summary from all verified IDV items
     const allIDVItems = [];
