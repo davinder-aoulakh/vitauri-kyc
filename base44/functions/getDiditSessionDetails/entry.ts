@@ -24,18 +24,18 @@ Deno.serve(async (req) => {
     // Session must be Approved, Declined, or In Review — otherwise 403
     if (action === 'generate_pdf') {
       try {
-        // Didit PDF endpoint — same base URL and auth as the decision endpoint that works
-        const pdfUrl = `https://verification.didit.me/v3/session/${session_id}/generate-pdf`;
-        console.log('PDF URL:', pdfUrl, 'session_id:', session_id);
+        // Didit PDF — exact curl equivalent: GET /v3/session/{id}/generate-pdf/ with x-api-key header
+        const pdfUrl = `https://verification.didit.me/v3/session/${session_id}/generate-pdf/`;
+        console.log('PDF request — url:', pdfUrl, 'session_id:', session_id, 'api_key_length:', tenant.didit_api_key?.length);
         const pdfResp = await fetch(pdfUrl, {
           method: 'GET',
-          headers: { 'x-api-key': tenant.didit_api_key, 'Accept': 'application/pdf' }
+          headers: { 'x-api-key': tenant.didit_api_key },
         });
-        console.log('PDF response status:', pdfResp.status, 'content-type:', pdfResp.headers.get('content-type'));
+        console.log('PDF response — status:', pdfResp.status, 'content-type:', pdfResp.headers.get('content-type'));
         if (!pdfResp.ok) {
           const errText = await pdfResp.text().catch(() => '');
           console.log('PDF error body:', errText);
-          return Response.json({ error: `PDF generation failed: ${pdfResp.status} — ${errText || 'no body'}` });
+          return Response.json({ error: `PDF generation failed: ${pdfResp.status} — ${errText || 'no detail'}` });
         }
 
         // Stream binary PDF bytes → base64 data URL for the frontend to download
