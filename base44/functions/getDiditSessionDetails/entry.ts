@@ -26,7 +26,8 @@ Deno.serve(async (req) => {
       try {
         // Didit PDF — exact curl equivalent: GET /v3/session/{id}/generate-pdf/ with x-api-key header
         const pdfUrl = `https://verification.didit.me/v3/session/${session_id}/generate-pdf/`;
-        console.log('PDF request — url:', pdfUrl, 'session_id:', session_id, 'api_key_length:', tenant.didit_api_key?.length);
+        const apiKey = tenant.didit_api_key;
+        console.log('PDF request — url:', pdfUrl, 'session_id:', session_id, 'api_key_length:', apiKey?.length, 'api_key_prefix:', apiKey?.substring(0, 8), 'api_key_suffix:', apiKey?.slice(-4));
         const pdfResp = await fetch(pdfUrl, {
           method: 'GET',
           headers: { 'x-api-key': tenant.didit_api_key },
