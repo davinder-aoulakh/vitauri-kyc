@@ -14,8 +14,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   FolderOpen, Search, X, ChevronLeft, ChevronRight,
-  ChevronsUpDown, ChevronUp, ChevronDown, Download, UserCheck, Loader2
+  ChevronsUpDown, ChevronUp, ChevronDown, Download, UserCheck, Loader2, Trash2
 } from 'lucide-react';
+import DeleteCaseConfirmDialog from '@/components/case/DeleteCaseConfirmDialog';
+import { deleteCase } from '@/lib/caseDelete';
 import { format, differenceInDays, isAfter } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -126,6 +128,9 @@ export default function CasesList({ myOnly = false }) {
 
   const userRole = currentUser?.app_role;
   const canBulk  = !myOnly && hasPermission(userRole, 'bulkActions');
+  const canDelete = hasPermission(userRole, 'deleteCase');
+
+  const [deletingCase, setDeletingCase] = useState(null);
 
   useEffect(() => {
     if (currentUser?.tenant_id) loadAll();
@@ -480,12 +485,23 @@ export default function CasesList({ myOnly = false }) {
                           </td>
                           <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums">{daysOpen}d</td>
                           <td className="px-4 py-3 text-right">
-                            <Button
-                              variant="outline" size="sm" className="h-7 text-xs"
-                              onClick={e => { e.stopPropagation(); navigate(`/case/${c.id}`); }}
-                            >
-                              Open →
-                            </Button>
+                            <div className="flex items-center gap-1 justify-end">
+                              <Button
+                                variant="outline" size="sm" className="h-7 text-xs"
+                                onClick={e => { e.stopPropagation(); navigate(`/case/${c.id}`); }}
+                              >
+                                Open →
+                              </Button>
+                              {canDelete && (
+                                <Button
+                                  variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
+                                  onClick={e => { e.stopPropagation(); setDeletingCase(c); }}
+                                  title="Delete case"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -524,6 +540,17 @@ export default function CasesList({ myOnly = false }) {
           </div>
         )}
       </div>
+      <DeleteCaseConfirmDialog
+        open={!!deletingCase}
+        kycCase={deletingCase}
+        clientName={deletingCase ? clients[deletingCase.client_id]?.full_name : null}
+        onClose={() => setDeletingCase(null)}
+        onConfirm={async () => {
+          await deleteCase(deletingCase, currentUser);
+          setDeletingCase(null);
+          await loadAll();
+        }}
+      />
     </AppShell>
   );
 }

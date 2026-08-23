@@ -23,6 +23,8 @@ import ClientProfileStep    from '@/components/case/ClientProfileStep';
 import CaseTypeBanner       from '@/components/case/views/CaseTypeBanner';
 import CaseAssignmentPicker from '@/components/case/CaseAssignmentPicker';
 import CaseNoteThread       from '@/components/case/CaseNoteThread';
+import DeleteCaseConfirmDialog from '@/components/case/DeleteCaseConfirmDialog';
+import { deleteCase } from '@/lib/caseDelete';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,7 +33,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ChevronLeft, CheckCircle, Circle, AlertTriangle, Clock,
   MessageSquare, User, Shield, BarChart3, ClipboardCheck,
-  FileText, Loader2
+  FileText, Loader2, Trash2
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -86,6 +88,7 @@ export default function CaseWorkspace() {
   const [flagReason, setFlagReason] = useState('');
   const [flagNote, setFlagNote] = useState('');
   const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
+  const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
 
   const FLAG_REASONS = ['Missing document', 'Awaiting client response', 'QC query', 'Other'];
 
@@ -335,6 +338,15 @@ export default function CaseWorkspace() {
                   title="Reopen this approved case for further work"
                 >
                   Reopen Case
+                </button>
+              )}
+              {hasPermission(userRole, 'deleteCase') && (
+                <button
+                  className="text-xs text-red-500 font-medium hover:text-red-700 flex items-center gap-1"
+                  onClick={() => setDeleteCaseOpen(true)}
+                  title="Permanently delete this case"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete Case
                 </button>
               )}
               {canOverrideStatus && (
@@ -724,6 +736,18 @@ export default function CaseWorkspace() {
           </div>
         </div>
       )}
+
+      {/* Delete Case Dialog */}
+      <DeleteCaseConfirmDialog
+        open={deleteCaseOpen}
+        kycCase={kycCase}
+        clientName={client?.full_name}
+        onClose={() => setDeleteCaseOpen(false)}
+        onConfirm={async () => {
+          await deleteCase(kycCase, currentUser);
+          navigate('/all-cases');
+        }}
+      />
 
       {/* Status Override Modal */}
       {statusOverrideOpen && (

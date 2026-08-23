@@ -27,6 +27,7 @@ export const PERMISSIONS = {
   exportData:           ['Manager', 'Director', 'Compliance Officer', 'Compliance Admin', 'Tenant Admin'],
   deleteAnyDocument:    ['Manager', 'Director', 'Compliance Admin', 'Tenant Admin'],
   deleteClient:         ['Compliance Admin', 'Tenant Admin'],
+  deleteCase:           ['Tenant Admin'],
   viewMIDashboard:      ['Manager', 'Director', 'Compliance Officer'],
   viewArchive:          ['Compliance Officer', 'Tenant Admin'],
   manageArchive:        ['Compliance Admin', 'Tenant Admin'],
