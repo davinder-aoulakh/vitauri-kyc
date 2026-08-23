@@ -34,6 +34,34 @@ function ScoreRing({ value, color, label, subLabel }) {
   );
 }
 
+// ── Apply OCR Button (with saving feedback) ───────────────────────────────────
+function ApplyOcrButton({ extractedData, clientId, onDone }) {
+  const [saving, setSaving] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+
+  async function handleApply() {
+    setSaving(true);
+    const updates = {};
+    if (extractedData.full_name)     updates.full_name     = extractedData.full_name;
+    if (extractedData.date_of_birth) updates.date_of_birth = extractedData.date_of_birth;
+    if (extractedData.nationality)   updates.nationality   = extractedData.nationality;
+    if (extractedData.id_number)     updates.id_number     = extractedData.id_number;
+    if (Object.keys(updates).length > 0) {
+      await base44.entities.Client.update(clientId, updates).catch(console.error);
+    }
+    setSaving(false);
+    setSaved(true);
+    setTimeout(onDone, 1200);
+  }
+
+  if (saved) return <span className="text-xs text-emerald-600 font-medium flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Saved to client profile</span>;
+  return (
+    <Button size="sm" className="h-7 text-xs" onClick={handleApply} disabled={saving}>
+      {saving ? <><Loader2 className="w-3 h-3 animate-spin mr-1" />Saving…</> : 'Apply to Client Profile'}
+    </Button>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function IdentityVerificationStep({ kycCase, client, currentUser, onStepComplete, onCaseChanged }) {
   const [loading, setLoading] = useState(true);
@@ -45,6 +73,8 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
   const [selectedItem, setSelectedItem] = useState(null);
   const [autoCompleted, setAutoCompleted] = useState(false);
   const [lastSynced, setLastSynced] = useState(null);
+  // Track if prompt has been shown/dismissed this session so it doesn't re-appear on re-load
+  const promptShownRef = React.useRef(false);
 
   useEffect(() => { loadResults(); }, [kycCase.id]);
 
@@ -69,7 +99,12 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
             (item.response_text && (() => { try { return JSON.parse(item.response_text)?.didit_session_id; } catch { return false; } })());
 
           if (!isIdvItem) continue;
-          const hasTerminalStatus = item.idv_status && item.idv_status !== 'Pending';
+
+          // Check terminal status — also look inside response_text JSON (legacy storage)
+          let hasTerminalStatus = item.idv_status && item.idv_status !== 'Pending';
+          if (!hasTerminalStatus && item.response_text) {
+            try { const p = JSON.parse(item.response_text); hasTerminalStatus = p?.idv_status && p.idv_status !== 'Pending'; } catch {}
+          }
           const hasSessionOrResponse = item.didit_session_id || item.response_text;
 
           if (!hasTerminalStatus && hasSessionOrResponse) {
@@ -172,11 +207,12 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
         }
       }
 
-      // Prompt to apply OCR data to client profile
-      if (best?.idv_status === 'Pass') {
+      // Prompt to apply OCR data to client profile — only once per page load
+      if (best?.idv_status === 'Pass' && !promptShownRef.current) {
         const extractedName = [best.idv_extracted_first_name, best.idv_extracted_last_name].filter(Boolean).join(' ');
         const hasExtracted = extractedName || best.idv_extracted_dob || best.idv_extracted_nationality;
         if (hasExtracted) {
+          promptShownRef.current = true;
           setExtractedData({
             full_name:     extractedName || null,
             date_of_birth: best.idv_extracted_dob || null,
@@ -240,20 +276,12 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
             {extractedData.nationality   && <div>Nationality: <span className="text-foreground font-medium">{extractedData.nationality}</span></div>}
             {extractedData.id_number     && <div>Document #: <span className="font-mono text-foreground">{extractedData.id_number}</span></div>}
           </div>
-          <div className="flex gap-2">
-            <Button size="sm" className="h-7 text-xs" onClick={async () => {
-              const updates = {};
-              if (extractedData.full_name)     updates.full_name     = extractedData.full_name;
-              if (extractedData.date_of_birth) updates.date_of_birth = extractedData.date_of_birth;
-              if (extractedData.nationality)   updates.nationality   = extractedData.nationality;
-              if (extractedData.id_number)     updates.id_number     = extractedData.id_number;
-              if (Object.keys(updates).length > 0) {
-                await base44.entities.Client.update(kycCase.client_id, updates).catch(console.error);
-              }
-              setShowExtractedPrompt(false);
-            }}>
-              Apply to Client Profile
-            </Button>
+          <div className="flex gap-2 items-center">
+            <ApplyOcrButton
+              extractedData={extractedData}
+              clientId={kycCase.client_id}
+              onDone={() => setShowExtractedPrompt(false)}
+            />
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowExtractedPrompt(false)}>
               Dismiss
             </Button>
