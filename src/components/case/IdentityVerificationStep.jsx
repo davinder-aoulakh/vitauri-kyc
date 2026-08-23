@@ -64,7 +64,9 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
       for (const req of all) {
         for (const item of (req.items || [])) {
           const isIdvItem = item.field_type === 'id_verification' || item.didit_session_id ||
-            (item.item_type === 'data_point' && (item.label || '').toLowerCase().match(/id[&\s]?v|identity\s*verif|idv/i));
+            (item.item_type === 'data_point' && (item.label || '').toLowerCase().match(/id[&\s]?v|identity\s*verif|idv/i)) ||
+            // Legacy: response_text is a JSON blob containing a didit_session_id
+            (item.response_text && (() => { try { return JSON.parse(item.response_text)?.didit_session_id; } catch { return false; } })());
 
           if (!isIdvItem) continue;
           const hasTerminalStatus = item.idv_status && item.idv_status !== 'Pending';
@@ -101,11 +103,12 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
       const items = refreshedAll
         .flatMap(req =>
           (req.items || [])
-            .filter(item =>
-              (item.field_type === 'id_verification' || item.didit_session_id ||
-               (item.item_type === 'data_point' && (item.label || '').toLowerCase().match(/id[&\s]?v|identity\s*verif|idv/i))) &&
-              item.idv_status && item.idv_status !== 'Pending'
-            )
+            .filter(item => {
+              const isIdv = item.field_type === 'id_verification' || item.didit_session_id ||
+                (item.item_type === 'data_point' && (item.label || '').toLowerCase().match(/id[&\s]?v|identity\s*verif|idv/i)) ||
+                (item.response_text && (() => { try { return JSON.parse(item.response_text)?.didit_session_id; } catch { return false; } })());
+              return isIdv && item.idv_status && item.idv_status !== 'Pending';
+            })
             .map(item => ({ ...item, _req_id: req.id }))
         )
         .sort((a, b) => {
