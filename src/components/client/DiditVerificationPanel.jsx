@@ -99,7 +99,8 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
         a.click();
         document.body.removeChild(a);
       } else {
-        alert(`Didit PDF failed: ${d?.error || 'Unknown error'}\n\nSession ID passed: ${sessionId}\nVendor data: ${data?.vendor_data || 'n/a'}`);
+        console.error('Didit PDF failed:', d?.error, 'session:', sessionId);
+        alert(`PDF generation failed: ${d?.error || 'Unknown error'}`);
       }
     } catch (e) {
       console.error('PDF invoke error:', e);
