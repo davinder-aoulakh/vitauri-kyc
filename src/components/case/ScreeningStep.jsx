@@ -113,7 +113,28 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
 
           if (!item.idv_status || item.idv_status === 'Pending') continue;
           if (item.idv_aml_hits != null) {
-            if (!amlSummary || new Date(item.idv_checked_at) > new Date(amlSummary.synced_at)) {
+            const isBetter = !amlSummary || new Date(item.idv_checked_at) > new Date(amlSummary.synced_at);
+            if (isBetter) {
+              // If we have hits but no screenings detail, queue a re-sync to fetch from Didit
+              if (item.idv_aml_hits > 0 && !item.idv_aml_screenings) {
+                const sessionId = item.didit_session_id;
+                const outreachId = refreshedAll.find(r => (r.items || []).some(i => i === rawItem))?.id ||
+                                   refreshedCaseOutreaches.find(r => (r.items || []).some(i => i.item_id === rawItem.item_id))?.id;
+                if (sessionId && outreachId) {
+                  try {
+                    await base44.functions.invoke('getDiditSessionResult', {
+                      session_id:  sessionId,
+                      outreach_id: outreachId,
+                      item_id:     rawItem.item_id,
+                      tenant_id:   tenantId,
+                    });
+                    // Re-fetch to get updated screenings
+                    const reloaded = await base44.entities.OutreachRequest.filter({ id: outreachId });
+                    const reloadedItem = (reloaded?.[0]?.items || []).find(i => i.item_id === rawItem.item_id);
+                    if (reloadedItem?.idv_aml_screenings) item = { ...item, idv_aml_screenings: reloadedItem.idv_aml_screenings };
+                  } catch {}
+                }
+              }
               amlSummary = {
                 status:     item.idv_aml_status || (item.idv_aml_hits === 0 ? 'Clear' : 'Flagged'),
                 total_hits: item.idv_aml_hits,
