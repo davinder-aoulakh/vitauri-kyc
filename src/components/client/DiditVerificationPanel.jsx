@@ -82,6 +82,11 @@ export default function DiditVerificationPanel({ sessionId, tenantId, diditApiKe
   }
 
   async function downloadPdf() {
+    console.log('downloadPdf called, sessionId:', sessionId, 'tenantId:', tenantId, 'hasApiKey:', !!diditApiKey);
+    if (!sessionId) {
+      alert('No session ID available — cannot generate PDF.');
+      return;
+    }
     setPdfLoading(true);
     try {
       const res = await base44.functions.invoke('getDiditSessionDetails', {
