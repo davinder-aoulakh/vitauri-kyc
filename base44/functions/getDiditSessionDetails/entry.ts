@@ -24,12 +24,13 @@ Deno.serve(async (req) => {
     // Session must be Approved, Declined, or In Review — otherwise 403
     if (action === 'generate_pdf') {
       try {
-        const pdfResp = await fetch(
-          `https://verification.didit.me/v3/session/${session_id}/generate-pdf/`,
-          { headers: { 'x-api-key': tenant.didit_api_key } }
-        );
+        const pdfUrl = `https://verification.didit.me/v3/session/${session_id}/generate-pdf/`;
+        console.log('PDF URL:', pdfUrl);
+        const pdfResp = await fetch(pdfUrl, { headers: { 'x-api-key': tenant.didit_api_key } });
+        console.log('PDF response status:', pdfResp.status, 'content-type:', pdfResp.headers.get('content-type'));
         if (!pdfResp.ok) {
           const errText = await pdfResp.text().catch(() => '');
+          console.log('PDF error body:', errText);
           return Response.json({ error: `PDF generation failed: ${pdfResp.status}${errText ? ' — ' + errText : ''}` });
         }
 

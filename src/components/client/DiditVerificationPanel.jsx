@@ -81,15 +81,16 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
   }
 
   async function downloadPdf() {
+    if (!data) return;
     setPdfLoading(true);
     try {
+      // Try Didit's native PDF first
       const res = await base44.functions.invoke('getDiditSessionDetails', {
         session_id: sessionId,
         tenant_id:  tenantId,
         action:     'generate_pdf',
       });
       const d = res?.data || res;
-      if (d?.error) { alert('PDF failed: ' + d.error); return; }
       if (d?.pdf_data_url) {
         const a = document.createElement('a');
         a.href     = d.pdf_data_url;
@@ -97,12 +98,121 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        return;
       }
+      // Fallback: generate client-side PDF from loaded session data
+      await generateClientSidePdf();
     } catch (e) {
-      alert('Could not generate PDF: ' + e.message);
+      // Fallback on any error
+      await generateClientSidePdf();
     } finally {
       setPdfLoading(false);
     }
+  }
+
+  async function generateClientSidePdf() {
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const M = 15; // margin
+    let y = 20;
+
+    const addText = (text, size = 10, bold = false, color = [30, 30, 30]) => {
+      if (y > 275) { doc.addPage(); y = 20; }
+      doc.setFontSize(size);
+      doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      doc.setTextColor(...color);
+      const lines = doc.splitTextToSize(String(text ?? ''), 180);
+      doc.text(lines, M, y);
+      y += lines.length * (size * 0.45) + 2;
+    };
+
+    const addSection = (title) => {
+      if (y > 260) { doc.addPage(); y = 20; }
+      y += 3;
+      doc.setFillColor(230, 237, 255);
+      doc.rect(M, y - 4, 180, 8, 'F');
+      addText(title, 9, true, [30, 60, 130]);
+      y += 1;
+    };
+
+    const addRow = (label, value) => {
+      if (!value) return;
+      if (y > 275) { doc.addPage(); y = 20; }
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(90, 90, 90);
+      doc.text(label + ':', M, y);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 30, 30);
+      const lines = doc.splitTextToSize(String(value), 120);
+      doc.text(lines, M + 55, y);
+      y += lines.length * 5 + 1;
+    };
+
+    // Header
+    addText('Didit Identity Verification Report', 16, true, [15, 40, 110]);
+    addText(`Generated: ${new Date().toLocaleString('en-AU')}`, 8, false, [110, 110, 110]);
+    addText(`Session ID: ${sessionId}`, 8, false, [110, 110, 110]);
+    addText(`Client: ${clientName}`, 8, false, [110, 110, 110]);
+    y += 4;
+
+    // Overall result banner
+    const passed = data.status === 'Approved';
+    doc.setFillColor(passed ? 220 : 255, passed ? 250 : 230, passed ? 230 : 220);
+    doc.rect(M, y - 2, 180, 10, 'F');
+    addText(`Overall Result: ${data.status || '—'}   |   Face Match: ${data.face_score != null ? Math.round(data.face_score) + '%' : '—'}   |   Liveness: ${data.liveness_score != null ? Math.round(data.liveness_score) + '%' : '—'}   |   AML Hits: ${data.aml_total_hits ?? 0}`,
+      10, true, passed ? [20, 120, 60] : [180, 30, 30]);
+    y += 4;
+
+    // Personal Data
+    addSection('Personal Data');
+    addRow('Full Name',       data.full_name || [data.first_name, data.last_name].filter(Boolean).join(' '));
+    addRow('Date of Birth',   data.date_of_birth);
+    addRow('Nationality',     formatNationality(data.nationality));
+    addRow('Gender',          data.gender);
+    addRow('Document Type',   data.document_type);
+    addRow('Document Number', data.document_number);
+    addRow('Personal Number', data.personal_number);
+    addRow('Expiry Date',     data.expiration_date);
+    addRow('Issue Date',      data.date_of_issue);
+    addRow('Issuing State',   data.issuing_state_name || data.issuing_state);
+    addRow('Address',         data.address);
+
+    // Biometric
+    addSection('Biometric Verification');
+    addRow('Face Match Score',  data.face_score != null ? Math.round(data.face_score) + '%' : '—');
+    addRow('Face Match Status', data.face_status);
+    addRow('Liveness Score',    data.liveness_score != null ? Math.round(data.liveness_score) + '%' : '—');
+    addRow('Liveness Status',   data.liveness_status);
+    if (data.front_quality != null) addRow('Front Image Quality', Math.round(data.front_quality) + '%');
+    if (data.back_quality  != null) addRow('Back Image Quality',  Math.round(data.back_quality)  + '%');
+
+    // AML
+    addSection('AML Screening');
+    addRow('AML Status',   data.aml_status || '—');
+    addRow('Total Hits',   String(data.aml_total_hits ?? 0));
+    if (data.aml_hits?.length > 0) {
+      for (const hit of data.aml_hits) {
+        y += 2;
+        addText(`• ${hit.entity_name || hit.name || 'Unknown Entity'}`, 9, true, [160, 80, 0]);
+        if (hit.match_type) addText(`  Match Type: ${hit.match_type}`, 8, false, [100, 100, 100]);
+        if (hit.categories?.length) addText(`  Categories: ${Array.isArray(hit.categories) ? hit.categories.join(', ') : hit.categories}`, 8, false, [100, 100, 100]);
+        if (hit.datasets?.length) addText(`  Lists: ${Array.isArray(hit.datasets) ? hit.datasets.join(', ') : hit.datasets}`, 8, false, [100, 100, 100]);
+      }
+    }
+
+    // Warnings
+    if (data.warnings?.length > 0) {
+      addSection('Warnings / Issues');
+      for (const w of data.warnings) {
+        addText(`• ${w.risk || '—'}${w.short_description ? ': ' + w.short_description : ''}`, 9, false, [160, 80, 0]);
+      }
+    }
+
+    // Footer
+    y += 6;
+    doc.setFontSize(7); doc.setTextColor(150, 150, 150);
+    doc.text('Verified by Didit (didit.me) · Generated from Vitauri KYC Platform', M, y);
+
+    doc.save(`Didit_Report_${clientName?.replace(/\s+/g, '_') || sessionId.substring(0, 8)}.pdf`);
   }
 
   useEffect(() => { if (sessionId && tenantId) load(); }, [sessionId, tenantId]);
