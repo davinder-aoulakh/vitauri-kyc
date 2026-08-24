@@ -579,7 +579,9 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                             <FileText className={cn('w-3.5 h-3.5 flex-shrink-0', item.status === 'Verified' ? 'text-emerald-500' : itemOverdue ? 'text-amber-500' : 'text-muted-foreground')} />
                             <div className="min-w-0">
                               <div className="text-xs text-foreground truncate">{item.label}</div>
-                              {item.response_text && item.field_type !== 'id_verification' && <div className="text-xs text-muted-foreground truncate">{item.response_text}</div>}
+                              {item.response_text && item.field_type !== 'id_verification' && !item.response_text.trim().startsWith('{') && (
+                                <div className="text-xs text-muted-foreground truncate">{item.response_text}</div>
+                              )}
                               {item.file_url && item.field_type !== 'id_verification' && (
                                 <button
                                   className="text-xs text-primary hover:underline text-left"
@@ -588,8 +590,8 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                                   View uploaded file
                                 </button>
                               )}
-                              {item.field_type === 'id_verification' && (
-                                <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {(item.field_type === 'id_verification' || (item.response_text && item.response_text.trim().startsWith('{'))) && (
+                                 <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   {item.idv_status ? (
                                     <>
                                       <span className={cn(
@@ -600,9 +602,14 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                                           ? 'bg-red-50 text-red-700 border-red-200'
                                           : 'bg-amber-50 text-amber-700 border-amber-200'
                                       )}>
-                                        🪪 IDV: {item.idv_status}
-                                        {item.idv_similarity_score != null && ` · ${item.idv_similarity_score}%`}
+                                        🪪 {item.idv_status}
                                       </span>
+                                      {item.idv_similarity_score != null && (
+                                        <span className="text-xs text-muted-foreground">Face {item.idv_similarity_score}%</span>
+                                      )}
+                                      {item.idv_liveness_score != null && (
+                                        <span className="text-xs text-muted-foreground">· Liveness {item.idv_liveness_score}%</span>
+                                      )}
                                       <button
                                         className="text-xs text-primary underline hover:no-underline"
                                         onClick={() => setIdvDetailItem(item)}
