@@ -115,29 +115,54 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
         country,
       };
 
-      // Use prop if already loaded, otherwise fetch directly from outreach requests
+      // Use prop if already loaded (from ScreeningStep), otherwise fetch from outreach + live Didit session
       let amlData = screeningData;
       if (!amlData && kycCase?.id) {
         try {
+          // Find IDV item with a didit_session_id from response_text
           const outreaches = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
+          let sessionId = null;
+          let baseAml = null;
+
           for (const req of (outreaches || [])) {
             for (const item of (req.items || [])) {
-              if (!item.idv_aml_hits && item.idv_aml_hits !== 0) continue;
-              // Found IDV item with AML data
-              let screenings = item.idv_aml_screenings || null;
-              amlData = {
-                status: item.idv_aml_status || (item.idv_aml_hits === 0 ? 'Clear' : 'Flagged'),
-                total_hits: item.idv_aml_hits,
-                screenings,
-                warnings: item.idv_aml_warnings || [],
-                ongoing_monitoring: item.idv_aml_ongoing_monitoring || false,
-              };
-              break;
+              if (!item.response_text) continue;
+              let parsed = null;
+              try { parsed = JSON.parse(item.response_text); } catch { continue; }
+              if (parsed?.didit_session_id && parsed?.idv_aml_hits != null) {
+                sessionId = parsed.didit_session_id;
+                baseAml = {
+                  total_hits: parsed.idv_aml_hits,
+                  status: parsed.idv_aml_hits === 0 ? 'Clear' : 'Flagged',
+                  warnings: parsed.idv_aml_warnings || [],
+                  ongoing_monitoring: parsed.idv_aml_ongoing_monitoring || false,
+                };
+                break;
+              }
             }
-            if (amlData) break;
+            if (sessionId) break;
           }
+
+          // If we have hits, fetch full hit details from Didit live session
+          if (sessionId && baseAml?.total_hits > 0) {
+            try {
+              const res = await base44.functions.invoke('getDiditSessionDetails', {
+                session_id: sessionId,
+                tenant_id: kycCase.tenant_id,
+                didit_api_key: null,
+                action: 'details',
+              });
+              const data = res?.data ?? res;
+              if (data?.aml_hits) {
+                baseAml.screenings = [{ hits: data.aml_hits }];
+              }
+            } catch (e) {
+              console.warn('AiAssistantPanel: failed to fetch Didit session details', e);
+            }
+          }
+          if (baseAml) amlData = baseAml;
         } catch (e) {
-          console.warn('AiAssistantPanel: failed to fetch AML data directly', e);
+          console.warn('AiAssistantPanel: failed to fetch AML data', e);
         }
       }
 
@@ -153,6 +178,7 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
             risk_score: h.risk_score,
             review_status: h.review_status || 'Unreviewed',
             datasets: h.datasets || h.categories || [],
+            sources: h.sources || [],
             properties: h.properties || {},
           })),
           screened_data: amlData.screenings?.[0]?.screened_data || {},

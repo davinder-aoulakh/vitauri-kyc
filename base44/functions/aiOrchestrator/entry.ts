@@ -87,7 +87,25 @@ async function buildContext(base44, agentType, payload, tenantId) {
       const amlLine = `AML Status: ${aml.status || 'Unknown'} | Total Hits: ${aml.total_hits ?? 0} | Ongoing Monitoring: ${aml.ongoing_monitoring ? 'Yes' : 'No'}`;
       const warnings = (aml.warnings || []).map(w => w.risk || w.code || String(w)).join(', ');
       const hitsDetail = hits.length > 0
-        ? hits.map((h, i) => `Hit ${i+1}: "${h.name}" | Match: ${h.match_score ?? 'N/A'}% | Risk: ${h.risk_score ?? 'N/A'}% | Lists: ${(h.datasets || h.categories || []).join(', ') || 'Unknown'} | Status: ${h.review_status || 'Unreviewed'}`).join('\n')
+        ? hits.map((h, i) => {
+            const lists = (h.datasets || h.categories || []).join(', ') || 'Unknown';
+            const sources = (h.sources || []).map((s: any) => s.name || String(s)).join(', ');
+            const pepMatches = (h.pep_matches || []).map((p: any) => p.name || p.category || String(p)).join(', ');
+            const sanctionMatches = (h.sanction_matches || h.warning_matches || []).map((s: any) => s.name || s.category || String(s)).join(', ');
+            const adverseMedia = h.adverse_media_matches?.length
+              ? `${h.adverse_media_matches.length} adverse media match(es)`
+              : h.adverse_media_details ? 'adverse media present' : '';
+            return [
+              `Hit ${i+1}: "${h.name || h.caption}"`,
+              `  Match: ${h.match_score ?? 'N/A'}% | Risk: ${h.risk_score ?? 'N/A'}%`,
+              `  Lists/Datasets: ${lists}`,
+              sources ? `  Sources: ${sources}` : '',
+              pepMatches ? `  PEP matches: ${pepMatches}` : '',
+              sanctionMatches ? `  Sanction matches: ${sanctionMatches}` : '',
+              adverseMedia ? `  Adverse media: ${adverseMedia}` : '',
+              `  Analyst status: ${h.review_status || 'Unreviewed'}`,
+            ].filter(Boolean).join('\n');
+          }).join('\n\n')
         : 'No individual hits returned.';
       const customInstructions = payload.instructions || '';
       return `${subjectLine}
