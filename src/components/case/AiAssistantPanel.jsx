@@ -4,6 +4,7 @@
  * Supports: Generate, Edit, Accept, Override (with justification), Reject, Regenerate.
  */
 import React, { useState, useEffect, useRef } from 'react';
+import { base44 } from '@/api/base44Client';
 import { useAiOrchestrator } from '@/hooks/useAiOrchestrator';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -97,7 +98,7 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
       payload.client = client || {};
       payload.idvData = idvData || null;
     }
-    // For step 3, enrich with live Didit AML data
+    // For step 3, fetch AML data directly and enrich payload
     if (activeStep === 3) {
       const clientName = client?.full_name || 'Unknown';
       const clientType = client?.client_type === 'NP' ? 'Natural Person (individual)' : client?.client_type === 'ORG' ? 'Organisation (legal entity)' : 'Unknown';
@@ -114,37 +115,63 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
         country,
       };
 
-      if (screeningData) {
-        const hits = screeningData.screenings?.[0]?.hits || [];
+      // Use prop if already loaded, otherwise fetch directly from outreach requests
+      let amlData = screeningData;
+      if (!amlData && kycCase?.id) {
+        try {
+          const outreaches = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
+          for (const req of (outreaches || [])) {
+            for (const item of (req.items || [])) {
+              if (!item.idv_aml_hits && item.idv_aml_hits !== 0) continue;
+              // Found IDV item with AML data
+              let screenings = item.idv_aml_screenings || null;
+              amlData = {
+                status: item.idv_aml_status || (item.idv_aml_hits === 0 ? 'Clear' : 'Flagged'),
+                total_hits: item.idv_aml_hits,
+                screenings,
+                warnings: item.idv_aml_warnings || [],
+                ongoing_monitoring: item.idv_aml_ongoing_monitoring || false,
+              };
+              break;
+            }
+            if (amlData) break;
+          }
+        } catch (e) {
+          console.warn('AiAssistantPanel: failed to fetch AML data directly', e);
+        }
+      }
+
+      if (amlData) {
+        const hits = amlData.screenings?.[0]?.hits || amlData.hits || [];
         payload.hitData = {
-          total_hits: screeningData.total_hits,
-          status: screeningData.status,
-          warnings: screeningData.warnings || [],
+          total_hits: amlData.total_hits,
+          status: amlData.status,
+          warnings: amlData.warnings || [],
           hits: hits.map(h => ({
             name: h.caption || h.name,
             match_score: h.match_score ?? (h.score != null ? Math.round(h.score * 100) : null),
             risk_score: h.risk_score,
             review_status: h.review_status || 'Unreviewed',
-            datasets: h.datasets || [],
+            datasets: h.datasets || h.categories || [],
             properties: h.properties || {},
           })),
-          screened_data: screeningData.screenings?.[0]?.screened_data || {},
-          ongoing_monitoring: screeningData.ongoing_monitoring,
+          screened_data: amlData.screenings?.[0]?.screened_data || {},
+          ongoing_monitoring: amlData.ongoing_monitoring,
         };
       } else {
-        payload.hitData = { total_hits: 0, hits: [], status: 'No screening data loaded yet' };
+        payload.hitData = { total_hits: 0, hits: [], status: 'No AML screening data available yet' };
       }
 
       payload.instructions = `You are a KYC compliance analyst. The subject being screened is: ${clientName} (${clientType}, ${country}).
 
 Review the AML screening results and provide a structured triage analysis:
-1) Confirm the subject's identity type (${clientType}) and note any relevant profile details.
-2) Summarise each screening hit (name on list, which sanctions/PEP lists, match score).
-3) For each hit, recommend a decision: False Positive / Possible Match / Confirmed Match — with a brief justification comparing the hit details to the subject's known profile.
-4) Highlight any high-risk findings (confirmed sanctions, PEP status, adverse media).
-5) Recommend overall next steps for the analyst.
+1) State the subject's identity type and key profile details.
+2) Summarise each screening hit: name on list, which sanctions/PEP/adverse media lists, match score, risk score.
+3) For each hit, recommend: False Positive / Possible Match / Confirmed Match — with justification.
+4) Highlight any high-risk findings.
+5) Recommend overall next steps.
 
-Keep the output concise and professional. Do not describe the subject as an "entity" — use the correct type (individual/organisation).`;
+Be specific about the actual hits found. Do not say data is insufficient if hits are present above.`;
     }
     await invoke(config.agentType, payload);
   }
