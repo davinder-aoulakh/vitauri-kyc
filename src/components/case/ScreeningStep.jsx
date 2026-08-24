@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Shield, AlertTriangle, CheckCircle, Loader2, RefreshCw, ExternalLink, ChevronDown, ChevronUp, Eye, Radio, ChevronRight } from 'lucide-react';
+import { Shield, AlertTriangle, CheckCircle, Loader2, RefreshCw, ExternalLink, ChevronDown, ChevronUp, Radio } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { addDays, format } from 'date-fns';
 import HitsTable from '@/components/case/screening/HitsTable';
 import HitDetailPanel from '@/components/case/screening/HitDetailPanel';
+import AmlHitSlidePanel from '@/components/case/screening/AmlHitSlidePanel';
 
 export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, client, onCaseChanged }) {
   const navigate = useNavigate();
@@ -22,7 +23,8 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
   const [sourceFilter, setSourceFilter] = useState('all');
   const [diditAmlSummary, setDiditAmlSummary] = useState(null); // { status, total_hits, screenings, warnings, thresholds, ongoing_monitoring, synced_at }
   const [showThresholds, setShowThresholds] = useState(false);
-  const [expandedHitIdx, setExpandedHitIdx] = useState(null);
+  const [expandedHitIdx, setExpandedHitIdx] = useState(null); // hitKey of slide-panel open hit
+  const [loadingHitDetails, setLoadingHitDetails] = useState(false);
   const [updatingHitId, setUpdatingHitId] = useState(null); // hit.id being updated in Didit
   const [openStatusDropdown, setOpenStatusDropdown] = useState(null); // hitKey with open dropdown
 
@@ -250,11 +252,12 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
     }
   }
 
-  // Fetch full hit details (including adverse media) from Didit when expanding a row
-  async function fetchHitDetails(hitIdx) {
-    if (expandedHitIdx === hitIdx) { setExpandedHitIdx(null); return; }
-    setExpandedHitIdx(hitIdx);
+  // Open the slide panel for a hit and fetch full details (including adverse media) from Didit
+  async function fetchHitDetails(hitKey) {
+    if (expandedHitIdx === hitKey) { setExpandedHitIdx(null); return; }
+    setExpandedHitIdx(hitKey);
     if (!diditAmlSummary?.session_id) return;
+    setLoadingHitDetails(true);
     try {
       const res = await base44.functions.invoke('getDiditSessionDetails', {
         session_id: diditAmlSummary.session_id,
@@ -263,7 +266,6 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
       });
       const data = res?.data ?? res;
       if (data?.aml_hits) {
-        // Merge full hit details (including adverse_media) into our screenings state
         setDiditAmlSummary(prev => {
           if (!prev?.screenings) return prev;
           return {
@@ -281,6 +283,8 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
       }
     } catch (err) {
       console.error('Failed to fetch hit details:', err);
+    } finally {
+      setLoadingHitDetails(false);
     }
   }
 
@@ -567,34 +571,36 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                       </thead>
                       <tbody className="divide-y divide-border bg-card">
                         {allHits.map((hit, idx) => {
-                          const hitKey = hit.id || String(idx);
-                          const matchScore = hit.match_score ?? (hit.score != null ? Math.round(hit.score * 100) : null);
-                          const riskScore  = hit.risk_score ?? null;
-                          const reviewStatus = hit.review_status || 'Unreviewed';
-                          const isFalsePositive = reviewStatus === 'False Positive';
-                          const isExpanded = expandedHitIdx === hitKey;
-                          const isUpdating = updatingHitId === hitKey;
-                          const adverseMedia = hit.adverse_media || hit.media_analysis;
-                          const hasDetail = true; // always show expand — hits always have some detail to show
+                           const hitKey = hit.id || String(idx);
+                           const matchScore = hit.match_score ?? (hit.score != null ? Math.round(hit.score * 100) : null);
+                           const riskScore  = hit.risk_score ?? null;
+                           const reviewStatus = hit.review_status || 'Unreviewed';
+                           const isExpanded = expandedHitIdx === hitKey;
+                           const isUpdating = updatingHitId === hitKey;
 
-                          const REVIEW_OPTIONS = [
-                            { value: 'Unreviewed',      label: 'UNREVIEWED',      style: 'bg-blue-100 text-blue-700' },
-                            { value: 'Confirmed Match', label: 'CONFIRMED MATCH', style: 'bg-red-100 text-red-700' },
-                            { value: 'False Positive',  label: 'FALSE POSITIVE',  style: 'bg-slate-100 text-slate-600' },
-                            { value: 'Inconclusive',    label: 'INCONCLUSIVE',    style: 'bg-amber-100 text-amber-700' },
-                          ];
-                          const currentOption = REVIEW_OPTIONS.find(o => o.value === reviewStatus) || REVIEW_OPTIONS[0];
+                           const REVIEW_OPTIONS = [
+                             { value: 'Unreviewed',      label: 'UNREVIEWED',      style: 'bg-blue-100 text-blue-700' },
+                             { value: 'Confirmed Match', label: 'CONFIRMED MATCH', style: 'bg-red-100 text-red-700' },
+                             { value: 'False Positive',  label: 'FALSE POSITIVE',  style: 'bg-slate-100 text-slate-600' },
+                             { value: 'Inconclusive',    label: 'INCONCLUSIVE',    style: 'bg-amber-100 text-amber-700' },
+                           ];
+                           const currentOption = REVIEW_OPTIONS.find(o => o.value === reviewStatus) || REVIEW_OPTIONS[0];
 
                           return (
                             <React.Fragment key={hitKey}>
                               <tr className={cn('hover:bg-muted/20', isExpanded && 'bg-muted/10')}>
-                                {/* Expand toggle */}
+                                {/* Open slide panel */}
                                 <td className="px-2 py-2.5">
                                   <button
                                     onClick={() => fetchHitDetails(hitKey)}
-                                    className="text-muted-foreground hover:text-foreground"
+                                    className={cn(
+                                      'text-xs px-2 py-0.5 rounded border font-medium transition-colors',
+                                      isExpanded
+                                        ? 'bg-primary text-primary-foreground border-primary'
+                                        : 'border-border text-muted-foreground hover:border-primary/60 hover:text-primary'
+                                    )}
                                   >
-                                    <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', isExpanded && 'rotate-90')} />
+                                    View
                                   </button>
                                 </td>
                                 <td className="px-3 py-2.5 font-medium text-foreground">
@@ -712,129 +718,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                                 </td>
                               </tr>
 
-                              {/* Expanded detail row — adverse media, sources, raw hit data */}
-                              {isExpanded && (
-                                <tr className="bg-muted/5 border-b border-border">
-                                  <td colSpan={8} className="px-4 py-3">
-                                    {adverseMedia && (
-                                      <div className="space-y-3">
-                                        {/* Media Analysis Summary */}
-                                        <div className="flex items-center gap-4 text-xs">
-                                          {adverseMedia.sentiment && (
-                                            <div>
-                                              <span className="text-muted-foreground">Sentiment: </span>
-                                              <span className={cn('font-semibold px-2 py-0.5 rounded-full text-xs',
-                                                adverseMedia.sentiment_score < -1 ? 'bg-red-100 text-red-700' :
-                                                adverseMedia.sentiment_score < 0 ? 'bg-amber-100 text-amber-700' :
-                                                'bg-slate-100 text-slate-600'
-                                              )}>
-                                                {adverseMedia.sentiment}
-                                              </span>
-                                            </div>
-                                          )}
-                                          {adverseMedia.sentiment_score != null && (
-                                            <div><span className="text-muted-foreground">Score: </span><span className="font-semibold">{adverseMedia.sentiment_score}</span></div>
-                                          )}
-                                          {adverseMedia.entity_type && (
-                                            <div><span className="text-muted-foreground">Entity Type: </span><span className="font-semibold">{adverseMedia.entity_type}</span></div>
-                                          )}
-                                        </div>
-
-                                        {/* Adverse Keywords */}
-                                        {adverseMedia.adverse_keywords?.length > 0 && (
-                                          <div>
-                                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Adverse Keywords</div>
-                                            <div className="flex flex-wrap gap-1.5">
-                                              {adverseMedia.adverse_keywords.map((kw, ki) => (
-                                                <span key={ki} className="bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded-full text-xs font-medium">
-                                                  {typeof kw === 'string' ? kw : `${kw.keyword || kw.word} (${kw.count || 1})`}
-                                                </span>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        {/* Media Articles */}
-                                        {adverseMedia.articles?.length > 0 && (
-                                          <div>
-                                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
-                                              Media Articles ({adverseMedia.articles.length})
-                                            </div>
-                                            <div className="space-y-2">
-                                              {adverseMedia.articles.slice(0, 5).map((article, ai) => (
-                                                <div key={ai} className="bg-card border border-border rounded-lg px-3 py-2.5 flex gap-3">
-                                                  {article.thumbnail && (
-                                                    <img src={article.thumbnail} alt="" className="w-12 h-10 rounded object-cover flex-shrink-0" />
-                                                  )}
-                                                  <div className="min-w-0">
-                                                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                                                      {article.sentiment && (
-                                                        <span className={cn('text-xs px-1.5 py-0 rounded font-medium',
-                                                          article.sentiment?.toLowerCase().includes('highly') ? 'bg-red-100 text-red-700' :
-                                                          article.sentiment?.toLowerCase().includes('negative') ? 'bg-orange-100 text-orange-700' :
-                                                          'bg-slate-100 text-slate-600'
-                                                        )}>
-                                                          {article.sentiment?.toUpperCase()}
-                                                        </span>
-                                                      )}
-                                                      {article.country && (
-                                                        <span className="text-xs text-muted-foreground">🌍 {article.country}</span>
-                                                      )}
-                                                    </div>
-                                                    {article.url ? (
-                                                      <a href={article.url} target="_blank" rel="noopener noreferrer"
-                                                        className="text-xs font-medium text-primary hover:underline line-clamp-2">
-                                                        {article.title || article.url}
-                                                      </a>
-                                                    ) : (
-                                                      <div className="text-xs font-medium">{article.title}</div>
-                                                    )}
-                                                    {article.snippet && (
-                                                      <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{article.snippet}</div>
-                                                    )}
-                                                    {article.date && (
-                                                      <div className="text-xs text-muted-foreground/60 mt-0.5">{article.date}</div>
-                                                    )}
-                                                  </div>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {/* Sources */}
-                                    {hit.sources?.length > 0 && (
-                                      <div className="mt-2">
-                                        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Sources</div>
-                                        <div className="flex flex-wrap gap-2">
-                                          {hit.sources.map((src, si) => (
-                                            <span key={si} className="text-xs bg-muted px-2 py-0.5 rounded border border-border">
-                                              {typeof src === 'string' ? src : (src.name || src.source || JSON.stringify(src))}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Fallback: show all available hit properties when no adverse media or sources */}
-                                    {!adverseMedia && !hit.sources?.length && (
-                                      <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-xs">
-                                        {hit.gender && <div><span className="text-muted-foreground">Gender: </span><span className="font-medium">{hit.gender}</span></div>}
-                                        {hit.nationality && <div><span className="text-muted-foreground">Nationality: </span><span className="font-medium">{hit.nationality}</span></div>}
-                                        {hit.pep_level && <div><span className="text-muted-foreground">PEP Level: </span><span className="font-medium">{hit.pep_level}</span></div>}
-                                        {hit.last_updated && <div><span className="text-muted-foreground">Last Updated: </span><span className="font-medium">{hit.last_updated}</span></div>}
-                                        {hit.description && <div className="col-span-3"><span className="text-muted-foreground">Description: </span><span className="font-medium">{hit.description}</span></div>}
-                                        {!hit.gender && !hit.nationality && !hit.pep_level && !hit.description && (
-                                          <div className="col-span-3 text-muted-foreground italic">No additional details available for this hit.</div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </td>
-                                </tr>
-                              )}
-                            </React.Fragment>
+                              </React.Fragment>
                           );
                         })}
                       </tbody>
@@ -1000,7 +884,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
         </Tabs>
       )}
 
-      {/* Slide-over Hit Detail Panel */}
+      {/* Slide-over Hit Detail Panel (ScreeningHit records) */}
       {selectedHit && (
         <>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setSelectedHit(null)} />
@@ -1012,6 +896,24 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
           />
         </>
       )}
+
+      {/* AML Hit Slide Panel — Didit hit evidence */}
+      {expandedHitIdx != null && (() => {
+        const screenings = Array.isArray(diditAmlSummary?.screenings) ? diditAmlSummary.screenings : [diditAmlSummary?.screenings].filter(Boolean);
+        const allHits = screenings[0]?.hits || [];
+        const hit = allHits.find((h, i) => (h.id || String(i)) === expandedHitIdx);
+        const hitIdx = allHits.findIndex((h, i) => (h.id || String(i)) === expandedHitIdx);
+        return (
+          <AmlHitSlidePanel
+            hit={hit}
+            hitIndex={hitIdx}
+            loading={loadingHitDetails}
+            onClose={() => setExpandedHitIdx(null)}
+            onStatusChange={updateHitStatusInDidit}
+            updatingHitId={updatingHitId}
+          />
+        );
+      })()}
     </div>
   );
 }
