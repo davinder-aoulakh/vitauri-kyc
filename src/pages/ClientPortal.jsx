@@ -457,6 +457,24 @@ export default function ClientPortal() {
       });
     }
 
+    // Auto-fill client contact info + country of residence from submitted items
+    try {
+      const clientUpdates = {};
+      for (const item of updatedItems) {
+        if (!item.response_text || !['Received', 'Verified'].includes(item.status)) continue;
+        const lbl = (item.label || '').toLowerCase();
+        const val = item.response_text.trim();
+        if (!val) continue;
+        if ((lbl.includes('email') || lbl.includes('e-mail')) && !client?.primary_contact_email) clientUpdates.primary_contact_email = val;
+        if ((lbl.includes('phone') || lbl.includes('mobile') || lbl.includes('tel')) && !client?.primary_contact_phone) clientUpdates.primary_contact_phone = val;
+        if ((lbl.includes('country of residence') || lbl.includes('residence country') || lbl.includes('country_of_residence')) && !client?.country_of_residence) clientUpdates.country_of_residence = val;
+      }
+      if (Object.keys(clientUpdates).length > 0 && outreach.client_id) {
+        await base44.entities.Client.update(outreach.client_id, clientUpdates);
+        setClient(prev => prev ? { ...prev, ...clientUpdates } : prev);
+      }
+    } catch {}
+
     setAllOutreaches(prev => prev.map(r => r.id === outreach.id ? { ...r, status: newStatus, items: updatedItems } : r));
     setSubmittedIds(s => new Set([...s, outreach.id]));
     setConfirmedOutreach({ ...outreach, items: updatedItems, status: newStatus });

@@ -125,7 +125,10 @@ export default async function(req) {
           if (diditFullName && !client.full_name) updates.full_name = diditFullName;
           if (idvFields.idv_extracted_dob && !client.date_of_birth) updates.date_of_birth = idvFields.idv_extracted_dob;
           if (idvFields.idv_extracted_nationality && !client.nationality) {
-            updates.nationality = ISO3_MAP[idvFields.idv_extracted_nationality] || 'Other';
+            updates.nationality = ISO3_MAP[idvFields.idv_extracted_nationality] || idvFields.idv_extracted_nationality;
+          }
+          if (idvFields.idv_issuing_country && !client.country_of_residence) {
+            updates.country_of_residence = ISO3_MAP[idvFields.idv_issuing_country] || idvFields.idv_issuing_country;
           }
           if (idvFields.idv_document_number && !client.id_number) updates.id_number = idvFields.idv_document_number;
           if (idvFields.idv_document_expiry && !client.id_expiry_date) updates.id_expiry_date = idvFields.idv_document_expiry;
