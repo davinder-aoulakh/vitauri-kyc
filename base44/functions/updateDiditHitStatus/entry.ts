@@ -2,8 +2,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.43';
 
 /**
  * Updates the review_status of a specific AML hit in Didit.
- * Didit API: PATCH /v3/session/{sessionId}/aml-screening/{screeningId}/hits/{hitId}/
- * Valid review_status values: "Unreviewed", "Confirmed Match", "False Positive", "Inconclusive"
+ * Didit API: PATCH /v3/session/{sessionId}/update-aml-hit-status/
+ * Body: { hit_id, review_status }
+ * Valid review_status: "Unreviewed", "Confirmed Match", "False Positive", "Inconclusive"
  */
 Deno.serve(async (req) => {
   try {
@@ -12,9 +13,7 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { session_id, screening_id, hit_id, review_status, tenant_id, didit_api_key: directApiKey } = body;
-
-    console.log('updateDiditHitStatus called:', { session_id, hit_id, review_status, has_api_key: !!directApiKey });
+    const { session_id, hit_id, review_status, tenant_id, didit_api_key: directApiKey } = body;
 
     if (!session_id || !hit_id || !review_status) {
       return Response.json({ error: 'session_id, hit_id, and review_status are required' }, { status: 400 });
@@ -33,43 +32,18 @@ Deno.serve(async (req) => {
     }
     if (!apiKey) return Response.json({ error: 'Didit API key not configured' }, { status: 400 });
 
-    // Resolve screening_id if not provided — fetch from session decision
-    let resolvedScreeningId = screening_id;
-    if (!resolvedScreeningId) {
-      const decisionResp = await fetch(
-        `https://verification.didit.me/v3/session/${session_id}/decision/`,
-        { headers: { 'x-api-key': apiKey } }
-      );
-      if (!decisionResp.ok) {
-        const errText = await decisionResp.text();
-        console.log('Decision fetch failed:', decisionResp.status, errText);
-        return Response.json({ error: `Could not fetch session decision: ${decisionResp.status}` }, { status: 502 });
-      }
-      const decision = await decisionResp.json();
-      // The session decision root IS the session object (no nested "decision" key)
-      const root = decision?.decision || decision || {};
-      console.log('Full aml_screenings:', JSON.stringify(root.aml_screenings));
-      resolvedScreeningId = root.aml_screenings?.[0]?.id || null;
-      console.log('Resolved screening_id:', resolvedScreeningId);
-    }
-
-    if (!resolvedScreeningId) {
-      return Response.json({ error: 'Could not find aml_screening id for this session' }, { status: 400 });
-    }
-
-    // POST hit status update in Didit
-    // Didit V3 endpoint: POST /v3/session/{sessionId}/aml-screening/{screeningId}/hits/{hitId}/
-    const url = `https://verification.didit.me/v3/session/${session_id}/aml-screening/${resolvedScreeningId}/hits/${hit_id}/`;
-    console.log('POST', url, '->', review_status);
+    // PATCH hit status — correct Didit V3 endpoint
+    const url = `https://verification.didit.me/v3/session/${session_id}/update-aml-hit-status/`;
+    console.log('PATCH', url, { hit_id, review_status });
 
     const resp = await fetch(url, {
-      method: 'POST',
+      method: 'PATCH',
       headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ review_status }),
+      body: JSON.stringify({ hit_id, review_status }),
     });
 
     const respText = await resp.text();
-    console.log('Didit PATCH response:', resp.status, respText.substring(0, 300));
+    console.log('Didit response:', resp.status, respText.substring(0, 300));
 
     if (!resp.ok) {
       return Response.json({ error: `Didit API error ${resp.status}: ${respText}` }, { status: resp.status });
