@@ -96,17 +96,15 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
     setOverrideJust('');
   }, [activeStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync edited text when fresh output arrives and persist to DB
+  // Sync edited text when fresh output arrives (do NOT persist to DB yet — only on Accept/Override)
   useEffect(() => {
     if (output) {
       const text = output.narrative || output.email_draft || output.summary || output.answer || JSON.stringify(output, null, 2);
       setEditedText(text);
-      const updated = {
+      stepStateRef.current = {
         ...stepStateRef.current,
         [activeStep]: { ...(stepStateRef.current[activeStep] || {}), output, tokenInfo },
       };
-      stepStateRef.current = updated;
-      persistToDb(updated);
     }
   }, [output]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -116,11 +114,10 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
 
   async function generate() {
     reset();
-    // Clear saved state for this step so we start fresh
+    // Clear in-memory state for this step so we start fresh
     const updated = { ...stepStateRef.current };
     delete updated[activeStep];
     stepStateRef.current = updated;
-    persistToDb(updated);
     setEditedText('');
     setEditing(false);
     setOverrideMode(false);
