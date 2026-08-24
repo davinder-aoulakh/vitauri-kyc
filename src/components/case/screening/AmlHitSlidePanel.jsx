@@ -190,6 +190,30 @@ export default function AmlHitSlidePanel({ hit, hitIndex, loading, onClose, onSt
                   <div className="font-medium">{hit.description}</div>
                 </div>
               )}
+              {(hit.aliases?.length > 0 || hit.also_known_as?.length > 0) && (
+                <div className="col-span-2">
+                  <div className="text-xs text-muted-foreground">Also Known As</div>
+                  <div className="flex flex-wrap gap-1 mt-0.5">
+                    {(hit.aliases || hit.also_known_as || []).map((alias, i) => (
+                      <span key={i} className="bg-muted border border-border px-2 py-0.5 rounded text-xs font-medium">
+                        {typeof alias === 'string' ? alias : (alias.name || alias.value || JSON.stringify(alias))}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {hit.positions?.length > 0 && (
+                <div className="col-span-2">
+                  <div className="text-xs text-muted-foreground">Positions</div>
+                  <div className="space-y-0.5 mt-0.5">
+                    {hit.positions.map((pos, i) => (
+                      <div key={i} className="text-xs font-medium text-foreground">
+                        {typeof pos === 'string' ? pos : [pos.title, pos.country, pos.start].filter(Boolean).join(' · ')}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -226,13 +250,61 @@ export default function AmlHitSlidePanel({ hit, hitIndex, loading, onClose, onSt
           {/* Sources */}
           {hit.sources?.length > 0 && (
             <div>
-              <SectionHeading>Sources</SectionHeading>
-              <div className="flex flex-wrap gap-2">
-                {hit.sources.map((src, i) => (
-                  <span key={i} className="text-xs bg-muted border border-border px-2.5 py-1 rounded-md font-medium">
-                    {typeof src === 'string' ? src : (src.name || src.source || JSON.stringify(src))}
-                  </span>
-                ))}
+              <SectionHeading>Sources ({hit.sources.length})</SectionHeading>
+              <div className="space-y-2">
+                {hit.sources.map((src, i) => {
+                  if (typeof src === 'string') {
+                    return (
+                      <div key={i} className="text-xs bg-muted border border-border px-2.5 py-1.5 rounded-md font-medium">
+                        {src}
+                      </div>
+                    );
+                  }
+                  // Rich source object — render all available fields
+                  const name = src.name || src.source || src.list_name || src.dataset || `Source ${i + 1}`;
+                  const category = src.category || src.type || src.source_type;
+                  const country = src.country || src.jurisdiction;
+                  const url = src.url || src.source_url;
+                  const listingStart = src.listing_started_utc || src.listed_on || src.start_date;
+                  const listingEnd = src.listing_ended_utc || src.delisted_on || src.end_date;
+                  const notes = src.notes || src.description || src.reason;
+
+                  return (
+                    <div key={i} className="border border-border rounded-lg px-3.5 py-3 bg-card text-xs space-y-1.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="font-semibold text-sm text-foreground">{name}</span>
+                        {category && (
+                          <span className="bg-purple-100 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full font-medium text-xs">
+                            {category}
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
+                        {country && <div>🌍 <span className="text-foreground font-medium">{country}</span></div>}
+                        {listingStart && (
+                          <div>Listed: <span className="text-foreground font-medium">
+                            {new Date(listingStart).toLocaleDateString?.() ?? listingStart}
+                          </span></div>
+                        )}
+                        {listingEnd && (
+                          <div>Delisted: <span className="text-foreground font-medium">
+                            {new Date(listingEnd).toLocaleDateString?.() ?? listingEnd}
+                          </span></div>
+                        )}
+                        {src.authority && <div>Authority: <span className="text-foreground font-medium">{src.authority}</span></div>}
+                        {src.sanctions_category && <div>Sanction type: <span className="text-foreground font-medium">{src.sanctions_category}</span></div>}
+                        {src.status && <div>Status: <span className="text-foreground font-medium">{src.status}</span></div>}
+                      </div>
+                      {notes && <div className="text-muted-foreground leading-relaxed">{notes}</div>}
+                      {url && (
+                        <a href={url} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-primary hover:underline font-medium">
+                          View source <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
