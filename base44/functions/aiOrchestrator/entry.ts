@@ -43,7 +43,7 @@ const DEFAULT_SYSTEM_PROMPTS = {
 
   ClientOutreachCopilot: `You are a helpful assistant for a financial institution's compliance process. A client has a question about the information request they have received. Answer clearly and helpfully in the client's language. Be reassuring, non-technical, and factual. Do not reveal internal compliance processes.`,
 
-  ScreeningTriage: `You are a financial crime screening analyst. Given a screening hit with entity name, source list, confidence score and raw details, determine whether this is a true match or a false positive. Return JSON: {recommendation: "Likely_False_Positive"|"Possible_Match"|"Confirmed_Match", confidence_score: number, rationale: string (2-3 sentences)}.`,
+  ScreeningTriage: `You are a KYC financial crime screening analyst. You will be given Didit AML screening results for a specific individual or organisation. Provide a structured triage analysis covering: (1) Subject overview and type, (2) Summary of each hit including which lists they appear on and match/risk scores, (3) Your recommended decision per hit (False Positive / Possible Match / Confirmed Match) with justification, (4) Overall risk assessment and recommended next steps. Write professionally in markdown. Return JSON: { narrative: string, key_risks: [string] }.`,
 
   ClientProfile: `You are a KYC analyst drafting a regulatory-grade client profile. Using all available client data, write a professional profile narrative in markdown format. Sections: Business Overview | Ownership Structure | Geographic Footprint | Products & Services | Notable Risk Factors. Be factual, precise, regulatory-grade.`,
 
@@ -79,8 +79,25 @@ async function buildContext(base44, agentType, payload, tenantId) {
     }
 
     case 'ScreeningTriage': {
-      const hit = hitData || {};
-      return `Entity: ${hit.entity_name || 'Unknown'} (${hit.entity_type || 'Client'}). Hit source: ${hit.source}. Confidence: ${hit.confidence_score}%. Raw details: ${JSON.stringify(hit.hit_details || {})}. Entity sector: ${entityData?.sector || 'Unknown'}, country: ${entityData?.country || 'Unknown'}.`;
+      const entity = payload.entityData || {};
+      const aml = payload.hitData || {};
+      const hits = aml.hits || [];
+      const clientType = entity.client_type || 'Unknown';
+      const subjectLine = `Subject: ${entity.name || 'Unknown'} | Type: ${clientType} | Country: ${entity.country || 'Unknown'}${entity.date_of_birth ? ` | DOB: ${entity.date_of_birth}` : ''}${entity.nationality ? ` | Nationality: ${entity.nationality}` : ''}${entity.sector ? ` | Sector: ${entity.sector}` : ''}`;
+      const amlLine = `AML Status: ${aml.status || 'Unknown'} | Total Hits: ${aml.total_hits ?? 0} | Ongoing Monitoring: ${aml.ongoing_monitoring ? 'Yes' : 'No'}`;
+      const warnings = (aml.warnings || []).map(w => w.risk || w.code || String(w)).join(', ');
+      const hitsDetail = hits.length > 0
+        ? hits.map((h, i) => `Hit ${i+1}: "${h.name}" | Match: ${h.match_score ?? 'N/A'}% | Risk: ${h.risk_score ?? 'N/A'}% | Lists: ${(h.datasets || h.categories || []).join(', ') || 'Unknown'} | Status: ${h.review_status || 'Unreviewed'}`).join('\n')
+        : 'No individual hits returned.';
+      const customInstructions = payload.instructions || '';
+      return `${subjectLine}
+${amlLine}
+Risk flags: ${warnings || 'None'}
+
+Hit details:
+${hitsDetail}
+
+${customInstructions}`;
     }
 
     case 'ClientProfile': {
@@ -168,9 +185,8 @@ const OUTPUT_SCHEMAS = {
   ClientOutreachCopilot: { type: 'object', properties: { answer: { type: 'string' } } },
   ScreeningTriage: {
     type: 'object', properties: {
-      recommendation: { type: 'string' },
-      confidence_score: { type: 'number' },
-      rationale: { type: 'string' },
+      narrative: { type: 'string' },
+      key_risks: { type: 'array', items: { type: 'string' } },
     },
   },
   ClientProfile: { type: 'object', properties: { narrative: { type: 'string' }, key_risks: { type: 'array', items: { type: 'string' } } } },
