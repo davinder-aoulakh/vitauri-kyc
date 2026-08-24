@@ -9,7 +9,7 @@ import NotificationBell from '@/components/layout/NotificationBell';
 import OpsBanner from '@/components/layout/OpsBanner';
 import SessionWatcher from '@/components/layout/SessionWatcher';
 import {
-  LayoutDashboard, FolderOpen, Users, Search, Shield,
+  LayoutDashboard, FolderOpen, Users, Search, Shield, Fingerprint,
   Settings, BarChart3, AlertTriangle, Calendar, Archive,
   ChevronLeft, ChevronRight, Menu, X, LogOut,
   Building2, UserCircle, Bell, ClipboardList, ScanSearch, Mail, Send
@@ -96,7 +96,7 @@ export default function AppShell({ children }) {
           className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
           style={{ backgroundColor: tenantColor }}
         >
-          <Shield className="w-4 h-4 text-white" />
+          <Fingerprint className="w-4 h-4 text-white" />
         </div>
         {!collapsed && (
           <div className="overflow-hidden">
