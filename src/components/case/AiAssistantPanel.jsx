@@ -43,8 +43,9 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
     currentUser,
   });
 
-  // Persist accepted outputs and action statuses across step navigation
-  const acceptedOutputsRef = useRef({}); // { [step]: { output, actionStatus, editedText } }
+  // Persist all step states across navigation: { [step]: { output, runId, actionStatus, editedText, tokenInfo } }
+  const stepStateRef = useRef({});
+  const prevStepRef  = useRef(activeStep);
 
   const [editedText, setEditedText]               = useState('');
   const [editing, setEditing]                     = useState(false);
@@ -52,42 +53,60 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
   const [overrideJustification, setOverrideJust] = useState('');
   const [actionStatus, setActionStatus]           = useState(null);
 
-  // On step change: save current accepted state, restore previous if available
+  // On step change: save outgoing state, restore incoming state
   useEffect(() => {
-    // Restore saved state for this step (if previously accepted)
-    const saved = acceptedOutputsRef.current[activeStep];
-    if (saved) {
-      setEditedText(saved.editedText || '');
+    const leaving = prevStepRef.current;
+    if (leaving !== activeStep) {
+      // Save current live state for the step we're leaving
+      if (output || actionStatus || editedText) {
+        stepStateRef.current[leaving] = {
+          output: output || stepStateRef.current[leaving]?.output || null,
+          actionStatus,
+          editedText,
+          tokenInfo,
+        };
+      }
+      prevStepRef.current = activeStep;
+    }
+
+    // Restore saved state for the incoming step
+    const saved = stepStateRef.current[activeStep];
+    if (saved?.output) {
+      // Rehydrate hook state from saved
       setActionStatus(saved.actionStatus || null);
-      // Don't call reset — let the output persist via savedOutput below
+      setEditedText(saved.editedText || '');
     } else {
       reset();
       setEditedText('');
-      setEditing(false);
-      setOverrideMode(false);
-      setOverrideJust('');
       setActionStatus(null);
     }
     setEditing(false);
     setOverrideMode(false);
     setOverrideJust('');
-  }, [activeStep]);
+  }, [activeStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync edited text when fresh output arrives
   useEffect(() => {
     if (output) {
       const text = output.narrative || output.email_draft || output.summary || output.answer || JSON.stringify(output, null, 2);
       setEditedText(text);
+      // Always persist newly generated output immediately
+      stepStateRef.current[activeStep] = {
+        ...(stepStateRef.current[activeStep] || {}),
+        output,
+        tokenInfo,
+      };
     }
-  }, [output]);
+  }, [output]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Effective output: live output OR previously accepted output for this step
-  const effectiveOutput = output || acceptedOutputsRef.current[activeStep]?.output || null;
+  // Effective output: live hook output OR saved output for this step
+  const effectiveOutput = output || stepStateRef.current[activeStep]?.output || null;
+  const effectiveTokenInfo = tokenInfo || stepStateRef.current[activeStep]?.tokenInfo || null;
 
   async function generate() {
     reset();
     // Clear saved state for this step so we start fresh
-    delete acceptedOutputsRef.current[activeStep];
+    delete stepStateRef.current[activeStep];
     setEditedText('');
     setEditing(false);
     setOverrideMode(false);
@@ -205,8 +224,8 @@ Be specific about the actual hits found. Do not say data is insufficient if hits
   async function handleAccept() {
     const action = editing ? 'Edited' : 'Accepted';
     await logAction(action, '');
-    // Persist accepted output so it survives step navigation
-    acceptedOutputsRef.current[activeStep] = {
+    stepStateRef.current[activeStep] = {
+      ...(stepStateRef.current[activeStep] || {}),
       output: effectiveOutput,
       actionStatus: action,
       editedText,
@@ -217,14 +236,17 @@ Be specific about the actual hits found. Do not say data is insufficient if hits
 
   async function handleReject() {
     await logAction('Rejected', 'Analyst rejected AI output');
-    // Clear saved state on reject
-    delete acceptedOutputsRef.current[activeStep];
+    delete stepStateRef.current[activeStep];
     setActionStatus('Rejected');
   }
 
   async function handleOverride() {
     if (overrideJustification.length < 10) return;
     await logAction('Overridden', overrideJustification);
+    stepStateRef.current[activeStep] = {
+      ...(stepStateRef.current[activeStep] || {}),
+      actionStatus: 'Overridden',
+    };
     setActionStatus('Overridden');
     setOverrideMode(false);
   }
@@ -352,10 +374,10 @@ Be specific about the actual hits found. Do not say data is insufficient if hits
             )}
 
             {/* Token info */}
-            {tokenInfo && (
+            {effectiveTokenInfo && (
               <div className="flex items-center gap-1 text-xs text-purple-400">
                 <Info className="w-3 h-3" />
-                {tokenInfo.remaining.toLocaleString()} tokens remaining today
+                {effectiveTokenInfo.remaining.toLocaleString()} tokens remaining today
               </div>
             )}
 
