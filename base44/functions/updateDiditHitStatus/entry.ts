@@ -48,8 +48,9 @@ Deno.serve(async (req) => {
       const decision = await decisionResp.json();
       // The session decision root IS the session object (no nested "decision" key)
       const root = decision?.decision || decision || {};
+      console.log('Full aml_screenings:', JSON.stringify(root.aml_screenings));
       resolvedScreeningId = root.aml_screenings?.[0]?.id || null;
-      console.log('Resolved screening_id:', resolvedScreeningId, 'aml_screenings:', JSON.stringify(root.aml_screenings?.map((s: any) => s.id)));
+      console.log('Resolved screening_id:', resolvedScreeningId);
     }
 
     if (!resolvedScreeningId) {
