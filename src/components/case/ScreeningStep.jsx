@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Shield, AlertTriangle, CheckCircle, Loader2, RefreshCw, ExternalLink, ChevronDown, ChevronUp, Eye, Radio } from 'lucide-react';
+import { Shield, AlertTriangle, CheckCircle, Loader2, RefreshCw, ExternalLink, ChevronDown, ChevronUp, Eye, Radio, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { addDays, format } from 'date-fns';
@@ -22,6 +22,8 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
   const [sourceFilter, setSourceFilter] = useState('all');
   const [diditAmlSummary, setDiditAmlSummary] = useState(null); // { status, total_hits, screenings, warnings, thresholds, ongoing_monitoring, synced_at }
   const [showThresholds, setShowThresholds] = useState(false);
+  const [expandedHitIdx, setExpandedHitIdx] = useState(null);
+  const [updatingHitId, setUpdatingHitId] = useState(null); // hit.id being updated in Didit
 
   useEffect(() => { loadAll(); }, [caseId]);
 
@@ -190,6 +192,37 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
 
     } catch (err) {
       console.error('syncDiditAml error:', err);
+    }
+  }
+
+  async function updateHitStatusInDidit(hit, newReviewStatus) {
+    if (!diditAmlSummary?.session_id) return;
+    setUpdatingHitId(hit.id || hit.hit_id);
+    try {
+      await base44.functions.invoke('updateDiditHitStatus', {
+        session_id:    diditAmlSummary.session_id,
+        screening_id:  diditAmlSummary.screenings?.[0]?.id || null,
+        hit_id:        hit.id || hit.hit_id,
+        review_status: newReviewStatus,
+        tenant_id:     tenantId,
+      });
+      // Update local state optimistically
+      setDiditAmlSummary(prev => {
+        if (!prev?.screenings) return prev;
+        const screenings = prev.screenings.map(s => ({
+          ...s,
+          hits: (s.hits || []).map(h =>
+            (h.id || h.hit_id) === (hit.id || hit.hit_id)
+              ? { ...h, review_status: newReviewStatus }
+              : h
+          ),
+        }));
+        return { ...prev, screenings };
+      });
+    } catch (err) {
+      console.error('Failed to update hit status in Didit:', err);
+    } finally {
+      setUpdatingHitId(null);
     }
   }
 
@@ -464,8 +497,9 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="bg-muted/40 border-b border-border text-muted-foreground uppercase tracking-wide">
+                          <th className="text-left px-3 py-2 w-4"></th>
                           <th className="text-left px-3 py-2">Name</th>
-                          <th className="text-left px-3 py-2">Match Status</th>
+                          <th className="text-left px-3 py-2">Status</th>
                           <th className="text-left px-3 py-2">Match Score</th>
                           <th className="text-left px-3 py-2">Risk Score</th>
                           <th className="text-left px-3 py-2">Categories</th>
@@ -475,89 +509,235 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                       </thead>
                       <tbody className="divide-y divide-border bg-card">
                         {allHits.map((hit, idx) => {
+                          const hitKey = hit.id || String(idx);
                           const matchScore = hit.match_score ?? (hit.score != null ? Math.round(hit.score * 100) : null);
                           const riskScore  = hit.risk_score ?? null;
                           const reviewStatus = hit.review_status || 'Unreviewed';
                           const isFalsePositive = reviewStatus === 'False Positive';
+                          const isExpanded = expandedHitIdx === hitKey;
+                          const isUpdating = updatingHitId === hitKey;
+                          const adverseMedia = hit.adverse_media || hit.media_analysis;
+                          const hasDetail = adverseMedia || (hit.sources?.length > 0) || (hit.connections?.length > 0);
+
+                          const REVIEW_OPTIONS = [
+                            { value: 'Unreviewed',      label: 'UNREVIEWED',      style: 'bg-blue-100 text-blue-700' },
+                            { value: 'Confirmed Match', label: 'CONFIRMED MATCH', style: 'bg-red-100 text-red-700' },
+                            { value: 'False Positive',  label: 'FALSE POSITIVE',  style: 'bg-slate-100 text-slate-600' },
+                            { value: 'Inconclusive',    label: 'INCONCLUSIVE',    style: 'bg-amber-100 text-amber-700' },
+                          ];
+                          const currentOption = REVIEW_OPTIONS.find(o => o.value === reviewStatus) || REVIEW_OPTIONS[0];
+
                           return (
-                            <tr key={hit.id || idx} className="hover:bg-muted/20">
-                              <td className="px-3 py-2.5 font-medium text-foreground">
-                                {hit.caption || hit.name || `Hit ${idx + 1}`}
-                              </td>
-                              <td className="px-3 py-2.5">
-                                <span className={cn(
-                                  'px-2 py-0.5 rounded-full font-medium text-xs',
-                                  isFalsePositive ? 'bg-slate-100 text-slate-600' :
-                                  reviewStatus === 'Confirmed Match' ? 'bg-red-100 text-red-700' :
-                                  'bg-blue-100 text-blue-700'
-                                )}>
-                                  {reviewStatus.toUpperCase().replace(' ', '_') === 'FALSE_POSITIVE' ? 'FALSE POSITIVE' : reviewStatus.toUpperCase()}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2.5">
-                                {matchScore != null ? (
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-20 bg-muted rounded-full h-1.5">
-                                      <div
-                                        className={cn('h-1.5 rounded-full', matchScore >= 93 ? 'bg-primary' : 'bg-slate-400')}
-                                        style={{ width: `${matchScore}%` }}
-                                      />
-                                    </div>
-                                    <span className="font-medium">{matchScore}%</span>
-                                  </div>
-                                ) : '—'}
-                              </td>
-                              <td className="px-3 py-2.5">
-                                {riskScore != null ? (
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-20 bg-muted rounded-full h-1.5">
-                                      <div
-                                        className={cn('h-1.5 rounded-full', riskScore >= 86 ? 'bg-red-500' : riskScore >= 40 ? 'bg-amber-400' : 'bg-slate-400')}
-                                        style={{ width: `${riskScore}%` }}
-                                      />
-                                    </div>
-                                    <span className="font-medium">{riskScore}%</span>
-                                  </div>
-                                ) : '—'}
-                              </td>
-                              {/* Categories column */}
-                              <td className="px-3 py-2.5">
-                                <div className="flex flex-wrap gap-1">
-                                  {(hit.categories || []).map((cat, i) => (
-                                    <span key={i} className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-xs font-medium">
-                                      {cat}
-                                    </span>
-                                  ))}
-                                  {hit.match_type && (
-                                    <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-xs">
-                                      {hit.match_type}
-                                    </span>
+                            <React.Fragment key={hitKey}>
+                              <tr className={cn('hover:bg-muted/20', isExpanded && 'bg-muted/10')}>
+                                {/* Expand toggle */}
+                                <td className="px-2 py-2.5">
+                                  {hasDetail && (
+                                    <button
+                                      onClick={() => setExpandedHitIdx(isExpanded ? null : hitKey)}
+                                      className="text-muted-foreground hover:text-foreground"
+                                    >
+                                      <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', isExpanded && 'rotate-90')} />
+                                    </button>
                                   )}
-                                  {(!hit.categories?.length && !hit.match_type) && <span className="text-muted-foreground">—</span>}
-                                </div>
-                              </td>
-                              {/* Country / DOB column */}
-                              <td className="px-3 py-2.5 text-xs text-muted-foreground space-y-0.5">
-                                {(hit.properties?.country || hit.country) && (
-                                  <div>🌍 {hit.properties?.country || hit.country}</div>
-                                )}
-                                {(hit.properties?.birthDate || hit.date_of_birth) && (
-                                  <div>🗓 {hit.properties?.birthDate || hit.date_of_birth}</div>
-                                )}
-                                {!hit.properties?.country && !hit.country && !hit.properties?.birthDate && !hit.date_of_birth && '—'}
-                              </td>
-                              {/* Datasets / Appears on column */}
-                              <td className="px-3 py-2.5">
-                                <div className="flex flex-wrap gap-1">
-                                  {(hit.datasets || []).map((ds, i) => (
-                                    <span key={i} className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-xs font-medium">
-                                      {ds.length > 4 ? ds.substring(0, 3).toUpperCase() : ds}
-                                    </span>
-                                  ))}
-                                  {(!hit.datasets || hit.datasets.length === 0) && <span className="text-muted-foreground">—</span>}
-                                </div>
-                              </td>
-                            </tr>
+                                </td>
+                                <td className="px-3 py-2.5 font-medium text-foreground">
+                                  {hit.caption || hit.name || `Hit ${idx + 1}`}
+                                </td>
+                                {/* Status dropdown — updates Didit directly */}
+                                <td className="px-3 py-2.5">
+                                  <div className="relative group inline-block">
+                                    <div className={cn(
+                                      'px-2 py-0.5 rounded-full font-medium text-xs cursor-pointer flex items-center gap-1 select-none',
+                                      currentOption.style,
+                                      isUpdating && 'opacity-50 pointer-events-none'
+                                    )}>
+                                      {isUpdating
+                                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                                        : currentOption.label
+                                      }
+                                      <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+                                    </div>
+                                    <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover:block bg-card border border-border rounded-lg shadow-lg min-w-[160px] py-1">
+                                      {REVIEW_OPTIONS.map(opt => (
+                                        <button
+                                          key={opt.value}
+                                          onClick={() => updateHitStatusInDidit(hit, opt.value)}
+                                          className={cn(
+                                            'w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-muted/50 flex items-center gap-2',
+                                            opt.value === reviewStatus && 'opacity-50 pointer-events-none'
+                                          )}
+                                        >
+                                          <span className={cn('w-2 h-2 rounded-full', opt.style.replace('text-', 'bg-').split(' ')[0])} />
+                                          {opt.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  {matchScore != null ? (
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-16 bg-muted rounded-full h-1.5">
+                                        <div
+                                          className={cn('h-1.5 rounded-full', matchScore >= 93 ? 'bg-primary' : 'bg-slate-400')}
+                                          style={{ width: `${matchScore}%` }}
+                                        />
+                                      </div>
+                                      <span className="font-medium">{matchScore}%</span>
+                                    </div>
+                                  ) : '—'}
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  {riskScore != null ? (
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-16 bg-muted rounded-full h-1.5">
+                                        <div
+                                          className={cn('h-1.5 rounded-full', riskScore >= 86 ? 'bg-red-500' : riskScore >= 40 ? 'bg-amber-400' : 'bg-slate-400')}
+                                          style={{ width: `${riskScore}%` }}
+                                        />
+                                      </div>
+                                      <span className="font-medium">{riskScore}%</span>
+                                    </div>
+                                  ) : '—'}
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <div className="flex flex-wrap gap-1">
+                                    {(hit.categories || []).map((cat, i) => (
+                                      <span key={i} className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-xs font-medium">{cat}</span>
+                                    ))}
+                                    {hit.match_type && (
+                                      <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-xs">{hit.match_type}</span>
+                                    )}
+                                    {(!hit.categories?.length && !hit.match_type) && <span className="text-muted-foreground">—</span>}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2.5 text-xs text-muted-foreground space-y-0.5">
+                                  {(hit.properties?.country || hit.country) && <div>🌍 {hit.properties?.country || hit.country}</div>}
+                                  {(hit.properties?.birthDate || hit.date_of_birth) && <div>🗓 {hit.properties?.birthDate || hit.date_of_birth}</div>}
+                                  {!hit.properties?.country && !hit.country && !hit.properties?.birthDate && !hit.date_of_birth && '—'}
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <div className="flex flex-wrap gap-1">
+                                    {(hit.datasets || []).map((ds, i) => (
+                                      <span key={i} className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-xs font-medium">
+                                        {ds.length > 4 ? ds.substring(0, 3).toUpperCase() : ds}
+                                      </span>
+                                    ))}
+                                    {(!hit.datasets?.length) && <span className="text-muted-foreground">—</span>}
+                                  </div>
+                                </td>
+                              </tr>
+
+                              {/* Expanded detail row — adverse media, sources */}
+                              {isExpanded && hasDetail && (
+                                <tr className="bg-muted/5">
+                                  <td colSpan={8} className="px-4 py-3">
+                                    {adverseMedia && (
+                                      <div className="space-y-3">
+                                        {/* Media Analysis Summary */}
+                                        <div className="flex items-center gap-4 text-xs">
+                                          {adverseMedia.sentiment && (
+                                            <div>
+                                              <span className="text-muted-foreground">Sentiment: </span>
+                                              <span className={cn('font-semibold px-2 py-0.5 rounded-full text-xs',
+                                                adverseMedia.sentiment_score < -1 ? 'bg-red-100 text-red-700' :
+                                                adverseMedia.sentiment_score < 0 ? 'bg-amber-100 text-amber-700' :
+                                                'bg-slate-100 text-slate-600'
+                                              )}>
+                                                {adverseMedia.sentiment}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {adverseMedia.sentiment_score != null && (
+                                            <div><span className="text-muted-foreground">Score: </span><span className="font-semibold">{adverseMedia.sentiment_score}</span></div>
+                                          )}
+                                          {adverseMedia.entity_type && (
+                                            <div><span className="text-muted-foreground">Entity Type: </span><span className="font-semibold">{adverseMedia.entity_type}</span></div>
+                                          )}
+                                        </div>
+
+                                        {/* Adverse Keywords */}
+                                        {adverseMedia.adverse_keywords?.length > 0 && (
+                                          <div>
+                                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Adverse Keywords</div>
+                                            <div className="flex flex-wrap gap-1.5">
+                                              {adverseMedia.adverse_keywords.map((kw, ki) => (
+                                                <span key={ki} className="bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded-full text-xs font-medium">
+                                                  {typeof kw === 'string' ? kw : `${kw.keyword || kw.word} (${kw.count || 1})`}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Media Articles */}
+                                        {adverseMedia.articles?.length > 0 && (
+                                          <div>
+                                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                                              Media Articles ({adverseMedia.articles.length})
+                                            </div>
+                                            <div className="space-y-2">
+                                              {adverseMedia.articles.slice(0, 5).map((article, ai) => (
+                                                <div key={ai} className="bg-card border border-border rounded-lg px-3 py-2.5 flex gap-3">
+                                                  {article.thumbnail && (
+                                                    <img src={article.thumbnail} alt="" className="w-12 h-10 rounded object-cover flex-shrink-0" />
+                                                  )}
+                                                  <div className="min-w-0">
+                                                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                                                      {article.sentiment && (
+                                                        <span className={cn('text-xs px-1.5 py-0 rounded font-medium',
+                                                          article.sentiment?.toLowerCase().includes('highly') ? 'bg-red-100 text-red-700' :
+                                                          article.sentiment?.toLowerCase().includes('negative') ? 'bg-orange-100 text-orange-700' :
+                                                          'bg-slate-100 text-slate-600'
+                                                        )}>
+                                                          {article.sentiment?.toUpperCase()}
+                                                        </span>
+                                                      )}
+                                                      {article.country && (
+                                                        <span className="text-xs text-muted-foreground">🌍 {article.country}</span>
+                                                      )}
+                                                    </div>
+                                                    {article.url ? (
+                                                      <a href={article.url} target="_blank" rel="noopener noreferrer"
+                                                        className="text-xs font-medium text-primary hover:underline line-clamp-2">
+                                                        {article.title || article.url}
+                                                      </a>
+                                                    ) : (
+                                                      <div className="text-xs font-medium">{article.title}</div>
+                                                    )}
+                                                    {article.snippet && (
+                                                      <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{article.snippet}</div>
+                                                    )}
+                                                    {article.date && (
+                                                      <div className="text-xs text-muted-foreground/60 mt-0.5">{article.date}</div>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Sources */}
+                                    {hit.sources?.length > 0 && (
+                                      <div className="mt-2">
+                                        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Sources</div>
+                                        <div className="flex flex-wrap gap-2">
+                                          {hit.sources.map((src, si) => (
+                                            <span key={si} className="text-xs bg-muted px-2 py-0.5 rounded border border-border">
+                                              {typeof src === 'string' ? src : (src.name || src.source || JSON.stringify(src))}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
                           );
                         })}
                       </tbody>

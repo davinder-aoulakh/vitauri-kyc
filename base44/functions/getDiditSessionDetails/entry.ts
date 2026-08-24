@@ -194,7 +194,9 @@ Deno.serve(async (req) => {
                          live.portrait    || live.selfie       || null,
       liveness_raw:      live,
 
-      // AML
+      // AML — enrich each hit with full detail (adverse media, sources, keywords etc.)
+      // Didit stores screening_id on the aml object itself
+      aml_screening_id: aml.id        || null,
       aml_total_hits: aml.total_hits ?? 0,
       aml_status:     aml.status     || null,
       aml_hits:       aml.hits       || [],
