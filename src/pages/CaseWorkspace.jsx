@@ -89,6 +89,7 @@ export default function CaseWorkspace() {
   const [flagNote, setFlagNote] = useState('');
   const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
   const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
+  const [amlScreeningData, setAmlScreeningData] = useState(null);
 
   const FLAG_REASONS = ['Missing document', 'Awaiting client response', 'QC query', 'Other'];
 
@@ -620,7 +621,7 @@ export default function CaseWorkspace() {
                         onCaseChanged={loadAll}
                       />
                     )}
-                    {activeStep === 3 && <ScreeningStep caseId={id} tenantId={kycCase?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} onCaseChanged={loadAll} />}
+                    {activeStep === 3 && <ScreeningStep caseId={id} tenantId={kycCase?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} onCaseChanged={loadAll} onAmlSummaryLoaded={setAmlScreeningData} />}
                     {activeStep === 4 && <ClientProfileStep kycCase={kycCase} client={client} currentUser={currentUser} onRegisterOsintAdd={cb => setOsintAddCallback(() => cb)} />}
                     {activeStep === 5 && <SoFSoWStep kycCase={kycCase} client={client} currentUser={currentUser} />}
                     {activeStep === 6 && <RiskAssessmentStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />}
@@ -653,6 +654,7 @@ export default function CaseWorkspace() {
                 currentUser={currentUser}
                 collapsed={aiCollapsed}
                 onToggleCollapse={() => setAiCollapsed(c => !c)}
+                screeningData={activeStep === 3 ? amlScreeningData : undefined}
               />
             )}
           </div>

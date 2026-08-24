@@ -14,7 +14,7 @@ import ReactMarkdown from 'react-markdown';
 const STEP_CONFIGS = {
   1: { agentType: 'OutreachCopilot',        agentLabel: 'Outreach Co-pilot',       description: 'Recommend documents to request and draft outreach email' },
   2: { agentType: 'ClientProfile',           agentLabel: 'Identity Summary',         description: 'Summarise identity verification findings' },
-  3: { agentType: 'ScreeningTriage',         agentLabel: 'Screening Triage',         description: 'Triage screening hits and suggest analyst decisions' },
+  3: { agentType: 'ScreeningTriage',         agentLabel: 'Screening Triage',         description: 'Analyse Didit AML hits and recommend analyst decisions' },
   4: { agentType: 'ClientProfile',           agentLabel: 'Client Profile',           description: 'Assess profile completeness and draft narrative' },
   5: { agentType: 'SoFSoW',                 agentLabel: 'SoF / SoW Agent',          description: 'Draft Source of Funds & Wealth assessment' },
   6: { agentType: 'RiskNarrative',           agentLabel: 'Risk Narrative',           description: 'Generate indicator narratives and risk assessment' },
@@ -33,7 +33,7 @@ function buildPayload(activeStep, kycCase, client) {
   }
 }
 
-export default function AiAssistantPanel({ kycCase, client, activeStep, currentUser, collapsed, onToggleCollapse }) {
+export default function AiAssistantPanel({ kycCase, client, activeStep, currentUser, collapsed, onToggleCollapse, screeningData }) {
   const config = STEP_CONFIGS[activeStep] || STEP_CONFIGS[1];
 
   const { invoke, logAction, reset, loading, output, error, tokenInfo } = useAiOrchestrator({
@@ -72,7 +72,34 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
     setEditing(false);
     setOverrideMode(false);
     setActionStatus(null);
-    await invoke(config.agentType, buildPayload(activeStep, kycCase, client));
+    const payload = buildPayload(activeStep, kycCase, client);
+    // For step 3, enrich with live Didit AML data
+    if (activeStep === 3 && screeningData) {
+      const hits = screeningData.screenings?.[0]?.hits || [];
+      payload.hitData = {
+        total_hits: screeningData.total_hits,
+        status: screeningData.status,
+        warnings: screeningData.warnings || [],
+        hits: hits.map(h => ({
+          name: h.caption || h.name,
+          match_score: h.match_score ?? (h.score != null ? Math.round(h.score * 100) : null),
+          risk_score: h.risk_score,
+          review_status: h.review_status || 'Unreviewed',
+          datasets: h.datasets || [],
+          properties: h.properties || {},
+        })),
+        screened_data: screeningData.screenings?.[0]?.screened_data || {},
+        ongoing_monitoring: screeningData.ongoing_monitoring,
+      };
+      payload.entityData = {
+        name: client?.full_name,
+        sector: client?.sector,
+        country: client?.registered_country || client?.country_of_residence || client?.nationality,
+        client_type: client?.client_type,
+      };
+      payload.instructions = `You are a KYC compliance analyst. Review the following Didit AML screening results and provide a structured triage analysis: 1) Summarise each hit (name, lists, scores). 2) Recommend a review decision for each (False Positive / Confirmed Match / Inconclusive) with brief justification. 3) Highlight any high-risk findings. 4) Recommend overall next steps.`;
+    }
+    await invoke(config.agentType, payload);
   }
 
   async function handleAccept() {

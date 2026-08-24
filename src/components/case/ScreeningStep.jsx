@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTenant } from '@/lib/tenantContext';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Shield, AlertTriangle, CheckCircle, Loader2, RefreshCw, ExternalLink, ChevronDown, ChevronUp, Radio } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
@@ -11,7 +10,7 @@ import HitsTable from '@/components/case/screening/HitsTable';
 import HitDetailPanel from '@/components/case/screening/HitDetailPanel';
 import AmlHitSlidePanel from '@/components/case/screening/AmlHitSlidePanel';
 
-export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, client, onCaseChanged }) {
+export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, client, onCaseChanged, onAmlSummaryLoaded }) {
   const navigate = useNavigate();
   const { tenant } = useTenant();
 
@@ -185,7 +184,9 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
           ...amlSummary,
           screenings: prevHasEnrichedHits ? prev.screenings : amlSummary.screenings,
         };
-        return applyHitOverrides(merged);
+        const final = applyHitOverrides(merged);
+        onAmlSummaryLoaded?.(final);
+        return final;
       });
 
       // Auto-import Didit AML hits as ScreeningHit records (if hits exist)
@@ -586,7 +587,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
 
                 {/* Hit rows */}
                 {allHits.length > 0 ? (
-                  <div className="border border-border rounded-lg overflow-hidden">
+                  <div className="border border-border rounded-lg overflow-visible">
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="bg-muted/40 border-b border-border text-muted-foreground uppercase tracking-wide">
@@ -598,7 +599,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                           <th className="text-left px-3 py-2">Lists / Categories</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-border bg-card">
+                      <tbody className="divide-y divide-border bg-card overflow-visible">
                         {allHits.map((hit, idx) => {
                            const hitKey = hit.id || String(idx);
                            const matchScore = hit.match_score ?? (hit.score != null ? Math.round(hit.score * 100) : null);
@@ -740,151 +741,75 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
+      ) : hits.length === 0 ? (
+        <div className="bg-card border border-border rounded-xl py-12 text-center">
+          <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+          <p className="text-sm font-medium text-muted-foreground">No AML hits found</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">
+            {diditAmlSummary
+              ? 'Didit returned no AML screening hits for this client.'
+              : 'Awaiting Didit verification results from Step 1 outreach.'}
+          </p>
+        </div>
       ) : (
-        <Tabs defaultValue="case">
-          <TabsList className="bg-muted/50 border border-border h-auto p-1">
-            <TabsTrigger value="case" className="text-xs px-3 py-1.5 data-[state=active]:bg-card data-[state=active]:shadow-sm">
-              Case Screening
-              {pendingCount > 0 && (
-                <span className="ml-1.5 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                  {pendingCount}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="monitoring" className="text-xs px-3 py-1.5 data-[state=active]:bg-card data-[state=active]:shadow-sm">
-              Monitoring Alerts
-              {newAlerts > 0 && (
-                <span className="ml-1.5 bg-orange-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                  {newAlerts}
-                </span>
-              )}
-            </TabsTrigger>
-          </TabsList>
+        <div className="space-y-3">
+          {/* Stats */}
+          <div className="flex gap-3 text-xs flex-wrap">
+            <div className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2">
+              <span className="w-2 h-2 bg-orange-400 rounded-full" />
+              <span className="text-muted-foreground">Pending:</span>
+              <span className="font-semibold">{pendingCount}</span>
+            </div>
+            <div className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full" />
+              <span className="text-muted-foreground">Resolved:</span>
+              <span className="font-semibold">{resolvedCount}</span>
+            </div>
+            <div className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2">
+              <span className="w-2 h-2 bg-slate-400 rounded-full" />
+              <span className="text-muted-foreground">Total:</span>
+              <span className="font-semibold">{hits.length}</span>
+            </div>
+          </div>
 
-          {/* Case Screening Tab */}
-          <TabsContent value="case" className="mt-3">
-            {hits.length === 0 ? (
-              <div className="bg-card border border-border rounded-xl py-12 text-center">
-                <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
-                <p className="text-sm font-medium text-muted-foreground">No AML hits found</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">
-                  {diditAmlSummary
-                    ? 'Didit returned no AML screening hits for this client.'
-                    : 'Awaiting Didit verification results from Step 1 outreach.'}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Stats */}
-                <div className="flex gap-3 text-xs flex-wrap">
-                  <div className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2">
-                    <span className="w-2 h-2 bg-orange-400 rounded-full" />
-                    <span className="text-muted-foreground">Pending:</span>
-                    <span className="font-semibold">{pendingCount}</span>
-                  </div>
-                  <div className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2">
-                    <span className="w-2 h-2 bg-emerald-500 rounded-full" />
-                    <span className="text-muted-foreground">Resolved:</span>
-                    <span className="font-semibold">{resolvedCount}</span>
-                  </div>
-                  <div className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2">
-                    <span className="w-2 h-2 bg-slate-400 rounded-full" />
-                    <span className="text-muted-foreground">Total:</span>
-                    <span className="font-semibold">{hits.length}</span>
-                  </div>
-                </div>
+          {pendingCount > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+              <span className="text-sm text-red-700 font-medium">
+                {pendingCount} hit{pendingCount !== 1 ? 's' : ''} require analyst review.
+              </span>
+            </div>
+          )}
 
-                {pendingCount > 0 && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                    <span className="text-sm text-red-700 font-medium">
-                      {pendingCount} hit{pendingCount !== 1 ? 's' : ''} require analyst review.
-                    </span>
-                  </div>
+          {/* Source filter */}
+          <div className="flex gap-1.5 flex-wrap">
+            {SOURCE_TABS.filter(t => t.value === 'all' || sourceCount(t.value) > 0).map(tab => (
+              <button
+                key={tab.value}
+                onClick={() => setSourceFilter(tab.value)}
+                className={cn(
+                  'text-xs px-3 py-1 rounded-full border font-medium transition-colors flex items-center gap-1.5',
+                  sourceFilter === tab.value
+                    ? 'bg-primary text-white border-primary'
+                    : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground bg-card'
                 )}
+              >
+                {tab.label}
+                {tab.value !== 'all' && (
+                  <span className={cn(
+                    'rounded-full px-1.5 py-0 text-xs font-semibold',
+                    sourceFilter === tab.value ? 'bg-white/20 text-white' :
+                    sourcePending(tab.value) > 0 ? 'bg-orange-100 text-orange-700' : 'bg-muted text-muted-foreground'
+                  )}>
+                    {sourceCount(tab.value)}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
 
-                {/* Source filter */}
-                <div className="flex gap-1.5 flex-wrap">
-                  {SOURCE_TABS.filter(t => t.value === 'all' || sourceCount(t.value) > 0).map(tab => (
-                    <button
-                      key={tab.value}
-                      onClick={() => setSourceFilter(tab.value)}
-                      className={cn(
-                        'text-xs px-3 py-1 rounded-full border font-medium transition-colors flex items-center gap-1.5',
-                        sourceFilter === tab.value
-                          ? 'bg-primary text-white border-primary'
-                          : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground bg-card'
-                      )}
-                    >
-                      {tab.label}
-                      {tab.value !== 'all' && (
-                        <span className={cn(
-                          'rounded-full px-1.5 py-0 text-xs font-semibold',
-                          sourceFilter === tab.value ? 'bg-white/20 text-white' :
-                          sourcePending(tab.value) > 0 ? 'bg-orange-100 text-orange-700' : 'bg-muted text-muted-foreground'
-                        )}>
-                          {sourceCount(tab.value)}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-
-                <HitsTable hits={visibleHits} onRowClick={setSelectedHit} onQuickDecision={handleDecision} submitting={submitting} />
-              </div>
-            )}
-          </TabsContent>
-
-          {/* Monitoring Alerts Tab */}
-          <TabsContent value="monitoring" className="mt-3">
-            {monitoringAlerts.length === 0 ? (
-              <div className="bg-card border border-border rounded-xl py-16 text-center">
-                <Shield className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-                <p className="text-sm font-medium text-muted-foreground">No monitoring alerts</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">24/7 monitoring alerts for active clients appear here</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-muted-foreground">{newAlerts} new alert{newAlerts !== 1 ? 's' : ''} across all active clients</p>
-                  <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={() => navigate('/monitoring')}>
-                    <ExternalLink className="w-3 h-3" /> Open Monitoring Console
-                  </Button>
-                </div>
-                <div className="bg-card border border-border rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-muted/40 border-b border-border text-xs text-muted-foreground uppercase tracking-wide">
-                        <th className="text-left px-4 py-3">Entity</th>
-                        <th className="text-left px-4 py-3">Type</th>
-                        <th className="text-left px-4 py-3">Source</th>
-                        <th className="text-left px-4 py-3">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {monitoringAlerts.slice(0, 15).map(alert => (
-                        <tr key={alert.id} className="hover:bg-muted/20 cursor-pointer" onClick={() => navigate('/monitoring')}>
-                          <td className="px-4 py-2.5 text-xs font-medium">{alert.entity_name}</td>
-                          <td className="px-4 py-2.5 text-xs text-muted-foreground">{alert.alert_type?.replace(/_/g, ' ')}</td>
-                          <td className="px-4 py-2.5 text-xs text-muted-foreground">{alert.source || '—'}</td>
-                          <td className="px-4 py-2.5">
-                            <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium',
-                              alert.status === 'New' ? 'bg-orange-100 text-orange-700' :
-                              alert.status === 'Dismissed' ? 'bg-slate-100 text-slate-600' :
-                              'bg-blue-100 text-blue-700'
-                            )}>
-                              {alert.status?.replace(/_/g, ' ')}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+          <HitsTable hits={visibleHits} onRowClick={setSelectedHit} onQuickDecision={handleDecision} submitting={submitting} />
+        </div>
       )}
 
       {/* Slide-over Hit Detail Panel (ScreeningHit records) */}
