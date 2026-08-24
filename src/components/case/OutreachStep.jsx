@@ -501,7 +501,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
             const isOverdue = req.deadline && isPast(parseISO(req.deadline)) && req.status !== 'Complete';
             const portalUrl = getPortalUrl(req);
             const pendingCount = req.items?.filter(i => i.status === 'Requested').length || 0;
-            const verifiedCount = req.items?.filter(i => i.status === 'Verified').length || 0;
+            const verifiedCount = req.items?.filter(i => i.status === 'Verified' || i.status === 'Received').length || 0;
 
             return (
               <div key={req.id} className={cn('bg-card border rounded-xl overflow-hidden', isOverdue ? 'border-amber-300' : 'border-border')}>
@@ -590,25 +590,34 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                                   View uploaded file
                                 </button>
                               )}
-                              {(item.field_type === 'id_verification' || (item.response_text && item.response_text.trim().startsWith('{'))) && (
+                              {(item.field_type === 'id_verification' || (item.response_text && item.response_text.trim().startsWith('{'))) && (() => {
+                                  // Resolve idv fields — may be stored directly or nested inside response_text JSON
+                                  let parsedIdv = {};
+                                  if (!item.idv_status && item.response_text) {
+                                    try { parsedIdv = JSON.parse(item.response_text) || {}; } catch {}
+                                  }
+                                  const idvStatus = item.idv_status || parsedIdv.idv_status;
+                                  const idvSimilarity = item.idv_similarity_score ?? parsedIdv.idv_similarity_score;
+                                  const idvLiveness = item.idv_liveness_score ?? parsedIdv.idv_liveness_score;
+                                  return (
                                  <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  {item.idv_status ? (
+                                  {idvStatus ? (
                                     <>
                                       <span className={cn(
                                         'text-xs px-2 py-0.5 rounded-full font-medium border',
-                                        item.idv_status === 'Pass'
+                                        idvStatus === 'Pass'
                                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                          : item.idv_status === 'Fail'
+                                          : idvStatus === 'Fail'
                                           ? 'bg-red-50 text-red-700 border-red-200'
                                           : 'bg-amber-50 text-amber-700 border-amber-200'
                                       )}>
-                                        🪪 {item.idv_status}
+                                        🪪 {idvStatus}
                                       </span>
-                                      {item.idv_similarity_score != null && (
-                                        <span className="text-xs text-muted-foreground">Face {item.idv_similarity_score}%</span>
+                                      {idvSimilarity != null && (
+                                        <span className="text-xs text-muted-foreground">Face {idvSimilarity}%</span>
                                       )}
-                                      {item.idv_liveness_score != null && (
-                                        <span className="text-xs text-muted-foreground">· Liveness {item.idv_liveness_score}%</span>
+                                      {idvLiveness != null && (
+                                        <span className="text-xs text-muted-foreground">· Liveness {idvLiveness}%</span>
                                       )}
                                       <button
                                         className="text-xs text-primary underline hover:no-underline"
@@ -623,7 +632,8 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                                     </span>
                                   )}
                                 </div>
-                              )}
+                                  );
+                              })()}
                             </div>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
