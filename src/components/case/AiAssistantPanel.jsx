@@ -98,30 +98,53 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
       payload.idvData = idvData || null;
     }
     // For step 3, enrich with live Didit AML data
-    if (activeStep === 3 && screeningData) {
-      const hits = screeningData.screenings?.[0]?.hits || [];
-      payload.hitData = {
-        total_hits: screeningData.total_hits,
-        status: screeningData.status,
-        warnings: screeningData.warnings || [],
-        hits: hits.map(h => ({
-          name: h.caption || h.name,
-          match_score: h.match_score ?? (h.score != null ? Math.round(h.score * 100) : null),
-          risk_score: h.risk_score,
-          review_status: h.review_status || 'Unreviewed',
-          datasets: h.datasets || [],
-          properties: h.properties || {},
-        })),
-        screened_data: screeningData.screenings?.[0]?.screened_data || {},
-        ongoing_monitoring: screeningData.ongoing_monitoring,
-      };
+    if (activeStep === 3) {
+      const clientName = client?.full_name || 'Unknown';
+      const clientType = client?.client_type === 'NP' ? 'Natural Person (individual)' : client?.client_type === 'ORG' ? 'Organisation (legal entity)' : 'Unknown';
+      const country = client?.registered_country || client?.country_of_residence || client?.nationality || 'Unknown';
+
       payload.entityData = {
-        name: client?.full_name,
-        sector: client?.sector,
-        country: client?.registered_country || client?.country_of_residence || client?.nationality,
-        client_type: client?.client_type,
+        name: clientName,
+        client_type: clientType,
+        date_of_birth: client?.date_of_birth || null,
+        nationality: client?.nationality || null,
+        country_of_residence: client?.country_of_residence || null,
+        sector: client?.sector || null,
+        registration_number: client?.registration_number || null,
+        country,
       };
-      payload.instructions = `You are a KYC compliance analyst. Review the following Didit AML screening results and provide a structured triage analysis: 1) Summarise each hit (name, lists, scores). 2) Recommend a review decision for each (False Positive / Confirmed Match / Inconclusive) with brief justification. 3) Highlight any high-risk findings. 4) Recommend overall next steps.`;
+
+      if (screeningData) {
+        const hits = screeningData.screenings?.[0]?.hits || [];
+        payload.hitData = {
+          total_hits: screeningData.total_hits,
+          status: screeningData.status,
+          warnings: screeningData.warnings || [],
+          hits: hits.map(h => ({
+            name: h.caption || h.name,
+            match_score: h.match_score ?? (h.score != null ? Math.round(h.score * 100) : null),
+            risk_score: h.risk_score,
+            review_status: h.review_status || 'Unreviewed',
+            datasets: h.datasets || [],
+            properties: h.properties || {},
+          })),
+          screened_data: screeningData.screenings?.[0]?.screened_data || {},
+          ongoing_monitoring: screeningData.ongoing_monitoring,
+        };
+      } else {
+        payload.hitData = { total_hits: 0, hits: [], status: 'No screening data loaded yet' };
+      }
+
+      payload.instructions = `You are a KYC compliance analyst. The subject being screened is: ${clientName} (${clientType}, ${country}).
+
+Review the AML screening results and provide a structured triage analysis:
+1) Confirm the subject's identity type (${clientType}) and note any relevant profile details.
+2) Summarise each screening hit (name on list, which sanctions/PEP lists, match score).
+3) For each hit, recommend a decision: False Positive / Possible Match / Confirmed Match — with a brief justification comparing the hit details to the subject's known profile.
+4) Highlight any high-risk findings (confirmed sanctions, PEP status, adverse media).
+5) Recommend overall next steps for the analyst.
+
+Keep the output concise and professional. Do not describe the subject as an "entity" — use the correct type (individual/organisation).`;
     }
     await invoke(config.agentType, payload);
   }
