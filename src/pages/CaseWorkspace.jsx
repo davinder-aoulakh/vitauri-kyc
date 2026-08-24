@@ -91,6 +91,7 @@ export default function CaseWorkspace() {
   const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
   const [amlScreeningData, setAmlScreeningData] = useState(null);
   const [idvData, setIdvData] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const FLAG_REASONS = ['Missing document', 'Awaiting client response', 'QC query', 'Other'];
 
@@ -99,8 +100,14 @@ export default function CaseWorkspace() {
 
   useEffect(() => { loadAll(); }, [id]);
 
-  async function loadAll() {
-    setLoading(true);
+  // Fires on navigation to step 8 — silent reload, no full-screen spinner
+  useEffect(() => {
+    if (activeStep === 8) refreshCaseData(true);
+  }, [activeStep]);
+
+  async function refreshCaseData(silent = false) {
+    if (!silent) setLoading(true);
+    else setIsRefreshing(true);
     setError(null);
     try {
       const caseData = await base44.entities.KycCase.filter({ id });
@@ -111,7 +118,7 @@ export default function CaseWorkspace() {
       const clientDataPromise = c?.client_id ? base44.entities.Client.filter({ id: c.client_id }) : Promise.resolve([]);
       const usersDataPromise = base44.entities.User.list().catch(() => []);
       const auditDataPromise = base44.entities.AuditEvent.filter({ case_id: id }, '-created_date', 100).catch(() => []);
-      
+
       const [clientData, usersData, auditData] = await Promise.all([
         clientDataPromise,
         usersDataPromise,
@@ -121,11 +128,16 @@ export default function CaseWorkspace() {
       setUsers(usersData || []);
       setAuditEvents(auditData || []);
     } catch (err) {
-      console.error('CaseWorkspace loadAll error:', err);
-      setError(err?.message || 'Failed to load case data');
+      console.error('CaseWorkspace refreshCaseData error:', err);
+      if (!silent) setError(err?.message || 'Failed to load case data');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+      else setIsRefreshing(false);
     }
+  }
+
+  async function loadAll() {
+    await refreshCaseData(false);
   }
 
   async function addNote(text) {

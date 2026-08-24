@@ -4,7 +4,7 @@ import AutoSaveIndicator from '@/components/shared/AutoSaveIndicator';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertTriangle, CheckCircle, Clock, FileText, Loader2, X, MessageSquare } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, FileText, Loader2, X, MessageSquare, RefreshCw } from 'lucide-react';
 import { canApproveRisk } from '@/lib/permissions';
 import { RISK_COLORS } from '@/lib/riskColors';
 import { cn } from '@/lib/utils';
@@ -19,7 +19,7 @@ const SIGN_OFF_MATRIX = {
 
 const COMPLIANCE_RISKS = ['Medium', 'High', 'Unacceptable'];
 
-export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate }) {
+export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate, onRefresh, refreshing }) {
   const [approvalNote, setApprovalNote]       = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   const [advisoryNote, setAdvisoryNote]       = useState(kycCase?.compliance_advisory_note || '');
