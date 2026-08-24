@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -27,8 +27,27 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
   const [loadingHitDetails, setLoadingHitDetails] = useState(false);
   const [updatingHitId, setUpdatingHitId] = useState(null); // hit.id being updated in Didit
   const [openStatusDropdown, setOpenStatusDropdown] = useState(null); // hitKey with open dropdown
+  // Persists analyst review_status overrides keyed by hit.id — survives re-syncs from Didit
+  const hitStatusOverrides = useRef({}); // { [hitKey]: reviewStatus }
 
   useEffect(() => { loadAll(); }, [caseId]);
+
+  // Apply any locally-saved status overrides on top of a new AML summary
+  function applyHitOverrides(summary) {
+    if (!summary?.screenings || Object.keys(hitStatusOverrides.current).length === 0) return summary;
+    return {
+      ...summary,
+      screenings: summary.screenings.map(s => ({
+        ...s,
+        hits: (s.hits || []).map((h, i) => {
+          const key = h.id || String(i);
+          return hitStatusOverrides.current[key]
+            ? { ...h, review_status: hitStatusOverrides.current[key] }
+            : h;
+        }),
+      })),
+    };
+  }
 
   async function loadAll(opts = {}) {
     if (opts.sync) setSyncing(true);
@@ -156,15 +175,15 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
           }
         }
       }
-      // Only update if we have newer data — preserve enriched hit details (adverse_media) already loaded
+      // Update summary, preserving enriched hit details and analyst status overrides
       setDiditAmlSummary(prev => {
         if (!amlSummary) return prev;
-        // If prev has enriched hits (adverse_media loaded), keep those screenings
         const prevHasEnrichedHits = prev?.screenings?.[0]?.hits?.some(h => h.adverse_media || h.media_analysis);
-        return {
+        const merged = {
           ...amlSummary,
           screenings: prevHasEnrichedHits ? prev.screenings : amlSummary.screenings,
         };
+        return applyHitOverrides(merged);
       });
 
       // Auto-import Didit AML hits as ScreeningHit records (if hits exist)
@@ -210,8 +229,13 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
   async function updateHitStatusInDidit(hit, newReviewStatus) {
     if (!diditAmlSummary?.session_id) return;
     const hitKey = hit.id || hit.hit_id;
+    const prevStatus = hit.review_status || 'Unreviewed';
+
+    // Persist override immediately — survives any future syncDiditAml calls
+    hitStatusOverrides.current[hitKey] = newReviewStatus;
     setUpdatingHitId(hitKey);
-    // Optimistically update local state immediately so UI reflects change
+
+    // Optimistic UI update
     setDiditAmlSummary(prev => {
       if (!prev?.screenings) return prev;
       return {
@@ -224,6 +248,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
         })),
       };
     });
+
     try {
       await base44.functions.invoke('updateDiditHitStatus', {
         session_id:    diditAmlSummary.session_id,
@@ -234,7 +259,8 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
       });
     } catch (err) {
       console.error('Failed to update hit status in Didit:', err);
-      // Revert on failure
+      // Revert both override and UI on failure
+      hitStatusOverrides.current[hitKey] = prevStatus;
       setDiditAmlSummary(prev => {
         if (!prev?.screenings) return prev;
         return {
@@ -242,7 +268,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
           screenings: prev.screenings.map(s => ({
             ...s,
             hits: (s.hits || []).map(h =>
-              (h.id || h.hit_id) === hitKey ? { ...h, review_status: hit.review_status || 'Unreviewed' } : h
+              (h.id || h.hit_id) === hitKey ? { ...h, review_status: prevStatus } : h
             ),
           })),
         };
@@ -268,7 +294,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
       if (data?.aml_hits) {
         setDiditAmlSummary(prev => {
           if (!prev?.screenings) return prev;
-          return {
+          const merged = {
             ...prev,
             screenings: prev.screenings.map((s, si) => {
               if (si !== 0) return s;
@@ -279,6 +305,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
               return { ...s, hits: enrichedHits };
             }),
           };
+          return applyHitOverrides(merged);
         });
       }
     } catch (err) {
