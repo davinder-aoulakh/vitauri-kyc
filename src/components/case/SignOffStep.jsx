@@ -181,7 +181,14 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
 
       {/* Case Summary */}
       <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-        <h3 className="font-semibold text-sm">Case Summary for Approver</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-sm">Case Summary for Approver</h3>
+          {onRefresh && (
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground" onClick={() => onRefresh(true)} title="Refresh case data">
+              <RefreshCw className={cn('w-3.5 h-3.5', refreshing && 'animate-spin')} />
+            </Button>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
           {[
             { label: 'Client',              value: client?.full_name },

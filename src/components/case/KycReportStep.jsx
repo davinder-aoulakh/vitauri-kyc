@@ -566,7 +566,7 @@ const PREREQUISITE_STEPS = [
 ];
 
 // ── Component ──────────────────────────────────────────────────────────────
-export default function KycReportStep({ kycCase, client, currentUser }) {
+export default function KycReportStep({ kycCase, client, currentUser, onRefresh, refreshing }) {
   const [generating, setGenerating] = useState(false);
   const [reports, setReports]       = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -648,6 +648,8 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
 
   const latestReport = reports[0];
   const isApproved = kycCase?.status === 'Approved';
+  const isOutdated = !loading && reports.length > 0 && kycCase?.updated_date && latestReport?.generated_at
+    && new Date(kycCase.updated_date) > new Date(latestReport.generated_at);
 
   const incompleteSteps = PREREQUISITE_STEPS.filter(s => !isStepComplete(kycCase, s.id));
   const allStepsComplete = incompleteSteps.length === 0;
@@ -673,6 +675,11 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {onRefresh && (
+            <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-muted-foreground" onClick={() => onRefresh(true)} title="Refresh case data">
+              <RefreshCw className={cn('w-3.5 h-3.5', refreshing && 'animate-spin')} />
+            </Button>
+          )}
           {reports.length > 0 && (
             <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={generateReport} disabled={generating || !allStepsComplete}>
               {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
@@ -739,6 +746,21 @@ export default function KycReportStep({ kycCase, client, currentUser }) {
         </div>
       ) : (
         <div className="space-y-4">
+          {/* Outdated banner */}
+          {isOutdated && (
+            <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+              <div className="flex items-center gap-2 text-xs text-amber-800">
+                <RefreshCw className="w-3.5 h-3.5 flex-shrink-0" />
+                <span><strong>Report outdated</strong> — case changed since this report was generated.</span>
+              </div>
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs border-amber-300 text-amber-700 hover:bg-amber-100 flex-shrink-0"
+                onClick={generateReport} disabled={generating || !allStepsComplete}>
+                {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                Regenerate
+              </Button>
+            </div>
+          )}
+
           {/* Latest report */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/20">

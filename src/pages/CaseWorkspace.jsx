@@ -642,9 +642,9 @@ export default function CaseWorkspace() {
                     {activeStep === 7 && <ControlMeasuresStep kycCase={kycCase} currentUser={currentUser} />}
                     {activeStep === 8 && (
                       <div className="space-y-8">
-                        <SignOffStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />
+                        <SignOffStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} onRefresh={refreshCaseData} refreshing={isRefreshing} />
                         <div className="border-t border-border pt-6">
-                          <KycReportStep kycCase={kycCase} client={client} currentUser={currentUser} />
+                          <KycReportStep kycCase={kycCase} client={client} currentUser={currentUser} onRefresh={refreshCaseData} refreshing={isRefreshing} />
                         </div>
                       </div>
                     )}
