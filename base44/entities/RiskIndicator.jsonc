@@ -23,6 +23,17 @@
         ]
       }
     },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Geography & Sector",
+        "PEP & Sanctions",
+        "Ownership & Structure",
+        "Transaction & Financial Behaviour",
+        "Relationship & Onboarding"
+      ],
+      "description": "Category group for the indicator picker UI"
+    },
     "is_active": {
       "type": "boolean",
       "default": true

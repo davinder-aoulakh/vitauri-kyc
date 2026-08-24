@@ -94,6 +94,7 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
             relatedParties={relatedParties}
             selections={selections}
             onChange={setSelections}
+            allScores={allScores}
             onConfirm={() => {
               setSelectionConfirmed(true);
               if (entities.length > 0) setActiveTab(`assess_${entities[0].key}`);

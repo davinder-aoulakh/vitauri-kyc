@@ -1,45 +1,58 @@
 /**
- * S-090: Risk Indicator Picker
- * Left: master indicator library | Right: per-entity selection
+ * S-090: Risk Indicator Picker — redesigned
+ * Category-grouped cards with inline entity toggles, live summary rail, AI badges.
+ *
+ * Props contract UNCHANGED: { client, relatedParties, selections, onChange, onConfirm, allScores }
+ * ALL_INDICATORS export PRESERVED (backward-compat for IndicatorAssessment import).
  */
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { base44 } from '@/api/base44Client';
-import { Sparkles, Loader2, Check, X, ChevronRight, User, Building2 } from 'lucide-react';
+import { Sparkles, Loader2, Check, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useRiskIndicators } from '@/hooks/useRiskIndicators';
+import IndicatorCategoryGroup from '@/components/risk/IndicatorCategoryGroup';
+import SelectionSummaryRail from '@/components/risk/SelectionSummaryRail';
+import { useTenant } from '@/lib/tenantContext';
 
+// ─── Static default library (PRESERVED — imported by IndicatorAssessment.jsx) ───
 export const ALL_INDICATORS = [
-  { id: 'geo',         name: 'High-Risk Geography',               description: 'Operating in a high-risk or non-cooperative jurisdiction (FATF grey/blacklist)',  applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'] },
-  { id: 'pep',         name: 'PEP Status',                        description: 'Client or related party is a Politically Exposed Person',                          applies: ['NP_Client','NP_Related_Party'] },
-  { id: 'sanctions',   name: 'Sanctions / Adverse Media',         description: 'Confirmed or possible match on sanctions, PEP or adverse media lists',             applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'] },
-  { id: 'ownership',   name: 'Complex Ownership Structure',       description: 'Multi-layered, opaque, or nominee-based ownership arrangements',                   applies: ['ORG_Client','ORG_Related_Party'] },
-  { id: 'sector',      name: 'High-Risk Sector / Industry',       description: 'Operating in a high-risk sector (e.g. crypto, gambling, arms, adult)',             applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'] },
-  { id: 'cash',        name: 'Cash-Intensive Business',           description: 'Primary operations involve large cash volumes or cash-equivalent transactions',     applies: ['ORG_Client'] },
-  { id: 'nftf',        name: 'Non-Face-to-Face Relationship',     description: 'Client relationship established without in-person verification',                   applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'] },
-  { id: 'txn',         name: 'Unusual Transaction Pattern',       description: 'Transactions inconsistent with stated purpose, profile, or expected behaviour',    applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'] },
-  { id: 'sof',         name: 'Inconsistent SoF/SoW',              description: 'Source of funds or wealth cannot be adequately explained or documented',           applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'] },
-  { id: 'pep_rp',      name: 'Politically Exposed Related Party', description: 'A UBO, director, or key related party is a PEP',                                   applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'] },
-  { id: 'opaque',      name: 'Opaque Ownership / Nominee',        description: 'Use of nominee shareholders, bearer shares, or trusts obscuring beneficial ownership', applies: ['ORG_Client','ORG_Related_Party'] },
-  { id: 'introducer',  name: 'Third-Party Introducer',            description: 'Client was introduced by a third party whose identity or integrity is uncertain',   applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'] },
+  { id: 'geo',        name: 'High-Risk Geography',               description: 'Operating in a high-risk or non-cooperative jurisdiction (FATF grey/blacklist)',      applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'Geography & Sector',                sort_order: 0  },
+  { id: 'sector',     name: 'High-Risk Sector / Industry',       description: 'Operating in a high-risk sector (e.g. crypto, gambling, arms, adult)',                 applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'Geography & Sector',                sort_order: 1  },
+  { id: 'cash',       name: 'Cash-Intensive Business',           description: 'Primary operations involve large cash volumes or cash-equivalent transactions',         applies: ['ORG_Client'],                                                    category: 'Geography & Sector',                sort_order: 2  },
+  { id: 'pep',        name: 'PEP Status',                        description: 'Client or related party is a Politically Exposed Person',                              applies: ['NP_Client','NP_Related_Party'],                                   category: 'PEP & Sanctions',                   sort_order: 3  },
+  { id: 'sanctions',  name: 'Sanctions / Adverse Media',         description: 'Confirmed or possible match on sanctions, PEP or adverse media lists',                 applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'PEP & Sanctions',                   sort_order: 4  },
+  { id: 'pep_rp',     name: 'Politically Exposed Related Party', description: 'A UBO, director, or key related party is a PEP',                                       applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'PEP & Sanctions',                   sort_order: 5  },
+  { id: 'ownership',  name: 'Complex Ownership Structure',       description: 'Multi-layered, opaque, or nominee-based ownership arrangements',                       applies: ['ORG_Client','ORG_Related_Party'],                                 category: 'Ownership & Structure',             sort_order: 6  },
+  { id: 'opaque',     name: 'Opaque Ownership / Nominee',        description: 'Use of nominee shareholders, bearer shares, or trusts obscuring beneficial ownership', applies: ['ORG_Client','ORG_Related_Party'],                                 category: 'Ownership & Structure',             sort_order: 7  },
+  { id: 'txn',        name: 'Unusual Transaction Pattern',       description: 'Transactions inconsistent with stated purpose, profile, or expected behaviour',        applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'Transaction & Financial Behaviour', sort_order: 8  },
+  { id: 'sof',        name: 'Inconsistent SoF/SoW',              description: 'Source of funds or wealth cannot be adequately explained or documented',               applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'Transaction & Financial Behaviour', sort_order: 9  },
+  { id: 'nftf',       name: 'Non-Face-to-Face Relationship',     description: 'Client relationship established without in-person verification',                       applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'Relationship & Onboarding',         sort_order: 10 },
+  { id: 'introducer', name: 'Third-Party Introducer',            description: 'Client was introduced by a third party whose identity or integrity is uncertain',       applies: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'Relationship & Onboarding',         sort_order: 11 },
 ];
 
-const ENTITY_TYPE_FILTER = [
-  { label: 'All',           value: 'all' },
-  { label: 'NP Client',     value: 'NP_Client' },
-  { label: 'ORG Client',    value: 'ORG_Client' },
-  { label: 'NP Related Party', value: 'NP_Related_Party' },
-  { label: 'ORG Related Party', value: 'ORG_Related_Party' },
+const CATEGORIES = [
+  'Geography & Sector',
+  'PEP & Sanctions',
+  'Ownership & Structure',
+  'Transaction & Financial Behaviour',
+  'Relationship & Onboarding',
 ];
 
-export default function IndicatorPicker({ client, relatedParties, selections, onChange, onConfirm }) {
-  const [filter, setFilter] = useState('all');
+export default function IndicatorPicker({ client, relatedParties, selections, onChange, onConfirm, allScores }) {
+  const { tenant } = useTenant();
+  const { byCategory, loading } = useRiskIndicators(tenant?.id);
+
+  const [search, setSearch] = useState('');
   const [suggesting, setSuggesting] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState(null);
-  const [activeEntity, setActiveEntity] = useState('client');
+  // aiBadges: { [indicator_id]: { [entityKey]: { reason, dismissed } } }
+  const [aiBadges, setAiBadges] = useState({});
+  // Track which indicators have been reviewed (toggled at least once this session)
+  const [reviewed, setReviewed] = useState(new Set());
 
   const entities = [
     { key: 'client', label: client?.full_name || 'Client', type: client?.client_type === 'ORG' ? 'ORG_Client' : 'NP_Client', data: client },
-    ...(relatedParties || []).map((rp, i) => ({
+    ...(relatedParties || []).map(rp => ({
       key: `rp_${rp.id}`,
       label: rp.full_name,
       type: rp.party_type === 'ORG' ? 'ORG_Related_Party' : 'NP_Related_Party',
@@ -47,44 +60,70 @@ export default function IndicatorPicker({ client, relatedParties, selections, on
     })),
   ];
 
-  const activeEntityObj = entities.find(e => e.key === activeEntity);
-
-  const filteredIndicators = ALL_INDICATORS.filter(ind =>
-    filter === 'all' || ind.applies.includes(filter)
-  );
-
-  function isSelected(entityKey, indicatorId) {
-    return (selections[entityKey] || []).includes(indicatorId);
-  }
-
   function toggle(entityKey, indicatorId) {
     const current = selections[entityKey] || [];
     const updated = current.includes(indicatorId)
       ? current.filter(id => id !== indicatorId)
       : [...current, indicatorId];
     onChange({ ...selections, [entityKey]: updated });
+    setReviewed(r => new Set([...r, indicatorId]));
   }
+
+  function dismissAiBadge(entityKey, indicatorId) {
+    setAiBadges(prev => ({
+      ...prev,
+      [indicatorId]: {
+        ...(prev[indicatorId] || {}),
+        [entityKey]: { ...(prev[indicatorId]?.[entityKey] || {}), dismissed: true },
+      },
+    }));
+  }
+
+  // Compute reviewed count: indicators with saved selections OR toggled this session
+  const allIndicatorIds = ALL_INDICATORS.map(i => i.id);
+  const reviewedCount = allIndicatorIds.filter(id => {
+    const hasSaved = entities.some(e => (selections[e.key] || []).includes(id));
+    return hasSaved || reviewed.has(id);
+  }).length;
+
+  const totalSelected = Object.values(selections).flat().length;
+
+  // Filter indicators by search text
+  const filteredByCategory = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return byCategory;
+    const result = {};
+    CATEGORIES.forEach(cat => {
+      result[cat] = (byCategory[cat] || []).filter(ind =>
+        ind.name.toLowerCase().includes(q) || ind.description.toLowerCase().includes(q)
+      );
+    });
+    return result;
+  }, [search, byCategory]);
+
+  const hasSearchResults = CATEGORIES.some(cat => (filteredByCategory[cat] || []).length > 0);
 
   async function suggestIndicators() {
     setSuggesting(true);
-    setAiSuggestions(null);
+    setAiBadges({});
 
     const entitySummaries = entities.map(e => {
       const d = e.data;
-      const base = `${e.label} (${e.type}): ${d?.sector || d?.nationality || ''} ${d?.country_of_residence || d?.registered_country || ''}`.trim();
-      return base;
+      return `${e.key}|${e.label} (${e.type}): ${d?.sector || d?.nationality || ''} ${d?.country_of_residence || d?.registered_country || ''}`.trim();
     }).join('\n');
 
     const result = await base44.integrations.Core.InvokeLLM({
       prompt: `You are a KYC compliance expert. Based on the following client and related party data, recommend which risk indicators apply and briefly explain why.
 
-ENTITIES:
+ENTITIES (format: key|name type: details):
 ${entitySummaries}
 
 AVAILABLE INDICATORS:
 ${ALL_INDICATORS.map(i => `${i.id}: ${i.name} — ${i.description}`).join('\n')}
 
-For each entity, return the indicator IDs that apply with a one-sentence reason. Return JSON only.`,
+For each entity, return the indicator IDs that apply with a one-sentence reason.
+Use the exact entity key (before the | separator) in entity_key.
+Return JSON only.`,
       response_json_schema: {
         type: 'object',
         properties: {
@@ -93,9 +132,9 @@ For each entity, return the indicator IDs that apply with a one-sentence reason.
             items: {
               type: 'object',
               properties: {
-                entity_key: { type: 'string' },
+                entity_key:   { type: 'string' },
                 indicator_id: { type: 'string' },
-                reason: { type: 'string' },
+                reason:       { type: 'string' },
               }
             }
           }
@@ -103,37 +142,42 @@ For each entity, return the indicator IDs that apply with a one-sentence reason.
       }
     });
 
-    setAiSuggestions(result?.suggestions || []);
-
-    // Auto-apply suggestions
+    const newBadges = {};
     const newSelections = { ...selections };
+
     (result?.suggestions || []).forEach(s => {
-      // Map entity_key from AI (it uses entity index or name) to our keys
       const matchedEntity = entities.find(e =>
-        e.label.toLowerCase().includes((s.entity_key || '').toLowerCase()) ||
-        s.entity_key === e.key ||
-        s.entity_key === String(entities.indexOf(e))
+        e.key === s.entity_key ||
+        e.label.toLowerCase().includes((s.entity_key || '').toLowerCase())
       ) || entities[0];
 
-      if (matchedEntity) {
-        const current = newSelections[matchedEntity.key] || [];
-        if (!current.includes(s.indicator_id)) {
-          newSelections[matchedEntity.key] = [...current, s.indicator_id];
-        }
+      if (!matchedEntity || !s.indicator_id) return;
+
+      // Store badge
+      if (!newBadges[s.indicator_id]) newBadges[s.indicator_id] = {};
+      newBadges[s.indicator_id][matchedEntity.key] = { reason: s.reason, dismissed: false };
+
+      // Auto-apply selection
+      const current = newSelections[matchedEntity.key] || [];
+      if (!current.includes(s.indicator_id)) {
+        newSelections[matchedEntity.key] = [...current, s.indicator_id];
       }
     });
+
+    setAiBadges(newBadges);
     onChange(newSelections);
     setSuggesting(false);
   }
 
-  const totalSelected = Object.values(selections).flat().length;
-
   return (
     <div className="space-y-4">
+      {/* Top bar */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h3 className="font-semibold text-sm text-foreground">Risk Indicator Selection</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Select applicable indicators for each entity, or use AI to suggest</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Toggle applicable indicators for each entity — grouped by risk category
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -144,7 +188,7 @@ For each entity, return the indicator IDs that apply with a one-sentence reason.
             disabled={suggesting}
           >
             {suggesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            {suggesting ? 'Analysing…' : 'AI Suggest Indicators'}
+            {suggesting ? 'Analysing…' : 'AI Suggest'}
           </Button>
           <Button
             size="sm"
@@ -157,111 +201,59 @@ For each entity, return the indicator IDs that apply with a one-sentence reason.
         </div>
       </div>
 
-      {/* AI suggestion reasoning panel */}
-      {aiSuggestions && aiSuggestions.length > 0 && (
-        <div className="bg-purple-50/60 border border-purple-200 rounded-xl p-3 space-y-1.5">
-          <div className="text-xs font-semibold text-purple-700 mb-1">AI Suggestions Applied — review and adjust below</div>
-          {aiSuggestions.slice(0, 6).map((s, i) => (
-            <div key={i} className="text-xs text-purple-900 flex gap-2">
-              <Sparkles className="w-3 h-3 text-purple-400 mt-0.5 flex-shrink-0" />
-              <span><strong>{ALL_INDICATORS.find(ind => ind.id === s.indicator_id)?.name || s.indicator_id}</strong>: {s.reason}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Search bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+        <input
+          type="text"
+          placeholder="Search indicators…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full pl-9 pr-3 py-2 text-sm border border-input rounded-lg bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+      </div>
 
-      <div className="grid grid-cols-5 gap-4">
-        {/* Left: Indicator Library */}
-        <div className="col-span-3 space-y-2">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {ENTITY_TYPE_FILTER.map(f => (
-              <button
-                key={f.value}
-                onClick={() => setFilter(f.value)}
-                className={cn('text-xs px-2.5 py-1 rounded-full border transition-colors',
-                  filter === f.value ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:border-primary/40'
-                )}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="bg-card border border-border rounded-xl overflow-hidden divide-y divide-border">
-            {filteredIndicators.map(ind => {
-              const selectedForActive = isSelected(activeEntity, ind.id);
-              const applicable = !activeEntityObj || ind.applies.includes(activeEntityObj.type);
-              return (
-                <div
-                  key={ind.id}
-                  className={cn('flex items-start gap-3 px-4 py-3 transition-colors', applicable ? 'hover:bg-muted/20' : 'opacity-40')}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedForActive}
-                    disabled={!applicable}
-                    onChange={() => applicable && toggle(activeEntity, ind.id)}
-                    className="mt-0.5 rounded border-border accent-primary"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-foreground">{ind.name}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{ind.description}</div>
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {ind.applies.map(a => (
-                        <span key={a} className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{a.replace('_', ' ')}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Right: Per-Entity Selection */}
+      {/* Main two-column layout */}
+      <div className="grid grid-cols-3 gap-4 items-start">
+        {/* Left: category groups */}
         <div className="col-span-2 space-y-3">
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Editing indicators for:</div>
-          <div className="space-y-1.5">
-            {entities.map(e => (
-              <button
-                key={e.key}
-                onClick={() => setActiveEntity(e.key)}
-                className={cn(
-                  'w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left text-xs transition-colors',
-                  activeEntity === e.key
-                    ? 'bg-primary/10 border-primary/30 text-primary font-semibold'
-                    : 'border-border hover:bg-muted/30'
-                )}
-              >
-                {e.type.startsWith('ORG') ? <Building2 className="w-3.5 h-3.5 flex-shrink-0" /> : <User className="w-3.5 h-3.5 flex-shrink-0" />}
-                <span className="truncate">{e.label}</span>
-                <span className="ml-auto bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full flex-shrink-0">
-                  {(selections[e.key] || []).length}
-                </span>
-                {activeEntity === e.key && <ChevronRight className="w-3 h-3 flex-shrink-0" />}
-              </button>
-            ))}
-          </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-12 bg-card border border-border rounded-xl">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : !hasSearchResults ? (
+            <div className="py-12 text-center text-sm text-muted-foreground bg-card border border-border rounded-xl">
+              No indicators match your search.
+            </div>
+          ) : (
+            CATEGORIES.map(cat => {
+              const catIndicators = filteredByCategory[cat] || [];
+              if (catIndicators.length === 0) return null;
+              return (
+                <IndicatorCategoryGroup
+                  key={cat}
+                  category={cat}
+                  indicators={catIndicators}
+                  entities={entities}
+                  selections={selections}
+                  onToggle={toggle}
+                  aiBadges={aiBadges}
+                  onDismissAiBadge={dismissAiBadge}
+                />
+              );
+            })
+          )}
+        </div>
 
-          {/* Selected indicators for active entity */}
-          <div className="bg-muted/30 border border-border rounded-xl p-3 space-y-1.5">
-            <div className="text-xs font-semibold text-muted-foreground mb-1">Selected for {activeEntityObj?.label}</div>
-            {(selections[activeEntity] || []).length === 0 ? (
-              <div className="text-xs text-muted-foreground italic">None selected — check indicators on the left</div>
-            ) : (
-              (selections[activeEntity] || []).map(id => {
-                const ind = ALL_INDICATORS.find(i => i.id === id);
-                return ind ? (
-                  <div key={id} className="flex items-center justify-between gap-2 bg-primary/5 rounded-lg px-2.5 py-1.5">
-                    <span className="text-xs font-medium text-foreground">{ind.name}</span>
-                    <button onClick={() => toggle(activeEntity, id)} className="text-muted-foreground hover:text-destructive">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ) : null;
-              })
-            )}
-          </div>
+        {/* Right: summary rail */}
+        <div className="col-span-1">
+          <SelectionSummaryRail
+            entities={entities}
+            selections={selections}
+            totalIndicators={ALL_INDICATORS.length}
+            reviewedCount={reviewedCount}
+            allScores={allScores || {}}
+          />
         </div>
       </div>
     </div>
