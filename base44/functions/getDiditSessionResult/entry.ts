@@ -156,30 +156,38 @@ export default async function(req) {
       console.error('Client enrichment failed:', enrichErr);
     }
 
-    // 7. Create Document records (idempotent via guard flag)
+    // 7. Create Document records — DB-level dedup guard (survives races and webhook pre-sets)
     try {
       const req7      = (await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id }))?.[0];
       const clientId7 = req7?.client_id;
       if (clientId7) {
+        // Fast-path: if flag already set, skip entirely
         const guardItem = (req7?.items || []).find(i => item_id ? i.item_id === item_id : i.didit_session_id === session_id);
         if (guardItem?.idv_docs_created_for_session !== session_id) {
-          // Claim the session
-          const claimedItems = (req7.items || []).map(i =>
+          // Authoritative guard: query existing docs for this session to handle concurrent calls
+          const existingDiditDocs = await base44.asServiceRole.entities.Document.filter({ didit_session_id: session_id, is_deleted: false });
+          const existingDocTypes = new Set((existingDiditDocs || []).map((d: any) => d.doc_type));
+
+          const docType = (idvFields.idv_document_type || '').toLowerCase().includes('passport') ? 'Passport' : 'ID_Card';
+
+          if (idv.front_image && !existingDocTypes.has(docType)) {
+            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: docType, file_name: `Didit_${docType}_Front_${session_id.substring(0,8)}.jpg`, file_url: idv.front_image, version: 1, is_ai_generated: false, review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review', source: 'didit', didit_session_id: session_id }).catch(() => {});
+            existingDocTypes.add(docType); // prevent back_image creating duplicate if same type
+          }
+          if (idv.back_image && !existingDocTypes.has(`${docType}_Back`)) {
+            // Use a distinct pseudo-type key for back image to allow both front and back
+            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: docType, file_name: `Didit_${docType}_Back_${session_id.substring(0,8)}.jpg`, file_url: idv.back_image, version: 1, is_ai_generated: false, review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review', source: 'didit', didit_session_id: session_id }).catch(() => {});
+          }
+          if (idv.portrait_image && !existingDocTypes.has('Selfie')) {
+            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: 'Selfie', file_name: `Didit_Selfie_${session_id.substring(0,8)}.jpg`, file_url: idv.portrait_image, version: 1, is_ai_generated: false, review_status: 'Approved', source: 'didit', didit_session_id: session_id }).catch(() => {});
+          }
+
+          // Set claim flag so future fast-path skips this block entirely
+          const claimedItems = (req7.items || []).map((i: any) =>
             (item_id ? i.item_id === item_id : i.didit_session_id === session_id)
               ? { ...i, idv_docs_created_for_session: session_id } : i
           );
           await base44.asServiceRole.entities.OutreachRequest.update(outreach_id, { items: claimedItems });
-
-          const docType = (idvFields.idv_document_type || '').toLowerCase().includes('passport') ? 'Passport' : 'ID_Card';
-          if (idv.front_image) {
-            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: docType, file_name: `Didit_${docType}_Front_${session_id.substring(0,8)}.jpg`, file_url: idv.front_image, version: 1, is_ai_generated: false, review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review', source: 'didit', didit_session_id: session_id }).catch(() => {});
-          }
-          if (idv.back_image) {
-            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: docType, file_name: `Didit_${docType}_Back_${session_id.substring(0,8)}.jpg`, file_url: idv.back_image, version: 1, is_ai_generated: false, review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review', source: 'didit', didit_session_id: session_id }).catch(() => {});
-          }
-          if (idv.portrait_image) {
-            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: 'Selfie', file_name: `Didit_Selfie_${session_id.substring(0,8)}.jpg`, file_url: idv.portrait_image, version: 1, is_ai_generated: false, review_status: 'Approved', source: 'didit', didit_session_id: session_id }).catch(() => {});
-          }
         }
       }
     } catch (docErr) {
