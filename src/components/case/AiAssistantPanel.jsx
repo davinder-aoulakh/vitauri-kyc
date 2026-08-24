@@ -127,13 +127,11 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
     setOverrideMode(false);
   }
 
-  // Render output as readable text
+  // Render output as readable text — narrative/summary fields only, never raw JSON
   function getDisplayText() {
     if (!output) return '';
     if (typeof output === 'string') return output;
-    return output.narrative || output.email_draft || output.summary || output.answer || output.rationale ||
-      (output.key_risks ? output.key_risks.join('\n') : '') ||
-      JSON.stringify(output, null, 2);
+    return output.narrative || output.email_draft || output.summary || output.answer || output.rationale || '';
   }
 
   // Key points / structured extras
@@ -246,8 +244,8 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
               <Textarea value={editedText} onChange={e => setEditedText(e.target.value)}
                 className="text-xs min-h-32 bg-white resize-none" autoFocus />
             ) : (
-              <div className="bg-white border border-purple-100 rounded-lg p-2.5 overflow-y-auto">
-                <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">{getDisplayText()}</p>
+              <div className="bg-white border border-purple-100 rounded-lg p-2.5 overflow-y-auto prose prose-xs max-w-none text-xs text-foreground/80 [&_h1]:text-xs [&_h2]:text-xs [&_h3]:text-xs [&_h4]:text-xs [&_strong]:font-semibold [&_ul]:pl-4 [&_li]:my-0.5">
+                <ReactMarkdown>{getDisplayText()}</ReactMarkdown>
               </div>
             )}
 
