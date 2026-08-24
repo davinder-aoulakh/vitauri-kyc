@@ -24,6 +24,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
   const [showThresholds, setShowThresholds] = useState(false);
   const [expandedHitIdx, setExpandedHitIdx] = useState(null);
   const [updatingHitId, setUpdatingHitId] = useState(null); // hit.id being updated in Didit
+  const [openStatusDropdown, setOpenStatusDropdown] = useState(null); // hitKey with open dropdown
 
   useEffect(() => { loadAll(); }, [caseId]);
 
@@ -517,7 +518,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                           const isExpanded = expandedHitIdx === hitKey;
                           const isUpdating = updatingHitId === hitKey;
                           const adverseMedia = hit.adverse_media || hit.media_analysis;
-                          const hasDetail = adverseMedia || (hit.sources?.length > 0) || (hit.connections?.length > 0);
+                          const hasDetail = true; // always show expand — hits always have some detail to show
 
                           const REVIEW_OPTIONS = [
                             { value: 'Unreviewed',      label: 'UNREVIEWED',      style: 'bg-blue-100 text-blue-700' },
@@ -546,33 +547,39 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                                 </td>
                                 {/* Status dropdown — updates Didit directly */}
                                 <td className="px-3 py-2.5">
-                                  <div className="relative group inline-block">
-                                    <div className={cn(
-                                      'px-2 py-0.5 rounded-full font-medium text-xs cursor-pointer flex items-center gap-1 select-none',
-                                      currentOption.style,
-                                      isUpdating && 'opacity-50 pointer-events-none'
-                                    )}>
-                                      {isUpdating
-                                        ? <Loader2 className="w-3 h-3 animate-spin" />
-                                        : currentOption.label
-                                      }
+                                  <div className="relative inline-block">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setOpenStatusDropdown(openStatusDropdown === hitKey ? null : hitKey); }}
+                                      disabled={isUpdating}
+                                      className={cn(
+                                        'px-2 py-0.5 rounded-full font-medium text-xs cursor-pointer flex items-center gap-1 select-none',
+                                        currentOption.style,
+                                        isUpdating && 'opacity-50 cursor-not-allowed'
+                                      )}
+                                    >
+                                      {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : currentOption.label}
                                       <ChevronDown className="w-2.5 h-2.5 opacity-60" />
-                                    </div>
-                                    <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover:block bg-card border border-border rounded-lg shadow-lg min-w-[160px] py-1">
-                                      {REVIEW_OPTIONS.map(opt => (
-                                        <button
-                                          key={opt.value}
-                                          onClick={() => updateHitStatusInDidit(hit, opt.value)}
-                                          className={cn(
-                                            'w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-muted/50 flex items-center gap-2',
-                                            opt.value === reviewStatus && 'opacity-50 pointer-events-none'
-                                          )}
-                                        >
-                                          <span className={cn('w-2 h-2 rounded-full', opt.style.replace('text-', 'bg-').split(' ')[0])} />
-                                          {opt.label}
-                                        </button>
-                                      ))}
-                                    </div>
+                                    </button>
+                                    {openStatusDropdown === hitKey && (
+                                      <>
+                                        <div className="fixed inset-0 z-40" onClick={() => setOpenStatusDropdown(null)} />
+                                        <div className="absolute left-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-lg min-w-[170px] py-1">
+                                          {REVIEW_OPTIONS.map(opt => (
+                                            <button
+                                              key={opt.value}
+                                              onClick={(e) => { e.stopPropagation(); setOpenStatusDropdown(null); updateHitStatusInDidit(hit, opt.value); }}
+                                              className={cn(
+                                                'w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-muted/50 flex items-center gap-2',
+                                                opt.value === reviewStatus && 'opacity-40 pointer-events-none'
+                                              )}
+                                            >
+                                              <span className={cn('w-2 h-2 rounded-full flex-shrink-0', opt.style.split(' ')[0].replace('text-', 'bg-'))} />
+                                              {opt.label}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </>
+                                    )}
                                   </div>
                                 </td>
                                 <td className="px-3 py-2.5">
@@ -629,9 +636,9 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                                 </td>
                               </tr>
 
-                              {/* Expanded detail row — adverse media, sources */}
-                              {isExpanded && hasDetail && (
-                                <tr className="bg-muted/5">
+                              {/* Expanded detail row — adverse media, sources, raw hit data */}
+                              {isExpanded && (
+                                <tr className="bg-muted/5 border-b border-border">
                                   <td colSpan={8} className="px-4 py-3">
                                     {adverseMedia && (
                                       <div className="space-y-3">
@@ -732,6 +739,20 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                                             </span>
                                           ))}
                                         </div>
+                                      </div>
+                                    )}
+
+                                    {/* Fallback: show all available hit properties when no adverse media or sources */}
+                                    {!adverseMedia && !hit.sources?.length && (
+                                      <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-xs">
+                                        {hit.gender && <div><span className="text-muted-foreground">Gender: </span><span className="font-medium">{hit.gender}</span></div>}
+                                        {hit.nationality && <div><span className="text-muted-foreground">Nationality: </span><span className="font-medium">{hit.nationality}</span></div>}
+                                        {hit.pep_level && <div><span className="text-muted-foreground">PEP Level: </span><span className="font-medium">{hit.pep_level}</span></div>}
+                                        {hit.last_updated && <div><span className="text-muted-foreground">Last Updated: </span><span className="font-medium">{hit.last_updated}</span></div>}
+                                        {hit.description && <div className="col-span-3"><span className="text-muted-foreground">Description: </span><span className="font-medium">{hit.description}</span></div>}
+                                        {!hit.gender && !hit.nationality && !hit.pep_level && !hit.description && (
+                                          <div className="col-span-3 text-muted-foreground italic">No additional details available for this hit.</div>
+                                        )}
                                       </div>
                                     )}
                                   </td>
