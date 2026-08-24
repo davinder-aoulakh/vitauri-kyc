@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Loader2, ExternalLink, ChevronDown, AlertTriangle, Shield, Newspaper } from 'lucide-react';
+import { X, Loader2, ExternalLink, ChevronDown, Shield, Newspaper } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const REVIEW_OPTIONS = [
@@ -30,6 +30,18 @@ function SectionHeading({ children }) {
   );
 }
 
+// Didit stores multi-value fields as arrays in properties{}
+function propFirst(hit, key) {
+  const val = hit?.properties?.[key];
+  if (!val) return null;
+  return Array.isArray(val) ? val[0] : val;
+}
+function propAll(hit, key) {
+  const val = hit?.properties?.[key];
+  if (!val) return [];
+  return Array.isArray(val) ? val : [val];
+}
+
 export default function AmlHitSlidePanel({ hit, hitIndex, loading, onClose, onStatusChange, updatingHitId }) {
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
 
@@ -43,13 +55,21 @@ export default function AmlHitSlidePanel({ hit, hitIndex, loading, onClose, onSt
   const matchScore = hit.match_score ?? (hit.score != null ? Math.round(hit.score * 100) : null);
   const riskScore = hit.risk_score ?? null;
 
-  const cats = hit.categories?.length ? hit.categories
-    : hit.types?.length ? hit.types.map(t => t.name || t)
-    : [];
+  // datasets[] = ["PEP Level 2", "Sanctions", ...] — the primary list memberships in Didit V3
+  const datasets = hit.datasets?.length ? hit.datasets : [];
 
-  const datasets = hit.datasets?.length ? hit.datasets
-    : hit.types?.length ? hit.types.map(t => t.name || t)
-    : [];
+  // Aliases from properties.alias or properties.name (additional names)
+  const aliases = [
+    ...propAll(hit, 'alias'),
+    ...propAll(hit, 'also_known_as'),
+  ].filter(Boolean);
+
+  // Names listed on the hit (all variants)
+  const allNames = propAll(hit, 'name').filter(n => n !== hit.caption);
+
+  const dob = propFirst(hit, 'birthDate') || hit.date_of_birth;
+  const country = propFirst(hit, 'country') || hit.country;
+  const nationality = propFirst(hit, 'nationality') || hit.nationality;
 
   const adverseMedia = hit.adverse_media || hit.media_analysis;
 
@@ -68,9 +88,9 @@ export default function AmlHitSlidePanel({ hit, hitIndex, loading, onClose, onSt
               <span className="text-sm font-bold text-foreground truncate">
                 {hit.caption || hit.name || `AML Hit ${(hitIndex ?? 0) + 1}`}
               </span>
-              {cats.slice(0, 2).map((cat, i) => (
+              {datasets.slice(0, 2).map((ds, i) => (
                 <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
-                  {typeof cat === 'string' ? cat : (cat.name || JSON.stringify(cat))}
+                  {String(ds)}
                 </span>
               ))}
             </div>
@@ -144,167 +164,93 @@ export default function AmlHitSlidePanel({ hit, hitIndex, loading, onClose, onSt
             </div>
           </div>
 
-          {/* Identity Details */}
+          {/* Identity Details — sourced from hit.properties{} */}
           <div>
             <SectionHeading>Identity Details</SectionHeading>
             <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-sm">
-              {(hit.properties?.country || hit.country) && (
-                <div>
-                  <div className="text-xs text-muted-foreground">Country</div>
-                  <div className="font-medium">🌍 {hit.properties?.country || hit.country}</div>
-                </div>
-              )}
-              {(hit.properties?.birthDate || hit.date_of_birth) && (
+              {dob && (
                 <div>
                   <div className="text-xs text-muted-foreground">Date of Birth</div>
-                  <div className="font-medium">🗓 {hit.properties?.birthDate || hit.date_of_birth}</div>
+                  <div className="font-medium">{Array.isArray(dob) ? dob[0] : dob}</div>
                 </div>
               )}
-              {hit.gender && (
+              {country && (
                 <div>
-                  <div className="text-xs text-muted-foreground">Gender</div>
-                  <div className="font-medium">{hit.gender}</div>
+                  <div className="text-xs text-muted-foreground">Country</div>
+                  <div className="font-medium">{country}</div>
                 </div>
               )}
-              {hit.nationality && (
+              {nationality && (
                 <div>
                   <div className="text-xs text-muted-foreground">Nationality</div>
-                  <div className="font-medium">{hit.nationality}</div>
+                  <div className="font-medium">{nationality}</div>
                 </div>
               )}
-              {hit.pep_level && (
+              {hit.first_seen && (
                 <div>
-                  <div className="text-xs text-muted-foreground">PEP Level</div>
-                  <div className="font-medium">{hit.pep_level}</div>
+                  <div className="text-xs text-muted-foreground">First Seen</div>
+                  <div className="font-medium">{new Date(hit.first_seen).toLocaleDateString()}</div>
                 </div>
               )}
-              {hit.last_updated && (
+              {hit.last_seen && (
                 <div>
-                  <div className="text-xs text-muted-foreground">Last Updated</div>
-                  <div className="font-medium">{hit.last_updated}</div>
+                  <div className="text-xs text-muted-foreground">Last Seen</div>
+                  <div className="font-medium">{new Date(hit.last_seen).toLocaleDateString()}</div>
                 </div>
               )}
-              {hit.description && (
+              {hit.target != null && (
+                <div>
+                  <div className="text-xs text-muted-foreground">Direct Target</div>
+                  <div className="font-medium">{hit.target ? 'Yes' : 'No'}</div>
+                </div>
+              )}
+
+              {/* All name variants */}
+              {allNames.length > 0 && (
                 <div className="col-span-2">
-                  <div className="text-xs text-muted-foreground">Description</div>
-                  <div className="font-medium">{hit.description}</div>
+                  <div className="text-xs text-muted-foreground">Name Variants</div>
+                  <div className="flex flex-wrap gap-1 mt-0.5">
+                    {allNames.map((n, i) => (
+                      <span key={i} className="bg-muted border border-border px-2 py-0.5 rounded text-xs font-medium">{n}</span>
+                    ))}
+                  </div>
                 </div>
               )}
-              {(hit.aliases?.length > 0 || hit.also_known_as?.length > 0) && (
+
+              {/* Aliases */}
+              {aliases.length > 0 && (
                 <div className="col-span-2">
                   <div className="text-xs text-muted-foreground">Also Known As</div>
                   <div className="flex flex-wrap gap-1 mt-0.5">
-                    {(hit.aliases || hit.also_known_as || []).map((alias, i) => (
-                      <span key={i} className="bg-muted border border-border px-2 py-0.5 rounded text-xs font-medium">
-                        {typeof alias === 'string' ? alias : (alias.name || alias.value || JSON.stringify(alias))}
-                      </span>
+                    {aliases.map((alias, i) => (
+                      <span key={i} className="bg-muted border border-border px-2 py-0.5 rounded text-xs font-medium">{alias}</span>
                     ))}
                   </div>
                 </div>
               )}
-              {hit.positions?.length > 0 && (
+
+              {/* Source URL */}
+              {hit.url && (
                 <div className="col-span-2">
-                  <div className="text-xs text-muted-foreground">Positions</div>
-                  <div className="space-y-0.5 mt-0.5">
-                    {hit.positions.map((pos, i) => (
-                      <div key={i} className="text-xs font-medium text-foreground">
-                        {typeof pos === 'string' ? pos : [pos.title, pos.country, pos.start].filter(Boolean).join(' · ')}
-                      </div>
-                    ))}
-                  </div>
+                  <a href={hit.url} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium">
+                    View on source registry <ExternalLink className="w-3 h-3" />
+                  </a>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Categories & Lists */}
-          {(cats.length > 0 || datasets.length > 0) && (
+          {/* Lists / Datasets */}
+          {datasets.length > 0 && (
             <div>
-              <SectionHeading>Categories &amp; Lists</SectionHeading>
-              <div className="space-y-2">
-                {cats.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {cats.map((cat, i) => (
-                      <span key={i} className="bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full text-xs font-medium border border-amber-200">
-                        {typeof cat === 'string' ? cat : (cat.name || JSON.stringify(cat))}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {datasets.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {datasets.map((ds, i) => {
-                      const label = typeof ds === 'string' ? ds : (ds.name || String(ds));
-                      return (
-                        <span key={i} className="bg-purple-100 text-purple-700 px-2.5 py-1 rounded-full text-xs font-medium border border-purple-200">
-                          {label}
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Sources */}
-          {hit.sources?.length > 0 && (
-            <div>
-              <SectionHeading>Sources ({hit.sources.length})</SectionHeading>
-              <div className="space-y-2">
-                {hit.sources.map((src, i) => {
-                  if (typeof src === 'string') {
-                    return (
-                      <div key={i} className="text-xs bg-muted border border-border px-2.5 py-1.5 rounded-md font-medium">
-                        {src}
-                      </div>
-                    );
-                  }
-                  // Rich source object — render all available fields
-                  const name = src.name || src.source || src.list_name || src.dataset || `Source ${i + 1}`;
-                  const category = src.category || src.type || src.source_type;
-                  const country = src.country || src.jurisdiction;
-                  const url = src.url || src.source_url;
-                  const listingStart = src.listing_started_utc || src.listed_on || src.start_date;
-                  const listingEnd = src.listing_ended_utc || src.delisted_on || src.end_date;
-                  const notes = src.notes || src.description || src.reason;
-
-                  return (
-                    <div key={i} className="border border-border rounded-lg px-3.5 py-3 bg-card text-xs space-y-1.5">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="font-semibold text-sm text-foreground">{name}</span>
-                        {category && (
-                          <span className="bg-purple-100 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full font-medium text-xs">
-                            {category}
-                          </span>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
-                        {country && <div>🌍 <span className="text-foreground font-medium">{country}</span></div>}
-                        {listingStart && (
-                          <div>Listed: <span className="text-foreground font-medium">
-                            {new Date(listingStart).toLocaleDateString?.() ?? listingStart}
-                          </span></div>
-                        )}
-                        {listingEnd && (
-                          <div>Delisted: <span className="text-foreground font-medium">
-                            {new Date(listingEnd).toLocaleDateString?.() ?? listingEnd}
-                          </span></div>
-                        )}
-                        {src.authority && <div>Authority: <span className="text-foreground font-medium">{src.authority}</span></div>}
-                        {src.sanctions_category && <div>Sanction type: <span className="text-foreground font-medium">{src.sanctions_category}</span></div>}
-                        {src.status && <div>Status: <span className="text-foreground font-medium">{src.status}</span></div>}
-                      </div>
-                      {notes && <div className="text-muted-foreground leading-relaxed">{notes}</div>}
-                      {url && (
-                        <a href={url} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-primary hover:underline font-medium">
-                          View source <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                    </div>
-                  );
-                })}
+              <SectionHeading>Lists / Datasets</SectionHeading>
+              <div className="flex flex-wrap gap-1.5">
+                {datasets.map((ds, i) => (
+                  <span key={i} className="bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full text-xs font-medium border border-amber-200">
+                    {String(ds)}
+                  </span>
+                ))}
               </div>
             </div>
           )}
@@ -316,26 +262,6 @@ export default function AmlHitSlidePanel({ hit, hitIndex, loading, onClose, onSt
                 <span className="flex items-center gap-1.5"><Newspaper className="w-3.5 h-3.5" /> Adverse Media</span>
               </SectionHeading>
 
-              {/* Summary bar */}
-              <div className="flex flex-wrap items-center gap-3 text-xs mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                {adverseMedia.sentiment && (
-                  <span className={cn('font-semibold px-2 py-0.5 rounded-full',
-                    adverseMedia.sentiment_score < -1 ? 'bg-red-100 text-red-700' :
-                    adverseMedia.sentiment_score < 0  ? 'bg-amber-100 text-amber-700' :
-                    'bg-slate-100 text-slate-600'
-                  )}>
-                    {adverseMedia.sentiment}
-                  </span>
-                )}
-                {adverseMedia.sentiment_score != null && (
-                  <span className="text-muted-foreground">Score: <strong>{adverseMedia.sentiment_score}</strong></span>
-                )}
-                {adverseMedia.entity_type && (
-                  <span className="text-muted-foreground">Entity: <strong>{adverseMedia.entity_type}</strong></span>
-                )}
-              </div>
-
-              {/* Keywords */}
               {adverseMedia.adverse_keywords?.length > 0 && (
                 <div className="mb-3">
                   <div className="text-xs font-medium text-muted-foreground mb-1.5">Adverse Keywords</div>
@@ -349,44 +275,33 @@ export default function AmlHitSlidePanel({ hit, hitIndex, loading, onClose, onSt
                 </div>
               )}
 
-              {/* Articles */}
               {adverseMedia.articles?.length > 0 && (
                 <div className="space-y-2.5">
-                  <div className="text-xs font-medium text-muted-foreground">
-                    Articles ({adverseMedia.articles.length})
-                  </div>
+                  <div className="text-xs font-medium text-muted-foreground">Articles ({adverseMedia.articles.length})</div>
                   {adverseMedia.articles.slice(0, 8).map((article, i) => (
-                    <div key={i} className="bg-card border border-border rounded-xl p-3 flex gap-3">
-                      {article.thumbnail && (
-                        <img src={article.thumbnail} alt="" className="w-14 h-12 rounded-lg object-cover flex-shrink-0" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          {article.sentiment && (
-                            <span className={cn('text-xs px-1.5 py-0 rounded font-semibold',
-                              article.sentiment?.toLowerCase().includes('highly') ? 'bg-red-100 text-red-700' :
-                              article.sentiment?.toLowerCase().includes('negative') ? 'bg-orange-100 text-orange-700' :
-                              'bg-slate-100 text-slate-600'
-                            )}>
-                              {article.sentiment.toUpperCase()}
-                            </span>
-                          )}
-                          {article.country && <span className="text-xs text-muted-foreground">🌍 {article.country}</span>}
-                          {article.date && <span className="text-xs text-muted-foreground/60">{article.date}</span>}
-                        </div>
-                        {article.url ? (
-                          <a href={article.url} target="_blank" rel="noopener noreferrer"
-                            className="text-sm font-medium text-primary hover:underline line-clamp-2 flex items-start gap-1">
-                            {article.title || article.url}
-                            <ExternalLink className="w-3 h-3 flex-shrink-0 mt-0.5 opacity-60" />
-                          </a>
-                        ) : (
-                          <div className="text-sm font-medium line-clamp-2">{article.title}</div>
+                    <div key={i} className="bg-card border border-border rounded-xl p-3">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        {article.sentiment && (
+                          <span className={cn('text-xs px-1.5 py-0 rounded font-semibold',
+                            article.sentiment?.toLowerCase().includes('negative') ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600'
+                          )}>
+                            {article.sentiment.toUpperCase()}
+                          </span>
                         )}
-                        {article.snippet && (
-                          <div className="text-xs text-muted-foreground mt-1 line-clamp-3">{article.snippet}</div>
-                        )}
+                        {article.date && <span className="text-xs text-muted-foreground/60">{article.date}</span>}
                       </div>
+                      {article.url ? (
+                        <a href={article.url} target="_blank" rel="noopener noreferrer"
+                          className="text-sm font-medium text-primary hover:underline line-clamp-2 flex items-start gap-1">
+                          {article.title || article.url}
+                          <ExternalLink className="w-3 h-3 flex-shrink-0 mt-0.5 opacity-60" />
+                        </a>
+                      ) : (
+                        <div className="text-sm font-medium line-clamp-2">{article.title}</div>
+                      )}
+                      {article.snippet && (
+                        <div className="text-xs text-muted-foreground mt-1 line-clamp-3">{article.snippet}</div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -403,16 +318,6 @@ export default function AmlHitSlidePanel({ hit, hitIndex, loading, onClose, onSt
                 No adverse media data for this hit.
               </div>
             )
-          )}
-
-          {/* Raw match type */}
-          {(hit.match_type || hit.match_types?.length > 0) && (
-            <div>
-              <SectionHeading>Match Type</SectionHeading>
-              <span className="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-md font-medium">
-                {hit.match_type || hit.match_types?.[0]}
-              </span>
-            </div>
           )}
 
         </div>

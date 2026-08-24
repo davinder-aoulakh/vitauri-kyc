@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useTenant } from '@/lib/tenantContext';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -12,6 +13,7 @@ import AmlHitSlidePanel from '@/components/case/screening/AmlHitSlidePanel';
 
 export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, client, onCaseChanged }) {
   const navigate = useNavigate();
+  const { tenant } = useTenant();
 
   const [hits, setHits] = useState([]);
   const [monitoringAlerts, setMonitoringAlerts] = useState([]);
@@ -256,6 +258,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
         hit_id:        hitKey,
         review_status: newReviewStatus,
         tenant_id:     tenantId,
+        didit_api_key: tenant?.didit_api_key || null,
       });
     } catch (err) {
       console.error('Failed to update hit status in Didit:', err);
@@ -286,9 +289,10 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
     setLoadingHitDetails(true);
     try {
       const res = await base44.functions.invoke('getDiditSessionDetails', {
-        session_id: diditAmlSummary.session_id,
-        tenant_id:  tenantId,
-        action:     'details',
+        session_id:    diditAmlSummary.session_id,
+        tenant_id:     tenantId,
+        didit_api_key: tenant?.didit_api_key || null,
+        action:        'details',
       });
       const data = res?.data ?? res;
       if (data?.aml_hits) {
@@ -591,9 +595,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                           <th className="text-left px-3 py-2">Status</th>
                           <th className="text-left px-3 py-2">Match Score</th>
                           <th className="text-left px-3 py-2">Risk Score</th>
-                          <th className="text-left px-3 py-2">Categories</th>
-                          <th className="text-left px-3 py-2">Country / DOB</th>
-                          <th className="text-left px-3 py-2">Appears On</th>
+                          <th className="text-left px-3 py-2">Lists / Categories</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border bg-card">
@@ -698,51 +700,25 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                                 </td>
                                 <td className="px-3 py-2.5">
                                   {(() => {
-                                    // Didit uses hit.types[] (array of {name}) and hit.match_types[] or datasets[]
-                                    const cats = hit.categories?.length ? hit.categories
-                                      : hit.types?.length ? hit.types.map(t => t.name || t)
+                                    // Didit V3: types[] = [{name}], categories[] = strings, sources[].name as fallback
+                                    // datasets[] = ["PEP Level 2", "Sanctions", ...] — primary list memberships
+                                    const cats = hit.datasets?.length ? hit.datasets
+                                      : hit.categories?.length ? hit.categories
+                                      : hit.types?.length ? hit.types.map(t => typeof t === 'string' ? t : (t.name || String(t)))
                                       : [];
-                                    const matchType = hit.match_type || hit.match_types?.[0];
                                     return (
                                       <div className="flex flex-wrap gap-1">
                                         {cats.map((cat, i) => (
                                           <span key={i} className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-xs font-medium">
-                                            {typeof cat === 'string' ? cat : JSON.stringify(cat)}
+                                            {String(cat)}
                                           </span>
                                         ))}
-                                        {matchType && (
-                                          <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-xs">{matchType}</span>
-                                        )}
-                                        {!cats.length && !matchType && <span className="text-muted-foreground">—</span>}
+                                        {!cats.length && <span className="text-muted-foreground">—</span>}
                                       </div>
                                     );
                                   })()}
                                 </td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground space-y-0.5">
-                                  {(hit.properties?.country || hit.country) && <div>🌍 {hit.properties?.country || hit.country}</div>}
-                                  {(hit.properties?.birthDate || hit.date_of_birth) && <div>🗓 {hit.properties?.birthDate || hit.date_of_birth}</div>}
-                                  {!hit.properties?.country && !hit.country && !hit.properties?.birthDate && !hit.date_of_birth && '—'}
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  {(() => {
-                                    const datasets = hit.datasets?.length ? hit.datasets
-                                      : hit.types?.length ? hit.types.map(t => t.name || t)
-                                      : [];
-                                    return (
-                                      <div className="flex flex-wrap gap-1">
-                                        {datasets.map((ds, i) => {
-                                          const label = typeof ds === 'string' ? ds : (ds.name || String(ds));
-                                          return (
-                                            <span key={i} className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-xs font-medium">
-                                              {label.length > 6 ? label.substring(0, 5).toUpperCase() : label.toUpperCase()}
-                                            </span>
-                                          );
-                                        })}
-                                        {!datasets.length && <span className="text-muted-foreground">—</span>}
-                                      </div>
-                                    );
-                                  })()}
-                                </td>
+
                               </tr>
 
                               </React.Fragment>
