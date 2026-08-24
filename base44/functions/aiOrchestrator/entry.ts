@@ -47,7 +47,7 @@ const DEFAULT_SYSTEM_PROMPTS = {
 
   ClientProfile: `You are a KYC analyst drafting a regulatory-grade client profile. Using all available client data, write a professional profile narrative in markdown format. Sections: Business Overview | Ownership Structure | Geographic Footprint | Products & Services | Notable Risk Factors. Be factual, precise, regulatory-grade.`,
 
-  IdentityVerificationSummary: `You are a KYC compliance analyst. Write a brief analyst opinion on the identity verification — do NOT list, echo, or repeat any raw data, scores, names, dates, or document details from the context. Instead write 2-4 sentences of professional observation: was the verification successful, were there any concerns, does the identity appear consistent, and what is your recommendation (Accept / Flag / Escalate). key_risks should contain only genuine risk observations, not data points. If everything passed with no issues, say so concisely. Return JSON: { narrative: string, key_risks: [string] }.`,
+  IdentityVerificationSummary: `You are a KYC compliance analyst writing an internal case note. Using the verification facts provided, write ONLY your professional analyst opinion — do not list, echo, or repeat any raw data fields, scores, names, IDs, dates, or document numbers. Your output must read as a natural paragraph of compliance commentary, not a data summary. Cover: (1) whether the verification was satisfactory, (2) any genuine concerns or anomalies, (3) a clear recommendation (Accept / Flag / Escalate). If all checks passed cleanly, state that in one concise sentence. key_risks: list only real compliance risks — omit if none. Return JSON: { narrative: string, key_risks: [string] }.`,
 
   SoFSoW: `You are a KYC compliance analyst. Write a Source of Funds (SoF) and Source of Wealth (SoW) assessment. Structure: (1) Stated Sources, (2) Supporting Evidence, (3) Plausibility Assessment, (4) Documentation Gaps, (5) Overall Adequacy. Use FATF-aligned language. Return JSON: {narrative: string, evidence_gaps: [string], adequacy: "Adequate"|"Partial"|"Inadequate"}.`,
 
@@ -236,7 +236,14 @@ Deno.serve(async (req) => {
 
   // ── 3. Build context string (tenant-isolated) ──
   const contextStr = await buildContext(base44, agent_type, { ...payload, tenantId, caseId: case_id }, tenantId);
-  const fullPrompt = `${systemPrompt}\n\n--- CONTEXT ---\n${contextStr}`;
+
+  // For summary/observation agents: reinforce at end of prompt that output must not echo raw data
+  const observationAgents = ['IdentityVerificationSummary', 'ScreeningTriage', 'ClientProfile', 'RiskNarrative', 'SoFSoW'];
+  const closingInstruction = observationAgents.includes(agent_type)
+    ? '\n\nIMPORTANT: Your response must contain ONLY analyst observations and conclusions. Do NOT reproduce, list, or paraphrase any of the raw data fields above. Write as a compliance professional, not as a data summariser.'
+    : '';
+
+  const fullPrompt = `${systemPrompt}\n\n--- CONTEXT (for reference only — do not echo) ---\n${contextStr}${closingInstruction}`;
   const promptHash = hashPrompt(fullPrompt);
 
   // ── 4. Call AI ──
