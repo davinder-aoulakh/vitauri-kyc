@@ -3,7 +3,7 @@
  * Uses the central AI Orchestrator via useAiOrchestrator hook.
  * Supports: Generate, Edit, Accept, Override (with justification), Reject, Regenerate.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAiOrchestrator } from '@/hooks/useAiOrchestrator';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -42,23 +42,37 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
     currentUser,
   });
 
+  // Persist accepted outputs and action statuses across step navigation
+  const acceptedOutputsRef = useRef({}); // { [step]: { output, actionStatus, editedText } }
+
   const [editedText, setEditedText]               = useState('');
   const [editing, setEditing]                     = useState(false);
   const [overrideMode, setOverrideMode]           = useState(false);
   const [overrideJustification, setOverrideJust] = useState('');
   const [actionStatus, setActionStatus]           = useState(null);
 
-  // Reset on step change
+  // On step change: save current accepted state, restore previous if available
   useEffect(() => {
-    reset();
-    setEditedText('');
+    // Restore saved state for this step (if previously accepted)
+    const saved = acceptedOutputsRef.current[activeStep];
+    if (saved) {
+      setEditedText(saved.editedText || '');
+      setActionStatus(saved.actionStatus || null);
+      // Don't call reset — let the output persist via savedOutput below
+    } else {
+      reset();
+      setEditedText('');
+      setEditing(false);
+      setOverrideMode(false);
+      setOverrideJust('');
+      setActionStatus(null);
+    }
     setEditing(false);
     setOverrideMode(false);
     setOverrideJust('');
-    setActionStatus(null);
   }, [activeStep]);
 
-  // Sync edited text when output arrives
+  // Sync edited text when fresh output arrives
   useEffect(() => {
     if (output) {
       const text = output.narrative || output.email_draft || output.summary || output.answer || JSON.stringify(output, null, 2);
@@ -66,8 +80,13 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
     }
   }, [output]);
 
+  // Effective output: live output OR previously accepted output for this step
+  const effectiveOutput = output || acceptedOutputsRef.current[activeStep]?.output || null;
+
   async function generate() {
     reset();
+    // Clear saved state for this step so we start fresh
+    delete acceptedOutputsRef.current[activeStep];
     setEditedText('');
     setEditing(false);
     setOverrideMode(false);
@@ -108,15 +127,22 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
   }
 
   async function handleAccept() {
-    const finalText = editing ? editedText : (output?.narrative || output?.email_draft || output?.summary || output?.answer || '');
     const action = editing ? 'Edited' : 'Accepted';
     await logAction(action, '');
+    // Persist accepted output so it survives step navigation
+    acceptedOutputsRef.current[activeStep] = {
+      output: effectiveOutput,
+      actionStatus: action,
+      editedText,
+    };
     setActionStatus(action);
     setEditing(false);
   }
 
   async function handleReject() {
     await logAction('Rejected', 'Analyst rejected AI output');
+    // Clear saved state on reject
+    delete acceptedOutputsRef.current[activeStep];
     setActionStatus('Rejected');
   }
 
@@ -129,15 +155,15 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
 
   // Render output as readable text — narrative/summary fields only, never raw JSON
   function getDisplayText() {
-    if (!output) return '';
-    if (typeof output === 'string') return output;
-    return output.narrative || output.email_draft || output.summary || output.answer || output.rationale || '';
+    if (!effectiveOutput) return '';
+    if (typeof effectiveOutput === 'string') return effectiveOutput;
+    return effectiveOutput.narrative || effectiveOutput.email_draft || effectiveOutput.summary || effectiveOutput.answer || effectiveOutput.rationale || '';
   }
 
   // Key points / structured extras
   function getKeyPoints() {
-    if (!output) return [];
-    return output.key_risks || output.evidence_gaps || output.capacity_warnings || output.checklist?.map(c => `${c.label}: ${c.justification}`) || [];
+    if (!effectiveOutput) return [];
+    return effectiveOutput.key_risks || effectiveOutput.evidence_gaps || effectiveOutput.capacity_warnings || effectiveOutput.checklist?.map(c => `${c.label}: ${c.justification}`) || [];
   }
 
   if (collapsed) {
@@ -171,7 +197,7 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
 
         {/* Idle */}
-        {!output && !loading && !error && (
+        {!effectiveOutput && !loading && !error && (
           <div className="text-center py-6 space-y-3">
             <Sparkles className="w-8 h-8 text-purple-300 mx-auto" />
             <p className="text-xs text-purple-600">Get AI assistance for this step.</p>
@@ -201,7 +227,7 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
         )}
 
         {/* Output */}
-        {output && !loading && (
+        {effectiveOutput && !loading && (
           <div className="space-y-3">
             {/* Action status banner */}
             {actionStatus === 'Accepted' && (
