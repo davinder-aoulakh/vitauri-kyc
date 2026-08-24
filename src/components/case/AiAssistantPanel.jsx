@@ -34,7 +34,7 @@ function buildPayload(activeStep, kycCase, client) {
   }
 }
 
-export default function AiAssistantPanel({ kycCase, client, activeStep, currentUser, collapsed, onToggleCollapse, screeningData, idvData }) {
+export default function AiAssistantPanel({ kycCase, client, activeStep, currentUser, collapsed, onToggleCollapse, screeningData, idvData, tenant }) {
   const config = STEP_CONFIGS[activeStep] || STEP_CONFIGS[1];
 
   const { invoke, logAction, reset, loading, output, error, tokenInfo } = useAiOrchestrator({
@@ -148,8 +148,8 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
             try {
               const res = await base44.functions.invoke('getDiditSessionDetails', {
                 session_id: sessionId,
-                tenant_id: kycCase.tenant_id,
-                didit_api_key: null,
+                tenant_id: tenant?.id || null,
+                didit_api_key: tenant?.didit_api_key || null,
                 action: 'details',
               });
               const data = res?.data ?? res;

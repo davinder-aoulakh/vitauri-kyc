@@ -658,6 +658,7 @@ export default function CaseWorkspace() {
                 onToggleCollapse={() => setAiCollapsed(c => !c)}
                 screeningData={activeStep === 3 ? amlScreeningData : undefined}
                 idvData={activeStep === 2 ? idvData : undefined}
+                tenant={tenant}
               />
             )}
           </div>
