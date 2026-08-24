@@ -46,22 +46,23 @@ Deno.serve(async (req) => {
         return Response.json({ error: `Could not fetch session decision: ${decisionResp.status}` }, { status: 502 });
       }
       const decision = await decisionResp.json();
+      // The session decision root IS the session object (no nested "decision" key)
       const root = decision?.decision || decision || {};
-      // The AML screening node can be at aml_screenings[] or nested under the session
-      resolvedScreeningId = root.aml_screenings?.[0]?.id || root.first_aml?.id || null;
-      console.log('Resolved screening_id:', resolvedScreeningId, 'root keys:', Object.keys(root));
+      resolvedScreeningId = root.aml_screenings?.[0]?.id || null;
+      console.log('Resolved screening_id:', resolvedScreeningId, 'aml_screenings:', JSON.stringify(root.aml_screenings?.map((s: any) => s.id)));
     }
 
     if (!resolvedScreeningId) {
       return Response.json({ error: 'Could not find aml_screening id for this session' }, { status: 400 });
     }
 
-    // PATCH hit status in Didit
+    // POST hit status update in Didit
+    // Didit V3 endpoint: POST /v3/session/{sessionId}/aml-screening/{screeningId}/hits/{hitId}/
     const url = `https://verification.didit.me/v3/session/${session_id}/aml-screening/${resolvedScreeningId}/hits/${hit_id}/`;
-    console.log('PATCH', url, '->', review_status);
+    console.log('POST', url, '->', review_status);
 
     const resp = await fetch(url, {
-      method: 'PATCH',
+      method: 'POST',
       headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({ review_status }),
     });
