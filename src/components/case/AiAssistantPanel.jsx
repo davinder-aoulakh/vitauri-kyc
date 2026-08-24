@@ -43,9 +43,10 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
     currentUser,
   });
 
-  // Persist all step states across navigation: { [step]: { output, runId, actionStatus, editedText, tokenInfo } }
+  // In-memory cache keyed by step, seeded from DB on mount
   const stepStateRef = useRef({});
   const prevStepRef  = useRef(activeStep);
+  const dbInitRef    = useRef(false);
 
   const [editedText, setEditedText]               = useState('');
   const [editing, setEditing]                     = useState(false);
@@ -53,11 +54,23 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
   const [overrideJustification, setOverrideJust] = useState('');
   const [actionStatus, setActionStatus]           = useState(null);
 
+  // Seed in-memory cache from DB once on mount (when kycCase.ai_outputs is available)
+  useEffect(() => {
+    if (dbInitRef.current || !kycCase?.ai_outputs) return;
+    dbInitRef.current = true;
+    stepStateRef.current = { ...kycCase.ai_outputs };
+  }, [kycCase?.ai_outputs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Helper: persist current stepStateRef to the DB
+  async function persistToDb(updatedStepState) {
+    if (!kycCase?.id) return;
+    await base44.entities.KycCase.update(kycCase.id, { ai_outputs: updatedStepState });
+  }
+
   // On step change: save outgoing state, restore incoming state
   useEffect(() => {
     const leaving = prevStepRef.current;
     if (leaving !== activeStep) {
-      // Save current live state for the step we're leaving
       if (output || actionStatus || editedText) {
         stepStateRef.current[leaving] = {
           output: output || stepStateRef.current[leaving]?.output || null,
@@ -69,10 +82,8 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
       prevStepRef.current = activeStep;
     }
 
-    // Restore saved state for the incoming step
     const saved = stepStateRef.current[activeStep];
     if (saved?.output) {
-      // Rehydrate hook state from saved
       setActionStatus(saved.actionStatus || null);
       setEditedText(saved.editedText || '');
     } else {
@@ -85,17 +96,17 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
     setOverrideJust('');
   }, [activeStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync edited text when fresh output arrives
+  // Sync edited text when fresh output arrives and persist to DB
   useEffect(() => {
     if (output) {
       const text = output.narrative || output.email_draft || output.summary || output.answer || JSON.stringify(output, null, 2);
       setEditedText(text);
-      // Always persist newly generated output immediately
-      stepStateRef.current[activeStep] = {
-        ...(stepStateRef.current[activeStep] || {}),
-        output,
-        tokenInfo,
+      const updated = {
+        ...stepStateRef.current,
+        [activeStep]: { ...(stepStateRef.current[activeStep] || {}), output, tokenInfo },
       };
+      stepStateRef.current = updated;
+      persistToDb(updated);
     }
   }, [output]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -106,7 +117,10 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
   async function generate() {
     reset();
     // Clear saved state for this step so we start fresh
-    delete stepStateRef.current[activeStep];
+    const updated = { ...stepStateRef.current };
+    delete updated[activeStep];
+    stepStateRef.current = updated;
+    persistToDb(updated);
     setEditedText('');
     setEditing(false);
     setOverrideMode(false);
@@ -224,29 +238,34 @@ Be specific about the actual hits found. Do not say data is insufficient if hits
   async function handleAccept() {
     const action = editing ? 'Edited' : 'Accepted';
     await logAction(action, '');
-    stepStateRef.current[activeStep] = {
-      ...(stepStateRef.current[activeStep] || {}),
-      output: effectiveOutput,
-      actionStatus: action,
-      editedText,
+    const updated = {
+      ...stepStateRef.current,
+      [activeStep]: { ...(stepStateRef.current[activeStep] || {}), output: effectiveOutput, actionStatus: action, editedText },
     };
+    stepStateRef.current = updated;
+    await persistToDb(updated);
     setActionStatus(action);
     setEditing(false);
   }
 
   async function handleReject() {
     await logAction('Rejected', 'Analyst rejected AI output');
-    delete stepStateRef.current[activeStep];
+    const updated = { ...stepStateRef.current };
+    delete updated[activeStep];
+    stepStateRef.current = updated;
+    await persistToDb(updated);
     setActionStatus('Rejected');
   }
 
   async function handleOverride() {
     if (overrideJustification.length < 10) return;
     await logAction('Overridden', overrideJustification);
-    stepStateRef.current[activeStep] = {
-      ...(stepStateRef.current[activeStep] || {}),
-      actionStatus: 'Overridden',
+    const updated = {
+      ...stepStateRef.current,
+      [activeStep]: { ...(stepStateRef.current[activeStep] || {}), actionStatus: 'Overridden' },
     };
+    stepStateRef.current = updated;
+    await persistToDb(updated);
     setActionStatus('Overridden');
     setOverrideMode(false);
   }

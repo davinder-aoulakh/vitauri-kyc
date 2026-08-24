@@ -168,6 +168,10 @@
         "type": "object"
       }
     },
+    "ai_outputs": {
+      "type": "object",
+      "description": "Persisted AI assistant outputs keyed by step number. Each key is the step number (as string), value is {output, actionStatus, editedText}."
+    },
     "purpose_nature_text": {
       "type": "string",
       "description": "Purpose & Nature of Business Relationship (mandatory)"
