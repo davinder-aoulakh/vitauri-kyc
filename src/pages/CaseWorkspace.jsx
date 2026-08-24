@@ -90,6 +90,7 @@ export default function CaseWorkspace() {
   const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
   const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
   const [amlScreeningData, setAmlScreeningData] = useState(null);
+  const [idvData, setIdvData] = useState(null);
 
   const FLAG_REASONS = ['Missing document', 'Awaiting client response', 'QC query', 'Other'];
 
@@ -619,6 +620,7 @@ export default function CaseWorkspace() {
                         tenant={tenant}
                         onStepComplete={() => updateStepStatus('step_2_status', 'complete')}
                         onCaseChanged={loadAll}
+                        onIdvDataLoaded={setIdvData}
                       />
                     )}
                     {activeStep === 3 && <ScreeningStep caseId={id} tenantId={kycCase?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} onCaseChanged={loadAll} onAmlSummaryLoaded={setAmlScreeningData} />}
@@ -655,6 +657,7 @@ export default function CaseWorkspace() {
                 collapsed={aiCollapsed}
                 onToggleCollapse={() => setAiCollapsed(c => !c)}
                 screeningData={activeStep === 3 ? amlScreeningData : undefined}
+                idvData={activeStep === 2 ? idvData : undefined}
               />
             )}
           </div>

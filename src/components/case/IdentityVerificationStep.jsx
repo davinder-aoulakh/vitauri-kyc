@@ -63,7 +63,7 @@ function ApplyOcrButton({ extractedData, clientId, onDone }) {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export default function IdentityVerificationStep({ kycCase, client, currentUser, tenant, onStepComplete, onCaseChanged }) {
+export default function IdentityVerificationStep({ kycCase, client, currentUser, tenant, onStepComplete, onCaseChanged, onIdvDataLoaded }) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [idvResults, setIdvResults] = useState([]);
@@ -169,6 +169,29 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
         });
 
       setIdvResults(items);
+
+      // Expose IDV data to parent (for AI assistant)
+      if (items.length > 0) {
+        const best = items[0];
+        onIdvDataLoaded?.({
+          status: best.idv_status,
+          similarity_score: best.idv_similarity_score,
+          liveness_score: best.idv_liveness_score,
+          liveness_passed: best.idv_liveness_passed,
+          document_type: best.idv_document_type,
+          issuing_country: best.idv_issuing_country,
+          failure_reason: best.idv_failure_reason,
+          aml_hits: best.idv_aml_hits,
+          extracted: {
+            full_name: [best.idv_extracted_first_name, best.idv_extracted_last_name].filter(Boolean).join(' ') || null,
+            date_of_birth: best.idv_extracted_dob,
+            nationality: best.idv_extracted_nationality,
+            document_number: best.idv_document_number,
+            expiry_date: best.idv_document_expiry,
+          },
+          total_sessions: items.length,
+        });
+      }
 
       // Auto-complete Step 2 on Pass
       const best = items[0];

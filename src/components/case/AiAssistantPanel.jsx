@@ -33,7 +33,7 @@ function buildPayload(activeStep, kycCase, client) {
   }
 }
 
-export default function AiAssistantPanel({ kycCase, client, activeStep, currentUser, collapsed, onToggleCollapse, screeningData }) {
+export default function AiAssistantPanel({ kycCase, client, activeStep, currentUser, collapsed, onToggleCollapse, screeningData, idvData }) {
   const config = STEP_CONFIGS[activeStep] || STEP_CONFIGS[1];
 
   const { invoke, logAction, reset, loading, output, error, tokenInfo } = useAiOrchestrator({
@@ -73,6 +73,11 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
     setOverrideMode(false);
     setActionStatus(null);
     const payload = buildPayload(activeStep, kycCase, client);
+    // For step 2, enrich with live Didit IDV data
+    if (activeStep === 2 && idvData) {
+      payload.idvData = idvData;
+      payload.instructions = `You are a KYC compliance analyst reviewing identity verification results from Didit. Provide a structured analysis: 1) Summarise the verification outcome (Pass/Fail, scores). 2) Note any concerns (low face match, liveness failure, expiring document, AML hits). 3) Confirm whether the extracted identity data matches the client profile. 4) Recommend whether Step 2 should be accepted, flagged, or escalated, with brief justification.`;
+    }
     // For step 3, enrich with live Didit AML data
     if (activeStep === 3 && screeningData) {
       const hits = screeningData.screenings?.[0]?.hits || [];
