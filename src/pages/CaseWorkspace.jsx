@@ -623,7 +623,7 @@ export default function CaseWorkspace() {
                   </div>
                 ) : (
                   <>
-                    {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} />}
+                    {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} onNavigateToStep={setActiveStep} />}
                     {activeStep === 2 && (
                       <IdentityVerificationStep
                         kycCase={kycCase}

@@ -90,7 +90,7 @@ function buildEmailHtml(tenant, client, req, portalUrl) {
   `;
 }
 
-export default function OutreachStep({ kycCase, client, currentUser, tenant }) {
+export default function OutreachStep({ kycCase, client, currentUser, tenant, onNavigateToStep }) {
   const [requests, setRequests]   = useState([]);
   const [loading, setLoading]     = useState(true);
   const [newOpen, setNewOpen]     = useState(false);
@@ -621,7 +621,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                                       )}
                                       <button
                                         className="text-xs text-primary underline hover:no-underline"
-                                        onClick={() => setIdvDetailItem(item)}
+                                        onClick={() => onNavigateToStep ? onNavigateToStep(2) : setIdvDetailItem(item)}
                                       >
                                         View details
                                       </button>
