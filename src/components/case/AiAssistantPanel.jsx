@@ -246,7 +246,7 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
               <Textarea value={editedText} onChange={e => setEditedText(e.target.value)}
                 className="text-xs min-h-32 bg-white resize-none" autoFocus />
             ) : (
-              <div className="bg-white border border-purple-100 rounded-lg p-2.5 max-h-48 overflow-y-auto">
+              <div className="bg-white border border-purple-100 rounded-lg p-2.5 overflow-y-auto">
                 <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">{getDisplayText()}</p>
               </div>
             )}
