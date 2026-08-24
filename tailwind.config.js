@@ -5,7 +5,9 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        inter: ['Inter', 'system-ui', 'sans-serif'],
+        heading: ['Outfit', 'system-ui', 'sans-serif'],
+        body: ['Public Sans', 'system-ui', 'sans-serif'],
+        inter: ['Public Sans', 'system-ui', 'sans-serif'],
         mono: ['IBM Plex Mono', 'monospace'],
       },
       borderRadius: {
