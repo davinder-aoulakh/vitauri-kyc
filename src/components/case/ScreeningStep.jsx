@@ -10,6 +10,63 @@ import HitsTable from '@/components/case/screening/HitsTable';
 import HitDetailPanel from '@/components/case/screening/HitDetailPanel';
 import AmlHitSlidePanel from '@/components/case/screening/AmlHitSlidePanel';
 
+// Dropdown rendered in a fixed portal to avoid table overflow clipping
+function StatusDropdown({ hitKey, hit, reviewStatus, isUpdating, REVIEW_OPTIONS, currentOption, onUpdate }) {
+  const [open, setOpen] = React.useState(false);
+  const [pos, setPos] = React.useState({ top: 0, left: 0 });
+  const btnRef = React.useRef(null);
+
+  function handleOpen(e) {
+    e.stopPropagation();
+    if (btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left });
+    }
+    setOpen(v => !v);
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={handleOpen}
+        disabled={isUpdating}
+        className={cn(
+          'px-2 py-0.5 rounded-full font-medium text-xs cursor-pointer flex items-center gap-1 select-none',
+          currentOption.style,
+          isUpdating && 'opacity-50 cursor-not-allowed'
+        )}
+      >
+        {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : currentOption.label}
+        <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
+          <div
+            className="fixed z-[70] bg-card border border-border rounded-lg shadow-xl min-w-[170px] py-1"
+            style={{ top: pos.top, left: pos.left }}
+          >
+            {REVIEW_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={(e) => { e.stopPropagation(); setOpen(false); onUpdate(hit, opt.value); }}
+                className={cn(
+                  'w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-muted/50 flex items-center gap-2',
+                  opt.value === reviewStatus && 'opacity-40 pointer-events-none'
+                )}
+              >
+                <span className={cn('w-2 h-2 rounded-full flex-shrink-0', opt.style.split(' ')[0])} />
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, client, onCaseChanged, onAmlSummaryLoaded }) {
   const navigate = useNavigate();
   const { tenant } = useTenant();
@@ -27,7 +84,6 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
   const [expandedHitIdx, setExpandedHitIdx] = useState(null); // hitKey of slide-panel open hit
   const [loadingHitDetails, setLoadingHitDetails] = useState(false);
   const [updatingHitId, setUpdatingHitId] = useState(null); // hit.id being updated in Didit
-  const [openStatusDropdown, setOpenStatusDropdown] = useState(null); // hitKey with open dropdown
   // Persists analyst review_status overrides keyed by hit.id — survives re-syncs from Didit
   const hitStatusOverrides = useRef({}); // { [hitKey]: reviewStatus }
 
@@ -638,40 +694,15 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                                 </td>
                                 {/* Status dropdown — updates Didit directly */}
                                 <td className="px-3 py-2.5">
-                                  <div className="relative inline-block">
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); setOpenStatusDropdown(openStatusDropdown === hitKey ? null : hitKey); }}
-                                      disabled={isUpdating}
-                                      className={cn(
-                                        'px-2 py-0.5 rounded-full font-medium text-xs cursor-pointer flex items-center gap-1 select-none',
-                                        currentOption.style,
-                                        isUpdating && 'opacity-50 cursor-not-allowed'
-                                      )}
-                                    >
-                                      {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : currentOption.label}
-                                      <ChevronDown className="w-2.5 h-2.5 opacity-60" />
-                                    </button>
-                                    {openStatusDropdown === hitKey && (
-                                      <>
-                                        <div className="fixed inset-0 z-40" onClick={() => setOpenStatusDropdown(null)} />
-                                        <div className="absolute left-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-lg min-w-[170px] py-1">
-                                          {REVIEW_OPTIONS.map(opt => (
-                                            <button
-                                              key={opt.value}
-                                              onClick={(e) => { e.stopPropagation(); setOpenStatusDropdown(null); updateHitStatusInDidit(hit, opt.value); }}
-                                              className={cn(
-                                                'w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-muted/50 flex items-center gap-2',
-                                                opt.value === reviewStatus && 'opacity-40 pointer-events-none'
-                                              )}
-                                            >
-                                              <span className={cn('w-2 h-2 rounded-full flex-shrink-0', opt.style.split(' ')[0].replace('text-', 'bg-'))} />
-                                              {opt.label}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      </>
-                                    )}
-                                  </div>
+                                  <StatusDropdown
+                                    hitKey={hitKey}
+                                    hit={hit}
+                                    reviewStatus={reviewStatus}
+                                    isUpdating={isUpdating}
+                                    REVIEW_OPTIONS={REVIEW_OPTIONS}
+                                    currentOption={currentOption}
+                                    onUpdate={updateHitStatusInDidit}
+                                  />
                                 </td>
                                 <td className="px-3 py-2.5">
                                   {matchScore != null ? (
@@ -737,11 +768,12 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
         </div>
       )}
 
+      {/* Legacy ScreeningHit records — only show when no Didit AML summary */}
       {loading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
-      ) : hits.length === 0 ? (
+      ) : diditAmlSummary ? null : hits.length === 0 ? (
         <div className="bg-card border border-border rounded-xl py-12 text-center">
           <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
           <p className="text-sm font-medium text-muted-foreground">No AML hits found</p>
