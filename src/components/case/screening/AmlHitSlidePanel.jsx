@@ -71,7 +71,12 @@ export default function AmlHitSlidePanel({ hit, hitIndex, loading, onClose, onSt
   const country = propFirst(hit, 'country') || hit.country;
   const nationality = propFirst(hit, 'nationality') || hit.nationality;
 
-  const adverseMedia = hit.adverse_media || hit.media_analysis;
+  // Didit V3 adverse media fields — try all known field names
+  const adverseMediaMatches = hit.adverse_media_matches || [];
+  const adverseMediaDetails = hit.adverse_media_details || null;
+  // Normalise into a single shape the template can render
+  const adverseMedia = adverseMediaDetails || hit.adverse_media || hit.media_analysis || null;
+  const hasAdverseMedia = adverseMedia || adverseMediaMatches.length > 0;
 
   return (
     <>
@@ -255,14 +260,51 @@ export default function AmlHitSlidePanel({ hit, hitIndex, loading, onClose, onSt
             </div>
           )}
 
-          {/* Adverse Media */}
-          {adverseMedia ? (
+          {/* Adverse Media — shown when datasets includes "Adverse Media" or we have match data */}
+          {(hasAdverseMedia || datasets.some(d => String(d).toLowerCase().includes('adverse'))) && (
             <div>
               <SectionHeading>
                 <span className="flex items-center gap-1.5"><Newspaper className="w-3.5 h-3.5" /> Adverse Media</span>
               </SectionHeading>
 
-              {adverseMedia.adverse_keywords?.length > 0 && (
+              {/* adverse_media_matches[] — array of individual match objects from Didit */}
+              {adverseMediaMatches.length > 0 && (
+                <div className="space-y-2.5 mb-3">
+                  <div className="text-xs font-medium text-muted-foreground">Matches ({adverseMediaMatches.length})</div>
+                  {adverseMediaMatches.map((match, i) => {
+                    // Didit adverse_media_matches shape varies; render all useful fields
+                    const title = match.title || match.caption || match.name || match.url || `Match ${i + 1}`;
+                    const url = match.url || match.source_url;
+                    const date = match.date || match.published_at || match.created_at;
+                    const snippet = match.snippet || match.summary || match.description;
+                    const source = match.source || match.publisher || match.outlet;
+                    const categories = match.categories || match.tags || [];
+                    return (
+                      <div key={i} className="bg-card border border-border rounded-xl p-3 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {categories.map((c, ci) => (
+                            <span key={ci} className="text-xs px-1.5 py-0 rounded font-semibold bg-orange-100 text-orange-700">{c}</span>
+                          ))}
+                          {source && <span className="text-xs text-muted-foreground">{source}</span>}
+                          {date && <span className="text-xs text-muted-foreground/60">{new Date(date).toLocaleDateString?.() ?? date}</span>}
+                        </div>
+                        {url ? (
+                          <a href={url} target="_blank" rel="noopener noreferrer"
+                            className="text-sm font-medium text-primary hover:underline line-clamp-2 flex items-start gap-1">
+                            {title}<ExternalLink className="w-3 h-3 flex-shrink-0 mt-0.5 opacity-60" />
+                          </a>
+                        ) : (
+                          <div className="text-sm font-medium line-clamp-2">{title}</div>
+                        )}
+                        {snippet && <div className="text-xs text-muted-foreground line-clamp-3">{snippet}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* adverse_media_details — structured object from Didit */}
+              {adverseMedia?.adverse_keywords?.length > 0 && (
                 <div className="mb-3">
                   <div className="text-xs font-medium text-muted-foreground mb-1.5">Adverse Keywords</div>
                   <div className="flex flex-wrap gap-1.5">
@@ -275,7 +317,7 @@ export default function AmlHitSlidePanel({ hit, hitIndex, loading, onClose, onSt
                 </div>
               )}
 
-              {adverseMedia.articles?.length > 0 && (
+              {adverseMedia?.articles?.length > 0 && (
                 <div className="space-y-2.5">
                   <div className="text-xs font-medium text-muted-foreground">Articles ({adverseMedia.articles.length})</div>
                   {adverseMedia.articles.slice(0, 8).map((article, i) => (
@@ -299,25 +341,18 @@ export default function AmlHitSlidePanel({ hit, hitIndex, loading, onClose, onSt
                       ) : (
                         <div className="text-sm font-medium line-clamp-2">{article.title}</div>
                       )}
-                      {article.snippet && (
-                        <div className="text-xs text-muted-foreground mt-1 line-clamp-3">{article.snippet}</div>
-                      )}
+                      {article.snippet && <div className="text-xs text-muted-foreground mt-1 line-clamp-3">{article.snippet}</div>}
                     </div>
                   ))}
                 </div>
               )}
 
-              {!adverseMedia.articles?.length && !adverseMedia.adverse_keywords?.length && (
-                <div className="text-xs text-muted-foreground italic">No article or keyword details available.</div>
+              {!hasAdverseMedia && !loading && (
+                <div className="text-xs text-muted-foreground italic px-1">
+                  Listed as Adverse Media — no article details returned by Didit for this hit.
+                </div>
               )}
             </div>
-          ) : (
-            !loading && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground py-3 px-4 bg-muted/30 rounded-lg border border-border">
-                <Shield className="w-4 h-4 flex-shrink-0 opacity-50" />
-                No adverse media data for this hit.
-              </div>
-            )
           )}
 
         </div>

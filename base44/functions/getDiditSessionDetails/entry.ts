@@ -194,12 +194,24 @@ Deno.serve(async (req) => {
                          live.portrait    || live.selfie       || null,
       liveness_raw:      live,
 
-      // AML — enrich each hit with full detail (adverse media, sources, keywords etc.)
-      // Didit stores screening_id on the aml object itself
+      // AML — return full hit objects including all sub-fields Didit provides
+      // Key sub-fields per hit: adverse_media_matches, adverse_media_details, pep_matches,
+      // sanction_matches, warning_matches, linked_entities, additional_information, features
       aml_screening_id: aml.id        || null,
       aml_total_hits: aml.total_hits ?? 0,
       aml_status:     aml.status     || null,
-      aml_hits:       aml.hits       || [],
+      aml_hits:       (aml.hits || []).map((hit: any) => {
+        // Log first hit structure to help debug field names
+        if (aml.hits?.indexOf(hit) === 0) {
+          console.log('First AML hit keys:', Object.keys(hit));
+          console.log('First AML hit datasets:', hit.datasets);
+          console.log('First AML hit has adverse_media_matches:', !!hit.adverse_media_matches?.length);
+          console.log('First AML hit has adverse_media_details:', !!hit.adverse_media_details);
+          console.log('First AML hit has pep_matches:', !!hit.pep_matches?.length);
+          console.log('First AML hit properties keys:', hit.properties ? Object.keys(hit.properties) : 'none');
+        }
+        return hit; // pass through full hit object unchanged
+      }),
       aml_raw:        aml,
 
       // All warnings combined
