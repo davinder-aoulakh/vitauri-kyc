@@ -266,16 +266,22 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
         setHits(fresh || []);
       }
 
-      // Step 3 auto-complete: AML clear + no active ScreeningHits
+      // Step 3 auto-complete: AML clear OR all hits reviewed (Approved/False Positive) + no unresolved ScreeningHits
       const currentHits = await base44.entities.ScreeningHit.filter({ case_id: caseId }, '-created_date');
-      const activeHits = (currentHits || []).filter(h => !['Discounted'].includes(h.status));
-      if (amlSummary?.total_hits === 0 && activeHits.length === 0 && kycCase?.step_3_status !== 'complete') {
+      const activeHits = (currentHits || []).filter(h => !['Discounted', 'Confirmed_Match'].includes(h.status));
+      const diditHitsAllReviewed = !amlSummary?.screenings || (() => {
+        const screenings = Array.isArray(amlSummary.screenings) ? amlSummary.screenings : [amlSummary.screenings];
+        const allHits = screenings[0]?.hits || [];
+        return allHits.length === 0 || allHits.every(h => h.review_status && h.review_status !== 'Unreviewed');
+      })();
+      const amlApprovedOrClear = amlSummary?.total_hits === 0 || amlSummary?.status === 'Approved' || diditHitsAllReviewed;
+      if (amlSummary && amlApprovedOrClear && activeHits.length === 0 && kycCase?.step_3_status !== 'complete') {
         await base44.entities.KycCase.update(caseId, { step_3_status: 'complete' });
         await base44.entities.AuditEvent.create({
           tenant_id: tenantId, case_id: caseId, client_id: kycCase?.client_id,
           actor_type: 'System', actor_name: 'System',
           event_type: 'step_3_autocompleted',
-          notes: 'Step 3 auto-completed: Didit AML returned 0 hits and no active screening hits.',
+          notes: `Step 3 auto-completed: Didit AML status "${amlSummary.status || 'Clear'}" with ${amlSummary.total_hits} hit(s), all reviewed.`,
         });
         onCaseChanged?.();
       }
@@ -317,6 +323,8 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
         tenant_id:     tenantId,
         didit_api_key: tenant?.didit_api_key || null,
       });
+      // Re-check step 3 auto-complete after a hit status change
+      await syncDiditAml(hits, false);
     } catch (err) {
       console.error('Failed to update hit status in Didit:', err);
       // Revert both override and UI on failure
