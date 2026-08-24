@@ -47,7 +47,7 @@ const DEFAULT_SYSTEM_PROMPTS = {
 
   ClientProfile: `You are a KYC analyst drafting a regulatory-grade client profile. Using all available client data, write a professional profile narrative in markdown format. Sections: Business Overview | Ownership Structure | Geographic Footprint | Products & Services | Notable Risk Factors. Be factual, precise, regulatory-grade.`,
 
-  IdentityVerificationSummary: `You are a KYC compliance analyst reviewing identity verification results. Do NOT repeat raw data back. Provide analyst observations only. Structure: 1) Outcome — one sentence on Pass/Fail. 2) Identity Match — did the verified identity match the client profile on file? Note any discrepancies only. 3) Concerns — list only genuine issues (low score, liveness fail, AML hits, expiring doc, mismatch). Omit if none. 4) Recommendation — Accept / Flag / Escalate with a one-line reason. Keep the entire narrative under 120 words. For ORG clients with no IDV required, state that clearly in one sentence. Return JSON: { narrative: string, key_risks: [string] }.`,
+  IdentityVerificationSummary: `You are a KYC compliance analyst. Write a brief analyst opinion on the identity verification — do NOT list, echo, or repeat any raw data, scores, names, dates, or document details from the context. Instead write 2-4 sentences of professional observation: was the verification successful, were there any concerns, does the identity appear consistent, and what is your recommendation (Accept / Flag / Escalate). key_risks should contain only genuine risk observations, not data points. If everything passed with no issues, say so concisely. Return JSON: { narrative: string, key_risks: [string] }.`,
 
   SoFSoW: `You are a KYC compliance analyst. Write a Source of Funds (SoF) and Source of Wealth (SoW) assessment. Structure: (1) Stated Sources, (2) Supporting Evidence, (3) Plausibility Assessment, (4) Documentation Gaps, (5) Overall Adequacy. Use FATF-aligned language. Return JSON: {narrative: string, evidence_gaps: [string], adequacy: "Adequate"|"Partial"|"Inadequate"}.`,
 
@@ -93,29 +93,33 @@ async function buildContext(base44, agentType, payload, tenantId) {
       const client = payload.client || {};
       const idv = payload.idvData || null;
       const clientType = client.client_type || 'NP';
-      const profileLine = clientType === 'NP'
-        ? `Natural Person — Name: ${client.full_name || 'N/A'}, DOB: ${client.date_of_birth || 'N/A'}, Nationality: ${client.nationality || 'N/A'}, ID Type: ${client.id_type || 'N/A'}, ID Number: ${client.id_number || 'N/A'}`
-        : `Organisation — Name: ${client.full_name || 'N/A'}, Registration: ${client.registration_number || 'N/A'}, Country: ${client.registered_country || 'N/A'}, Legal Form: ${client.legal_form || 'N/A'}`;
 
       if (!idv) {
-        return `Client type: ${clientType}. ${profileLine}. IDV Status: No Didit verification results available yet — identity verification has not been completed or results are pending.`;
+        return `Client type: ${clientType}. IDV not yet completed — no Didit results available.`;
       }
 
-      const extractedLine = idv.extracted
-        ? `Extracted from document — Name: ${idv.extracted.full_name || 'N/A'}, DOB: ${idv.extracted.date_of_birth || 'N/A'}, Nationality: ${idv.extracted.nationality || 'N/A'}, Doc Number: ${idv.extracted.document_number || 'N/A'}, Expiry: ${idv.extracted.expiry_date || 'N/A'}`
-        : 'No extracted data available';
+      // Detect mismatches between profile and extracted data
+      const nameMismatch = idv.extracted?.full_name && client.full_name &&
+        idv.extracted.full_name.toLowerCase().trim() !== client.full_name.toLowerCase().trim();
+      const dobMismatch = idv.extracted?.date_of_birth && client.date_of_birth &&
+        idv.extracted.date_of_birth !== client.date_of_birth;
 
-      return `Client type: ${clientType}. ${profileLine}.
+      const issues = [];
+      if (idv.status !== 'Pass') issues.push(`IDV status: ${idv.status}`);
+      if (idv.similarity_score != null && idv.similarity_score < 80) issues.push(`Low face match score: ${idv.similarity_score}%`);
+      if (idv.liveness_passed === false) issues.push('Liveness check failed');
+      if (idv.aml_hits > 0) issues.push(`${idv.aml_hits} AML hit(s) detected`);
+      if (idv.failure_reason) issues.push(`Failure reason: ${idv.failure_reason}`);
+      if (nameMismatch) issues.push(`Name mismatch — profile: "${client.full_name}", document: "${idv.extracted.full_name}"`);
+      if (dobMismatch) issues.push(`DOB mismatch — profile: ${client.date_of_birth}, document: ${idv.extracted.date_of_birth}`);
 
-Didit IDV Result:
-- Status: ${idv.status || 'Unknown'}
-- Document Type: ${idv.document_type || 'N/A'}, Issuing Country: ${idv.issuing_country || 'N/A'}
-- Face Match Score: ${idv.similarity_score != null ? idv.similarity_score + '%' : 'N/A'}
-- Liveness Score: ${idv.liveness_score != null ? idv.liveness_score + '%' : 'N/A'}, Liveness Passed: ${idv.liveness_passed != null ? idv.liveness_passed : 'N/A'}
-- AML Hits: ${idv.aml_hits != null ? idv.aml_hits : 'N/A'}
-- Failure Reason: ${idv.failure_reason || 'None'}
-- ${extractedLine}
-- Total sessions reviewed: ${idv.total_sessions || 1}`;
+      return `Client type: ${clientType}.
+IDV outcome: ${idv.status || 'Unknown'}.
+Face match: ${idv.similarity_score != null ? idv.similarity_score + '%' : 'N/A'}, Liveness: ${idv.liveness_passed ? 'Passed' : 'Failed'} (${idv.liveness_score != null ? idv.liveness_score + '%' : 'N/A'}).
+Document: ${idv.document_type || 'N/A'} issued by ${idv.issuing_country || 'N/A'}.
+AML hits: ${idv.aml_hits ?? 0}.
+Identity match vs profile: ${issues.length === 0 ? 'No discrepancies found' : issues.join('; ')}.
+Provide analyst observations and recommendation only. Do not list out or repeat any of the above data points.`;
     }
 
     case 'SoFSoW': {
