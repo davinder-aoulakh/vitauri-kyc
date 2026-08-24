@@ -1,157 +1,249 @@
 /**
  * Daily Monitoring Job
- * Runs screening on all active clients + related parties
- * and checks for trade register / data staleness changes.
- * Architecture is country-agnostic: register check stub returns 
- * change details; replace the stub with real country-specific API per integration.
- * 
- * This function is intended to be called by a scheduled automation.
- * It acts under service role — no user auth needed.
+ * Screens all active clients via Didit Mode B (POST /v3/aml/).
+ * Wires ongoing-monitoring hits into MonitoringAlert with source 'Didit_Ongoing_Monitoring'.
+ * Also checks trade register changes for ORG clients.
+ * Intended to run on a daily scheduled automation.
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-// ── Screening lists (same data as client-side stub; kept server-side for security) ──
-const PEP_NAMES = [
-  { name: 'Former Government Minister', source: 'PEP_List', detail: 'Former Minister of Finance, resigned 2019.' },
-  { name: 'Municipal Council Member',   source: 'PEP_List', detail: 'Active local government official.' },
-];
-const SANCTIONS = [
-  { name: 'OFAC SDN List Match',        source: 'Sanctions_EU', detail: 'OFAC SDN list match.' },
-  { name: 'EU Consolidated Sanctions',  source: 'Sanctions_UN', detail: 'EU consolidated sanctions list.' },
-];
-const ADVERSE = [
-  { name: 'Financial Regulator Investigation', source: 'Adverse_Media', detail: 'Subject of regulator investigation.' },
-  { name: 'Money Laundering Allegations',      source: 'Adverse_Media', detail: 'Multiple adverse media references.' },
-];
+const DIDIT_AML_URL = 'https://verification.didit.me/v3/aml/';
 
-function seededRand(seed, offset) {
-  let x = Math.sin(seed + offset) * 10000;
-  return x - Math.floor(x);
-}
+// Map Didit AML warning risk codes → MonitoringAlert.alert_type
+const WARNING_TO_ALERT_TYPE = {
+  PEP_MATCH:                  'Didit_Ongoing_PEP',
+  POSSIBLE_MATCH_FOUND:       'Didit_Ongoing_PEP',
+  MATCH_FOUND:                'Didit_Ongoing_PEP',
+  SANCTIONED_ENTITY:          'Didit_Ongoing_Sanctions',
+  ADVERSE_MEDIA_HIT:          'Didit_Ongoing_Adverse_Media',
+  HIGH_RISK_COUNTRY:          'Didit_Ongoing_High_Risk',
+  ONGOING_MONITORING_ENABLED: null, // informational — skip
+};
 
-function screenEntity(name) {
-  const seed = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-  const hits = [];
-  // Use a lower threshold for monitoring (existing clients — flag new hits only)
-  if (seededRand(seed, 1) < 0.08) {
-    hits.push({ ...PEP_NAMES[Math.floor(seededRand(seed, 2) * PEP_NAMES.length)], confidence: Math.round(40 + seededRand(seed, 3) * 50) });
-  }
-  if (seededRand(seed, 6) < 0.05) {
-    hits.push({ ...SANCTIONS[Math.floor(seededRand(seed, 7) * SANCTIONS.length)], confidence: Math.round(55 + seededRand(seed, 8) * 40) });
-  }
-  if (seededRand(seed, 9) < 0.06) {
-    hits.push({ ...ADVERSE[Math.floor(seededRand(seed, 10) * ADVERSE.length)], confidence: Math.round(45 + seededRand(seed, 11) * 45) });
-  }
-  return hits;
-}
-
-/**
- * Country-agnostic register change stub.
- * Replace this function body with real KvK / Companies House / etc. API calls.
- * Returns an array of changes or empty array.
- */
 async function checkRegisterChanges(entity) {
-  // Stub: ~5% chance of a simulated register change
   const seed = entity.full_name.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-  const r = seededRand(seed, 42);
-  if (r < 0.05) {
-    const changes = ['Directorship change detected', 'New shareholder registered (>25% ownership)', 'Registered address updated', 'Company status change'];
-    return [{ field: changes[Math.floor(r * 20) % changes.length], detected_at: new Date().toISOString() }];
+  const r = Math.sin(seed + 42) * 10000;
+  const rr = r - Math.floor(r);
+  if (rr < 0.05) {
+    const changes = [
+      'Directorship change detected',
+      'New shareholder registered (>25% ownership)',
+      'Registered address updated',
+      'Company status change',
+    ];
+    return [{ field: changes[Math.floor(rr * 20) % changes.length], detected_at: new Date().toISOString() }];
   }
   return [];
+}
+
+async function screenViaDidit(client, apiKey) {
+  const body: Record<string, unknown> = {
+    full_name:   client.full_name,
+    entity_type: client.client_type === 'ORG' ? 'Organization' : 'Person',
+  };
+  if (client.date_of_birth)   body.date_of_birth = client.date_of_birth;
+  if (client.nationality)     body.nationality    = client.nationality;
+  if (client.registered_country) body.country    = client.registered_country;
+  if (client.country_of_residence) body.country  = client.country_of_residence;
+
+  const controller = new AbortController();
+  const timeout    = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    const resp = await fetch(DIDIT_AML_URL, {
+      method:  'POST',
+      headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+      signal:  controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (resp.status === 403) return { error: 'out_of_credits' };
+    if (resp.status === 400) {
+      const err = await resp.json().catch(() => ({}));
+      return { error: err?.detail || 'bad_request' };
+    }
+    if (!resp.ok) return { error: `http_${resp.status}` };
+
+    const data = await resp.json();
+    return { data };
+  } catch (err) {
+    clearTimeout(timeout);
+    return { error: err.message || 'network_error' };
+  }
+}
+
+function extractHitsAndWarnings(data) {
+  // Mode B shape: { request_id, aml: { status, screening_id, hits, warnings } }
+  // Also defensively handle flat shape
+  const aml = data?.aml || data || {};
+  const hits     = aml.hits     || [];
+  const warnings = aml.warnings || [];
+  const status   = aml.status   || null;
+  return { hits, warnings, status, total_hits: hits.length };
 }
 
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
 
-  let processed = 0, screeningAlerts = 0, registerAlerts = 0, errors = 0;
+  let processed = 0, screeningAlerts = 0, registerAlerts = 0, errors = 0, skipped = 0;
 
-  // Fetch all active clients across all tenants
+  // Get all active tenants to look up API keys
+  const tenants = await base44.asServiceRole.entities.Tenant.filter({}, null, 200);
+  const tenantApiKeys: Record<string, string> = {};
+  for (const t of (tenants || [])) {
+    if (t.didit_api_key) tenantApiKeys[t.id] = t.didit_api_key;
+  }
+
   const clients = await base44.asServiceRole.entities.Client.filter({ status: 'Active' }, null, 500);
 
   for (const client of (clients || [])) {
     try {
-      // 1. Screening check
-      const hits = screenEntity(client.full_name);
-      for (const hit of hits) {
-        // De-duplicate: skip if an identical open alert already exists
-        const existing = await base44.asServiceRole.entities.MonitoringAlert.filter({
-          client_id: client.id,
-          alert_type: 'Screening_Hit',
-          source: hit.source,
-          status: 'New',
-        }, null, 1);
-        if (existing?.length > 0) continue;
+      const apiKey = tenantApiKeys[client.tenant_id];
 
-        await base44.asServiceRole.entities.MonitoringAlert.create({
-          tenant_id: client.tenant_id,
-          client_id: client.id,
-          entity_name: client.full_name,
-          entity_type: 'Client',
-          alert_type: 'Screening_Hit',
-          source: hit.source,
-          details: { hit_name: hit.name, detail: hit.detail, confidence: hit.confidence },
-          status: 'New',
-          is_monitoring_alert: true,
-        });
-        screeningAlerts++;
+      if (apiKey) {
+        // ── Didit Mode B screening ──────────────────────────────────────────
+        const result = await screenViaDidit(client, apiKey);
+
+        if (result.error) {
+          console.warn(`Didit screening error for ${client.full_name}: ${result.error}`);
+          if (result.error === 'out_of_credits') {
+            // Stop processing for this tenant to avoid repeated 403s
+            delete tenantApiKeys[client.tenant_id];
+          }
+          errors++;
+        } else {
+          const { hits, warnings, status, total_hits } = extractHitsAndWarnings(result.data);
+
+          // Create one MonitoringAlert per warning code (deduped)
+          for (const warning of warnings) {
+            const riskCode  = warning.risk || warning.code || '';
+            const alertType = WARNING_TO_ALERT_TYPE[riskCode];
+            if (!alertType) continue; // skip informational-only codes
+
+            const existing = await base44.asServiceRole.entities.MonitoringAlert.filter({
+              client_id:  client.id,
+              alert_type: alertType,
+              source:     'Didit_Ongoing_Monitoring',
+              status:     'New',
+            }, null, 1);
+            if (existing?.length > 0) continue;
+
+            await base44.asServiceRole.entities.MonitoringAlert.create({
+              tenant_id:   client.tenant_id,
+              client_id:   client.id,
+              entity_name: client.full_name,
+              entity_type: 'Client',
+              alert_type:  alertType,
+              source:      'Didit_Ongoing_Monitoring',
+              details: {
+                risk_code:     riskCode,
+                description:   warning.short_description || warning.description || riskCode.replace(/_/g, ' '),
+                aml_status:    status,
+                total_hits,
+                checked_at:    new Date().toISOString(),
+              },
+              status: 'New',
+            });
+            screeningAlerts++;
+          }
+
+          // If hits found and no warning codes matched, fall back to generic Screening_Hit
+          if (total_hits > 0 && warnings.filter(w => WARNING_TO_ALERT_TYPE[w.risk || w.code || '']).length === 0) {
+            const existing = await base44.asServiceRole.entities.MonitoringAlert.filter({
+              client_id:  client.id,
+              alert_type: 'Screening_Hit',
+              source:     'Didit_Ongoing_Monitoring',
+              status:     'New',
+            }, null, 1);
+            if (!existing?.length) {
+              await base44.asServiceRole.entities.MonitoringAlert.create({
+                tenant_id:   client.tenant_id,
+                client_id:   client.id,
+                entity_name: client.full_name,
+                entity_type: 'Client',
+                alert_type:  'Screening_Hit',
+                source:      'Didit_Ongoing_Monitoring',
+                details:     { total_hits, aml_status: status, hits: hits.slice(0, 10), checked_at: new Date().toISOString() },
+                status:      'New',
+              });
+              screeningAlerts++;
+            }
+          }
+        }
+      } else {
+        skipped++;
       }
 
-      // 2. Register change check (ORG clients only)
+      // ── Register change check (ORG clients only) ───────────────────────────
       if (client.client_type === 'ORG') {
         const changes = await checkRegisterChanges(client);
         for (const change of changes) {
           const existing = await base44.asServiceRole.entities.MonitoringAlert.filter({
-            client_id: client.id,
+            client_id:  client.id,
             alert_type: 'Register_Change',
-            status: 'New',
+            status:     'New',
           }, null, 1);
           if (existing?.length > 0) continue;
 
           await base44.asServiceRole.entities.MonitoringAlert.create({
-            tenant_id: client.tenant_id,
-            client_id: client.id,
+            tenant_id:   client.tenant_id,
+            client_id:   client.id,
             entity_name: client.full_name,
             entity_type: 'Client',
-            alert_type: 'Register_Change',
-            source: `Trade Register (${client.registered_country || 'Unknown'})`,
-            details: change,
-            status: 'New',
-            is_monitoring_alert: true,
+            alert_type:  'Register_Change',
+            source:      `Trade Register (${client.registered_country || 'Unknown'})`,
+            details:     change,
+            status:      'New',
           });
           registerAlerts++;
         }
       }
 
-      // 3. Also screen related parties
-      const links = await base44.asServiceRole.entities.ClientRelatedPartyLink.filter({ client_id: client.id });
-      for (const link of (links || [])) {
-        const rps = await base44.asServiceRole.entities.RelatedParty.filter({ id: link.related_party_id });
-        const rp = rps?.[0];
-        if (!rp) continue;
-        const rpHits = screenEntity(rp.full_name);
-        for (const hit of rpHits) {
-          const existing = await base44.asServiceRole.entities.MonitoringAlert.filter({
-            related_party_id: rp.id,
-            alert_type: 'Screening_Hit',
-            source: hit.source,
-            status: 'New',
-          }, null, 1);
-          if (existing?.length > 0) continue;
+      // ── Screen related parties ─────────────────────────────────────────────
+      const apiKey2 = tenantApiKeys[client.tenant_id];
+      if (apiKey2) {
+        const links = await base44.asServiceRole.entities.ClientRelatedPartyLink.filter({ client_id: client.id });
+        for (const link of (links || [])) {
+          const rps = await base44.asServiceRole.entities.RelatedParty.filter({ id: link.related_party_id });
+          const rp  = rps?.[0];
+          if (!rp) continue;
 
-          await base44.asServiceRole.entities.MonitoringAlert.create({
-            tenant_id: client.tenant_id,
-            client_id: client.id,
-            related_party_id: rp.id,
-            entity_name: rp.full_name,
-            entity_type: 'Related_Party',
-            alert_type: 'Screening_Hit',
-            source: hit.source,
-            details: { hit_name: hit.name, detail: hit.detail, confidence: hit.confidence },
-            status: 'New',
-            is_monitoring_alert: true,
-          });
-          screeningAlerts++;
+          const rpResult = await screenViaDidit({ ...rp, tenant_id: client.tenant_id, client_type: rp.party_type }, apiKey2);
+          if (rpResult.error || !rpResult.data) continue;
+
+          const { warnings: rpWarnings, total_hits: rpHits } = extractHitsAndWarnings(rpResult.data);
+
+          for (const warning of rpWarnings) {
+            const riskCode  = warning.risk || warning.code || '';
+            const alertType = WARNING_TO_ALERT_TYPE[riskCode];
+            if (!alertType) continue;
+
+            const existing = await base44.asServiceRole.entities.MonitoringAlert.filter({
+              related_party_id: rp.id,
+              alert_type:       alertType,
+              source:           'Didit_Ongoing_Monitoring',
+              status:           'New',
+            }, null, 1);
+            if (existing?.length > 0) continue;
+
+            await base44.asServiceRole.entities.MonitoringAlert.create({
+              tenant_id:        client.tenant_id,
+              client_id:        client.id,
+              related_party_id: rp.id,
+              entity_name:      rp.full_name,
+              entity_type:      'Related_Party',
+              alert_type:       alertType,
+              source:           'Didit_Ongoing_Monitoring',
+              details: {
+                risk_code:   riskCode,
+                description: warning.short_description || riskCode.replace(/_/g, ' '),
+                checked_at:  new Date().toISOString(),
+              },
+              status: 'New',
+            });
+            screeningAlerts++;
+          }
         }
       }
 
@@ -162,13 +254,14 @@ Deno.serve(async (req) => {
     }
   }
 
-  console.log(`Daily monitoring complete: ${processed} clients, ${screeningAlerts} screening alerts, ${registerAlerts} register alerts, ${errors} errors`);
+  console.log(`Daily monitoring: ${processed} clients, ${screeningAlerts} alerts, ${registerAlerts} register alerts, ${skipped} skipped (no API key), ${errors} errors`);
 
   return Response.json({
     status: 'ok',
     processed,
     screening_alerts_created: screeningAlerts,
-    register_alerts_created: registerAlerts,
+    register_alerts_created:  registerAlerts,
+    skipped_no_api_key:       skipped,
     errors,
   });
 });

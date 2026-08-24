@@ -8,6 +8,10 @@
     "client_id": {
       "type": "string"
     },
+    "case_id": {
+      "type": "string",
+      "description": "nullable \u2014 FK to KycCase if alert is linked to a specific case"
+    },
     "related_party_id": {
       "type": "string",
       "description": "nullable"
@@ -28,7 +32,11 @@
       "enum": [
         "Screening_Hit",
         "Register_Change",
-        "Manual_Flag"
+        "Manual_Flag",
+        "Didit_Ongoing_PEP",
+        "Didit_Ongoing_Sanctions",
+        "Didit_Ongoing_Adverse_Media",
+        "Didit_Ongoing_High_Risk"
       ]
     },
     "source": {

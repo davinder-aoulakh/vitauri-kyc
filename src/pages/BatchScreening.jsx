@@ -221,28 +221,51 @@ export default function BatchScreening() {
     setPhase('screening');
     setProgress(5);
 
-    const entities = validRows.map((row, idx) => ({
-      _idx: idx,
-      name: row.name || row.full_name,
-      type: (row.entity_type || 'NP').toUpperCase(),
-      country: row.country || row.nationality || row.registered_country || '',
-      dob: row.date_of_birth || row.dob || '',
-      registration_number: row.registration_number || '',
-    }));
-
-    setProgress(15);
-
-    const res = await base44.functions.invoke('batchScreening', {
-      entities,
-      tenant_id: currentUser.tenant_id,
-    });
-
-    setProgress(90);
+    setProgress(10);
 
     const resultMap = {};
-    (res?.data?.results || []).forEach(r => {
-      resultMap[r.index] = r;
-    });
+    const step = 80 / Math.max(validRows.length, 1);
+
+    for (let idx = 0; idx < validRows.length; idx++) {
+      const row = validRows[idx];
+      try {
+        const res = await base44.functions.invoke('screenEntityAml', {
+          tenant_id:   currentUser.tenant_id,
+          full_name:   row.name || row.full_name,
+          legal_type:  (row.entity_type || 'NP').toUpperCase(),
+          country:     row.country || row.registered_country || '',
+          date_of_birth: row.date_of_birth || row.dob || undefined,
+          nationality: row.nationality || undefined,
+          registration_number: row.registration_number || undefined,
+          include_adverse_media: false,
+        });
+        const d = res?.data ?? res;
+        if (d?.error) {
+          resultMap[idx] = { hit: false, risk_level: null, summary: d.error, hits: [], error: true };
+        } else {
+          const hits = (d?.hits || []).map(h => ({
+            hit_name:         h.hitName,
+            source:           h.source,
+            confidence_score: h.confidenceScore,
+            ai_recommendation: h.confidenceScore >= 90 ? 'Confirmed_Match' : h.confidenceScore >= 60 ? 'Possible_Match' : 'Likely_False_Positive',
+            ai_rationale:     h.rawDetails?.match_type ? `${h.rawDetails.match_type} match via Didit AML` : 'Didit AML match',
+          }));
+          const maxConf = hits.reduce((m, h) => Math.max(m, h.confidence_score), 0);
+          resultMap[idx] = {
+            hit:       hits.length > 0,
+            risk_level: hits.length === 0 ? 'Low' : maxConf >= 90 ? 'High' : maxConf >= 60 ? 'Medium' : 'Low',
+            summary:   hits.length === 0 ? 'No hits found' : `${hits.length} hit${hits.length !== 1 ? 's' : ''} — ${hits[0].hit_name}`,
+            hits,
+            warnings:  d.warnings || [],
+            adverse_media_incomplete: d.adverse_media_incomplete || false,
+          };
+        }
+      } catch (err) {
+        resultMap[idx] = { hit: false, risk_level: null, summary: `Error: ${err.message}`, hits: [], error: true };
+      }
+      setProgress(10 + Math.round((idx + 1) * step));
+    }
+
     setResults(resultMap);
     setProgress(100);
     setScreening(false);
@@ -344,9 +367,9 @@ export default function BatchScreening() {
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-start gap-3">
           <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
           <div className="text-xs text-blue-800">
-            <span className="font-semibold">AI Sanction Screening</span> — Screens against OFAC SDN, EU, UN, UK OFSI sanction lists, PEP databases, and adverse media.
+            <span className="font-semibold">Didit AML Screening</span> — Screens against PEP databases, sanctions lists (OFAC SDN, EU, UN, UK OFSI), adverse media, and global watchlists via the Didit AML API.
             Entities with hits will be flagged for review. You can create individual KYC case drafts for any confirmed hits.
-            <span className="ml-1 text-blue-600">Results are AI-generated and must be reviewed by a qualified analyst.</span>
+            <span className="ml-1 text-blue-600">Results are sourced from Didit and must be reviewed by a qualified analyst.</span>
           </div>
         </div>
 
@@ -391,8 +414,8 @@ export default function BatchScreening() {
                 </p>
               </div>
               <Button onClick={runScreening} disabled={validRows.length === 0} className="gap-2">
-                <Sparkles className="w-4 h-4" />
-                Run AI Screening on {validRows.length} entities
+              <Sparkles className="w-4 h-4" />
+              Run Didit AML on {validRows.length} entities
               </Button>
             </div>
 
@@ -461,9 +484,9 @@ export default function BatchScreening() {
               <Sparkles className="w-5 h-5 text-primary absolute inset-0 m-auto" />
             </div>
             <div>
-              <div className="font-semibold text-sm">AI Screening in progress…</div>
+              <div className="font-semibold text-sm">Didit AML Screening in progress…</div>
               <div className="text-xs text-muted-foreground mt-1">
-                Screening {validRows.length} entities against global sanction lists
+                Screening {validRows.length} entities via Didit AML API — this may take up to 30s
               </div>
             </div>
             <div className="max-w-xs mx-auto bg-muted rounded-full h-1.5 overflow-hidden">

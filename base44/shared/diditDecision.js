@@ -64,6 +64,18 @@ export function extractIdvFields(decision, sessionId) {
     idv_aml_hits:               aml.total_hits        != null ? aml.total_hits : 0,
     idv_aml_status:             aml.status            || null,
     idv_aml_screenings:         root.aml_screenings   || null,
+    // AML warnings / risk codes (PEP_MATCH, SANCTIONED_ENTITY, ADVERSE_MEDIA_HIT, etc.)
+    idv_aml_warnings:           aml.warnings          || [],
+    // Scoring thresholds & weights from the workflow config embedded in the screening result
+    idv_aml_match_threshold:    aml.aml_match_score_threshold    ?? null,
+    idv_aml_approve_threshold:  aml.aml_score_approve_threshold  ?? null,
+    idv_aml_review_threshold:   aml.aml_score_review_threshold   ?? null,
+    idv_aml_name_weight:        aml.aml_name_weight              ?? null,
+    idv_aml_dob_weight:         aml.aml_dob_weight               ?? null,
+    idv_aml_country_weight:     aml.aml_country_weight           ?? null,
+    // Flags
+    idv_aml_adverse_media:      aml.include_adverse_media        ?? false,
+    idv_aml_ongoing_monitoring: aml.include_ongoing_monitoring   ?? false,
     idv_checked_at:             new Date().toISOString(),
     idv_provider:               'didit',
     // Raw face/liveness objects for rich rendering
