@@ -47,6 +47,8 @@ const DEFAULT_SYSTEM_PROMPTS = {
 
   ClientProfile: `You are a KYC analyst drafting a regulatory-grade client profile. Using all available client data, write a professional profile narrative in markdown format. Sections: Business Overview | Ownership Structure | Geographic Footprint | Products & Services | Notable Risk Factors. Be factual, precise, regulatory-grade.`,
 
+  IdentityVerificationSummary: `You are a KYC compliance analyst reviewing identity verification results from Didit. You will be given the client type (NP = Natural Person, ORG = Organisation), client profile data, and Didit IDV results. Provide a concise structured analysis: 1) Verification Outcome — Pass/Fail and key scores (face match, liveness). 2) Identity Data Match — confirm whether the Didit-extracted name, DOB, nationality and document match the client profile on file. 3) Concerns — flag any issues such as low scores, liveness failure, expiring document, AML hits, or mismatches. 4) Recommendation — Accept / Flag / Escalate with a one-line justification. For ORG clients where IDV is waived, note that clearly. Return JSON: { narrative: string, key_risks: [string] }.`,
+
   SoFSoW: `You are a KYC compliance analyst. Write a Source of Funds (SoF) and Source of Wealth (SoW) assessment. Structure: (1) Stated Sources, (2) Supporting Evidence, (3) Plausibility Assessment, (4) Documentation Gaps, (5) Overall Adequacy. Use FATF-aligned language. Return JSON: {narrative: string, evidence_gaps: [string], adequacy: "Adequate"|"Partial"|"Inadequate"}.`,
 
   IndicatorApplicability: `You are a KYC risk analyst. Given a client profile and a list of risk indicators, identify which indicators apply to this entity and briefly explain why. Return JSON: {applicable: [{indicator_id: string, indicator_name: string, reason: string}], not_applicable: [string]}.`,
@@ -85,6 +87,35 @@ async function buildContext(base44, agentType, payload, tenantId) {
       const client = entityData?.client || {};
       const outreachResponses = entityData?.outreachSummary || '';
       return `Client name: ${client.full_name}. Type: ${client.client_type}. Sector: ${client.sector || 'N/A'}. Jurisdiction: ${client.registered_country || client.country_of_residence || 'N/A'}. Legal form: ${client.legal_form || 'N/A'}. Registration: ${client.registration_number || 'N/A'}. Outreach responses: ${outreachResponses}. OSINT: ${entityData?.osintSummary || 'Not yet completed'}.`;
+    }
+
+    case 'IdentityVerificationSummary': {
+      const client = payload.client || {};
+      const idv = payload.idvData || null;
+      const clientType = client.client_type || 'NP';
+      const profileLine = clientType === 'NP'
+        ? `Natural Person — Name: ${client.full_name || 'N/A'}, DOB: ${client.date_of_birth || 'N/A'}, Nationality: ${client.nationality || 'N/A'}, ID Type: ${client.id_type || 'N/A'}, ID Number: ${client.id_number || 'N/A'}`
+        : `Organisation — Name: ${client.full_name || 'N/A'}, Registration: ${client.registration_number || 'N/A'}, Country: ${client.registered_country || 'N/A'}, Legal Form: ${client.legal_form || 'N/A'}`;
+
+      if (!idv) {
+        return `Client type: ${clientType}. ${profileLine}. IDV Status: No Didit verification results available yet — identity verification has not been completed or results are pending.`;
+      }
+
+      const extractedLine = idv.extracted
+        ? `Extracted from document — Name: ${idv.extracted.full_name || 'N/A'}, DOB: ${idv.extracted.date_of_birth || 'N/A'}, Nationality: ${idv.extracted.nationality || 'N/A'}, Doc Number: ${idv.extracted.document_number || 'N/A'}, Expiry: ${idv.extracted.expiry_date || 'N/A'}`
+        : 'No extracted data available';
+
+      return `Client type: ${clientType}. ${profileLine}.
+
+Didit IDV Result:
+- Status: ${idv.status || 'Unknown'}
+- Document Type: ${idv.document_type || 'N/A'}, Issuing Country: ${idv.issuing_country || 'N/A'}
+- Face Match Score: ${idv.similarity_score != null ? idv.similarity_score + '%' : 'N/A'}
+- Liveness Score: ${idv.liveness_score != null ? idv.liveness_score + '%' : 'N/A'}, Liveness Passed: ${idv.liveness_passed != null ? idv.liveness_passed : 'N/A'}
+- AML Hits: ${idv.aml_hits != null ? idv.aml_hits : 'N/A'}
+- Failure Reason: ${idv.failure_reason || 'None'}
+- ${extractedLine}
+- Total sessions reviewed: ${idv.total_sessions || 1}`;
     }
 
     case 'SoFSoW': {
@@ -139,6 +170,7 @@ const OUTPUT_SCHEMAS = {
     },
   },
   ClientProfile: { type: 'object', properties: { narrative: { type: 'string' }, key_risks: { type: 'array', items: { type: 'string' } } } },
+  IdentityVerificationSummary: { type: 'object', properties: { narrative: { type: 'string' }, key_risks: { type: 'array', items: { type: 'string' } } } },
   SoFSoW: {
     type: 'object', properties: {
       narrative: { type: 'string' },

@@ -13,7 +13,7 @@ import ReactMarkdown from 'react-markdown';
 
 const STEP_CONFIGS = {
   1: { agentType: 'OutreachCopilot',        agentLabel: 'Outreach Co-pilot',       description: 'Recommend documents to request and draft outreach email' },
-  2: { agentType: 'ClientProfile',           agentLabel: 'Identity Summary',         description: 'Summarise identity verification findings' },
+  2: { agentType: 'IdentityVerificationSummary', agentLabel: 'Identity Summary', description: 'Summarise identity verification findings' },
   3: { agentType: 'ScreeningTriage',         agentLabel: 'Screening Triage',         description: 'Analyse Didit AML hits and recommend analyst decisions' },
   4: { agentType: 'ClientProfile',           agentLabel: 'Client Profile',           description: 'Assess profile completeness and draft narrative' },
   5: { agentType: 'SoFSoW',                 agentLabel: 'SoF / SoW Agent',          description: 'Draft Source of Funds & Wealth assessment' },
@@ -73,10 +73,10 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
     setOverrideMode(false);
     setActionStatus(null);
     const payload = buildPayload(activeStep, kycCase, client);
-    // For step 2, enrich with live Didit IDV data
-    if (activeStep === 2 && idvData) {
-      payload.idvData = idvData;
-      payload.instructions = `You are a KYC compliance analyst reviewing identity verification results from Didit. Provide a structured analysis: 1) Summarise the verification outcome (Pass/Fail, scores). 2) Note any concerns (low face match, liveness failure, expiring document, AML hits). 3) Confirm whether the extracted identity data matches the client profile. 4) Recommend whether Step 2 should be accepted, flagged, or escalated, with brief justification.`;
+    // For step 2, always send client + idvData (idvData may be null if not yet completed)
+    if (activeStep === 2) {
+      payload.client = client || {};
+      payload.idvData = idvData || null;
     }
     // For step 3, enrich with live Didit AML data
     if (activeStep === 3 && screeningData) {
