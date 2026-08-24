@@ -40,13 +40,16 @@ function OpsRouteGuard({ children }) {
   // Wait for user to load before enforcing route rules
   if (loading || !currentUser) return children;
 
-  const isOps = currentUser.app_role === 'Vitauri Ops';
+  // Normalise role — may be on user directly or nested under user.data
+  const role = currentUser.app_role || currentUser.data?.app_role;
+  const isOps = role === 'Vitauri Ops';
+  const path = window.location.pathname;
 
-  if (isOps && window.location.pathname === '/') {
+  if (isOps && path === '/') {
     window.location.replace('/ops');
     return null;
   }
-  if (!isOps && window.location.pathname === '/ops') {
+  if (!isOps && path === '/ops') {
     window.location.replace('/');
     return null;
   }
