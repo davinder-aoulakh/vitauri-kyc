@@ -154,7 +154,16 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
           }
         }
       }
-      setDiditAmlSummary(amlSummary);
+      // Only update if we have newer data — preserve enriched hit details (adverse_media) already loaded
+      setDiditAmlSummary(prev => {
+        if (!amlSummary) return prev;
+        // If prev has enriched hits (adverse_media loaded), keep those screenings
+        const prevHasEnrichedHits = prev?.screenings?.[0]?.hits?.some(h => h.adverse_media || h.media_analysis);
+        return {
+          ...amlSummary,
+          screenings: prevHasEnrichedHits ? prev.screenings : amlSummary.screenings,
+        };
+      });
 
       // Auto-import Didit AML hits as ScreeningHit records (if hits exist)
       const existingDiditHit = existingHits.some(h => h.source === 'Didit_AML');
@@ -198,32 +207,80 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
 
   async function updateHitStatusInDidit(hit, newReviewStatus) {
     if (!diditAmlSummary?.session_id) return;
-    setUpdatingHitId(hit.id || hit.hit_id);
+    const hitKey = hit.id || hit.hit_id;
+    setUpdatingHitId(hitKey);
+    // Optimistically update local state immediately so UI reflects change
+    setDiditAmlSummary(prev => {
+      if (!prev?.screenings) return prev;
+      return {
+        ...prev,
+        screenings: prev.screenings.map(s => ({
+          ...s,
+          hits: (s.hits || []).map(h =>
+            (h.id || h.hit_id) === hitKey ? { ...h, review_status: newReviewStatus } : h
+          ),
+        })),
+      };
+    });
     try {
       await base44.functions.invoke('updateDiditHitStatus', {
         session_id:    diditAmlSummary.session_id,
         screening_id:  diditAmlSummary.screenings?.[0]?.id || null,
-        hit_id:        hit.id || hit.hit_id,
+        hit_id:        hitKey,
         review_status: newReviewStatus,
         tenant_id:     tenantId,
       });
-      // Update local state optimistically
-      setDiditAmlSummary(prev => {
-        if (!prev?.screenings) return prev;
-        const screenings = prev.screenings.map(s => ({
-          ...s,
-          hits: (s.hits || []).map(h =>
-            (h.id || h.hit_id) === (hit.id || hit.hit_id)
-              ? { ...h, review_status: newReviewStatus }
-              : h
-          ),
-        }));
-        return { ...prev, screenings };
-      });
     } catch (err) {
       console.error('Failed to update hit status in Didit:', err);
+      // Revert on failure
+      setDiditAmlSummary(prev => {
+        if (!prev?.screenings) return prev;
+        return {
+          ...prev,
+          screenings: prev.screenings.map(s => ({
+            ...s,
+            hits: (s.hits || []).map(h =>
+              (h.id || h.hit_id) === hitKey ? { ...h, review_status: hit.review_status || 'Unreviewed' } : h
+            ),
+          })),
+        };
+      });
     } finally {
       setUpdatingHitId(null);
+    }
+  }
+
+  // Fetch full hit details (including adverse media) from Didit when expanding a row
+  async function fetchHitDetails(hitIdx) {
+    if (expandedHitIdx === hitIdx) { setExpandedHitIdx(null); return; }
+    setExpandedHitIdx(hitIdx);
+    if (!diditAmlSummary?.session_id) return;
+    try {
+      const res = await base44.functions.invoke('getDiditSessionDetails', {
+        session_id: diditAmlSummary.session_id,
+        tenant_id:  tenantId,
+        action:     'details',
+      });
+      const data = res?.data ?? res;
+      if (data?.aml_hits) {
+        // Merge full hit details (including adverse_media) into our screenings state
+        setDiditAmlSummary(prev => {
+          if (!prev?.screenings) return prev;
+          return {
+            ...prev,
+            screenings: prev.screenings.map((s, si) => {
+              if (si !== 0) return s;
+              const enrichedHits = (s.hits || []).map((h, hi) => {
+                const fullHit = data.aml_hits[hi];
+                return fullHit ? { ...h, ...fullHit } : h;
+              });
+              return { ...s, hits: enrichedHits };
+            }),
+          };
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch hit details:', err);
     }
   }
 
@@ -533,14 +590,12 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                               <tr className={cn('hover:bg-muted/20', isExpanded && 'bg-muted/10')}>
                                 {/* Expand toggle */}
                                 <td className="px-2 py-2.5">
-                                  {hasDetail && (
-                                    <button
-                                      onClick={() => setExpandedHitIdx(isExpanded ? null : hitKey)}
-                                      className="text-muted-foreground hover:text-foreground"
-                                    >
-                                      <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', isExpanded && 'rotate-90')} />
-                                    </button>
-                                  )}
+                                  <button
+                                    onClick={() => fetchHitDetails(hitKey)}
+                                    className="text-muted-foreground hover:text-foreground"
+                                  >
+                                    <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', isExpanded && 'rotate-90')} />
+                                  </button>
                                 </td>
                                 <td className="px-3 py-2.5 font-medium text-foreground">
                                   {hit.caption || hit.name || `Hit ${idx + 1}`}
@@ -609,15 +664,26 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                                   ) : '—'}
                                 </td>
                                 <td className="px-3 py-2.5">
-                                  <div className="flex flex-wrap gap-1">
-                                    {(hit.categories || []).map((cat, i) => (
-                                      <span key={i} className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-xs font-medium">{cat}</span>
-                                    ))}
-                                    {hit.match_type && (
-                                      <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-xs">{hit.match_type}</span>
-                                    )}
-                                    {(!hit.categories?.length && !hit.match_type) && <span className="text-muted-foreground">—</span>}
-                                  </div>
+                                  {(() => {
+                                    // Didit uses hit.types[] (array of {name}) and hit.match_types[] or datasets[]
+                                    const cats = hit.categories?.length ? hit.categories
+                                      : hit.types?.length ? hit.types.map(t => t.name || t)
+                                      : [];
+                                    const matchType = hit.match_type || hit.match_types?.[0];
+                                    return (
+                                      <div className="flex flex-wrap gap-1">
+                                        {cats.map((cat, i) => (
+                                          <span key={i} className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-xs font-medium">
+                                            {typeof cat === 'string' ? cat : JSON.stringify(cat)}
+                                          </span>
+                                        ))}
+                                        {matchType && (
+                                          <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-xs">{matchType}</span>
+                                        )}
+                                        {!cats.length && !matchType && <span className="text-muted-foreground">—</span>}
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                                 <td className="px-3 py-2.5 text-xs text-muted-foreground space-y-0.5">
                                   {(hit.properties?.country || hit.country) && <div>🌍 {hit.properties?.country || hit.country}</div>}
@@ -625,14 +691,24 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                                   {!hit.properties?.country && !hit.country && !hit.properties?.birthDate && !hit.date_of_birth && '—'}
                                 </td>
                                 <td className="px-3 py-2.5">
-                                  <div className="flex flex-wrap gap-1">
-                                    {(hit.datasets || []).map((ds, i) => (
-                                      <span key={i} className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-xs font-medium">
-                                        {ds.length > 4 ? ds.substring(0, 3).toUpperCase() : ds}
-                                      </span>
-                                    ))}
-                                    {(!hit.datasets?.length) && <span className="text-muted-foreground">—</span>}
-                                  </div>
+                                  {(() => {
+                                    const datasets = hit.datasets?.length ? hit.datasets
+                                      : hit.types?.length ? hit.types.map(t => t.name || t)
+                                      : [];
+                                    return (
+                                      <div className="flex flex-wrap gap-1">
+                                        {datasets.map((ds, i) => {
+                                          const label = typeof ds === 'string' ? ds : (ds.name || String(ds));
+                                          return (
+                                            <span key={i} className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-xs font-medium">
+                                              {label.length > 6 ? label.substring(0, 5).toUpperCase() : label.toUpperCase()}
+                                            </span>
+                                          );
+                                        })}
+                                        {!datasets.length && <span className="text-muted-foreground">—</span>}
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                               </tr>
 
