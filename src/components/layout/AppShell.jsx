@@ -53,6 +53,7 @@ const navItems = [
     group: 'REPORTS & ADMIN',
     items: [
       { label: 'MI Dashboard', icon: BarChart3, href: '/mi-dashboard', permission: 'viewMIDashboard', featureKey: 'mi_dashboard' },
+      { label: 'Risk Dashboard', icon: Shield, href: '/risk-dashboard', permission: 'viewMIDashboard', featureKey: 'mi_dashboard' },
       { label: 'Audit Log', icon: ClipboardList, href: '/audit-logs', permission: 'tenantConfig', featureKey: 'audit_logs' },
       { label: 'Archive', icon: Archive, href: '/archive', permission: 'viewArchive', featureKey: 'archive' },
       { label: 'Tenant Config', icon: Settings, href: '/tenant-config', permission: 'tenantConfig', featureKey: 'tenant_config' },

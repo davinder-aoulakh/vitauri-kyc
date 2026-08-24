@@ -33,6 +33,7 @@ import EntityMap from './pages/EntityMap';
 import OutreachDashboard from './pages/OutreachDashboard';
 import StandaloneOutreach from './pages/StandaloneOutreach';
 import TenantOnboarding from './pages/TenantOnboarding';
+import RiskDashboard from './pages/RiskDashboard';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -112,6 +113,7 @@ const AuthenticatedApp = () => {
       {/* Monitoring / Planning */}
       <Route path="/review-planner" element={<ReviewPlanner />} />
       <Route path="/mi-dashboard" element={<MIDashboard />} />
+      <Route path="/risk-dashboard" element={<RiskDashboard />} />
 
       {/* Admin */}
       <Route path="/tenant-config" element={<TenantConfig />} />
