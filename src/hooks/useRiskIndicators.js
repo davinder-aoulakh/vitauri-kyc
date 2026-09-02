@@ -1,6 +1,7 @@
 /**
  * useRiskIndicators — loads RiskIndicator records for a tenant, grouped by category.
- * Lazily seeds the 12 default indicators if none exist yet.
+ * Uses canonical ALL_INDICATORS as source of truth for indicator_id and category.
+ * Seeds any missing canonical indicators if the full 12 aren't present.
  */
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -13,6 +14,29 @@ const CATEGORIES = [
   'Transaction & Financial Behaviour',
   'Relationship & Onboarding',
 ];
+
+// Normalise name for robust matching: lowercase, strip non-alphanumeric except spaces
+function norm(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// Build lookup: normalised name → canonical indicator
+const NORM_LOOKUP = {};
+ALL_INDICATORS.forEach(ind => { NORM_LOOKUP[norm(ind.name)] = ind; });
+
+function matchCanonical(dbRecord) {
+  const n = norm(dbRecord.name);
+  // Exact normalised match
+  if (NORM_LOOKUP[n]) return NORM_LOOKUP[n];
+  // Partial: first + last word match
+  const words = n.split(' ');
+  const first = words[0];
+  const last = words[words.length - 1];
+  return Object.values(NORM_LOOKUP).find(ind => {
+    const indN = norm(ind.name);
+    return indN.includes(first) && indN.includes(last);
+  }) || null;
+}
 
 export function useRiskIndicators(tenantId) {
   const [indicators, setIndicators] = useState([]);
@@ -31,43 +55,48 @@ export function useRiskIndicators(tenantId) {
       'sort_order'
     );
 
-    // Lazy seed: if no records yet, create defaults for this tenant
-    if (!records || records.length === 0) {
-      const seeds = ALL_INDICATORS.map((ind, i) => ({
-        tenant_id: tenantId,
-        name: ind.name,
-        description: ind.description,
-        applies_to: ind.applies,
-        category: ind.category,
-        sort_order: i,
-        is_active: true,
-        default_weight: 1.0,
-        // Store the canonical id in the name lookup — use id as a stable identifier
-        // We embed the indicator id as a prefix so IndicatorAssessment lookups still work
-        _indicator_id: ind.id,
-      }));
-      // bulkCreate doesn't support custom id field so we store indicator_id in sort_order area;
-      // instead, match by name in the hook output normalisation below
-      await base44.entities.RiskIndicator.bulkCreate(seeds);
+    // Seed ALL missing canonical indicators (not just when empty)
+    const existingNormNames = new Set((records || []).map(r => norm(r.name)));
+    const missing = ALL_INDICATORS.filter(ind => {
+      if (existingNormNames.has(norm(ind.name))) return false;
+      // Also check partial match
+      const words = norm(ind.name).split(' ');
+      return !Array.from(existingNormNames).some(en =>
+        en.includes(words[0]) && en.includes(words[words.length - 1])
+      );
+    });
+
+    if (missing.length > 0) {
+      await base44.entities.RiskIndicator.bulkCreate(
+        missing.map((ind, i) => ({
+          tenant_id: tenantId,
+          name: ind.name,
+          description: ind.description,
+          applies_to: ind.applies,
+          category: ind.category,
+          sort_order: (records?.length || 0) + i,
+          is_active: true,
+          default_weight: 1.0,
+        }))
+      );
       records = await base44.entities.RiskIndicator.filter(
         { tenant_id: tenantId, is_active: true },
         'sort_order'
       );
     }
 
-    // Normalise: map each DB record back to the canonical indicator id by matching name
-    const nameToId = {};
-    ALL_INDICATORS.forEach(ind => { nameToId[ind.name] = ind.id; });
+    // Normalise each DB record to canonical indicator_id and category
+    const normalised = (records || []).map(r => {
+      const canonical = matchCanonical(r);
+      return {
+        ...r,
+        indicator_id: canonical ? canonical.id : r.id,
+        applies: canonical ? canonical.applies : (r.applies_to || []),
+        category: canonical ? canonical.category : (r.category || 'Geography & Sector'),
+      };
+    });
 
-    const normalised = (records || []).map(r => ({
-      ...r,
-      // id used for toggle state must be the canonical indicator id (geo, pep, etc.)
-      indicator_id: nameToId[r.name] || r.id,
-      applies: r.applies_to || [],
-      category: r.category || 'Geography & Sector',
-    }));
-
-    // Group by category maintaining CATEGORIES order
+    // Group by category in CATEGORIES order
     const grouped = {};
     CATEGORIES.forEach(cat => { grouped[cat] = []; });
     normalised.forEach(ind => {
