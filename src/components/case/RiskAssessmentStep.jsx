@@ -5,7 +5,8 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Loader2, User, Building2, BarChart3 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Loader2, User, Building2, BarChart3, ArrowRight, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import IndicatorPicker from '@/components/risk/IndicatorPicker';
 import IndicatorAssessment from '@/components/risk/IndicatorAssessment';
@@ -135,58 +136,113 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
         </TabsContent>
 
         {/* S-091 — Per-Entity Assessment */}
-        {entities.map(e => (
-          <TabsContent key={e.key} value={`assess_${e.key}`} className="mt-4">
-            {!selectionConfirmed ? (
-              <div className="text-center py-12 text-muted-foreground text-sm bg-card border border-border rounded-xl">
-                Complete the indicator selection in Step 1 first.
-              </div>
-            ) : (
-              <IndicatorAssessment
-                entityKey={e.key}
-                entityLabel={e.label}
-                entityType={e.type}
-                client={client}
-                selectedIndicatorIds={selections[e.key] || []}
-                kycCase={kycCase}
-                currentUser={currentUser}
-                scores={getEntityScores(e.key)}
-                onScoresChange={scores => handleScoresChange(e.key, scores)}
-                persistedData={{
-                  narrativeAccepted:  narrativeAccepted[e.key] || {},
-                  overallNarrative:   overallNarratives[e.key] || '',
-                  narratives:         buildNarrativesFromScores(allScores[e.key]),
-                  evidenceLinks:      buildEvidenceFromScores(allScores[e.key]),
-                }}
-                onPersistedDataChange={(patch) => {
-                  if (patch.narrativeAccepted !== undefined) {
-                    updateNarrativeAccepted({ ...narrativeAccepted, [e.key]: patch.narrativeAccepted });
-                  }
-                  if (patch.overallNarrative !== undefined) {
-                    updateOverallNarratives({ ...overallNarratives, [e.key]: patch.overallNarrative });
-                  }
-                  if (patch.narratives !== undefined) {
-                    // Narratives are stored per-indicator inside allScores as ai_narrative
-                    Object.entries(patch.narratives).forEach(([indicatorId, text]) => {
-                      const existing = allScores[e.key]?.[indicatorId] || {};
-                      updateAllScores(e.key, indicatorId, { ...existing, ai_narrative: text });
-                    });
-                  }
-                  if (patch.evidenceLinks !== undefined) {
-                    // Evidence is stored per-indicator inside allScores as evidence_document_ids
-                    Object.entries(patch.evidenceLinks).forEach(([indicatorId, docs]) => {
-                      const existing = allScores[e.key]?.[indicatorId] || {};
-                      updateAllScores(e.key, indicatorId, {
-                        ...existing,
-                        evidence_document_ids: (docs || []).map(d => d.id),
-                      });
-                    });
-                  }
-                }}
-              />
-            )}
-          </TabsContent>
-        ))}
+        {entities.map((e, idx) => {
+          const selectedIds = selections[e.key] || [];
+          const entityScores = allScores[e.key] || {};
+          const scoredCount = selectedIds.filter(id => entityScores[id]?.score).length;
+          const totalCount = selectedIds.length;
+          const allScored = totalCount > 0 && scoredCount === totalCount;
+
+          const isFirst = idx === 0;
+          const isLast = idx === entities.length - 1;
+          const prevTab = isFirst ? 'picker' : `assess_${entities[idx - 1].key}`;
+          const nextTab = isLast ? 'consolidated' : `assess_${entities[idx + 1].key}`;
+          const backLabel = isFirst ? 'Back to Indicators' : `Back: ${entities[idx - 1].label.split(' ')[0]}`;
+          const nextLabel = isLast ? 'Next: Consolidated View' : `Next: ${entities[idx + 1].label.split(' ')[0]}`;
+
+          return (
+            <TabsContent key={e.key} value={`assess_${e.key}`} className="mt-4">
+              {!selectionConfirmed ? (
+                <div className="text-center py-12 text-muted-foreground text-sm bg-card border border-border rounded-xl">
+                  Complete the indicator selection in Step 1 first.
+                </div>
+              ) : (
+                <>
+                  <IndicatorAssessment
+                    entityKey={e.key}
+                    entityLabel={e.label}
+                    entityType={e.type}
+                    client={client}
+                    selectedIndicatorIds={selectedIds}
+                    kycCase={kycCase}
+                    currentUser={currentUser}
+                    scores={getEntityScores(e.key)}
+                    onScoresChange={scores => handleScoresChange(e.key, scores)}
+                    persistedData={{
+                      narrativeAccepted:  narrativeAccepted[e.key] || {},
+                      overallNarrative:   overallNarratives[e.key] || '',
+                      narratives:         buildNarrativesFromScores(allScores[e.key]),
+                      evidenceLinks:      buildEvidenceFromScores(allScores[e.key]),
+                    }}
+                    onPersistedDataChange={(patch) => {
+                      if (patch.narrativeAccepted !== undefined) {
+                        updateNarrativeAccepted({ ...narrativeAccepted, [e.key]: patch.narrativeAccepted });
+                      }
+                      if (patch.overallNarrative !== undefined) {
+                        updateOverallNarratives({ ...overallNarratives, [e.key]: patch.overallNarrative });
+                      }
+                      if (patch.narratives !== undefined) {
+                        Object.entries(patch.narratives).forEach(([indicatorId, text]) => {
+                          const existing = allScores[e.key]?.[indicatorId] || {};
+                          updateAllScores(e.key, indicatorId, { ...existing, ai_narrative: text });
+                        });
+                      }
+                      if (patch.evidenceLinks !== undefined) {
+                        Object.entries(patch.evidenceLinks).forEach(([indicatorId, docs]) => {
+                          const existing = allScores[e.key]?.[indicatorId] || {};
+                          updateAllScores(e.key, indicatorId, {
+                            ...existing,
+                            evidence_document_ids: (docs || []).map(d => d.id),
+                          });
+                        });
+                      }
+                    }}
+                  />
+
+                  {/* Navigation footer */}
+                  <div className="mt-4 pt-4 border-t border-border flex items-start justify-between gap-3">
+                    {/* Back */}
+                    <Button
+                      size="sm" variant="outline"
+                      className="text-xs gap-1.5"
+                      onClick={() => setActiveTab(prevTab)}
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      {backLabel}
+                    </Button>
+
+                    {/* Skip + Next */}
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm" variant="ghost"
+                          className="text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => setActiveTab('consolidated')}
+                        >
+                          Skip to Consolidated View
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="text-xs gap-1.5"
+                          disabled={!allScored}
+                          onClick={() => setActiveTab(nextTab)}
+                        >
+                          {nextLabel}
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                      {!allScored && totalCount > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          Score all indicators to proceed ({scoredCount}/{totalCount} done)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </TabsContent>
+          );
+        })}
 
         {/* S-092 — Consolidated Risk */}
         <TabsContent value="consolidated" className="mt-4">
