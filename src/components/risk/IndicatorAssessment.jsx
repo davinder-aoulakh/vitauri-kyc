@@ -28,20 +28,23 @@ export default function IndicatorAssessment({
   entityKey, entityLabel, entityType, client,
   selectedIndicatorIds, kycCase, currentUser,
   scores, onScoresChange,
+  persistedData, onPersistedDataChange,
 }) {
   const [expanded, setExpanded] = useState(null);
-  const [narratives, setNarratives] = useState({});
-  const [narrativeAccepted, setNarrativeAccepted] = useState({});
+  // Initialise from persisted data on mount
+  const [narratives, setNarratives] = useState(persistedData?.narratives || {});
+  const [narrativeAccepted, setNarrativeAccepted] = useState(persistedData?.narrativeAccepted || {});
   const [generatingNarrative, setGeneratingNarrative] = useState(null);
-  const [overallNarrative, setOverallNarrative] = useState('');
+  const [overallNarrative, setOverallNarrative] = useState(persistedData?.overallNarrative || '');
   const [generatingOverall, setGeneratingOverall] = useState(false);
   const [evidenceOpen, setEvidenceOpen] = useState(null);
   const [documents, setDocuments] = useState([]);
-  const [evidenceLinks, setEvidenceLinks] = useState({});
+  // Initialise evidence links from persisted data
+  const [evidenceLinks, setEvidenceLinks] = useState(persistedData?.evidenceLinks || {});
   const [overrideMode, setOverrideMode] = useState(false);
-  const [overrideScore, setOverrideScore] = useState('');
+  const [overrideScore, setOverrideScore] = useState(scores?.__override?.score || '');
   const [overrideJust, setOverrideJust] = useState('');
-  const [overrideApplied, setOverrideApplied] = useState(false);
+  const [overrideApplied, setOverrideApplied] = useState(!!scores?.__override?.score);
   const [saving, setSaving] = useState(false);
 
   const indicators = selectedIndicatorIds.map(id => ALL_INDICATORS.find(i => i.id === id)).filter(Boolean);
@@ -77,8 +80,16 @@ Tone: factual, neutral, third-person, regulatory-grade. Total: 3–5 sentences.`
       model: 'claude_sonnet_4_6',
     });
     const text = typeof result === 'string' ? result : result?.narrative || result?.text || JSON.stringify(result);
-    setNarratives(n => ({ ...n, [ind.id]: text }));
-    setNarrativeAccepted(a => ({ ...a, [ind.id]: false }));
+    setNarratives(n => {
+      const next = { ...n, [ind.id]: text };
+      onPersistedDataChange?.({ narratives: next });
+      return next;
+    });
+    setNarrativeAccepted(a => {
+      const next = { ...a, [ind.id]: false };
+      onPersistedDataChange?.({ narrativeAccepted: next });
+      return next;
+    });
     setGeneratingNarrative(null);
   }
 
@@ -109,7 +120,9 @@ Write a consolidated narrative (4–6 paragraphs) that:
 Tone: professional, regulatory-grade, suitable for a compliance file.`,
       model: 'claude_sonnet_4_6',
     });
-    setOverallNarrative(typeof result === 'string' ? result : result?.narrative || JSON.stringify(result));
+    const text = typeof result === 'string' ? result : result?.narrative || JSON.stringify(result);
+    setOverallNarrative(text);
+    onPersistedDataChange?.({ overallNarrative: text });
     setGeneratingOverall(false);
   }
 
@@ -130,17 +143,19 @@ Tone: professional, regulatory-grade, suitable for a compliance file.`,
     });
     setOverrideApplied(true);
     setOverrideMode(false);
-    onScoresChange({ ...scores, __override: { score: overrideScore } });
+    const overrideData = { score: overrideScore, justification: overrideJust };
+    onScoresChange({ ...scores, __override: overrideData });
     setSaving(false);
   }
 
   function toggleEvidence(indicatorId, doc) {
     const current = evidenceLinks[indicatorId] || [];
     const exists = current.find(d => d.id === doc.id);
-    setEvidenceLinks(e => ({
-      ...e,
-      [indicatorId]: exists ? current.filter(d => d.id !== doc.id) : [...current, doc],
-    }));
+    setEvidenceLinks(e => {
+      const next = { ...e, [indicatorId]: exists ? current.filter(d => d.id !== doc.id) : [...current, doc] };
+      onPersistedDataChange?.({ evidenceLinks: next });
+      return next;
+    });
     setEvidenceOpen(null);
   }
 
@@ -347,7 +362,13 @@ Tone: professional, regulatory-grade, suitable for a compliance file.`,
                       {!accepted && (
                         <div className="flex gap-2">
                           <Button size="sm" variant="outline" className="text-xs gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50 h-7"
-                            onClick={() => setNarrativeAccepted(a => ({ ...a, [ind.id]: true }))}>
+                           onClick={() => {
+                             setNarrativeAccepted(a => {
+                               const next = { ...a, [ind.id]: true };
+                               onPersistedDataChange?.({ narrativeAccepted: next });
+                               return next;
+                             });
+                           }}>
                             <CheckCircle className="w-3 h-3" /> Accept
                           </Button>
                           <Button size="sm" variant="ghost" className="text-xs gap-1 text-amber-600 hover:bg-amber-50 h-7"
@@ -479,7 +500,10 @@ Tone: professional, regulatory-grade, suitable for a compliance file.`,
           </div>
           <Textarea
             value={overallNarrative}
-            onChange={e => setOverallNarrative(e.target.value)}
+            onChange={e => {
+              setOverallNarrative(e.target.value);
+              onPersistedDataChange?.({ overallNarrative: e.target.value });
+            }}
             placeholder="Click 'Generate Overall Narrative' to synthesise all indicator assessments into a consolidated risk narrative…"
             className="text-sm min-h-40 resize-y leading-relaxed"
           />

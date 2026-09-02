@@ -170,32 +170,31 @@
     },
     "ai_outputs": {
       "type": "object",
-      "description": "Persisted AI assistant outputs keyed by step number. Each key is the step number (as string), value is {output, actionStatus, editedText}."
+      "description": "Persisted AI assistant outputs keyed by step number."
     },
     "profile_suggestions": {
       "type": "object",
-      "description": "Step 4 structured field suggestions. Shape: { client_fields: { field_name: {value, confidence, source_type, source_ref, status, conflict_note} }, related_parties: [{full_name, party_type, role_in_relationship, ownership_percentage, fields:{...}, status, rp_id}], run_at, sources_summary, pipeline_running }"
+      "description": "Step 4 structured field suggestions."
+    },
+    "risk_assessment_meta": {
+      "type": "object",
+      "description": "Persisted S-090/S-092 state: { selections, selectionConfirmed, narrativeAccepted, overallNarratives, entityOverrides, consolidatedOverride }"
     },
     "purpose_nature_text": {
-      "type": "string",
-      "description": "Purpose & Nature of Business Relationship (mandatory)"
+      "type": "string"
     },
     "expected_transaction_behavior": {
-      "type": "string",
-      "description": "JSON string: expected transaction types, frequency, counterparties, geographies, volumes"
+      "type": "string"
     },
     "sof_narrative": {
-      "type": "string",
-      "description": "SoF/SoW JSON blob"
+      "type": "string"
     },
     "sow_applicable": {
       "type": "boolean",
-      "default": false,
-      "description": "Whether SoW assessment is applicable for this NP client"
+      "default": false
     },
     "osint_cache": {
-      "type": "string",
-      "description": "JSON string: cached OSINT results including findings and run timestamp"
+      "type": "string"
     },
     "sign_off_submitted_by": {
       "type": "string"
@@ -222,8 +221,7 @@
       "default": false
     },
     "previous_case_id": {
-      "type": "string",
-      "description": "For EDR/re-onboarding: FK to previous case"
+      "type": "string"
     }
   },
   "required": [

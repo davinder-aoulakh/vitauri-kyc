@@ -24,11 +24,12 @@ function getHighestRisk(scores) {
 
 export default function ConsolidatedRiskView({
   entities, allScores, kycCase, client, currentUser, onProceed,
+  persistedOverride, onOverrideChange,
 }) {
   const [overrideMode, setOverrideMode] = useState(false);
-  const [overrideLevel, setOverrideLevel] = useState('');
-  const [overrideJust, setOverrideJust] = useState('');
-  const [overrideApplied, setOverrideApplied] = useState(false);
+  const [overrideLevel, setOverrideLevel] = useState(persistedOverride?.level || '');
+  const [overrideJust, setOverrideJust] = useState(persistedOverride?.justification || '');
+  const [overrideApplied, setOverrideApplied] = useState(!!persistedOverride?.level);
   const [saving, setSaving] = useState(false);
   const [proceeding, setProceeding] = useState(false);
 
@@ -46,7 +47,7 @@ export default function ConsolidatedRiskView({
   for (const level of RISK_ORDER) {
     if (allHighest.includes(level)) { consolidated = level; break; }
   }
-  const finalConsolidated = overrideApplied ? overrideLevel : consolidated;
+  const finalConsolidated = overrideApplied ? (overrideLevel || persistedOverride?.level) : consolidated;
 
   async function applyOverride() {
     if (!overrideLevel || overrideJust.length < 30) return;
@@ -66,6 +67,7 @@ export default function ConsolidatedRiskView({
     setOverrideApplied(true);
     setOverrideMode(false);
     setSaving(false);
+    onOverrideChange?.({ level: overrideLevel, justification: overrideJust });
   }
 
   async function proceedToControlMeasures() {
