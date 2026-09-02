@@ -5,7 +5,7 @@
  */
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { ALL_INDICATORS } from '@/components/risk/IndicatorPicker';
+import { ALL_INDICATORS } from '@/lib/riskIndicatorLibrary';
 
 const CATEGORIES = [
   'Geography & Sector',
