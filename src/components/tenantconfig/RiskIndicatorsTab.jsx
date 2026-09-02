@@ -4,31 +4,43 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Pencil, GripVertical, Loader2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const APPLICABILITY_OPTIONS = ['NP_Client', 'ORG_Client', 'NP_Related_Party', 'ORG_Related_Party'];
 
-const DEFAULT_INDICATORS = [
-  { name: 'PEP Status', description: 'Entity is a Politically Exposed Person or closely associated.', applies_to: ['NP_Client','NP_Related_Party'] },
-  { name: 'Sanctions Exposure', description: 'Entity appears on EU/UN/OFAC sanctions lists.', applies_to: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'] },
-  { name: 'Adverse Media', description: 'Entity linked to credible adverse media reports.', applies_to: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'] },
-  { name: 'High-Risk Jurisdiction', description: 'Client resides in or entity is registered in a FATF high-risk or non-cooperative jurisdiction.', applies_to: ['NP_Client','ORG_Client'] },
-  { name: 'Complex Ownership Structure', description: 'Entity has a layered or opaque beneficial ownership structure.', applies_to: ['ORG_Client'] },
-  { name: 'Cash-Intensive Business', description: 'Business operates predominantly in cash.', applies_to: ['ORG_Client'] },
-  { name: 'Unusual Transaction Patterns', description: 'Transactions inconsistent with stated business purpose or profile.', applies_to: ['NP_Client','ORG_Client'] },
-  { name: 'Source of Wealth Unclear', description: 'Origin of wealth cannot be verified or is implausible.', applies_to: ['NP_Client','NP_Related_Party'] },
-  { name: 'Correspondent Banking Exposure', description: 'Client operates or has exposure via correspondent banking relationships.', applies_to: ['ORG_Client'] },
-  { name: 'Crypto / Virtual Asset Exposure', description: 'Client has significant exposure to virtual assets or crypto businesses.', applies_to: ['NP_Client','ORG_Client'] },
+const CATEGORIES = [
+  'Geography & Sector',
+  'PEP & Sanctions',
+  'Ownership & Structure',
+  'Transaction & Financial Behaviour',
+  'Relationship & Onboarding',
 ];
 
-const BLANK = { name: '', description: '', applies_to: [], default_weight: 1.0, is_active: true };
+// Canonical default indicators matching ALL_INDICATORS in IndicatorPicker
+const DEFAULT_INDICATORS = [
+  { name: 'High-Risk Geography',               description: 'Operating in a high-risk or non-cooperative jurisdiction (FATF grey/blacklist)',      applies_to: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'Geography & Sector' },
+  { name: 'High-Risk Sector / Industry',       description: 'Operating in a high-risk sector (e.g. crypto, gambling, arms, adult)',                 applies_to: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'Geography & Sector' },
+  { name: 'Cash-Intensive Business',           description: 'Primary operations involve large cash volumes or cash-equivalent transactions',         applies_to: ['ORG_Client'],                                                    category: 'Geography & Sector' },
+  { name: 'PEP Status',                        description: 'Client or related party is a Politically Exposed Person',                              applies_to: ['NP_Client','NP_Related_Party'],                                   category: 'PEP & Sanctions' },
+  { name: 'Sanctions / Adverse Media',         description: 'Confirmed or possible match on sanctions, PEP or adverse media lists',                 applies_to: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'PEP & Sanctions' },
+  { name: 'Politically Exposed Related Party', description: 'A UBO, director, or key related party is a PEP',                                       applies_to: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'PEP & Sanctions' },
+  { name: 'Complex Ownership Structure',       description: 'Multi-layered, opaque, or nominee-based ownership arrangements',                       applies_to: ['ORG_Client','ORG_Related_Party'],                                 category: 'Ownership & Structure' },
+  { name: 'Opaque Ownership / Nominee',        description: 'Use of nominee shareholders, bearer shares, or trusts obscuring beneficial ownership', applies_to: ['ORG_Client','ORG_Related_Party'],                                 category: 'Ownership & Structure' },
+  { name: 'Unusual Transaction Pattern',       description: 'Transactions inconsistent with stated purpose, profile, or expected behaviour',        applies_to: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'Transaction & Financial Behaviour' },
+  { name: 'Inconsistent SoF/SoW',              description: 'Source of funds or wealth cannot be adequately explained or documented',               applies_to: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'Transaction & Financial Behaviour' },
+  { name: 'Non-Face-to-Face Relationship',     description: 'Client relationship established without in-person verification',                       applies_to: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'Relationship & Onboarding' },
+  { name: 'Third-Party Introducer',            description: 'Client was introduced by a third party whose identity or integrity is uncertain',       applies_to: ['NP_Client','ORG_Client','NP_Related_Party','ORG_Related_Party'], category: 'Relationship & Onboarding' },
+];
+
+const BLANK = { name: '', description: '', applies_to: [], category: 'Geography & Sector', default_weight: 1.0, is_active: true };
 
 export default function RiskIndicatorsTab({ tenant }) {
   const [indicators, setIndicators] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null); // null | { mode: 'add'|'edit', data }
+  const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [dragIdx, setDragIdx] = useState(null);
@@ -63,13 +75,18 @@ export default function RiskIndicatorsTab({ tenant }) {
   async function seedDefaults() {
     setSeeding(true);
     for (let i = 0; i < DEFAULT_INDICATORS.length; i++) {
-      await base44.entities.RiskIndicator.create({ ...DEFAULT_INDICATORS[i], tenant_id: tenant.id, default_weight: 1.0, is_active: true, sort_order: i });
+      await base44.entities.RiskIndicator.create({
+        ...DEFAULT_INDICATORS[i],
+        tenant_id: tenant.id,
+        default_weight: 1.0,
+        is_active: true,
+        sort_order: i,
+      });
     }
     setSeeding(false);
     load();
   }
 
-  // Simple drag-and-drop reorder
   function onDragStart(i) { setDragIdx(i); }
   function onDragOver(e, i) { e.preventDefault(); setOverIdx(i); }
   async function onDrop(e, i) {
@@ -122,6 +139,7 @@ export default function RiskIndicatorsTab({ tenant }) {
               <tr className="bg-muted/40 border-b border-border text-xs text-muted-foreground uppercase tracking-wide">
                 <th className="w-6 px-2 py-3" />
                 <th className="text-left px-4 py-3">Indicator</th>
+                <th className="text-left px-4 py-3">Category</th>
                 <th className="text-left px-4 py-3">Applies To</th>
                 <th className="text-left px-4 py-3">Weight</th>
                 <th className="text-left px-4 py-3">Active</th>
@@ -142,6 +160,11 @@ export default function RiskIndicatorsTab({ tenant }) {
                   <td className="px-4 py-3">
                     <div className="font-medium text-xs">{ind.name}</div>
                     <div className="text-xs text-muted-foreground truncate max-w-xs">{ind.description}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full border border-border">
+                      {ind.category || '—'}
+                    </span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
@@ -178,6 +201,22 @@ export default function RiskIndicatorsTab({ tenant }) {
               <div>
                 <label className="text-xs font-medium block mb-1.5">Description</label>
                 <Textarea value={modal.data.description} onChange={e => setModal(m => ({ ...m, data: { ...m.data, description: e.target.value } }))} className="text-sm min-h-16 resize-none" />
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1.5">Category</label>
+                <Select
+                  value={modal.data.category || 'Geography & Sector'}
+                  onValueChange={val => setModal(m => ({ ...m, data: { ...m.data, category: val } }))}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map(cat => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="text-xs font-medium block mb-1.5">Applies To</label>

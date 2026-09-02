@@ -1,14 +1,13 @@
 /**
- * S-090: Risk Indicator Picker — redesigned
- * Category-grouped cards with inline entity toggles, live summary rail, AI badges.
+ * S-090: Risk Indicator Picker — mockup-aligned
+ * Category-grouped cards, per-entity toggle switches, entity-scope filter, live right rail.
  *
  * Props contract UNCHANGED: { client, relatedParties, selections, onChange, onConfirm, allScores }
  * ALL_INDICATORS export PRESERVED (backward-compat for IndicatorAssessment import).
  */
 import React, { useState, useMemo } from 'react';
-import { Button } from '@/components/ui/button';
 import { base44 } from '@/api/base44Client';
-import { Sparkles, Loader2, Check, Search } from 'lucide-react';
+import { Sparkles, Loader2, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useRiskIndicators } from '@/hooks/useRiskIndicators';
 import IndicatorCategoryGroup from '@/components/risk/IndicatorCategoryGroup';
@@ -39,16 +38,24 @@ const CATEGORIES = [
   'Relationship & Onboarding',
 ];
 
+const SCOPE_FILTERS = [
+  { key: 'All', label: 'All' },
+  { key: 'NP_Client', label: 'NP Client' },
+  { key: 'ORG_Client', label: 'ORG Client' },
+  { key: 'NP_Related_Party', label: 'NP Related Party' },
+  { key: 'ORG_Related_Party', label: 'ORG Related Party' },
+];
+
 export default function IndicatorPicker({ client, relatedParties, selections, onChange, onConfirm, allScores }) {
   const { tenant } = useTenant();
   const { byCategory, loading } = useRiskIndicators(tenant?.id);
 
   const [search, setSearch] = useState('');
+  const [scopeFilter, setScopeFilter] = useState('All');
   const [suggesting, setSuggesting] = useState(false);
-  // aiBadges: { [indicator_id]: { [entityKey]: { reason, dismissed } } }
   const [aiBadges, setAiBadges] = useState({});
-  // Track which indicators have been reviewed (toggled at least once this session)
   const [reviewed, setReviewed] = useState(new Set());
+  const [activeEntityKey, setActiveEntityKey] = useState(null);
 
   const entities = [
     { key: 'client', label: client?.full_name || 'Client', type: client?.client_type === 'ORG' ? 'ORG_Client' : 'NP_Client', data: client },
@@ -59,6 +66,9 @@ export default function IndicatorPicker({ client, relatedParties, selections, on
       data: rp,
     })),
   ];
+
+  // Default active entity key to first entity
+  const resolvedActiveKey = activeEntityKey || entities[0]?.key;
 
   function toggle(entityKey, indicatorId) {
     const current = selections[entityKey] || [];
@@ -79,7 +89,6 @@ export default function IndicatorPicker({ client, relatedParties, selections, on
     }));
   }
 
-  // Compute reviewed count: indicators with saved selections OR toggled this session
   const allIndicatorIds = ALL_INDICATORS.map(i => i.id);
   const reviewedCount = allIndicatorIds.filter(id => {
     const hasSaved = entities.some(e => (selections[e.key] || []).includes(id));
@@ -88,20 +97,23 @@ export default function IndicatorPicker({ client, relatedParties, selections, on
 
   const totalSelected = Object.values(selections).flat().length;
 
-  // Filter indicators by search text
+  // Filter by search + scope
   const filteredByCategory = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return byCategory;
     const result = {};
     CATEGORIES.forEach(cat => {
-      result[cat] = (byCategory[cat] || []).filter(ind =>
-        ind.name.toLowerCase().includes(q) || ind.description.toLowerCase().includes(q)
-      );
+      let inds = byCategory[cat] || [];
+      if (q) inds = inds.filter(ind => ind.name.toLowerCase().includes(q) || ind.description.toLowerCase().includes(q));
+      if (scopeFilter !== 'All') inds = inds.filter(ind => (ind.applies || []).includes(scopeFilter));
+      result[cat] = inds;
     });
     return result;
-  }, [search, byCategory]);
+  }, [search, scopeFilter, byCategory]);
 
   const hasSearchResults = CATEGORIES.some(cat => (filteredByCategory[cat] || []).length > 0);
+
+  // Active entity for AI suggest label
+  const activeEntity = entities.find(e => e.key === resolvedActiveKey) || entities[0];
 
   async function suggestIndicators() {
     setSuggesting(true);
@@ -153,11 +165,9 @@ Return JSON only.`,
 
       if (!matchedEntity || !s.indicator_id) return;
 
-      // Store badge
       if (!newBadges[s.indicator_id]) newBadges[s.indicator_id] = {};
       newBadges[s.indicator_id][matchedEntity.key] = { reason: s.reason, dismissed: false };
 
-      // Auto-apply selection
       const current = newSelections[matchedEntity.key] || [];
       if (!current.includes(s.indicator_id)) {
         newSelections[matchedEntity.key] = [...current, s.indicator_id];
@@ -171,46 +181,53 @@ Return JSON only.`,
 
   return (
     <div className="space-y-4">
-      {/* Top bar */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h3 className="font-semibold text-sm text-foreground">Risk Indicator Selection</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Toggle applicable indicators for each entity — grouped by risk category
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5 text-xs text-purple-600 border-purple-200 hover:bg-purple-50"
-            onClick={suggestIndicators}
-            disabled={suggesting}
-          >
-            {suggesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            {suggesting ? 'Analysing…' : 'AI Suggest'}
-          </Button>
-          <Button
-            size="sm"
-            disabled={totalSelected === 0}
-            onClick={onConfirm}
-            className="gap-1.5 text-xs"
-          >
-            <Check className="w-3.5 h-3.5" /> Confirm Selection ({totalSelected})
-          </Button>
-        </div>
+      {/* Top bar: title */}
+      <div>
+        <h3 className="font-semibold text-sm text-foreground">Risk Indicator Selection</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Select applicable indicators per entity, grouped by risk category. Use AI Suggest for a starting point, then review and confirm.
+        </p>
       </div>
 
-      {/* Search bar */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-        <input
-          type="text"
-          placeholder="Search indicators…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full pl-9 pr-3 py-2 text-sm border border-input rounded-lg bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-        />
+      {/* Search + scope filters + AI Suggest */}
+      <div className="space-y-2">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search indicators…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 text-sm border border-input rounded-lg bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+
+        {/* Scope filter pills + AI Suggest */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {SCOPE_FILTERS.map(f => (
+            <button
+              key={f.key}
+              onClick={() => setScopeFilter(f.key)}
+              className={cn(
+                'text-xs px-3 py-1 rounded-full border font-medium transition-colors',
+                scopeFilter === f.key
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground bg-background'
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+
+          <button
+            onClick={suggestIndicators}
+            disabled={suggesting}
+            className="ml-auto inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border border-purple-200 text-purple-600 bg-purple-50 hover:bg-purple-100 font-medium transition-colors disabled:opacity-50"
+          >
+            {suggesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+            {suggesting ? 'Analysing…' : `AI Suggest${activeEntity ? ` for ${activeEntity.label}` : ''}`}
+          </button>
+        </div>
       </div>
 
       {/* Main two-column layout */}
@@ -253,6 +270,9 @@ Return JSON only.`,
             totalIndicators={ALL_INDICATORS.length}
             reviewedCount={reviewedCount}
             allScores={allScores || {}}
+            activeEntityKey={resolvedActiveKey}
+            onActiveEntityChange={setActiveEntityKey}
+            onConfirm={onConfirm}
           />
         </div>
       </div>
