@@ -36,6 +36,23 @@ const CASE_TYPES = [
 ];
 const RISK_LEVELS = ['Low','Medium','High','Unacceptable'];
 
+function SortTh({ col, label, className, sortCol, sortAsc, onSort }) {
+  return (
+    <th
+      className={cn('text-left px-4 py-3 cursor-pointer select-none whitespace-nowrap', className)}
+      onClick={() => onSort(col)}
+    >
+      <span className="flex items-center gap-0.5">
+        {label}
+        {sortCol === col
+          ? sortAsc ? <ChevronUp className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />
+          : <ChevronsUpDown className="w-3 h-3 ml-0.5 opacity-30" />
+        }
+      </span>
+    </th>
+  );
+}
+
 function SortIcon({ col, sortKey }) {
   if (sortKey !== col) return <ChevronsUpDown className="w-3 h-3 ml-1 text-muted-foreground/40" />;
   return null;
@@ -265,23 +282,6 @@ export default function CasesList({ myOnly = false }) {
     URL.revokeObjectURL(url);
   }
 
-  function SortTh({ col, label, className }) {
-    return (
-      <th
-        className={cn('text-left px-4 py-3 cursor-pointer select-none whitespace-nowrap', className)}
-        onClick={() => handleSort(col)}
-      >
-        <span className="flex items-center gap-0.5">
-          {label}
-          {sortCol === col
-            ? sortAsc ? <ChevronUp className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />
-            : <ChevronsUpDown className="w-3 h-3 ml-0.5 opacity-30" />
-          }
-        </span>
-      </th>
-    );
-  }
-
   const title    = myOnly ? 'My Cases' : 'All Cases';
   const subtitle = myOnly
     ? `${filtered.length} cases assigned to you`
@@ -428,14 +428,14 @@ export default function CasesList({ myOnly = false }) {
                           />
                         </th>
                       )}
-                      <SortTh col="client_name" label="Client Name" />
-                      <SortTh col="client_type" label="Type" />
-                      <SortTh col="case_type" label="Case Type" />
-                      <SortTh col="status" label="Status" />
-                      <SortTh col="risk" label="Risk Class" />
+                      <SortTh col="client_name" label="Client Name" sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
+                      <SortTh col="client_type" label="Type"        sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
+                      <SortTh col="case_type"   label="Case Type"   sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
+                      <SortTh col="status"      label="Status"      sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
+                      <SortTh col="risk"        label="Risk Class"  sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
                       {!myOnly && <th className="text-left px-4 py-3">Analyst</th>}
-                      <SortTh col="due_date" label="Due Date" />
-                      <SortTh col="days_open" label="Days Open" />
+                      <SortTh col="due_date"  label="Due Date"   sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
+                      <SortTh col="days_open" label="Days Open"  sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
                       <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
                   </thead>

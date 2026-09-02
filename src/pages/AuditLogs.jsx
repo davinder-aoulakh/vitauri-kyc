@@ -28,6 +28,18 @@ const ACTOR_TYPE_COLORS = {
   System:   'bg-slate-50 text-slate-600 border-slate-200',
 };
 
+function SortTh({ col, label, sortCol, sortDir, onSort }) {
+  const active = sortCol === col;
+  return (
+    <th className="text-left px-3 py-2.5 cursor-pointer select-none hover:bg-muted/60 transition-colors" onClick={() => onSort(col)}>
+      <div className="flex items-center gap-1">
+        <span>{label}</span>
+        <span className={cn('text-xs', active ? 'text-primary' : 'text-transparent')}>{sortDir === 'asc' ? '↑' : '↓'}</span>
+      </div>
+    </th>
+  );
+}
+
 function exportCSV(rows, filename) {
   if (!rows.length) return;
   const cols = ['created_date','actor_name','actor_type','event_type','case_id','client_id','notes','is_override'];
@@ -131,18 +143,6 @@ export default function AuditLogs() {
 
   const hasFilters = fromDate || toDate || actorFilter !== 'all' || eventTypeFilter !== 'all' || entitySearch || notesSearch;
 
-  function SortTh({ col, label }) {
-    const active = sortCol === col;
-    return (
-      <th className="text-left px-3 py-2.5 cursor-pointer select-none hover:bg-muted/60 transition-colors" onClick={() => toggleSort(col)}>
-        <div className="flex items-center gap-1">
-          <span>{label}</span>
-          <span className={cn('text-xs', active ? 'text-primary' : 'text-transparent')}>{sortDir === 'asc' ? '↑' : '↓'}</span>
-        </div>
-      </th>
-    );
-  }
-
   return (
     <AppShell>
       <div className="p-6 max-w-screen-2xl mx-auto space-y-5">
@@ -238,9 +238,9 @@ export default function AuditLogs() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-muted/40 border-b border-border text-muted-foreground uppercase tracking-wide">
-                    <SortTh col="created_date" label="Timestamp" />
-                    <SortTh col="actor_name"   label="Actor" />
-                    <SortTh col="event_type"   label="Event" />
+                    <SortTh col="created_date" label="Timestamp" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                    <SortTh col="actor_name"   label="Actor"     sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                    <SortTh col="event_type"   label="Event"     sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                     <th className="text-left px-3 py-2.5">Case / Client</th>
                     <th className="text-left px-3 py-2.5">Notes</th>
                     <th className="text-left px-3 py-2.5">Override</th>

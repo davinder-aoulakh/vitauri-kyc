@@ -37,6 +37,34 @@ const SECTORS   = ['Financial Services','Real Estate','Legal Services','Consulti
 const LEGAL_FORMS = ['BV','NV','Ltd','SA','GmbH','LLC','Inc','PLC','SRL','AG','SARL','Other'];
 const ID_TYPES    = ['Passport','National ID Card','Driving Licence','Residence Permit','Other'];
 
+function F({ label, value, onChange, type = 'text', placeholder, readOnly, disabled }) {
+  return (
+    <div>
+      <Label className="text-xs font-medium mb-1 block text-muted-foreground">{label}</Label>
+      <Input
+        type={type}
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled || readOnly}
+        className="h-8 text-sm"
+      />
+    </div>
+  );
+}
+
+function SF({ label, value, onChange, options, disabled }) {
+  return (
+    <div>
+      <Label className="text-xs font-medium mb-1 block text-muted-foreground">{label}</Label>
+      <Select value={value || ''} onValueChange={onChange} disabled={disabled}>
+        <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
+        <SelectContent>{options.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrApplied }) {
   const { currentUser } = useTenant();
   const [form, setForm] = useState({ ...client });
@@ -54,6 +82,13 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
   const canEdit = hasPermission(currentUser?.app_role, 'createEditClient');
 
   const set = (field, val) => { setForm(f => ({ ...f, [field]: val })); setSaved(false); };
+
+  const fProps = (field, extra = {}) => ({
+    value: form[field] || '',
+    onChange: v => set(field, v),
+    disabled: !canEdit,
+    ...extra,
+  });
 
   async function handleSave() {
     setSaving(true);
@@ -73,34 +108,6 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
     setSaving(false);
     setSaved(true);
     onClientUpdated?.({ ...client, ...rest });
-  }
-
-  function F({ label, field, type = 'text', placeholder, readOnly }) {
-    return (
-      <div>
-        <Label className="text-xs font-medium mb-1 block text-muted-foreground">{label}</Label>
-        <Input
-          type={type}
-          value={form[field] || ''}
-          onChange={e => set(field, e.target.value)}
-          placeholder={placeholder}
-          disabled={!canEdit || readOnly}
-          className="h-8 text-sm"
-        />
-      </div>
-    );
-  }
-
-  function SF({ label, field, options }) {
-    return (
-      <div>
-        <Label className="text-xs font-medium mb-1 block text-muted-foreground">{label}</Label>
-        <Select value={form[field] || ''} onValueChange={v => set(field, v)} disabled={!canEdit}>
-          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
-          <SelectContent>{options.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
-        </Select>
-      </div>
-    );
   }
 
   function handleOcrApply(fields) {
@@ -125,30 +132,30 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {isOrg ? (
             <>
-              <F label="Legal Name" field="full_name" />
-              <SF label="Legal Form" field="legal_form" options={LEGAL_FORMS} />
-              <F label="Registration No. / KvK" field="registration_number" />
-              <F label="LEI Code" field="lei_code" placeholder="Optional" />
-              <SF label="Registered Country" field="registered_country" options={COUNTRIES} />
-              <SF label="Sector / Industry" field="sector" options={SECTORS} />
-              <div className="md:col-span-2"><F label="Registered Address" field="registered_address" /></div>
-              <F label="Contact Name" field="primary_contact_name" />
-              <F label="Contact Email" field="primary_contact_email" type="email" />
-              <F label="Contact Phone" field="primary_contact_phone" />
+              <F label="Legal Name" {...fProps('full_name')} />
+              <SF label="Legal Form" {...fProps('legal_form')} options={LEGAL_FORMS} />
+              <F label="Registration No. / KvK" {...fProps('registration_number')} />
+              <F label="LEI Code" {...fProps('lei_code')} placeholder="Optional" />
+              <SF label="Registered Country" {...fProps('registered_country')} options={COUNTRIES} />
+              <SF label="Sector / Industry" {...fProps('sector')} options={SECTORS} />
+              <div className="md:col-span-2"><F label="Registered Address" {...fProps('registered_address')} /></div>
+              <F label="Contact Name" {...fProps('primary_contact_name')} />
+              <F label="Contact Email" {...fProps('primary_contact_email')} type="email" />
+              <F label="Contact Phone" {...fProps('primary_contact_phone')} />
             </>
           ) : (
             <>
-              <F label="Full Name" field="full_name" />
+              <F label="Full Name" {...fProps('full_name')} />
               <div>
                 <Label className="text-xs font-medium mb-1 block text-muted-foreground">Date of Birth</Label>
                 <Input type="date" value={form.date_of_birth || ''} onChange={e => set('date_of_birth', e.target.value)} disabled={!canEdit} className="h-8 text-sm" />
               </div>
-              <SF label="Nationality" field="nationality" options={COUNTRIES} />
-              <SF label="Country of Residence" field="country_of_residence" options={COUNTRIES} />
-              <SF label="ID Type" field="id_type" options={ID_TYPES} />
-              <F label="ID Number" field="id_number" />
-              <F label="Contact Email" field="primary_contact_email" type="email" />
-              <F label="Contact Phone" field="primary_contact_phone" />
+              <SF label="Nationality" {...fProps('nationality')} options={COUNTRIES} />
+              <SF label="Country of Residence" {...fProps('country_of_residence')} options={COUNTRIES} />
+              <SF label="ID Type" {...fProps('id_type')} options={ID_TYPES} />
+              <F label="ID Number" {...fProps('id_number')} />
+              <F label="Contact Email" {...fProps('primary_contact_email')} type="email" />
+              <F label="Contact Phone" {...fProps('primary_contact_phone')} />
             </>
           )}
         </div>
@@ -162,8 +169,8 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
           <span className="text-xs text-amber-600 italic ml-1">— Pending Gino/Glenn schema confirmation</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <F label="Tax Residency" field="tax_residency" />
-          <F label="TIN(s)" field="tin" placeholder="e.g. NL123456789" />
+          <F label="Tax Residency" {...fProps('tax_residency')} />
+          <F label="TIN(s)" {...fProps('tin')} placeholder="e.g. NL123456789" />
           <div>
             <Label className="text-xs font-medium mb-1 block text-amber-700">Entity Classification</Label>
             <Select value={form.entity_classification || ''} onValueChange={v => set('entity_classification', v)} disabled={!canEdit}>
@@ -173,7 +180,7 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
               </SelectContent>
             </Select>
           </div>
-          <F label="FATCA Reporting Status" field="fatca_reporting_status" placeholder="e.g. Reporting FI" />
+          <F label="FATCA Reporting Status" {...fProps('fatca_reporting_status')} placeholder="e.g. Reporting FI" />
         </div>
       </div>
 
