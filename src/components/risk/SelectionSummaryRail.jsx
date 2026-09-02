@@ -79,10 +79,10 @@ export default function SelectionSummaryRail({
                   : <User className="w-2.5 h-2.5" />
                 }
               </div>
-              <span className="font-medium text-foreground truncate max-w-[120px]">{activeEntity.label}</span>
+              <span className="font-medium text-foreground truncate max-w-[80px]">{activeEntity.label}</span>
             </div>
             <span className={cn(
-              'font-bold px-2 py-0.5 rounded-full',
+              'font-bold px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0',
               activeCount > 0 ? 'text-primary bg-primary/10' : 'text-muted-foreground bg-muted'
             )}>
               {activeCount} selected
