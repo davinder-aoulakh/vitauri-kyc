@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import AppShell from '@/components/layout/AppShell';
@@ -65,9 +65,11 @@ export default function TenantConfig() {
 
   const userRole = currentUser?.app_role;
   const canConfig = hasPermission(userRole, 'tenantConfig');
+  const hydrated = useRef(false);
 
   useEffect(() => {
-    if (tenant) {
+    if (tenant && !hydrated.current) {
+      hydrated.current = true;
       setForm({
         name:                     tenant.name || '',
         branding_primary_color:   tenant.branding_primary_color || '#1A6BFF',
