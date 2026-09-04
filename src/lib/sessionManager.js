@@ -28,7 +28,7 @@ export function getSessionLimit() {
 
 export function getLastActivity() {
   const v = localStorage.getItem(ACTIVITY_KEY);
-  return v ? parseInt(v, 10) : Date.now();
+  return v ? parseInt(v, 10) : 0; // 0 = treat as expired if no record exists
 }
 
 export function getTimeUntilExpiry() {
