@@ -3,7 +3,7 @@
  * Uses localStorage to track last-activity and session mode.
  */
 
-const INACTIVITY_LIMIT_MS = 20 * 60 * 1000;           // 20 minutes
+const INACTIVITY_LIMIT_MS = 15 * 60 * 1000;           // 15 minutes
 const EXTENDED_LIMIT_MS   = 30 * 24 * 60 * 60 * 1000; // 30 days
 const WARNING_BEFORE_MS   = 5 * 60 * 1000;             // 5 minutes
 const ACTIVITY_KEY        = 'vitauri_last_activity';
