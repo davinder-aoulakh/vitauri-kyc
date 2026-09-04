@@ -109,6 +109,7 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
   const [deadline, setDeadline]   = useState(format(addDays(new Date(), 14), 'yyyy-MM-dd'));
   const [creating, setCreating]   = useState(false);
   const [sending, setSending]     = useState(false);
+  const [verifyingItemId, setVerifyingItemId] = useState(null); // "reqId:itemIndex"
 
   // Email templates
   const [emailTemplates, setEmailTemplates] = useState([]);
@@ -378,20 +379,41 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
   }
 
   async function verifyItem(req, itemIndex) {
+    const key = `${req.id}:${itemIndex}`;
+    setVerifyingItemId(key);
+
+    // Brief spinner acknowledgment (~300ms) then optimistic flip
+    await new Promise(r => setTimeout(r, 300));
+
     const updatedItems = req.items.map((item, i) =>
       i === itemIndex ? { ...item, status: 'Verified' } : item
     );
-    await base44.entities.OutreachRequest.update(req.id, { items: updatedItems });
-    await base44.entities.AuditEvent.create({
-      tenant_id: kycCase.tenant_id,
-      case_id: kycCase.id,
-      actor_user_id: currentUser?.id,
-      actor_name: currentUser?.full_name,
-      actor_type: 'User',
-      event_type: 'document_verified',
-      notes: `Verified: ${req.items[itemIndex].label}`,
-    });
-    load();
+
+    // Capture previous state for silent rollback
+    const prevRequests = requests;
+
+    // Optimistic update — UI reflects Verified immediately
+    setRequests(prev => prev.map(r => r.id === req.id ? { ...r, items: updatedItems } : r));
+    setVerifyingItemId(null);
+
+    // Parallel backend writes
+    try {
+      await Promise.all([
+        base44.entities.OutreachRequest.update(req.id, { items: updatedItems }),
+        base44.entities.AuditEvent.create({
+          tenant_id: kycCase.tenant_id,
+          case_id: kycCase.id,
+          actor_user_id: currentUser?.id,
+          actor_name: currentUser?.full_name,
+          actor_type: 'User',
+          event_type: 'document_verified',
+          notes: `Verified: ${req.items[itemIndex].label}`,
+        }),
+      ]);
+    } catch {
+      // Silent revert
+      setRequests(prevRequests);
+    }
   }
 
   function getPortalUrl(req) {
@@ -658,12 +680,19 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                             <span className={cn('text-xs px-1.5 py-0.5 rounded-full border', ITEM_STATUS_STYLES[item.status] || ITEM_STATUS_STYLES.Requested)}>
                               {item.status}
                             </span>
-                            {item.status === 'Received' && (
-                              <Button size="sm" variant="outline" className="h-6 text-xs gap-0.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                                onClick={() => verifyItem(req, i)}>
-                                <ShieldCheck className="w-3 h-3" /> Verify
-                              </Button>
-                            )}
+                            {item.status === 'Received' && (() => {
+                              const key = `${req.id}:${i}`;
+                              const isVerifying = verifyingItemId === key;
+                              return (
+                                <Button size="sm" variant="outline" className="h-6 text-xs gap-0.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                  onClick={() => verifyItem(req, i)} disabled={isVerifying}>
+                                  {isVerifying
+                                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                                    : <ShieldCheck className="w-3 h-3" />}
+                                  {isVerifying ? '' : 'Verify'}
+                                </Button>
+                              );
+                            })()}
                           </div>
                         </div>
                       );
