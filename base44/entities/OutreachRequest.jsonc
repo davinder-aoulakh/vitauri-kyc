@@ -88,6 +88,71 @@
           },
           "file_url": {
             "type": "string"
+          },
+          "field_type": {
+            "type": "string",
+            "description": "Rich field type \u2014 controls how the portal renders the input"
+          },
+          "field_options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Choices for dropdown and multi_select field types"
+          },
+          "validation_required": {
+            "type": "boolean"
+          },
+          "validation_accepted_file_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "validation_max_file_size_mb": {
+            "type": "number"
+          },
+          "validation_min_length": {
+            "type": "number"
+          },
+          "validation_max_length": {
+            "type": "number"
+          },
+          "validation_min_value": {
+            "type": "number"
+          },
+          "validation_max_value": {
+            "type": "number"
+          },
+          "condition_depends_on_item_id": {
+            "type": "string"
+          },
+          "condition_equals_value": {
+            "type": "string"
+          },
+          "section_title": {
+            "type": "string"
+          },
+          "idv_accepted_doc_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "idv_min_match_score": {
+            "type": "number"
+          },
+          "idv_liveness_required": {
+            "type": "boolean"
+          },
+          "idv_auto_proceed": {
+            "type": "boolean"
+          },
+          "idv_workflow_id": {
+            "type": "string"
+          },
+          "idv_workflow_name": {
+            "type": "string"
           }
         }
       }

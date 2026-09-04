@@ -221,7 +221,43 @@ export default function ClientPortal() {
       base44.entities.Client.filter({ id: primary.client_id }),
     ]);
 
-    const visibleReqs = (allReqs || []).filter(r => r.status !== 'Draft');
+    let visibleReqs = (allReqs || []).filter(r => r.status !== 'Draft');
+
+    // Safety fallback: merge field_type/field_options from templates for items
+    // that were created before the schema fix (missing field_type).
+    try {
+      const templates = await base44.entities.OutreachTemplate.filter({ tenant_id: primary.tenant_id });
+      if (templates?.length > 0) {
+        const tmplMap = {};
+        templates.forEach(t => { tmplMap[t.id] = t; });
+        visibleReqs = visibleReqs.map(req => {
+          const needsPatch = (req.items || []).some(item => !item.field_type);
+          if (!needsPatch) return req;
+          return {
+            ...req,
+            items: (req.items || []).map(item => {
+              if (item.field_type) return item; // already has it, don't touch
+              const tmpl = tmplMap[item.item_id];
+              if (!tmpl) return item;
+              return {
+                ...item,
+                field_type:                    tmpl.field_type || item.field_type,
+                field_options:                 tmpl.field_options || item.field_options || [],
+                validation_required:           item.validation_required ?? tmpl.validation_required,
+                validation_accepted_file_types: tmpl.validation_accepted_file_types || [],
+                validation_max_file_size_mb:   tmpl.validation_max_file_size_mb,
+                validation_min_length:         tmpl.validation_min_length,
+                validation_max_length:         tmpl.validation_max_length,
+                condition_depends_on_item_id:  tmpl.condition_depends_on_item_id,
+                condition_equals_value:        tmpl.condition_equals_value,
+                section_title:                 tmpl.section_title,
+              };
+            }),
+          };
+        });
+      }
+    } catch { /* non-fatal — portal still renders, just without fallback config */ }
+
     setAllOutreaches(visibleReqs);
     setTenant(tenantData?.[0] || null);
     setClient(clientData?.[0] || null);
