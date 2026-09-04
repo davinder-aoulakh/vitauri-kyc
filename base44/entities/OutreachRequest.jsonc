@@ -18,7 +18,12 @@
       "description": "True for outreach not linked to a KYC case"
     },
     "message": {
-      "type": "string"
+      "type": "string",
+      "description": "Short custom note from analyst \u2014 NOT the email template body"
+    },
+    "email_template_body": {
+      "type": "string",
+      "description": "Resolved email template HTML body stored at creation time \u2014 used by sendEmail instead of message"
     },
     "deadline": {
       "type": "string",

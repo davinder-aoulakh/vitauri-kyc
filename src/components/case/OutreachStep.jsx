@@ -113,6 +113,7 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
   // Email templates
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [selectedEmailTemplate, setSelectedEmailTemplate] = useState(null);
 
   // AI copilot
   const [aiLoading, setAiLoading] = useState(false);
@@ -209,9 +210,9 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
 
   function applyTemplate(tmpl, portalUrl) {
     setEmailSubject(resolveTemplateVars(tmpl.subject, portalUrl));
-    // Strip HTML tags for the plain message field
-    const stripped = tmpl.body_html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
-    setMessage(resolveTemplateVars(stripped, portalUrl));
+    // Store the template ID so buildEmailHtml can use the full body_html directly.
+    // Do NOT put the email body into the message field — message is a short custom note only.
+    setSelectedEmailTemplate(tmpl);
     setTemplatePickerOpen(false);
   }
 
@@ -285,6 +286,10 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
       case_id: kycCase.id,
       client_id: kycCase.client_id,
       message,
+      // Store the email template body_html so sendEmail can use it directly
+      email_template_body: selectedEmailTemplate
+        ? resolveTemplateVars(selectedEmailTemplate.body_html, `${window.location.origin}/portal/${token}`)
+        : undefined,
       deadline,
       delivery_channel: channel,
       status: 'Draft',
@@ -307,6 +312,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
     setSelectedItems([]);
     setMessage('');
     setEmailSubject('');
+    setSelectedEmailTemplate(null);
     setAiSuggestions(null);
     setCreating(false);
     load();
@@ -317,7 +323,19 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
     setSending(true);
     const portalUrl = getPortalUrl(req);
     const fromName = tenant?.email_from_name || tenant?.name || 'Compliance Team';
-    const body = buildEmailHtml(tenant, client, req, portalUrl);
+    // If an email template was selected, use its body_html directly (with variable substitution).
+    // Otherwise fall back to the generic buildEmailHtml.
+    let body;
+    if (req.email_template_body) {
+      body = req.email_template_body
+        .replace(/{{client_name}}/g, client?.full_name || '')
+        .replace(/{{tenant_name}}/g, tenant?.name || '')
+        .replace(/{{portal_link}}/g, portalUrl)
+        .replace(/{{due_date}}/g, req.deadline || '')
+        .replace(/{{analyst_name}}/g, currentUser?.full_name || '');
+    } else {
+      body = buildEmailHtml(tenant, client, req, portalUrl);
+    }
 
     try {
       await base44.integrations.Core.SendEmail({
@@ -853,7 +871,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
       </Dialog>
 
       {/* ── Builder Dialog ── */}
-      <Dialog open={newOpen} onOpenChange={v => { setNewOpen(v); if (!v) { setAiSuggestions(null); setSelectedItems([]); setMessage(''); setSelectedFormTemplate(null); } }}>
+      <Dialog open={newOpen} onOpenChange={v => { setNewOpen(v); if (!v) { setAiSuggestions(null); setSelectedItems([]); setMessage(''); setEmailSubject(''); setSelectedEmailTemplate(null); setSelectedFormTemplate(null); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New Outreach Request — {client?.full_name}</DialogTitle>

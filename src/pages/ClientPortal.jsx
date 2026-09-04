@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { FileText, Upload, CheckCircle, Clock, Send, Loader2, MessageCircle, AlertTriangle, X, ChevronRight, ArrowLeft, LayoutDashboard, Shield, ToggleLeft, ToggleRight, PenLine } from 'lucide-react';
+import { FileText, Upload, CheckCircle, Clock, Send, Loader2, MessageCircle, AlertTriangle, X, ChevronRight, ArrowLeft, LayoutDashboard, Shield, PenLine } from 'lucide-react';
 import { portalSecureUpload } from '@/lib/securityUtils';
 import SubmissionConfirmation from '@/components/portal/SubmissionConfirmation';
 import IdVerificationField from '@/components/portal/IdVerificationField';
@@ -28,7 +28,7 @@ const T = {
     status_pending: 'Action required', status_review: 'Under review',
     open_request: 'Open', back_to_dashboard: 'Back to overview',
     requests_count: 'request', requests_count_pl: 'requests',
-    dashboard_title: 'Your Document Requests',
+    dashboard_title: 'Document Requests',
     dashboard_sub: 'Here is an overview of all information requests from your institution.',
     compliance_title: 'Compliance Overview',
     no_requests: 'No active requests found for this link.',
@@ -49,7 +49,7 @@ const T = {
     status_pending: 'Actie vereist', status_review: 'In behandeling',
     open_request: 'Openen', back_to_dashboard: 'Terug naar overzicht',
     requests_count: 'verzoek', requests_count_pl: 'verzoeken',
-    dashboard_title: 'Uw documentverzoeken',
+    dashboard_title: 'Documentverzoeken',
     dashboard_sub: 'Hier is een overzicht van alle informatieverzoeken van uw instelling.',
     compliance_title: 'Compliance overzicht',
     no_requests: 'Geen actieve verzoeken gevonden voor deze link.',
@@ -63,7 +63,6 @@ function statusConfig(outreach) {
   return { label: 'Draft', color: 'text-slate-600 bg-slate-50 border-slate-200', dot: 'bg-slate-400' };
 }
 
-// Derive all branding values from a tenant object
 function getBranding(tenant) {
   const primary = tenant?.branding_primary_color || '#1A6BFF';
   const secondary = tenant?.branding_secondary_color || '#E8F0FF';
@@ -74,30 +73,22 @@ function getBranding(tenant) {
   const radiusMap = { square: '0px', rounded: '8px', pill: '9999px' };
   const radius = radiusMap[tenant?.branding_button_radius] || '8px';
   const whiteLabel = !!tenant?.white_label_enabled;
-
   const headerBg = headerStyle === 'light' ? '#FFFFFF' : primary;
   const headerText = headerStyle === 'light' ? text : '#FFFFFF';
   const headerBorder = headerStyle === 'light' ? '#E2E8F0' : 'transparent';
-
   return { primary, secondary, bg, text, font, radius, whiteLabel, headerBg, headerText, headerBorder };
 }
 
-// Portal footer shown at the bottom of every view
 function PortalFooter({ tenant, branding }) {
   const hasFooter = !!tenant?.portal_footer_text;
   return (
-    <div
-      className="max-w-lg mx-auto px-4 py-5 mt-6 border-t text-xs"
-      style={{ borderColor: branding.secondary, color: branding.text, opacity: 0.75 }}
-    >
+    <div className="px-6 py-5 mt-6 border-t text-xs" style={{ borderColor: branding.secondary, color: branding.text, opacity: 0.75 }}>
       {hasFooter ? (
         <div dangerouslySetInnerHTML={{ __html: tenant.portal_footer_text }} className="leading-relaxed" />
       ) : (
         <p>This is a secure, one-time link. Do not share it with others.</p>
       )}
-      {tenant?.portal_contact_info && (
-        <p className="mt-1.5 opacity-70">{tenant.portal_contact_info}</p>
-      )}
+      {tenant?.portal_contact_info && <p className="mt-1.5 opacity-70">{tenant.portal_contact_info}</p>}
     </div>
   );
 }
@@ -136,40 +127,27 @@ export default function ClientPortal() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
   useEffect(() => { setChatMessages([{ role: 'ai', text: T[lang].chat_intro }]); }, [lang]);
 
-  // ── Didit step 1: capture URL params immediately on mount ─────────────────
+  // Didit step 1: capture URL params immediately on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('didit_done') !== '1') return;
-
     const captured = {
       sessionId:  params.get('verificationSessionId'),
       outreachId: params.get('outreach_id'),
       itemId:     params.get('item_id'),
     };
-
     window.history.replaceState({}, '', window.location.pathname);
-
     if (!captured.sessionId || !captured.outreachId || !captured.itemId) return;
-
-    const isMob = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-      || window.innerWidth < 900;
-
-    if (isMob) {
-      setDiditCallbackDone(true);
-      setDiditCallbackStatus('checking');
-    }
-
+    const isMob = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 900;
+    if (isMob) { setDiditCallbackDone(true); setDiditCallbackStatus('checking'); }
     setDiditCallbackParams({ ...captured, isMobile: isMob });
   }, []);
 
-  // ── Didit step 2: process when both params and tenant are ready ───────────
+  // Didit step 2: process when both params and tenant are ready
   useEffect(() => {
     if (!diditCallbackParams || !tenant?.id) return;
-
     const { sessionId, outreachId, itemId, isMobile } = diditCallbackParams;
-
     setDiditCallbackParams(null);
-
     base44.functions.invoke('getDiditSessionResult', {
       session_id:  sessionId,
       outreach_id: outreachId,
@@ -177,31 +155,20 @@ export default function ClientPortal() {
       tenant_id:   tenant.id,
     }).then(res => {
       const data = res?.data || res;
-      if (isMobile) {
-        setDiditCallbackStatus(data?.idv_status === 'Pass' ? 'pass' : 'done');
-      } else {
-        if (data?.ok || data?.idv_status) loadByToken();
-      }
-    }).catch(() => {
-      if (isMobile) setDiditCallbackStatus('done');
-    });
+      if (isMobile) { setDiditCallbackStatus(data?.idv_status === 'Pass' ? 'pass' : 'done'); }
+      else { if (data?.ok || data?.idv_status) loadByToken(); }
+    }).catch(() => { if (isMobile) setDiditCallbackStatus('done'); });
   }, [diditCallbackParams, tenant]);
 
   // Apply favicon + page title when tenant loads
   useEffect(() => {
     if (!tenant) return;
     const branding = getBranding(tenant);
-
-    if (branding.whiteLabel) {
-      document.title = `${tenant.name} — Secure Portal`;
-    }
-
+    if (branding.whiteLabel) document.title = `${tenant.name} — Secure Portal`;
     if (tenant.branding_favicon_url) {
-      // Remove any existing favicon
       document.querySelectorAll('link[rel="icon"]').forEach(el => el.remove());
       const link = document.createElement('link');
-      link.rel = 'icon';
-      link.href = tenant.branding_favicon_url;
+      link.rel = 'icon'; link.href = tenant.branding_favicon_url;
       document.head.appendChild(link);
     }
   }, [tenant]);
@@ -214,7 +181,6 @@ export default function ClientPortal() {
       setExpired(true); setLoading(false); return;
     }
 
-    // For standalone outreach (case_id is null) only load client + tenant, skip case lookups
     const [allReqs, tenantData, clientData] = await Promise.all([
       base44.entities.OutreachRequest.filter({ client_id: primary.client_id, tenant_id: primary.tenant_id }),
       base44.entities.Tenant.filter({ id: primary.tenant_id }),
@@ -223,8 +189,7 @@ export default function ClientPortal() {
 
     let visibleReqs = (allReqs || []).filter(r => r.status !== 'Draft');
 
-    // Safety fallback: merge field_type/field_options from templates for items
-    // that were created before the schema fix (missing field_type).
+    // Safety fallback: merge field_type/field_options from templates for items missing field_type
     try {
       const templates = await base44.entities.OutreachTemplate.filter({ tenant_id: primary.tenant_id });
       if (templates?.length > 0) {
@@ -236,7 +201,7 @@ export default function ClientPortal() {
           return {
             ...req,
             items: (req.items || []).map(item => {
-              if (item.field_type) return item; // already has it, don't touch
+              if (item.field_type) return item;
               const tmpl = tmplMap[item.item_id];
               if (!tmpl) return item;
               return {
@@ -256,7 +221,7 @@ export default function ClientPortal() {
           };
         });
       }
-    } catch { /* non-fatal — portal still renders, just without fallback config */ }
+    } catch { /* non-fatal */ }
 
     setAllOutreaches(visibleReqs);
     setTenant(tenantData?.[0] || null);
@@ -271,11 +236,11 @@ export default function ClientPortal() {
           fileUrl: item.file_url || '',
           uploading: false,
           done: item.status === 'Received' || item.status === 'Verified',
-          selected: [], // for multi_select / checkbox
+          selected: [],
           idvResult: (item.idv_status && item.idv_status !== 'Pending') ? {
-            idv_status:           item.idv_status,
+            idv_status: item.idv_status,
             idv_similarity_score: item.idv_similarity_score,
-            idv_confidence:       item.idv_confidence,
+            idv_confidence: item.idv_confidence,
           } : null,
         };
       });
@@ -284,8 +249,7 @@ export default function ClientPortal() {
 
     await Promise.all([
       base44.entities.AuditEvent.create({
-        tenant_id: primary.tenant_id,
-        case_id: primary.case_id || null,
+        tenant_id: primary.tenant_id, case_id: primary.case_id || null,
         client_id: primary.client_id, actor_type: 'System', actor_name: 'Client Portal',
         event_type: 'portal_viewed', notes: 'Client portal accessed via token',
       }),
@@ -294,14 +258,8 @@ export default function ClientPortal() {
       }),
     ]);
 
-    if (visibleReqs.length === 1) {
-      setActiveOutreach(visibleReqs[0]);
-      setView('request');
-    } else {
-      setActiveOutreach(primary);
-      setView('dashboard');
-    }
-
+    if (visibleReqs.length === 1) { setActiveOutreach(visibleReqs[0]); setView('request'); }
+    else { setActiveOutreach(primary); setView('dashboard'); }
     setLoading(false);
   }
 
@@ -350,52 +308,39 @@ export default function ClientPortal() {
     return (outreach?.items || []).filter(i => i.field_type !== 'section_header').length;
   }
 
-  // Check if a conditional field should be visible
   function isFieldVisible(item, states) {
     if (!item.condition_depends_on_item_id) return true;
     const depState = states[item.condition_depends_on_item_id] || {};
-    const depValue = depState.text || '';
-    return depValue === item.condition_equals_value;
+    return (depState.text || '') === item.condition_equals_value;
   }
 
   const [validationErrors, setValidationErrors] = useState({});
 
   async function handleSubmit(outreach) {
     const states = getItemStates(outreach.id);
-
-    // Validate required fields
     const errors = {};
     (outreach.items || []).forEach(item => {
       if (item.field_type === 'section_header') return;
       if (!item.validation_required && !item.is_mandatory) return;
       if (!isFieldVisible(item, states)) return;
-      if (!isItemCompleted(item, states[item.item_id])) {
-        errors[item.item_id] = 'This field is required.';
-      }
+      if (!isItemCompleted(item, states[item.item_id])) errors[item.item_id] = 'This field is required.';
     });
-    if (Object.keys(errors).length > 0) {
-      setValidationErrors(errors);
-      return;
-    }
+    if (Object.keys(errors).length > 0) { setValidationErrors(errors); return; }
     setValidationErrors({});
     setSubmitting(true);
 
-    // Read the freshest version from DB to avoid clobbering backend (webhook) writes
     const freshOutreachList = await base44.entities.OutreachRequest.filter({ id: outreach.id });
     const freshOutreach = freshOutreachList?.[0] || outreach;
 
-    // Merge: start from fresh DB items, patch response fields from client state
     const mergedItems = (freshOutreach.items || []).map(item => {
       const s = states[item.item_id] || {};
       const ft = inferFieldType(item);
 
-      // IDV items — use the full idvFields set, including all structured fields
       if (ft === 'id_verification') {
-        // If backend already wrote structured idv_status, preserve it
         if (item.idv_status && item.idv_status !== 'Pending') return item;
         let idvFields = {};
         try { idvFields = JSON.parse(s.text || '{}'); } catch {}
-        if (!idvFields.idv_status) return item; // nothing to write yet
+        if (!idvFields.idv_status) return item;
         return {
           ...item,
           response_text:              s.text || '',
@@ -442,40 +387,29 @@ export default function ClientPortal() {
     await base44.entities.OutreachRequest.update(outreach.id, { items: mergedItems, status: newStatus });
     const updatedItems = mergedItems;
 
-    // Create Document records for any newly uploaded files
     for (const item of updatedItems) {
       const ft = item.field_type || (item.item_type === 'document' ? 'file_upload' : 'textarea');
       if (ft !== 'file_upload' || !item.file_url || item.file_url.startsWith('data:')) continue;
       if (item.field_type === 'id_verification') continue;
-      // Determine doc_type from label
       const lbl = (item.label || '').toLowerCase();
       const docType =
         lbl.includes('passport')   ? 'Passport' :
         lbl.includes('id card') || lbl.includes('identity') || lbl.includes('id ') ? 'ID_Card' :
         lbl.includes('salary') || lbl.includes('payslip') ? 'Salary_Slip' :
         lbl.includes('tax')        ? 'Tax_Return' :
-        lbl.includes('financial') || lbl.includes('statement') ? 'Financial_Statement' :
-        'Other';
-      // Check if doc already exists to avoid duplicates on re-submit
+        lbl.includes('financial') || lbl.includes('statement') ? 'Financial_Statement' : 'Other';
       base44.entities.Document.create({
-        tenant_id:           outreach.tenant_id,
-        client_id:           outreach.client_id,
-        case_id:             outreach.case_id || null,
-        doc_type:            docType,
-        file_name:           item.label || 'Portal_Upload',
-        file_url:            item.file_url,
-        version:             1,
-        is_ai_generated:     false,
-        review_status:       'Pending_Review',
+        tenant_id: outreach.tenant_id, client_id: outreach.client_id,
+        case_id: outreach.case_id || null, doc_type: docType,
+        file_name: item.label || 'Portal_Upload', file_url: item.file_url,
+        version: 1, is_ai_generated: false, review_status: 'Pending_Review',
       }).catch(() => {});
     }
 
-    // For standalone (case_id null), still create audit event but with null case_id
     await base44.entities.AuditEvent.create({
-      tenant_id: outreach.tenant_id,
-      case_id: outreach.case_id || null,
-      client_id: outreach.client_id,
-      actor_type: 'System', actor_name: 'Client Portal', event_type: 'portal_submitted',
+      tenant_id: outreach.tenant_id, case_id: outreach.case_id || null,
+      client_id: outreach.client_id, actor_type: 'System', actor_name: 'Client Portal',
+      event_type: 'portal_submitted',
       notes: `Client submitted: ${newStatus}. ${submittedCount}/${countable.length} items.${!outreach.case_id ? ' (Standalone outreach)' : ''}`,
     });
 
@@ -484,7 +418,6 @@ export default function ClientPortal() {
       const emailBody = allDone
         ? `Dear ${client.full_name},\n\nYour submission has been successfully received by ${tenant?.name}.\n\nSubmitted items:\n${submittedItems}\n\nReference: ${outreach.id.substring(0, 8).toUpperCase()}\n\nOur compliance team will review your submission shortly.\n\nBest regards,\n${tenant?.name}`
         : `Dear ${client.full_name},\n\nThank you for your submission. We have received ${submittedCount} of ${countable.length} requested items.\n\nReceived:\n${submittedItems}\n\nPlease complete the remaining items by ${outreach.deadline ? format(parseISO(outreach.deadline), 'd MMMM yyyy') : 'the deadline'}.\n\nReference: ${outreach.id.substring(0, 8).toUpperCase()}\n\nBest regards,\n${tenant?.name}`;
-
       await base44.integrations.Core.SendEmail({
         to: client.primary_contact_email,
         subject: allDone ? 'Document Submission Confirmed' : 'Partial Submission Received',
@@ -493,7 +426,6 @@ export default function ClientPortal() {
       });
     }
 
-    // Auto-fill client contact info + country of residence from submitted items
     try {
       const clientUpdates = {};
       for (const item of updatedItems) {
@@ -536,96 +468,29 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
   function inferFieldType(item) {
     if (item.field_type) return item.field_type;
     if (item.item_type === 'document') return 'file_upload';
-    // Infer from label for legacy items saved without field_type
     const lbl = (item.label || '').toLowerCase();
-    if (lbl.includes('date') || lbl.includes('birth') || lbl.includes('expiry') ||
-        lbl.includes('incorporated') || lbl.includes('issued')) return 'date';
+    if (lbl.includes('date') || lbl.includes('birth') || lbl.includes('expiry') || lbl.includes('incorporated') || lbl.includes('issued')) return 'date';
     if (lbl.includes('email')) return 'text';
-    if (lbl.includes('id&v') || lbl.includes('identity verif') ||
-        lbl.includes('idv') || lbl.includes('passport') || lbl.includes('id verification')) return 'id_verification';
-    if (lbl.includes('upload') || lbl.includes('document') || lbl.includes('certificate') ||
-        lbl.includes('statement') || lbl.includes('accounts') || lbl.includes('register') ||
-        lbl.includes('licence') || lbl.includes('permit')) return 'file_upload';
+    if (lbl.includes('id&v') || lbl.includes('identity verif') || lbl.includes('idv') || lbl.includes('passport') || lbl.includes('id verification')) return 'id_verification';
+    if (lbl.includes('upload') || lbl.includes('document') || lbl.includes('certificate') || lbl.includes('statement') || lbl.includes('accounts') || lbl.includes('register') || lbl.includes('licence') || lbl.includes('permit')) return 'file_upload';
     return 'textarea';
   }
 
+  // ── Didit mobile callback screen ──
   if (diditCallbackDone) {
     const passed = diditCallbackStatus === 'pass';
     const checking = diditCallbackStatus === 'checking';
     return (
-      <div style={{
-        minHeight: '100vh', background: '#F4F6FA',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
-      }}>
-        <div style={{
-          background: '#FFFFFF', borderRadius: '20px', padding: '40px 32px',
-          textAlign: 'center', maxWidth: '360px', width: '100%',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-        }}>
+      <div style={{ minHeight: '100vh', background: '#F4F6FA', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+        <div style={{ background: '#FFFFFF', borderRadius: '20px', padding: '40px 32px', textAlign: 'center', maxWidth: '360px', width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
           {checking ? (
-            <>
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔄</div>
-              <div style={{ fontWeight: 700, fontSize: '18px', color: '#1A2332', marginBottom: '8px' }}>
-                Confirming verification…
-              </div>
-              <div style={{ fontSize: '14px', color: '#64748B', lineHeight: 1.5 }}>
-                Just a moment while we confirm your result.
-              </div>
-            </>
+            <><div style={{ fontSize: '48px', marginBottom: '16px' }}>🔄</div><div style={{ fontWeight: 700, fontSize: '18px', color: '#1A2332', marginBottom: '8px' }}>Confirming verification…</div><div style={{ fontSize: '14px', color: '#64748B', lineHeight: 1.5 }}>Just a moment while we confirm your result.</div></>
           ) : passed ? (
-            <>
-              <div style={{ fontSize: '56px', marginBottom: '16px' }}>✅</div>
-              <div style={{ fontWeight: 700, fontSize: '20px', color: '#059669', marginBottom: '10px' }}>
-                Identity Verified!
-              </div>
-              <div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>
-                Your identity has been successfully verified.
-              </div>
-              <div style={{
-                background: '#F0FDF4', border: '1px solid #10B981', borderRadius: '12px',
-                padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left',
-              }}>
-                <span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '14px', color: '#065F46', marginBottom: '4px' }}>
-                    Continue on your laptop
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#047857', lineHeight: 1.5 }}>
-                    Return to your laptop or desktop — it has already updated
-                    with your verification result. You can close this tab.
-                  </div>
-                </div>
-              </div>
-            </>
+            <><div style={{ fontSize: '56px', marginBottom: '16px' }}>✅</div><div style={{ fontWeight: 700, fontSize: '20px', color: '#059669', marginBottom: '10px' }}>Identity Verified!</div><div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>Your identity has been successfully verified.</div><div style={{ background: '#F0FDF4', border: '1px solid #10B981', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left' }}><span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span><div><div style={{ fontWeight: 600, fontSize: '14px', color: '#065F46', marginBottom: '4px' }}>Continue on your laptop</div><div style={{ fontSize: '13px', color: '#047857', lineHeight: 1.5 }}>Return to your laptop or desktop — it has already updated with your verification result. You can close this tab.</div></div></div></>
           ) : (
-            <>
-              <div style={{ fontSize: '56px', marginBottom: '16px' }}>🪪</div>
-              <div style={{ fontWeight: 700, fontSize: '18px', color: '#1A2332', marginBottom: '10px' }}>
-                Verification Complete
-              </div>
-              <div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>
-                Thank you for completing the verification step.
-              </div>
-              <div style={{
-                background: '#EEF4FF', border: '1px solid #BFDBFE', borderRadius: '12px',
-                padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left',
-              }}>
-                <span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '14px', color: '#1E40AF', marginBottom: '4px' }}>
-                    Return to your laptop
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#3B82F6', lineHeight: 1.5 }}>
-                    Please return to your laptop or desktop to see your result
-                    and continue your application. You can close this tab.
-                  </div>
-                </div>
-              </div>
-            </>
+            <><div style={{ fontSize: '56px', marginBottom: '16px' }}>🪪</div><div style={{ fontWeight: 700, fontSize: '18px', color: '#1A2332', marginBottom: '10px' }}>Verification Complete</div><div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>Thank you for completing the verification step.</div><div style={{ background: '#EEF4FF', border: '1px solid #BFDBFE', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left' }}><span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span><div><div style={{ fontWeight: 600, fontSize: '14px', color: '#1E40AF', marginBottom: '4px' }}>Return to your laptop</div><div style={{ fontSize: '13px', color: '#3B82F6', lineHeight: 1.5 }}>Please return to your laptop or desktop to see your result and continue your application. You can close this tab.</div></div></div></>
           )}
-          <div style={{ marginTop: '24px', fontSize: '11px', color: '#9CA3AF' }}>
-            Powered by Didit · Secure identity verification
-          </div>
+          <div style={{ marginTop: '24px', fontSize: '11px', color: '#9CA3AF' }}>Powered by Didit · Secure identity verification</div>
         </div>
       </div>
     );
@@ -635,23 +500,15 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
   const tenantName = tenant?.name || 'Your Financial Institution';
   const logoUrl = tenant?.branding_logo_url;
   const contactInfo = tenant?.portal_contact_info || tenantName;
-  const errorMsg = branding.whiteLabel
-    ? `Please contact ${contactInfo} for assistance.`
-    : 'If you think this is an error, please contact your relationship manager.';
+  const errorMsg = branding.whiteLabel ? `Please contact ${contactInfo} for assistance.` : 'If you think this is an error, please contact your relationship manager.';
+  const portalTitle = branding.whiteLabel ? (tenant?.portal_welcome_title || `${tenantName} — Document Request`) : `${tenantName} — Document Request`;
 
-  // Portal page/header title
-  const portalTitle = branding.whiteLabel
-    ? (tenant?.portal_welcome_title || `${tenantName} — Document Request`)
-    : `${tenantName} — Document Request`;
-
-  // ── Loading ──
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: branding.bg }}>
       <Loader2 className="w-6 h-6 animate-spin" style={{ color: branding.primary }} />
     </div>
   );
 
-  // ── Expired ──
   if (expired || !token) return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: branding.bg, fontFamily: branding.font }}>
       <div className="text-center max-w-sm">
@@ -669,11 +526,8 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
 
   // ── Shared Header ──
   const Header = () => (
-    <div
-      className="sticky top-0 z-10 shadow-sm"
-      style={{ backgroundColor: branding.headerBg, borderBottom: `1px solid ${branding.headerBorder}` }}
-    >
-      <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+    <div className="sticky top-0 z-20 shadow-sm" style={{ backgroundColor: branding.headerBg, borderBottom: `1px solid ${branding.headerBorder}` }}>
+      <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {logoUrl ? (
             <img src={logoUrl} alt={tenantName} className="h-8 w-auto object-contain" />
@@ -686,50 +540,35 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
         </div>
         <div className="flex items-center gap-2">
           {allOutreaches.length > 1 && view !== 'dashboard' && (
-            <button
-              onClick={() => setView('dashboard')}
+            <button onClick={() => setView('dashboard')}
               className="text-xs font-medium flex items-center gap-1 rounded-md px-2 py-1 transition-colors"
-              style={{ color: branding.headerText, border: `1px solid ${branding.headerText}30`, opacity: 0.8 }}
-            >
+              style={{ color: branding.headerText, border: `1px solid ${branding.headerText}30`, opacity: 0.8 }}>
               <ArrowLeft className="w-3 h-3" /> {t.back_to_dashboard}
             </button>
           )}
-          <button
-            onClick={() => setLang(l => l === 'en' ? 'nl' : 'en')}
+          <button onClick={() => setLang(l => l === 'en' ? 'nl' : 'en')}
             className="text-xs font-medium rounded-md px-2 py-1 transition-colors"
-            style={{ color: branding.headerText, border: `1px solid ${branding.headerText}30`, opacity: 0.8 }}
-          >{t.lang}</button>
+            style={{ color: branding.headerText, border: `1px solid ${branding.headerText}30`, opacity: 0.8 }}>
+            {t.lang}
+          </button>
         </div>
       </div>
       {allOutreaches.length > 1 && (
-        <div className="max-w-lg mx-auto px-4 pb-2 flex items-center gap-1">
-          <button
-            onClick={() => setView('dashboard')}
+        <div className="max-w-5xl mx-auto px-6 pb-2 flex items-center gap-1">
+          <button onClick={() => setView('dashboard')}
             className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-            style={{
-              backgroundColor: view === 'dashboard' ? `${branding.headerText}20` : 'transparent',
-              color: branding.headerText,
-            }}
-          >
+            style={{ backgroundColor: view === 'dashboard' ? `${branding.headerText}20` : 'transparent', color: branding.headerText }}>
             <LayoutDashboard className="w-3.5 h-3.5" /> {t.all_requests}
           </button>
-          <button
-            onClick={() => setView('compliance')}
+          <button onClick={() => setView('compliance')}
             className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-            style={{
-              backgroundColor: view === 'compliance' ? `${branding.headerText}20` : 'transparent',
-              color: branding.headerText,
-            }}
-          >
+            style={{ backgroundColor: view === 'compliance' ? `${branding.headerText}20` : 'transparent', color: branding.headerText }}>
             <Shield className="w-3.5 h-3.5" /> {t.compliance_status}
           </button>
         </div>
       )}
     </div>
   );
-
-  // Styled card wrapper
-  const cardStyle = { backgroundColor: '#FFFFFF', borderColor: `${branding.secondary}` };
 
   // ── Dashboard View ──
   if (view === 'dashboard' && allOutreaches.length > 1) {
@@ -741,22 +580,18 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
         <div className="max-w-lg mx-auto px-4 pt-6 space-y-4">
           <div>
             <h1 className="text-lg font-bold">{welcomeTitle}</h1>
-            <p className="text-sm opacity-60 mt-0.5">{welcomeBody}</p>
+            <p className="text-sm opacity-60 mt-0.5" style={{ whiteSpace: 'pre-line' }}>{welcomeBody}</p>
           </div>
-
           <div className="bg-white rounded-2xl border p-4 shadow-sm" style={{ borderColor: branding.secondary }}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium opacity-70">{t.progress}</span>
-              <span className="text-sm font-bold" style={{ color: branding.primary }}>
-                {totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0}%
-              </span>
+              <span className="text-sm font-bold" style={{ color: branding.primary }}>{totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0}%</span>
             </div>
             <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: branding.secondary }}>
               <div className="h-full rounded-full transition-all duration-500" style={{ width: `${totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0}%`, backgroundColor: branding.primary }} />
             </div>
             <div className="text-xs opacity-50 mt-1.5">{doneItems} of {totalItems} items completed across {allOutreaches.length} {allOutreaches.length === 1 ? t.requests_count : t.requests_count_pl}</div>
           </div>
-
           <div className="space-y-3">
             {allOutreaches.map(req => {
               const cfg = statusConfig(req);
@@ -764,12 +599,9 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
               const total = req.items?.length || 0;
               const isOver = req.deadline && isPast(parseISO(req.deadline)) && req.status !== 'Complete';
               return (
-                <button
-                  key={req.id}
-                  onClick={() => { setActiveOutreach(req); setView('request'); }}
+                <button key={req.id} onClick={() => { setActiveOutreach(req); setView('request'); }}
                   className="w-full text-left bg-white rounded-2xl border p-4 shadow-sm hover:shadow-md transition-all"
-                  style={{ borderColor: branding.secondary }}
-                >
+                  style={{ borderColor: branding.secondary }}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1.5">
@@ -777,9 +609,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                         {isOver && <span className="text-xs text-red-600 font-medium">Overdue</span>}
                       </div>
                       {req.message && <p className="text-sm font-medium truncate opacity-80">{req.message.substring(0, 80)}{req.message.length > 80 ? '…' : ''}</p>}
-                      <div className="text-xs opacity-50 mt-1">
-                        {done}/{total} items · {req.deadline ? `Due ${format(parseISO(req.deadline), 'd MMM yyyy')}` : 'No deadline'}
-                      </div>
+                      <div className="text-xs opacity-50 mt-1">{done}/{total} items · {req.deadline ? `Due ${format(parseISO(req.deadline), 'd MMM yyyy')}` : 'No deadline'}</div>
                     </div>
                     <ChevronRight className="w-4 h-4 opacity-40 flex-shrink-0 mt-1" />
                   </div>
@@ -808,13 +638,8 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
         <Header />
         <div className="max-w-lg mx-auto px-4 pt-6 space-y-4">
           <h1 className="text-lg font-bold">{t.compliance_title}</h1>
-
           <div className={cn('rounded-2xl border p-4 flex items-center gap-3', allComplete ? 'bg-emerald-50 border-emerald-200' : anyOverdue ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200')}>
-            {allComplete
-              ? <CheckCircle className="w-8 h-8 text-emerald-500 flex-shrink-0" />
-              : anyOverdue
-                ? <AlertTriangle className="w-8 h-8 text-red-500 flex-shrink-0" />
-                : <Clock className="w-8 h-8 text-amber-500 flex-shrink-0" />}
+            {allComplete ? <CheckCircle className="w-8 h-8 text-emerald-500 flex-shrink-0" /> : anyOverdue ? <AlertTriangle className="w-8 h-8 text-red-500 flex-shrink-0" /> : <Clock className="w-8 h-8 text-amber-500 flex-shrink-0" />}
             <div>
               <div className={cn('font-semibold text-sm', allComplete ? 'text-emerald-800' : anyOverdue ? 'text-red-800' : 'text-amber-800')}>
                 {allComplete ? t.status_complete : anyOverdue ? t.status_pending : t.status_partial}
@@ -824,7 +649,6 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
               </div>
             </div>
           </div>
-
           {[
             { label: 'Action Required', items: pendingReqs, color: 'text-red-700 bg-red-50 border-red-200' },
             { label: 'Partial Response', items: partialReqs, color: 'text-amber-700 bg-amber-50 border-amber-200' },
@@ -867,21 +691,18 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
   const progress = _total > 0 ? Math.round((completedCount(outreach) / _total) * 100) : 0;
   const isOverdue = outreach.deadline && isPast(parseISO(outreach.deadline));
 
+  // Welcome text — use portal_welcome_body (tenant config), NOT outreach.message
+  const welcomeHeading = `${t.welcome} ${client?.full_name || ''},`;
+  const welcomeSub = tenant?.portal_welcome_body || null;
+
   if (confirmedOutreach) {
     return (
       <div className="min-h-screen" style={{ backgroundColor: branding.bg, fontFamily: branding.font }}>
         <Header />
         <SubmissionConfirmation
-          outreach={confirmedOutreach}
-          client={client}
-          tenantName={tenantName}
-          brandColor={branding.primary}
-          lang={lang}
-          onBackToDashboard={
-            allOutreaches.length > 1
-              ? () => { setConfirmedOutreach(null); setView('dashboard'); }
-              : null
-          }
+          outreach={confirmedOutreach} client={client} tenantName={tenantName}
+          brandColor={branding.primary} lang={lang}
+          onBackToDashboard={allOutreaches.length > 1 ? () => { setConfirmedOutreach(null); setView('dashboard'); } : null}
         />
         <PortalFooter tenant={tenant} branding={branding} />
       </div>
@@ -896,12 +717,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
         <h2 className="text-lg font-semibold mb-2">{t.completed}</h2>
         <p className="text-sm opacity-50">You may close this window.</p>
         {allOutreaches.length > 1 && (
-          <Button
-            variant="outline"
-            className="mt-6"
-            style={{ borderRadius: branding.radius }}
-            onClick={() => setView('dashboard')}
-          >
+          <Button variant="outline" className="mt-6" style={{ borderRadius: branding.radius }} onClick={() => setView('dashboard')}>
             <ArrowLeft className="w-4 h-4 mr-1.5" /> {t.back_to_dashboard}
           </Button>
         )}
@@ -910,338 +726,360 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
     </div>
   );
 
-  const welcomeHeading = tenant?.portal_welcome_title
-    ? `${t.welcome} ${client?.full_name || ''},`
-    : `${t.welcome} ${client?.full_name || ''},`;
-  const welcomeSub = tenant?.portal_welcome_body || null;
-
+  // ── Two-column request layout ──
   return (
-    <div className="min-h-screen pb-8" style={{ backgroundColor: branding.bg, fontFamily: branding.font, color: branding.text }}>
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+    <div style={{ backgroundColor: branding.bg, fontFamily: branding.font, color: branding.text, minHeight: '100vh' }}>
+      <style>{`
+        @keyframes portalRise { from { opacity:0; transform:translateY(18px) } to { opacity:1; transform:none } }
+        @keyframes portalCard { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:none } }
+        @keyframes portalFill { from { transform:scaleX(0) } to { transform:scaleX(1) } }
+        @keyframes portalDrift { from { transform:translate3d(0,0,0) } to { transform:translate3d(-35px,28px,0) } }
+        .portal-layout { display:grid; grid-template-columns:315px 1fr; min-height:calc(100vh - 56px); position:relative; isolation:isolate; overflow:hidden; }
+        .portal-layout:before { content:""; position:absolute; inset:0; background:radial-gradient(circle at 84% 8%,rgba(226,245,235,.9),transparent 29%),linear-gradient(135deg,#edf5f3 0%,#f5f8f6 48%,#e6f0ed 100%); z-index:-2; pointer-events:none; }
+        .portal-layout:after { content:""; position:absolute; width:520px; height:520px; right:-185px; top:420px; border-radius:50%; background:rgba(180,224,207,.28); filter:blur(2px); z-index:-1; animation:portalDrift 12s ease-in-out infinite alternate; pointer-events:none; }
+        .portal-sidebar { padding:42px 24px 38px; background:rgba(21,67,62,.96); color:#f5fbf8; display:flex; flex-direction:column; gap:24px; box-shadow:14px 0 38px rgba(28,66,60,.12); animation:portalRise .7s cubic-bezier(.2,.8,.2,1) both; }
+        .portal-brandmark { width:43px; height:43px; border-radius:14px; background:#d8f2df; color:#164f46; display:grid; place-items:center; box-shadow:0 8px 18px rgba(0,0,0,.13); flex-shrink:0; overflow:hidden; }
+        .portal-welcome-text h1 { font-size:30px; line-height:1.08; letter-spacing:-.8px; margin:0 0 14px; font-weight:700; color:#f5fbf8; }
+        .portal-welcome-text p { font-size:15px; line-height:1.65; color:#c7ddd5; margin:0; white-space:pre-line; }
+        .portal-glass { border:1px solid rgba(213,243,226,.2); background:rgba(255,255,255,.085); border-radius:17px; padding:17px; backdrop-filter:blur(12px); box-shadow:inset 0 1px rgba(255,255,255,.08); }
+        .portal-deadline-card { display:flex; gap:12px; align-items:flex-start; color:#f0f8f3; font-size:14px; font-weight:600; line-height:1.45; }
+        .portal-progress-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; color:#c8ded6; font-size:13px; font-weight:600; }
+        .portal-progress-head strong { color:#d8f2df; font-size:17px; }
+        .portal-track { height:9px; border-radius:99px; background:rgba(255,255,255,.15); overflow:hidden; }
+        .portal-fill { height:100%; border-radius:99px; background:linear-gradient(90deg,#9be0b2,#d8f2df); box-shadow:0 0 14px rgba(155,224,178,.5); animation:portalFill .9s .45s ease-out both; transform-origin:left; }
+        .portal-count { font-size:12px; color:#a9c7bb; margin-top:10px; }
+        .portal-main { padding:48px 54px 64px; display:flex; flex-direction:column; gap:28px; animation:portalRise .8s .12s cubic-bezier(.2,.8,.2,1) both; overflow-y:auto; }
+        .portal-mainhead { display:flex; justify-content:space-between; align-items:flex-end; padding:0 2px 8px; border-bottom:1px solid rgba(21,67,62,.13); }
+        .portal-mainhead h2 { font-size:27px; line-height:1.15; margin:0; color:#193e3a; letter-spacing:-.5px; }
+        .portal-mainhead span { font-size:12px; color:#6d8780; letter-spacing:.08em; text-transform:uppercase; }
+        .portal-item-grid { display:grid; grid-template-columns:1fr 1fr; gap:17px; }
+        .portal-item-card { box-sizing:border-box; background:rgba(255,255,255,.72); border:1px solid rgba(38,105,88,.16); border-radius:21px; padding:22px; display:flex; flex-direction:column; gap:10px; box-shadow:0 13px 30px rgba(30,75,66,.07),inset 0 1px rgba(255,255,255,.85); backdrop-filter:blur(15px); animation:portalCard .65s cubic-bezier(.2,.8,.2,1) both; }
+        .portal-item-card:nth-child(2){animation-delay:.12s}
+        .portal-item-card:nth-child(3){animation-delay:.24s}
+        .portal-item-card:nth-child(4){animation-delay:.36s}
+        .portal-item-card:nth-child(5){animation-delay:.48s}
+        .portal-item-card:nth-child(6){animation-delay:.6s}
+        .portal-item-done-card { border-color:rgba(16,185,129,.3) !important; background:rgba(240,253,244,.8) !important; }
+        .portal-item-error-card { border-color:rgba(239,68,68,.4) !important; }
+        .portal-item-top { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+        .portal-item-title { margin:0; color:#214840; font-size:15px; line-height:1.35; font-weight:650; }
+        .portal-check-icon { width:27px; height:27px; border-radius:50%; display:grid; place-items:center; background:#d8f2df; color:#287150; flex-shrink:0; }
+        .portal-submit-bar { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:24px 25px; background:rgba(218,241,226,.74); border:1px solid rgba(44,117,91,.2); border-radius:22px; box-shadow:0 15px 35px rgba(36,91,70,.08); backdrop-filter:blur(14px); }
+        .portal-submit-bar p { margin:0; color:#315f53; font-size:14px; line-height:1.5; }
+        .portal-submit-btn { border:0; border-radius:13px; background:#27775c; color:#fff; padding:14px 22px; font:600 14px Inter,system-ui; cursor:pointer; box-shadow:0 8px 18px rgba(39,119,92,.22); transition:background .2s,box-shadow .2s,transform .2s; white-space:nowrap; display:flex; align-items:center; gap:8px; }
+        .portal-submit-btn:hover { background:#1d624b; box-shadow:0 10px 22px rgba(39,119,92,.3); }
+        .portal-submit-btn:active { transform:translateY(1px); box-shadow:0 4px 10px rgba(39,119,92,.2); }
+        .portal-submit-btn:focus-visible { outline:3px solid #a8dfb9; outline-offset:3px; }
+        .portal-submit-btn:disabled { opacity:.5; cursor:not-allowed; }
+        @media(max-width:700px) {
+          .portal-layout { display:block; }
+          .portal-sidebar { padding:28px 20px; }
+          .portal-main { padding:28px 20px 40px; }
+          .portal-item-grid { grid-template-columns:1fr; }
+          .portal-mainhead { flex-direction:column; align-items:flex-start; gap:10px; }
+        }
+      `}</style>
+
       <Header />
-      <div className="max-w-lg mx-auto px-4 pt-6 space-y-5">
 
-        {/* Welcome + deadline */}
-        <div className="bg-white rounded-2xl border p-5 shadow-sm" style={{ borderColor: branding.secondary }}>
-          <div className="text-lg font-semibold mb-1">{welcomeHeading}</div>
-          {welcomeSub && <p className="text-sm opacity-60 mb-2">{welcomeSub}</p>}
-          {outreach.message && <p className="text-sm opacity-70 mb-3">{outreach.message}</p>}
-          <div className={cn('flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium', isOverdue ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800')}>
-            {isOverdue ? <AlertTriangle className="w-4 h-4 flex-shrink-0" /> : <Clock className="w-4 h-4 flex-shrink-0" />}
-            {isOverdue ? t.overdue : `${t.deadline} ${outreach.deadline ? format(parseISO(outreach.deadline), 'd MMMM yyyy') : '—'}`}
+      <div className="portal-layout">
+        {/* ── Left Sidebar ── */}
+        <aside className="portal-sidebar">
+          {/* Brand mark */}
+          <div className="portal-brandmark">
+            {logoUrl
+              ? <img src={logoUrl} alt={tenantName} style={{ height: '32px', width: 'auto', objectFit: 'contain' }} />
+              : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 25, height: 25 }}>
+                  <path d="M12 20c4.5-2.4 7-6.2 7-10.7V5.8L12 3 5 5.8v3.5C5 13.8 7.5 17.6 12 20Z" />
+                  <path d="m8.5 11.8 2.2 2.2 4.8-5" />
+                </svg>
+              )}
           </div>
-        </div>
 
-        {/* Progress */}
-        <div className="bg-white rounded-2xl border p-4 shadow-sm" style={{ borderColor: branding.secondary }}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium opacity-70">{t.progress}</span>
-            <span className="text-sm font-bold" style={{ color: branding.primary }}>{progress}%</span>
+          {/* Welcome text — only portal_welcome_body, no email message */}
+          <div className="portal-welcome-text" style={{ paddingTop: '6px' }}>
+            <h1>{welcomeHeading}</h1>
+            {welcomeSub && <p>{welcomeSub}</p>}
           </div>
-          <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: branding.secondary }}>
-            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, backgroundColor: branding.primary }} />
+
+          {/* Deadline */}
+          <div className="portal-glass portal-deadline-card">
+            {isOverdue
+              ? <AlertTriangle style={{ width: 19, height: 19, flexShrink: 0, marginTop: 1, color: '#f87171' }} />
+              : <Clock style={{ width: 19, height: 19, flexShrink: 0, marginTop: 1, color: '#f4c878' }} />}
+            <span>{isOverdue ? t.overdue : `${t.deadline} ${outreach.deadline ? format(parseISO(outreach.deadline), 'd MMMM yyyy') : '—'}`}</span>
           </div>
-          <div className="text-xs opacity-50 mt-1.5">{completedCount(outreach)} of {_total} items completed</div>
-        </div>
 
-        {/* Items */}
-        <div className="space-y-3">
-          {(outreach.items || []).map(item => {
-            const s = states[item.item_id] || {};
-            const ft = inferFieldType(item);
+          {/* Progress */}
+          <div className="portal-glass" style={{ marginTop: 'auto' }}>
+            <div className="portal-progress-head">
+              <span>{t.progress}</span>
+              <strong>{progress}%</strong>
+            </div>
+            <div className="portal-track">
+              <div className="portal-fill" style={{ width: `${progress}%` }} />
+            </div>
+            <div className="portal-count">{completedCount(outreach)} of {_total} items completed</div>
+          </div>
+        </aside>
 
-            // Conditional field visibility
-            if (!isFieldVisible(item, states)) return null;
+        {/* ── Right Main ── */}
+        <main className="portal-main">
+          <div className="portal-mainhead">
+            <h2>{t.dashboard_title}</h2>
+            {outreach.deadline && <span>{format(parseISO(outreach.deadline), 'd MMM yyyy')}</span>}
+          </div>
 
-            // Section header — rendered as a divider, not an input
-            if (ft === 'section_header') {
+          {/* Item grid */}
+          <div className="portal-item-grid">
+            {(outreach.items || []).map((item, idx) => {
+              const s = states[item.item_id] || {};
+              const ft = inferFieldType(item);
+
+              if (!isFieldVisible(item, states)) return null;
+
+              // Section header — full-width divider
+              if (ft === 'section_header') {
+                return (
+                  <div key={item.item_id} style={{ gridColumn: '1 / -1', paddingTop: 8, paddingBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ flex: 1, height: 1, background: 'rgba(21,67,62,.13)' }} />
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: '#6d8780' }}>
+                        {item.section_title || item.label}
+                      </span>
+                      <div style={{ flex: 1, height: 1, background: 'rgba(21,67,62,.13)' }} />
+                    </div>
+                  </div>
+                );
+              }
+
+              const isDone = isItemCompleted(item, s);
+              const hasError = !!validationErrors[item.item_id];
+
               return (
-                <div key={item.item_id} className="pt-3 pb-1">
-                  <div className="flex items-center gap-3">
-                    <div className="h-px flex-1" style={{ backgroundColor: branding.secondary }} />
-                    <span className="text-xs font-bold uppercase tracking-widest opacity-60" style={{ color: branding.text }}>
-                      {item.section_title || item.label}
-                    </span>
-                    <div className="h-px flex-1" style={{ backgroundColor: branding.secondary }} />
-                  </div>
-                </div>
-              );
-            }
-
-            const isDone = isItemCompleted(item, s);
-            const hasError = !!validationErrors[item.item_id];
-
-            return (
-              <div key={item.item_id} className={cn('bg-white rounded-2xl border shadow-sm overflow-hidden transition-all', isDone ? 'border-emerald-200' : hasError ? 'border-red-300' : '')} style={!isDone && !hasError ? { borderColor: branding.secondary } : {}}>
-                <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div className={cn('w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5', isDone ? 'bg-emerald-100' : 'bg-slate-100')}>
-                      {isDone ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <FileText className="w-4 h-4 text-slate-400" />}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-medium text-sm" style={{ color: branding.text }}>
-                        {item.label}
-                        {item.validation_required && <span className="text-red-500 ml-1">*</span>}
+                <article
+                  key={item.item_id}
+                  className={cn(
+                    'portal-item-card',
+                    isDone && 'portal-item-done-card',
+                    hasError && !isDone && 'portal-item-error-card'
+                  )}
+                  style={{ animationDelay: `${idx * 0.08}s` }}
+                >
+                  {/* Card header */}
+                  <div className="portal-item-top">
+                    <h3 className="portal-item-title">
+                      {item.label}
+                      {item.validation_required && <span style={{ color: '#ef4444', marginLeft: 3 }}>*</span>}
+                    </h3>
+                    {isDone && (
+                      <div className="portal-check-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: 15, height: 15 }}>
+                          <path d="m5 12 4 4L19 6" />
+                        </svg>
                       </div>
-                      {item.description && <div className="text-xs opacity-50 mt-0.5">{item.description}</div>}
-                    </div>
+                    )}
                   </div>
-                  {isDone && <span className="text-xs font-medium text-emerald-600 flex-shrink-0">{t.submitted_item}</span>}
-                </div>
 
-                {!s.done && (
-                  <div className="px-4 pb-4 mt-1">
-                    {/* id_verification */}
-                    {(() => {
-                      const isIdv   = ft === 'id_verification';
-                      const idvDone = !!s.idvResult;
-                      const tenantPrimary = branding.primary;
-                      const tenantRadius  = branding.radius;
-                      if (!isIdv) return null;
-                      if (!idvDone) return (
-                        <IdVerificationField
-                          item={item}
-                          primaryColor={tenantPrimary}
-                          buttonRadius={tenantRadius}
-                          portalUrl={`${window.location.origin}/portal/${outreach.access_token}`}
-                          outreachId={outreach.id}
-                          clientId={client?.id || ''}
-                          tenantId={tenant?.id || ''}
-                          clientEmail={client?.primary_contact_email || ''}
-                          firstName={client?.full_name?.split(' ')[0] || ''}
-                          lastName={client?.full_name?.split(' ').slice(1).join(' ') || ''}
-                          language={lang}
-                          onComplete={idvResult => {
-                            setItemStateMap(prev => ({
-                              ...prev,
-                              [outreach.id]: {
-                                ...prev[outreach.id],
-                                [item.item_id]: {
-                                  ...prev[outreach.id]?.[item.item_id],
-                                  done:      idvResult.idv_status === 'Pass' || idvResult.idv_status === 'Inconclusive',
-                                  idvResult,
-                                  text:      JSON.stringify(idvResult),
-                                  fileUrl:   idvResult.idv_selfie_url || '',
+                  {item.description && (
+                    <p style={{ margin: 0, fontSize: 12, color: '#78918a', lineHeight: 1.5 }}>{item.description}</p>
+                  )}
+
+                  {/* Input area — only if not already done */}
+                  {!s.done && (
+                    <div style={{ marginTop: 4 }}>
+                      {/* id_verification */}
+                      {ft === 'id_verification' && (() => {
+                        if (s.idvResult) return (
+                          <div style={{ padding: '10px 12px', borderRadius: 10, background: s.idvResult.idv_status === 'Pass' ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${s.idvResult.idv_status === 'Pass' ? '#10B981' : '#EF4444'}`, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {s.idvResult.idv_status === 'Pass' ? '✅' : '❌'}
+                            Identity verification {s.idvResult.idv_status === 'Pass' ? 'passed' : 'failed'} — {s.idvResult.idv_similarity_score}% face match
+                          </div>
+                        );
+                        return (
+                          <IdVerificationField
+                            item={item} primaryColor={branding.primary} buttonRadius={branding.radius}
+                            portalUrl={`${window.location.origin}/portal/${outreach.access_token}`}
+                            outreachId={outreach.id} clientId={client?.id || ''} tenantId={tenant?.id || ''}
+                            clientEmail={client?.primary_contact_email || ''}
+                            firstName={client?.full_name?.split(' ')[0] || ''}
+                            lastName={client?.full_name?.split(' ').slice(1).join(' ') || ''}
+                            language={lang}
+                            onComplete={idvResult => {
+                              setItemStateMap(prev => ({
+                                ...prev,
+                                [outreach.id]: {
+                                  ...prev[outreach.id],
+                                  [item.item_id]: {
+                                    ...prev[outreach.id]?.[item.item_id],
+                                    done: idvResult.idv_status === 'Pass' || idvResult.idv_status === 'Inconclusive',
+                                    idvResult, text: JSON.stringify(idvResult), fileUrl: idvResult.idv_selfie_url || '',
+                                  },
                                 },
-                              },
-                            }));
-                          }}
-                        />
-                      );
-                      return (
-                        <div style={{
-                          padding: '12px 14px', borderRadius: '10px',
-                          background: s.idvResult.idv_status === 'Pass' ? '#F0FDF4' : '#FEF2F2',
-                          border: `1px solid ${s.idvResult.idv_status === 'Pass' ? '#10B981' : '#EF4444'}`,
-                          fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px',
-                        }}>
-                          {s.idvResult.idv_status === 'Pass' ? '✅' : '❌'}
-                          Identity verification {s.idvResult.idv_status === 'Pass' ? 'passed' : 'failed'}{' '}
-                          — {s.idvResult.idv_similarity_score}% face match
-                        </div>
-                      );
-                    })()}
-
-                    {/* file_upload */}
-                    {ft !== 'id_verification' && ft === 'file_upload' && (
-                      s.fileUrl ? (
-                        <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2.5">
-                          <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                          <span className="truncate">{t.uploaded}</span>
-                          <button className="ml-auto text-slate-400 hover:text-slate-600" onClick={() => setItemStateMap(m => ({ ...m, [outreach.id]: { ...m[outreach.id], [item.item_id]: { ...m[outreach.id]?.[item.item_id], fileUrl: '' } } }))}>
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <label className={cn('flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-5 cursor-pointer transition-colors', s.uploading ? 'bg-slate-50' : 'hover:bg-slate-50')} style={{ borderColor: branding.secondary }}>
-                          {s.uploading ? <Loader2 className="w-5 h-5 animate-spin mb-1" style={{ color: branding.primary }} /> : <Upload className="w-5 h-5 mb-1 opacity-40" />}
-                          <span className="text-sm font-medium opacity-60">{s.uploading ? 'Uploading…' : t.upload_btn}</span>
-                          <span className="text-xs opacity-40 mt-0.5">
-                            {item.validation_accepted_file_types?.length > 0 ? item.validation_accepted_file_types.join(', ').toUpperCase() : 'PDF, JPG, PNG'} — max {item.validation_max_file_size_mb || 25}MB
-                          </span>
-                          <input
-                            type="file"
-                            accept={item.validation_accepted_file_types?.length > 0 ? item.validation_accepted_file_types.map(e => `.${e}`).join(',') : '.pdf,.jpg,.jpeg,.png'}
-                            className="hidden"
-                            disabled={s.uploading}
-                            onChange={e => uploadFile(outreach.id, item.item_id, e.target.files?.[0])}
+                              }));
+                            }}
                           />
-                        </label>
-                      )
-                    )}
+                        );
+                      })()}
 
-                    {/* text */}
-                    {ft !== 'id_verification' && ft === 'text' && (
-                      <Input
-                        value={s.text || ''}
-                        onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
-                        placeholder={t.text_placeholder}
-                        className="mt-1 text-sm rounded-xl"
-                        style={{ borderColor: branding.secondary }}
-                      />
-                    )}
-
-                    {/* textarea (default for data_point) */}
-                    {ft !== 'id_verification' && (ft === 'textarea' || (ft !== 'file_upload' && ft !== 'text' && ft !== 'number' && ft !== 'date' && ft !== 'dropdown' && ft !== 'multi_select' && ft !== 'checkbox' && ft !== 'yes_no' && ft !== 'signature' && item.item_type === 'data_point')) && (
-                      <Textarea
-                        value={s.text || ''}
-                        onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
-                        placeholder={t.text_placeholder}
-                        className="mt-1 text-sm min-h-16 rounded-xl"
-                        style={{ borderColor: branding.secondary }}
-                      />
-                    )}
-
-                    {/* number */}
-                    {ft === 'number' && (
-                      <Input
-                        type="number"
-                        value={s.text || ''}
-                        onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
-                        min={item.validation_min_value}
-                        max={item.validation_max_value}
-                        placeholder="Enter a number…"
-                        className="mt-1 text-sm rounded-xl"
-                        style={{ borderColor: branding.secondary }}
-                      />
-                    )}
-
-                    {/* date */}
-                    {ft === 'date' && (
-                      <Input
-                        type="date"
-                        value={s.text || ''}
-                        onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
-                        className="mt-1 text-sm rounded-xl"
-                        style={{ borderColor: branding.secondary }}
-                      />
-                    )}
-
-                    {/* dropdown */}
-                    {ft === 'dropdown' && (
-                      <select
-                        value={s.text || ''}
-                        onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
-                        className="mt-1 w-full text-sm rounded-xl border px-3 py-2 bg-white"
-                        style={{ borderColor: branding.secondary, color: branding.text }}
-                      >
-                        <option value="">Select an option…</option>
-                        {(item.field_options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
-                    )}
-
-                    {/* multi_select */}
-                    {ft === 'multi_select' && (
-                      <div className="mt-2 space-y-2">
-                        {(item.field_options || []).map(opt => {
-                          const checked = (s.selected || []).includes(opt);
-                          return (
-                            <label key={opt} className="flex items-center gap-2.5 cursor-pointer text-sm">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  const cur = s.selected || [];
-                                  setItemSelected(outreach.id, item.item_id, checked ? cur.filter(v => v !== opt) : [...cur, opt]);
-                                }}
-                                className="rounded"
-                              />
-                              <span style={{ color: branding.text }}>{opt}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* checkbox (single boolean) */}
-                    {ft === 'checkbox' && (
-                      <label className="mt-2 flex items-center gap-2.5 cursor-pointer text-sm">
-                        <input
-                          type="checkbox"
-                          checked={s.text === 'true'}
-                          onChange={e => setItemText(outreach.id, item.item_id, e.target.checked ? 'true' : '')}
-                          className="rounded"
-                        />
-                        <span style={{ color: branding.text }}>{item.label}</span>
-                      </label>
-                    )}
-
-                    {/* yes_no */}
-                    {ft === 'yes_no' && (
-                      <div className="mt-2 flex gap-3">
-                        {['yes', 'no'].map(val => (
-                          <button
-                            key={val}
-                            type="button"
-                            onClick={() => setItemText(outreach.id, item.item_id, val)}
-                            className={cn(
-                              'flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all',
-                              s.text === val
-                                ? 'text-white border-transparent'
-                                : 'bg-white border-slate-200 opacity-70 hover:opacity-100'
-                            )}
-                            style={s.text === val ? { backgroundColor: branding.primary, borderColor: branding.primary } : {}}
-                          >
-                            {val === 'yes' ? '✓ Yes' : '✗ No'}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* signature */}
-                    {ft === 'signature' && (
-                      <div className="mt-2">
-                        {s.text ? (
-                          <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2.5">
-                            <PenLine className="w-4 h-4 flex-shrink-0" />
-                            <span className="italic">{s.text}</span>
-                            <button className="ml-auto text-slate-400 hover:text-slate-600" onClick={() => setItemText(outreach.id, item.item_id, '')}>
+                      {/* file_upload */}
+                      {ft === 'file_upload' && (
+                        s.fileUrl ? (
+                          <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2">
+                            <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                            <span className="truncate text-xs">{t.uploaded}</span>
+                            <button className="ml-auto text-slate-400 hover:text-slate-600 cursor-pointer" onClick={() => setItemStateMap(m => ({ ...m, [outreach.id]: { ...m[outreach.id], [item.item_id]: { ...m[outreach.id]?.[item.item_id], fileUrl: '' } } }))}>
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         ) : (
-                          <div className="border-2 border-dashed rounded-xl p-4" style={{ borderColor: branding.secondary }}>
-                            <p className="text-xs opacity-50 mb-2">Type your full name as a digital signature:</p>
-                            <Input
-                              value={s.text || ''}
-                              onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
-                              placeholder="Full name…"
-                              className="text-sm font-semibold italic rounded-xl"
-                              style={{ borderColor: branding.secondary }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
+                          <label className={cn('flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-4 cursor-pointer', s.uploading ? 'bg-slate-50' : 'hover:bg-slate-50')} style={{ borderColor: 'rgba(38,105,88,.25)' }}>
+                            {s.uploading ? <Loader2 className="w-4 h-4 animate-spin mb-1" style={{ color: branding.primary }} /> : <Upload className="w-4 h-4 mb-1 opacity-40" />}
+                            <span className="text-xs font-medium opacity-60">{s.uploading ? 'Uploading…' : t.upload_btn}</span>
+                            <span className="text-xs opacity-40 mt-0.5">
+                              {item.validation_accepted_file_types?.length > 0 ? item.validation_accepted_file_types.join(', ').toUpperCase() : 'PDF, JPG, PNG'} — max {item.validation_max_file_size_mb || 25}MB
+                            </span>
+                            <input type="file"
+                              accept={item.validation_accepted_file_types?.length > 0 ? item.validation_accepted_file_types.map(e => `.${e}`).join(',') : '.pdf,.jpg,.jpeg,.png'}
+                              className="hidden" disabled={s.uploading}
+                              onChange={e => uploadFile(outreach.id, item.item_id, e.target.files?.[0])} />
+                          </label>
+                        )
+                      )}
 
-                    {/* Validation error */}
-                    {hasError && (
-                      <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3 flex-shrink-0" /> {validationErrors[item.item_id]}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                      {/* text */}
+                      {ft === 'text' && (
+                        <Input value={s.text || ''} onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
+                          placeholder={t.text_placeholder} className="text-sm rounded-xl" style={{ borderColor: 'rgba(38,105,88,.25)' }} />
+                      )}
 
-        <Button
-          className="w-full h-12 text-base font-semibold gap-2 shadow-sm text-white"
-          style={{ backgroundColor: branding.primary, borderRadius: branding.radius }}
-          onClick={() => handleSubmit(outreach)}
-          disabled={submitting || completedCount(outreach) === 0}
-        >
-          {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-          {submitting ? t.submitting : t.submit}
-        </Button>
+                      {/* textarea */}
+                      {ft === 'textarea' && (
+                        <Textarea value={s.text || ''} onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
+                          placeholder={t.text_placeholder} className="text-sm min-h-[60px] rounded-xl" style={{ borderColor: 'rgba(38,105,88,.25)' }} />
+                      )}
+
+                      {/* number */}
+                      {ft === 'number' && (
+                        <Input type="number" value={s.text || ''} onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
+                          min={item.validation_min_value} max={item.validation_max_value} placeholder="Enter a number…"
+                          className="text-sm rounded-xl" style={{ borderColor: 'rgba(38,105,88,.25)' }} />
+                      )}
+
+                      {/* date */}
+                      {ft === 'date' && (
+                        <Input type="date" value={s.text || ''} onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
+                          className="text-sm rounded-xl" style={{ borderColor: 'rgba(38,105,88,.25)' }} />
+                      )}
+
+                      {/* dropdown */}
+                      {ft === 'dropdown' && (
+                        <select value={s.text || ''} onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
+                          className="mt-1 w-full text-sm rounded-xl border px-3 py-2 bg-white cursor-pointer"
+                          style={{ borderColor: 'rgba(38,105,88,.25)', color: branding.text }}>
+                          <option value="">Select an option…</option>
+                          {(item.field_options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      )}
+
+                      {/* multi_select */}
+                      {ft === 'multi_select' && (
+                        <div className="space-y-2">
+                          {(item.field_options || []).map(opt => {
+                            const checked = (s.selected || []).includes(opt);
+                            return (
+                              <label key={opt} className="flex items-center gap-2.5 cursor-pointer text-sm">
+                                <input type="checkbox" checked={checked} className="rounded"
+                                  onChange={() => { const cur = s.selected || []; setItemSelected(outreach.id, item.item_id, checked ? cur.filter(v => v !== opt) : [...cur, opt]); }} />
+                                <span style={{ color: '#214840' }}>{opt}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* checkbox */}
+                      {ft === 'checkbox' && (
+                        <label className="flex items-center gap-2.5 cursor-pointer text-sm">
+                          <input type="checkbox" checked={s.text === 'true'} className="rounded"
+                            onChange={e => setItemText(outreach.id, item.item_id, e.target.checked ? 'true' : '')} />
+                          <span style={{ color: '#214840' }}>{item.label}</span>
+                        </label>
+                      )}
+
+                      {/* yes_no */}
+                      {ft === 'yes_no' && (
+                        <div className="flex gap-3 mt-1">
+                          {['yes', 'no'].map(val => (
+                            <button key={val} type="button" onClick={() => setItemText(outreach.id, item.item_id, val)}
+                              className={cn('flex-1 py-2 rounded-xl text-sm font-semibold border-2 transition-all cursor-pointer',
+                                s.text === val ? 'text-white border-transparent' : 'bg-white border-slate-200 opacity-70 hover:opacity-100')}
+                              style={s.text === val ? { backgroundColor: '#27775c', borderColor: '#27775c' } : {}}>
+                              {val === 'yes' ? '✓ Yes' : '✗ No'}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* signature */}
+                      {ft === 'signature' && (
+                        <div>
+                          {s.text ? (
+                            <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2.5">
+                              <PenLine className="w-4 h-4 flex-shrink-0" />
+                              <span className="italic">{s.text}</span>
+                              <button className="ml-auto text-slate-400 hover:text-slate-600 cursor-pointer" onClick={() => setItemText(outreach.id, item.item_id, '')}>
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="border-2 border-dashed rounded-xl p-3" style={{ borderColor: 'rgba(38,105,88,.25)' }}>
+                              <p className="text-xs opacity-50 mb-2">Type your full name as a digital signature:</p>
+                              <Input value={s.text || ''} onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
+                                placeholder="Full name…" className="text-sm font-semibold italic rounded-xl"
+                                style={{ borderColor: 'rgba(38,105,88,.25)' }} />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Validation error */}
+                      {hasError && (
+                        <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 flex-shrink-0" /> {validationErrors[item.item_id]}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+
+          {/* Submit bar */}
+          <div className="portal-submit-bar">
+            <p>
+              {completedCount(outreach) === _total && _total > 0
+                ? 'All items completed — ready to submit.'
+                : `${completedCount(outreach)} of ${_total} items completed.`}
+            </p>
+            <button
+              className="portal-submit-btn"
+              onClick={() => handleSubmit(outreach)}
+              disabled={submitting || completedCount(outreach) === 0}
+            >
+              {submitting ? <Loader2 style={{ width: 18, height: 18, animation: 'spin 1s linear infinite' }} /> : <Send style={{ width: 18, height: 18 }} />}
+              {submitting ? t.submitting : t.submit}
+            </button>
+          </div>
+
+          <PortalFooter tenant={tenant} branding={branding} />
+        </main>
       </div>
 
-      <PortalFooter tenant={tenant} branding={branding} />
-
       {/* AI Chat bubble */}
-      <div className="fixed bottom-5 right-5 z-20">
+      <div className="fixed bottom-5 right-5 z-30">
         {chatOpen && (
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl w-80 mb-3 overflow-hidden flex flex-col" style={{ maxHeight: '60vh' }}>
             <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between flex-shrink-0" style={{ backgroundColor: branding.primary + '15' }}>
@@ -1249,26 +1087,28 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                 <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: branding.primary }}>AI</div>
                 <span className="text-sm font-semibold" style={{ color: branding.text }}>Assistant</span>
               </div>
-              <button onClick={() => setChatOpen(false)} className="opacity-40 hover:opacity-70"><X className="w-4 h-4" /></button>
+              <button onClick={() => setChatOpen(false)} className="opacity-40 hover:opacity-70 cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
               {chatMessages.map((msg, i) => (
                 <div key={i} className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
-                  <div
-                    className={cn('max-w-[85%] px-3 py-2 text-sm leading-relaxed', msg.role === 'user' ? 'text-white' : 'bg-slate-100 text-slate-700')}
-                    style={{ borderRadius: branding.radius, ...(msg.role === 'user' ? { backgroundColor: branding.primary } : {}) }}
-                  >
+                  <div className={cn('max-w-[85%] px-3 py-2 text-sm leading-relaxed rounded-2xl', msg.role === 'user' ? 'text-white' : 'bg-slate-100 text-slate-700')}
+                    style={msg.role === 'user' ? { backgroundColor: branding.primary } : {}}>
                     {msg.text}
                   </div>
                 </div>
               ))}
-              {chatLoading && <div className="flex justify-start"><div className="bg-slate-100 rounded-2xl rounded-bl-sm px-3 py-2"><Loader2 className="w-4 h-4 animate-spin text-slate-400" /></div></div>}
+              {chatLoading && <div className="flex justify-start"><div className="bg-slate-100 rounded-2xl px-3 py-2"><Loader2 className="w-4 h-4 animate-spin text-slate-400" /></div></div>}
               <div ref={chatEndRef} />
             </div>
             <div className="p-3 border-t border-slate-100 flex-shrink-0">
               <div className="flex gap-2">
-                <Input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder={t.ask} className="text-sm rounded-xl border-slate-200" onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askAI(chatInput); } }} />
-                <Button size="icon" className="flex-shrink-0 text-white" style={{ backgroundColor: branding.primary, borderRadius: branding.radius }} onClick={() => askAI(chatInput)} disabled={!chatInput.trim() || chatLoading}>
+                <Input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder={t.ask}
+                  className="text-sm rounded-xl border-slate-200"
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askAI(chatInput); } }} />
+                <Button size="icon" className="flex-shrink-0 text-white cursor-pointer"
+                  style={{ backgroundColor: branding.primary, borderRadius: branding.radius }}
+                  onClick={() => askAI(chatInput)} disabled={!chatInput.trim() || chatLoading}>
                   <Send className="w-4 h-4" />
                 </Button>
               </div>
@@ -1277,9 +1117,9 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
         )}
         <button
           onClick={() => setChatOpen(o => !o)}
-          className="w-14 h-14 text-white shadow-lg flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+          className="w-14 h-14 text-white shadow-lg flex items-center justify-center transition-transform hover:scale-105 active:scale-95 cursor-pointer"
           style={{ backgroundColor: branding.primary, borderRadius: '9999px' }}
-        >
+          aria-label="Open AI assistant">
           {chatOpen ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
         </button>
       </div>
