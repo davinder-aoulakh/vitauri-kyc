@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { format, addYears, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { deleteCase } from '@/lib/caseDelete';
 
 const ARCHIVE_STATUSES = ['Inactive', 'Former', 'Rejected', 'Unacceptable'];
 
@@ -100,8 +101,14 @@ export default function ArchiveClients() {
     const lastCase    = getLastClosedCase(reactivateClient.id);
     const caseType    = isFormer ? 'Onboarding' : 'Periodic_Review';
 
-    // Update client status to Active
-    await base44.entities.Client.update(reactivateClient.id, { status: 'Active' });
+    // Update client status to Active, clear soft-delete flags
+    await base44.entities.Client.update(reactivateClient.id, {
+      status: 'Active',
+      is_deleted: false,
+      deleted_at: null,
+      deleted_by_user_id: null,
+      deletion_reason: null,
+    });
 
     // Create new KYC case, pre-fill if former
     const newCase = await base44.entities.KycCase.create({
@@ -198,6 +205,11 @@ export default function ArchiveClients() {
       notes: `Permanent deletion of archived client record. Retention expiry: ${getRetentionExpiry(deleteClient) ? format(getRetentionExpiry(deleteClient), 'd MMM yyyy') : 'unknown'}`,
       is_override: true,
     });
+
+    const clientCases = await base44.entities.KycCase.filter({ client_id: deleteClient.id });
+    for (const kycCase of (clientCases || [])) {
+      await deleteCase(kycCase, currentUser);
+    }
 
     await base44.entities.Client.delete(deleteClient.id);
     setDeleting(false);

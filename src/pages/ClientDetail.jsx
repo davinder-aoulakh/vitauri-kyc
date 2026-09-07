@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CLIENT_STATUS_COLORS } from '@/lib/riskColors';
+import { deleteCase } from '@/lib/caseDelete';
 
 export default function ClientDetail() {
   const { id } = useParams();
@@ -91,7 +92,12 @@ export default function ClientDetail() {
       deleted_at: new Date().toISOString(),
       deleted_by_user_id: currentUser.id,
       deletion_reason: deleteReason,
+      status: 'Inactive',
     });
+    const clientCases = await base44.entities.KycCase.filter({ client_id: id });
+    for (const kycCase of (clientCases || [])) {
+      await deleteCase(kycCase, currentUser);
+    }
     await base44.entities.AuditEvent.create({
       tenant_id: client.tenant_id,
       client_id: id,

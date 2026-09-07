@@ -184,6 +184,7 @@ export default function CasesList({ myOnly = false }) {
     const today = new Date();
     return cases.filter(c => {
       const client = clients[c.client_id];
+      if (client?.is_deleted) return false;
       const clientName = client?.full_name || '';
       if (search && !clientName.toLowerCase().includes(search.toLowerCase())) return false;
       if (caseTypes.length && !caseTypes.includes(c.case_type)) return false;
