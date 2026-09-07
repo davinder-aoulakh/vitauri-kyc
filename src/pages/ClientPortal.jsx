@@ -292,7 +292,8 @@ export default function ClientPortal() {
     const ft = item.field_type || (item.item_type === 'document' ? 'file_upload' : 'textarea');
     if (ft === 'file_upload') return !!s.fileUrl;
     if (ft === 'section_header') return true;
-    if (ft === 'multi_select' || ft === 'checkbox') return (s.selected || []).length > 0;
+    if (ft === 'multi_select') return (s.selected || []).length > 0;
+    if (ft === 'checkbox') return s.text === 'true';
     if (ft === 'yes_no') return s.text === 'yes' || s.text === 'no';
     if (ft === 'signature') return !!s.fileUrl;
     return !!s.text?.trim();
