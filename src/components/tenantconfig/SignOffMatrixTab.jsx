@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -23,14 +23,30 @@ const DEFAULT_MATRIX = {
   Unacceptable: { approver: 'Director',  compliance_mandatory: false },
 };
 
-export default function SignOffMatrixTab({ tenant, currentUser }) {
+export default function SignOffMatrixTab({ tenant, currentUser, setTenant }) {
   const [matrix, setMatrix] = useState(DEFAULT_MATRIX);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved]   = useState(false);
+  const hydrated = useRef(false);
+
+  useEffect(() => {
+    if (tenant?.sign_off_matrix && !hydrated.current) {
+      hydrated.current = true;
+      const merged = {};
+      RISK_LEVELS.forEach(level => {
+        merged[level] = {
+          approver: tenant.sign_off_matrix[level]?.approver ?? DEFAULT_MATRIX[level].approver,
+          compliance_mandatory: tenant.sign_off_matrix[level]?.compliance_mandatory ?? DEFAULT_MATRIX[level].compliance_mandatory,
+        };
+      });
+      setMatrix(merged);
+    }
+  }, [tenant]);
 
   async function save() {
     setSaving(true);
-    await base44.entities.Tenant.update(tenant.id, { sign_off_matrix: matrix });
+    const updated = await base44.entities.Tenant.update(tenant.id, { sign_off_matrix: matrix });
+    setTenant?.(updated);
     await base44.entities.AuditEvent.create({
       tenant_id: currentUser.tenant_id,
       actor_user_id: currentUser.id,

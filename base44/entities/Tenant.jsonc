@@ -176,6 +176,10 @@
     "features_enabled": {
       "type": "string",
       "description": "JSON object of feature flag overrides per tenant. Missing key = feature ON. e.g. {\"outreach\": false, \"batch_screening\": false}"
+    },
+    "sign_off_matrix": {
+      "type": "object",
+      "description": "Sign-off requirements per risk class. Keys: Low, Medium, High, Unacceptable. Each value: { approver: string, compliance_mandatory: boolean }"
     }
   },
   "required": [

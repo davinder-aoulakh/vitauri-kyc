@@ -190,7 +190,7 @@ export default function TenantConfig() {
           </TabsContent>
 
           <TabsContent value="signoff" className="mt-5">
-            <SignOffMatrixTab tenant={tenant} currentUser={currentUser} />
+            <SignOffMatrixTab tenant={tenant} currentUser={currentUser} setTenant={setTenant} />
           </TabsContent>
 
           <TabsContent value="outreach" className="mt-5">
