@@ -52,7 +52,7 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      const canViewUsers = hasPermission(currentUser?.app_role, 'viewAllTenantCases');
+      const canViewUsers = currentUser?.role === 'admin' || currentUser?.data?.role === 'admin';
       const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
       const [casesData, auditData, clientsData, newHits, reviewHits, usersData, controlData] = await Promise.all([
         base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }),
@@ -162,6 +162,7 @@ export default function Dashboard() {
           subtitle={`${myCases.filter(c => c.due_date && new Date(c.due_date).toDateString() === today.toDateString()).length} due today`}
           icon={UserCircle}
           accentColor="#8B5CF6"
+          onClick={() => navigate('/my-cases')}
         />
         <KpiCard
           label="Overdue"
@@ -185,6 +186,7 @@ export default function Dashboard() {
           subtitle={clientsWithReviewDue.length > 0 ? `Next: ${format(new Date(clientsWithReviewDue[0].next_review_date), 'd MMM')}` : 'None upcoming'}
           icon={Calendar}
           accentColor="#10B981"
+          onClick={() => navigate('/review-planner')}
         />
         <KpiCard
           label="Control Measures Overdue"
