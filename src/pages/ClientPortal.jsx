@@ -8,6 +8,7 @@ import { FileText, Upload, CheckCircle, Clock, Send, Loader2, MessageCircle, Ale
 import { portalSecureUpload } from '@/lib/securityUtils';
 import SubmissionConfirmation from '@/components/portal/SubmissionConfirmation';
 import IdVerificationField from '@/components/portal/IdVerificationField';
+import SignaturePad from '@/components/portal/SignaturePad';
 import { format, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -293,6 +294,7 @@ export default function ClientPortal() {
     if (ft === 'section_header') return true;
     if (ft === 'multi_select' || ft === 'checkbox') return (s.selected || []).length > 0;
     if (ft === 'yes_no') return s.text === 'yes' || s.text === 'no';
+    if (ft === 'signature') return !!s.fileUrl;
     return !!s.text?.trim();
   }
 
@@ -1025,20 +1027,33 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                       {/* signature */}
                       {ft === 'signature' && (
                         <div>
-                          {s.text ? (
-                            <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2.5">
-                              <PenLine className="w-4 h-4 flex-shrink-0" />
-                              <span className="italic">{s.text}</span>
-                              <button className="ml-auto text-slate-400 hover:text-slate-600 cursor-pointer" onClick={() => setItemText(outreach.id, item.item_id, '')}>
-                                <X className="w-3.5 h-3.5" />
-                              </button>
+                          {s.fileUrl ? (
+                            <div className="border rounded-xl p-3 bg-emerald-50/50" style={{ borderColor: 'rgba(16,185,129,.3)' }}>
+                              <img src={s.fileUrl} alt="Signature" className="w-full h-auto rounded-lg bg-white border" style={{ borderColor: 'rgba(38,105,88,.15)', maxHeight: 100, objectFit: 'contain' }} />
+                              <div className="flex items-center justify-between mt-2">
+                                <span className="text-xs text-slate-500">{s.text}</span>
+                                <button className="text-slate-400 hover:text-slate-600 cursor-pointer" onClick={() => setItemStateMap(m => ({ ...m, [outreach.id]: { ...m[outreach.id], [item.item_id]: { ...m[outreach.id]?.[item.item_id], fileUrl: '', text: '', signerName: '' } } }))}>
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <div className="border-2 border-dashed rounded-xl p-3" style={{ borderColor: 'rgba(38,105,88,.25)' }}>
-                              <p className="text-xs opacity-50 mb-2">Type your full name as a digital signature:</p>
-                              <Input value={s.text || ''} onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
-                                placeholder="Full name…" className="text-sm font-semibold italic rounded-xl"
+                              <p className="text-xs opacity-50 mb-2">Type your full name:</p>
+                              <Input value={s.signerName || ''} onChange={e => setItemStateMap(m => ({ ...m, [outreach.id]: { ...m[outreach.id], [item.item_id]: { ...m[outreach.id]?.[item.item_id], signerName: e.target.value } } }))}
+                                placeholder="Full name…" className="text-sm rounded-xl mb-3"
                                 style={{ borderColor: 'rgba(38,105,88,.25)' }} />
+                              <p className="text-xs opacity-50 mb-2">Draw your signature below:</p>
+                              <SignaturePad
+                                name={s.signerName || ''}
+                                onConfirm={async (dataUrl, timestampLabel) => {
+                                  const res = await fetch(dataUrl);
+                                  const blob = await res.blob();
+                                  const file = new File([blob], `signature-${item.item_id}.png`, { type: 'image/png' });
+                                  const file_url = await portalSecureUpload(file);
+                                  setItemStateMap(m => ({ ...m, [outreach.id]: { ...m[outreach.id], [item.item_id]: { ...m[outreach.id]?.[item.item_id], fileUrl: file_url, text: `${s.signerName || ''} — Signed on ${timestampLabel}` } } }));
+                                }}
+                              />
                             </div>
                           )}
                         </div>
