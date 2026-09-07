@@ -25,6 +25,27 @@ export default function IdVerificationField({
   // Stop polling on unmount
   useEffect(() => () => clearInterval(pollRef.current), []);
 
+  // On mount: detect an already-created Didit session on this item and
+  // resume the flow instead of restarting at consent.
+  useEffect(() => {
+    const terminal = ['Pass', 'Fail', 'Inconclusive', 'Expired'];
+    if (item?.idv_status && terminal.includes(item.idv_status)) {
+      setResult({
+        idv_status:            item.idv_status,
+        idv_similarity_score:  item.idv_similarity_score,
+        idv_confidence:        item.idv_confidence,
+        idv_document_type:     item.idv_document_type,
+        idv_failure_reason:    item.idv_failure_reason,
+      });
+      setPhase('result');
+    } else if (item?.didit_session_id) {
+      sessionIdRef.current = item.didit_session_id;
+      setPhase('checking');
+      startPolling();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const minScore = item?.idv_min_match_score ?? 75;
 
   const btn = {
@@ -192,6 +213,17 @@ export default function IdVerificationField({
         Setting up secure verification…
       </div>
       <div style={{ fontSize:'13px', color:'#6B7280' }}>This takes a moment</div>
+    </div>
+  );
+
+  // ── PHASE: checking ───────────────────────────────────────────────────────
+  if (phase === 'checking') return (
+    <div style={{ textAlign:'center', padding:'40px 20px' }}>
+      <div style={{ fontSize:'32px', marginBottom:'12px' }}>🔄</div>
+      <div style={{ fontWeight:600, fontSize:'14px', marginBottom:'6px' }}>
+        Confirming your verification…
+      </div>
+      <div style={{ fontSize:'13px', color:'#6B7280' }}>This usually takes a few seconds.</div>
     </div>
   );
 

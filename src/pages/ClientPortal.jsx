@@ -889,17 +889,19 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                     <p style={{ margin: 0, fontSize: 12, color: '#78918a', lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: item.description }} />
                   )}
 
+                  {/* IDV result confirmation — stays visible even after completion */}
+                  {ft === 'id_verification' && s.done && s.idvResult && (
+                    <div style={{ marginTop: 4, padding: '10px 12px', borderRadius: 10, background: s.idvResult.idv_status === 'Pass' ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${s.idvResult.idv_status === 'Pass' ? '#10B981' : '#EF4444'}`, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {s.idvResult.idv_status === 'Pass' ? '✅' : '❌'}
+                      Identity verification {s.idvResult.idv_status === 'Pass' ? 'passed' : 'failed'} — {s.idvResult.idv_similarity_score}% face match
+                    </div>
+                  )}
+
                   {/* Input area — only if not already done */}
                   {!s.done && (
                     <div style={{ marginTop: 4 }}>
                       {/* id_verification */}
                       {ft === 'id_verification' && (() => {
-                        if (s.idvResult) return (
-                          <div style={{ padding: '10px 12px', borderRadius: 10, background: s.idvResult.idv_status === 'Pass' ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${s.idvResult.idv_status === 'Pass' ? '#10B981' : '#EF4444'}`, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-                            {s.idvResult.idv_status === 'Pass' ? '✅' : '❌'}
-                            Identity verification {s.idvResult.idv_status === 'Pass' ? 'passed' : 'failed'} — {s.idvResult.idv_similarity_score}% face match
-                          </div>
-                        );
                         return (
                           <IdVerificationField
                             item={item} primaryColor={branding.primary} buttonRadius={branding.radius}
