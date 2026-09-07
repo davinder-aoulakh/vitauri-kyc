@@ -203,7 +203,7 @@ export default function FormTemplatePreview({ template, tenant, open, onClose })
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <DialogContent hideClose className="max-w-5xl h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
 
         {/* Dialog header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-background flex-shrink-0">
