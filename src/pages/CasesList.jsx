@@ -137,6 +137,7 @@ export default function CasesList({ myOnly = false }) {
   const [analystId, setAnalystId] = useState('all');
   const [dueDateFrom, setDueDateFrom] = useState('');
   const [dueDateTo, setDueDateTo]     = useState('');
+  const [overdueOnly, setOverdueOnly] = useState(searchParams.get('overdue') === 'true');
 
   // Bulk actions
   const [selected, setSelected]   = useState(new Set());
@@ -172,14 +173,15 @@ export default function CasesList({ myOnly = false }) {
 
   function clearFilters() {
     setSearch(''); setCaseTypes([]); setStatuses([]); setRisks([]);
-    setAnalystId('all'); setDueDateFrom(''); setDueDateTo('');
+    setAnalystId('all'); setDueDateFrom(''); setDueDateTo(''); setOverdueOnly(false);
     setPage(1); setSelected(new Set());
   }
 
   const hasActiveFilters = search || caseTypes.length || statuses.length || risks.length ||
-    analystId !== 'all' || dueDateFrom || dueDateTo;
+    analystId !== 'all' || dueDateFrom || dueDateTo || overdueOnly;
 
   const filtered = useMemo(() => {
+    const today = new Date();
     return cases.filter(c => {
       const client = clients[c.client_id];
       const clientName = client?.full_name || '';
@@ -193,9 +195,10 @@ export default function CasesList({ myOnly = false }) {
       if (analystId !== 'all' && c.assigned_analyst_id !== analystId) return false;
       if (dueDateFrom && c.due_date && c.due_date < dueDateFrom) return false;
       if (dueDateTo && c.due_date && c.due_date > dueDateTo) return false;
+      if (overdueOnly && !(c.due_date && isAfter(today, new Date(c.due_date)) && !CLOSED.includes(c.status))) return false;
       return true;
     });
-  }, [cases, clients, search, caseTypes, statuses, risks, analystId, dueDateFrom, dueDateTo]);
+  }, [cases, clients, search, caseTypes, statuses, risks, analystId, dueDateFrom, dueDateTo, overdueOnly]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -364,6 +367,17 @@ export default function CasesList({ myOnly = false }) {
                 placeholder="To"
               />
             </div>
+
+            <Button
+              variant="ghost" size="sm"
+              onClick={() => { setOverdueOnly(o => !o); setPage(1); }}
+              className={cn(
+                'h-8 px-3 text-sm rounded-md border whitespace-nowrap',
+                overdueOnly ? 'border-red-500 text-red-600 bg-red-50' : 'border-input bg-background text-foreground hover:bg-muted/50'
+              )}
+            >
+              Overdue
+            </Button>
 
             {hasActiveFilters && (
               <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1 h-8 text-sm text-muted-foreground">

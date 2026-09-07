@@ -170,7 +170,7 @@ export default function Dashboard() {
           subtitle="Requires attention"
           icon={AlertTriangle}
           accentColor="#EF4444"
-          onClick={isManager ? () => navigate('/all-cases') : undefined}
+          onClick={isManager ? () => navigate('/all-cases?overdue=true') : () => navigate('/my-cases?overdue=true')}
         />
         <KpiCard
           label="Screening Alerts"
