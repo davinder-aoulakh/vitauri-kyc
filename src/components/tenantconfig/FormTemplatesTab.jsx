@@ -180,7 +180,8 @@ export default function FormTemplatesTab({ tenant }) {
   async function save() {
     if (!modal?.data?.name) return;
     setSaving(true);
-    const d = { ...modal.data, tenant_id: tenant.id };
+    const items = (modal.data.items || []).map((it, i) => ({ ...it, sort_order: i }));
+    const d = { ...modal.data, items, tenant_id: tenant.id };
     if (modal.mode === 'add') {
       await base44.entities.OutreachFormTemplate.create(d);
     } else {
@@ -248,6 +249,7 @@ export default function FormTemplatesTab({ tenant }) {
       const target = idx + dir;
       if (target < 0 || target >= items.length) return m;
       [items[idx], items[target]] = [items[target], items[idx]];
+      items.forEach((it, i) => { it.sort_order = i; });
       return { ...m, data: { ...m.data, items } };
     });
   }

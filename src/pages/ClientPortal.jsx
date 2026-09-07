@@ -883,7 +883,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                   </div>
 
                   {item.description && (
-                    <p style={{ margin: 0, fontSize: 12, color: '#78918a', lineHeight: 1.5 }}>{item.description}</p>
+                    <p style={{ margin: 0, fontSize: 12, color: '#78918a', lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: item.description }} />
                   )}
 
                   {/* Input area — only if not already done */}
