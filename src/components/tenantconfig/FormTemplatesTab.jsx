@@ -466,8 +466,8 @@ Only include items whose ids exist in the library list above. Return valid JSON 
 
       {/* Create / Edit Modal */}
       <Dialog open={!!modal} onOpenChange={v => { if (!v) { setModal(null); setAiOpen(false); setAiStatus(null); setAiDesc(''); } }}>
-        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto p-0 gap-0">
-          <DialogHeader className="px-6 pt-5 pb-4 border-b border-border sticky top-0 bg-background z-10">
+        <DialogContent className="max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-5 pb-4 border-b border-border">
             <div className="flex items-center justify-between">
               <DialogTitle className="text-base">
                 {modal?.mode === 'add' ? 'New Form Template' : 'Edit Form Template'}
@@ -480,7 +480,7 @@ Only include items whose ids exist in the library list above. Return valid JSON 
           </DialogHeader>
 
           {modal && (
-            <div className="px-6 pb-6 pt-4 space-y-5">
+            <div className="px-6 pb-6 pt-4 space-y-5 flex-1 overflow-y-auto min-w-0">
               {/* AI Panel */}
               {aiOpen && (
                 <div className="border border-primary/20 bg-primary/5 rounded-xl p-4 space-y-3">
@@ -643,33 +643,35 @@ Only include items whose ids exist in the library list above. Return valid JSON 
 
               {/* Preview of selected email template */}
               {modal.data.email_template_id && emailTmplMap[modal.data.email_template_id] && (
-                <div className="border border-border rounded-lg p-3 bg-muted/20">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-1.5">
-                      <Mail className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-xs font-medium">{emailTmplMap[modal.data.email_template_id].name}</span>
+                <div className="border border-border rounded-lg p-3 bg-muted/20 overflow-hidden min-w-0">
+                  <div className="flex items-center justify-between gap-2 mb-2 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Mail className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                      <span className="text-xs font-medium truncate">{emailTmplMap[modal.data.email_template_id].name}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">{emailTmplMap[modal.data.email_template_id].subject}</span>
+                    <span className="text-xs text-muted-foreground truncate flex-shrink-0">{emailTmplMap[modal.data.email_template_id].subject}</span>
                   </div>
                   <div
-                    className="text-xs text-muted-foreground line-clamp-3 prose prose-xs max-w-none"
+                    className="text-xs text-muted-foreground line-clamp-3 prose prose-xs overflow-hidden break-words overflow-x-hidden w-full"
                     dangerouslySetInnerHTML={{ __html: emailTmplMap[modal.data.email_template_id].body_html }}
                   />
                 </div>
               )}
+            </div>
+          )}
 
-              {/* Footer */}
-              <div className="flex gap-2 justify-end pt-3 border-t border-border">
-                <Button variant="outline" onClick={() => setModal(null)}>Cancel</Button>
-                <Button type="button" variant="outline" className="gap-1.5"
-                  onClick={() => setPreviewTemplate(modal.data)}>
-                  <Eye className="w-3.5 h-3.5" /> Preview in Portal
-                </Button>
-                <Button onClick={save} disabled={saving || !modal.data.name} className="gap-2">
-                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Save Template
-                </Button>
-              </div>
+          {/* Footer */}
+          {modal && (
+            <div className="flex gap-2 justify-end px-6 py-4 border-t border-border flex-shrink-0">
+              <Button variant="outline" onClick={() => setModal(null)}>Cancel</Button>
+              <Button type="button" variant="outline" className="gap-1.5"
+                onClick={() => setPreviewTemplate(modal.data)}>
+                <Eye className="w-3.5 h-3.5" /> Preview in Portal
+              </Button>
+              <Button onClick={save} disabled={saving || !modal.data.name} className="gap-2">
+                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Save Template
+              </Button>
             </div>
           )}
         </DialogContent>
