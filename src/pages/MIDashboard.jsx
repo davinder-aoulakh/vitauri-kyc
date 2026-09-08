@@ -79,12 +79,13 @@ export default function MIDashboard() {
     setLoading(true);
     setError(null);
     try {
+      const canViewUsers = currentUser?.role === 'admin' || currentUser?.data?.role === 'admin';
       const [casesData, clientsData, hitsData, aiData, usersData, controlData] = await Promise.all([
         base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 1000),
         base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 1000),
         base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
         base44.entities.AiAgentRun.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
-        base44.entities.User.list(),
+        canViewUsers ? base44.entities.User.list().catch(() => []) : Promise.resolve([]),
         base44.entities.ControlMeasure.filter({ tenant_id: currentUser.tenant_id }),
       ]);
       setCases(casesData || []);
