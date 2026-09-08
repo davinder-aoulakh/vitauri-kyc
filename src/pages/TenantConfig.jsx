@@ -229,7 +229,7 @@ export default function TenantConfig() {
           </TabsContent>
 
           <TabsContent value="integrations" className="mt-5">
-            <IntegrationsTab />
+            <IntegrationsTab tenant={tenant} />
           </TabsContent>
 
         </Tabs>

@@ -66,6 +66,10 @@
           "item_id": {
             "type": "string"
           },
+          "sort_order": {
+            "type": "number",
+            "description": "Display order within this request"
+          },
           "item_type": {
             "type": "string",
             "enum": [

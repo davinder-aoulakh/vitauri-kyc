@@ -836,7 +836,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
 
           {/* Item grid */}
           <div className="portal-item-grid">
-            {(outreach.items || []).map((item, idx) => {
+            {[...(outreach.items || [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)).map((item, idx) => {
               const s = states[item.item_id] || {};
               const ft = inferFieldType(item);
 

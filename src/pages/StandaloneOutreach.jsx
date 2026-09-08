@@ -141,7 +141,6 @@ export default function StandaloneOutreach() {
 
     if (tmpl.items?.length > 0) {
       const itemIds = tmpl.items
-        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
         .map(i => i.outreach_template_id)
         .filter(Boolean);
       setSelectedItems(itemIds);
@@ -242,7 +241,7 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
 
   async function sendAll() {
     setSending(true);
-    const items = selectedItems.map(id => {
+    const items = selectedItems.map((id, idx) => {
       const item = libraryItems.find(d => d.id === id);
       return {
         // Core fields
@@ -250,6 +249,7 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
         label:       item?.label || id,
         description: item?.description || '',
         status:      'Requested',
+        sort_order:  idx,
 
         // Field type — BOTH slots so portal resolves correctly
         field_type: item?.field_type || 'textarea',

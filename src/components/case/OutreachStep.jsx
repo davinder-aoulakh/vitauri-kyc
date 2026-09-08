@@ -188,7 +188,6 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
 
   function applyFormTemplate(formTmpl) {
     const itemIds = (formTmpl.items || [])
-      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
       .map(i => i.outreach_template_id)
       .filter(id => libraryItems.find(lib => lib.id === id));
 
@@ -267,7 +266,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
     const tokenExpiry = new Date(deadline);
     tokenExpiry.setDate(tokenExpiry.getDate() + 1);
 
-    const items = selectedItems.map(id => {
+    const items = selectedItems.map((id, idx) => {
       const item = libraryItems.find(d => d.id === id);
       return {
         item_id: id,
@@ -279,6 +278,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
         validation_required: item?.validation_required || false,
         validation_accepted_file_types: item?.validation_accepted_file_types || [],
         status: 'Requested',
+        sort_order: idx,
       };
     });
 

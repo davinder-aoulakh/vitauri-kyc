@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
+import { base44 } from '@/api/base44Client';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { AlertTriangle, ExternalLink, CheckCircle, Circle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { AlertTriangle, ExternalLink, CheckCircle, Circle, Loader2, ListOrdered } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 
 const INTEGRATIONS = [
   {
@@ -47,12 +50,36 @@ const INTEGRATIONS = [
   },
 ];
 
-export default function IntegrationsTab() {
+export default function IntegrationsTab({ tenant }) {
   const [values, setValues]   = useState({});
   const [enabled, setEnabled] = useState({ kvk: true });
+  const [fixing, setFixing]   = useState(false);
+  const { toast } = useToast();
 
   function setField(intKey, fieldKey, val) {
     setValues(v => ({ ...v, [intKey]: { ...(v[intKey] || {}), [fieldKey]: val } }));
+  }
+
+  async function fixItemOrdering() {
+    if (!tenant?.id) return;
+    setFixing(true);
+    const requests = await base44.entities.OutreachRequest.filter({ tenant_id: tenant.id });
+    const patches = [];
+    for (const req of (requests || [])) {
+      const items = req.items || [];
+      const needsPatch = items.some(i => i.sort_order === undefined || i.sort_order === null);
+      if (!needsPatch) continue;
+      const patchedItems = items.map((item, idx) => ({
+        ...item,
+        sort_order: item.sort_order ?? idx,
+      }));
+      patches.push({ id: req.id, items: patchedItems });
+    }
+    if (patches.length > 0) {
+      await base44.entities.OutreachRequest.bulkUpdate(patches);
+    }
+    setFixing(false);
+    toast({ description: `Fixed item ordering on ${patches.length} outreach request(s).` });
   }
 
   return (
@@ -65,6 +92,21 @@ export default function IntegrationsTab() {
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
         <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
         <span className="text-xs text-amber-700">Integration credentials are stored securely. Never share API keys. Changes are effective immediately for new operations.</span>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <span className="font-semibold text-sm">Fix Outreach Item Ordering</span>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              One-time backfill that assigns a display order to existing outreach requests so item ordering in the client portal matches how items were configured.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" className="text-xs gap-1.5 flex-shrink-0" onClick={fixItemOrdering} disabled={fixing}>
+            {fixing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ListOrdered className="w-3.5 h-3.5" />}
+            {fixing ? 'Fixing…' : 'Fix Item Ordering'}
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-3">
