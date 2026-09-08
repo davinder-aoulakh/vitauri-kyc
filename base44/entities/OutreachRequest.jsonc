@@ -162,6 +162,129 @@
           },
           "idv_workflow_name": {
             "type": "string"
+          },
+          "didit_session_id": {
+            "type": "string",
+            "description": "Didit session UUID for this IDV field"
+          },
+          "didit_session_url": {
+            "type": "string",
+            "description": "Didit hosted verification URL for this session"
+          },
+          "didit_session_status": {
+            "type": "string",
+            "description": "Raw Didit session status e.g. Approved, Declined, In Review"
+          },
+          "idv_docs_created_for_session": {
+            "type": "string",
+            "description": "Session ID for which Document records have already been created \u2014 dedup guard"
+          },
+          "idv_status": {
+            "type": "string",
+            "enum": [
+              "Pending",
+              "Pass",
+              "Fail",
+              "Inconclusive",
+              "Expired"
+            ]
+          },
+          "idv_similarity_score": {
+            "type": "number",
+            "description": "Face match % score"
+          },
+          "idv_confidence": {
+            "type": "number"
+          },
+          "idv_liveness_passed": {
+            "type": "boolean"
+          },
+          "idv_liveness_score": {
+            "type": "number"
+          },
+          "idv_document_type": {
+            "type": "string"
+          },
+          "idv_document_number": {
+            "type": "string"
+          },
+          "idv_document_expiry": {
+            "type": "string",
+            "format": "date"
+          },
+          "idv_extracted_first_name": {
+            "type": "string"
+          },
+          "idv_extracted_last_name": {
+            "type": "string"
+          },
+          "idv_extracted_dob": {
+            "type": "string",
+            "format": "date"
+          },
+          "idv_extracted_nationality": {
+            "type": "string"
+          },
+          "idv_issuing_country": {
+            "type": "string"
+          },
+          "idv_failure_reason": {
+            "type": "string"
+          },
+          "idv_aml_hits": {
+            "type": "number"
+          },
+          "idv_aml_status": {
+            "type": "string"
+          },
+          "idv_aml_screenings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "idv_aml_warnings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "idv_aml_match_threshold": {
+            "type": "number"
+          },
+          "idv_aml_approve_threshold": {
+            "type": "number"
+          },
+          "idv_aml_review_threshold": {
+            "type": "number"
+          },
+          "idv_aml_name_weight": {
+            "type": "number"
+          },
+          "idv_aml_dob_weight": {
+            "type": "number"
+          },
+          "idv_aml_country_weight": {
+            "type": "number"
+          },
+          "idv_aml_adverse_media": {
+            "type": "boolean"
+          },
+          "idv_aml_ongoing_monitoring": {
+            "type": "boolean"
+          },
+          "idv_checked_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "idv_provider": {
+            "type": "string"
+          },
+          "idv_face_raw": {
+            "type": "object"
+          },
+          "idv_liveness_raw": {
+            "type": "object"
           }
         }
       }
