@@ -242,6 +242,9 @@ export default function ClientPortal() {
             idv_status: item.idv_status,
             idv_similarity_score: item.idv_similarity_score,
             idv_confidence: item.idv_confidence,
+            idv_failure_reason: item.idv_failure_reason,
+            idv_liveness_passed: item.idv_liveness_passed,
+            idv_liveness_score: item.idv_liveness_score,
           } : null,
         };
       });
@@ -491,7 +494,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
           ) : passed ? (
             <><div style={{ fontSize: '56px', marginBottom: '16px' }}>✅</div><div style={{ fontWeight: 700, fontSize: '20px', color: '#059669', marginBottom: '10px' }}>Identity Verified!</div><div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>Your identity has been successfully verified.</div><div style={{ background: '#F0FDF4', border: '1px solid #10B981', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left' }}><span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span><div><div style={{ fontWeight: 600, fontSize: '14px', color: '#065F46', marginBottom: '4px' }}>Continue on your laptop</div><div style={{ fontSize: '13px', color: '#047857', lineHeight: 1.5 }}>Return to your laptop or desktop — it has already updated with your verification result. You can close this tab.</div></div></div></>
           ) : (
-            <><div style={{ fontSize: '56px', marginBottom: '16px' }}>🪪</div><div style={{ fontWeight: 700, fontSize: '18px', color: '#1A2332', marginBottom: '10px' }}>Verification Complete</div><div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>Thank you for completing the verification step.</div><div style={{ background: '#EEF4FF', border: '1px solid #BFDBFE', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left' }}><span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span><div><div style={{ fontWeight: 600, fontSize: '14px', color: '#1E40AF', marginBottom: '4px' }}>Return to your laptop</div><div style={{ fontSize: '13px', color: '#3B82F6', lineHeight: 1.5 }}>Please return to your laptop or desktop to see your result and continue your application. You can close this tab.</div></div></div></>
+            <><div style={{ fontSize: '56px', marginBottom: '16px' }}>🪪</div><div style={{ fontWeight: 700, fontSize: '18px', color: '#92400E', marginBottom: '10px' }}>Verification Complete</div><div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>Thank you for completing the verification step.</div><div style={{ background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left' }}><span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span><div><div style={{ fontWeight: 600, fontSize: '14px', color: '#92400E', marginBottom: '4px' }}>Return to your laptop</div><div style={{ fontSize: '13px', color: '#78350F', lineHeight: 1.5 }}>Please return to your laptop or desktop to see your result and continue your application. You can close this tab.</div></div></div></>
           )}
           <div style={{ marginTop: '24px', fontSize: '11px', color: '#9CA3AF' }}>Powered by Didit · Secure identity verification</div>
         </div>
@@ -891,10 +894,36 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
 
                   {/* IDV result confirmation — stays visible even after completion */}
                   {ft === 'id_verification' && s.done && s.idvResult && (
-                    <div style={{ marginTop: 4, padding: '10px 12px', borderRadius: 10, background: s.idvResult.idv_status === 'Pass' ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${s.idvResult.idv_status === 'Pass' ? '#10B981' : '#EF4444'}`, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {s.idvResult.idv_status === 'Pass' ? '✅' : '❌'}
-                      Identity verification {s.idvResult.idv_status === 'Pass' ? 'passed' : 'failed'} — {s.idvResult.idv_similarity_score}% face match
-                    </div>
+                    s.idvResult.idv_status === 'Pass' ? (
+                      <div style={{ marginTop: 4, padding: '10px 12px', borderRadius: 10, background: '#F0FDF4', border: '1px solid #10B981', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        ✅ Identity verification passed — {s.idvResult.idv_similarity_score}% face match
+                      </div>
+                    ) : s.idvResult.idv_status === 'Inconclusive' ? (
+                      <>
+                        <style>{`
+                          @keyframes idv-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+                          @keyframes idv-icon-in { from { opacity: 0; transform: scale(.7) rotate(-12deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
+                          .idv-box { box-sizing: border-box; display: inline-flex; align-items: center; gap: 10px; margin-top: 4px; padding: 11px 14px; border: 1px solid #3B82F6; border-radius: 10px; background: #EFF6FF; box-shadow: 0 3px 10px rgba(59,130,246,.1); font-size: 13px; line-height: 1.45; font-weight: 500; letter-spacing: .005em; color: #17335f; animation: idv-in .32s cubic-bezier(.2,.8,.2,1) both; }
+                          .idv-box:hover { background: #E5F0FF; border-color: #2563EB; box-shadow: 0 5px 14px rgba(59,130,246,.16); }
+                          .idv-box:active { background: #DBEAFE; box-shadow: 0 2px 6px rgba(59,130,246,.12); }
+                          .idv-box:focus-visible { outline: 3px solid rgba(59,130,246,.28); outline-offset: 2px; }
+                          .idv-box .idv-icon, .idv-box .idv-check { transition: background-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease; }
+                          .idv-box .idv-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 22px; width: 22px; height: 22px; border-radius: 50%; background: #DBEAFE; color: #2563EB; font-size: 14px; line-height: 1; transform: translateZ(0); animation: idv-icon-in .45s ease-out .12s both; }
+                          .idv-box .idv-check { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 19px; width: 19px; height: 19px; border-radius: 50%; background: #16A34A; color: #fff; font-size: 12px; font-weight: 700; line-height: 1; box-shadow: 0 1px 3px rgba(22,163,74,.25); }
+                          .idv-box:hover .idv-icon { transform: rotate(-8deg); }
+                          .idv-box:hover .idv-check { box-shadow: 0 2px 6px rgba(22,163,74,.35); }
+                        `}</style>
+                        <div className="idv-box" tabIndex={0}>
+                          <span className="idv-check" aria-hidden="true">✓</span>
+                          <span className="idv-icon" aria-hidden="true">⌕</span>
+                          <span>Identity verification is being reviewed — {s.idvResult.idv_similarity_score}% face match. We'll confirm your result shortly.</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ marginTop: 4, padding: '10px 12px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #EF4444', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        ❌ Identity verification failed{s.idvResult.idv_failure_reason ? ` — ${s.idvResult.idv_failure_reason}` : ` — ${s.idvResult.idv_similarity_score}% face match`}
+                      </div>
+                    )
                   )}
 
                   {/* Input area — only if not already done */}
