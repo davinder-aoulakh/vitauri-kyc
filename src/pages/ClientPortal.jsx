@@ -115,6 +115,8 @@ export default function ClientPortal() {
   const [diditCallbackDone, setDiditCallbackDone] = useState(false);
   const [diditCallbackStatus, setDiditCallbackStatus] = useState('');
   const [diditCallbackParams, setDiditCallbackParams] = useState(null);
+  const [diditCallbackResult, setDiditCallbackResult] = useState(null);
+  const diditPollRef = useRef(null);
 
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
@@ -149,16 +151,45 @@ export default function ClientPortal() {
     if (!diditCallbackParams || !tenant?.id) return;
     const { sessionId, outreachId, itemId, isMobile } = diditCallbackParams;
     setDiditCallbackParams(null);
-    base44.functions.invoke('getDiditSessionResult', {
-      session_id:  sessionId,
-      outreach_id: outreachId,
-      item_id:     itemId,
-      tenant_id:   tenant.id,
-    }).then(res => {
-      const data = res?.data || res;
-      if (isMobile) { setDiditCallbackStatus(data?.idv_status === 'Pass' ? 'pass' : 'done'); }
-      else { if (data?.ok || data?.idv_status) loadByToken(); }
-    }).catch(() => { if (isMobile) setDiditCallbackStatus('done'); });
+
+    if (!isMobile) {
+      base44.functions.invoke('getDiditSessionResult', {
+        session_id: sessionId, outreach_id: outreachId, item_id: itemId, tenant_id: tenant.id,
+      }).then(res => {
+        const data = res?.data || res;
+        if (data?.ok || data?.idv_status) loadByToken();
+      }).catch(() => {});
+      return;
+    }
+
+    // Mobile: poll until Didit returns a terminal result, with a timeout fallback.
+    const TERMINAL = ['Pass', 'Fail', 'Inconclusive', 'Expired'];
+    const MAX_ATTEMPTS = 45; // ~3 minutes at 4s intervals
+    let attempts = 0;
+
+    const poll = async () => {
+      attempts++;
+      try {
+        const res = await base44.functions.invoke('getDiditSessionResult', {
+          session_id: sessionId, outreach_id: outreachId, item_id: itemId, tenant_id: tenant.id,
+        });
+        const data = res?.data || res;
+        if (data?.idv_status && TERMINAL.includes(data.idv_status)) {
+          clearInterval(diditPollRef.current);
+          setDiditCallbackResult(data);
+          setDiditCallbackStatus(data.idv_status === 'Pass' ? 'pass' : 'fail');
+          return;
+        }
+      } catch { /* transient — keep polling */ }
+      if (attempts >= MAX_ATTEMPTS) {
+        clearInterval(diditPollRef.current);
+        setDiditCallbackStatus('done');
+      }
+    };
+
+    poll();
+    diditPollRef.current = setInterval(poll, 4000);
+    return () => clearInterval(diditPollRef.current);
   }, [diditCallbackParams, tenant]);
 
   // Apply favicon + page title when tenant loads
@@ -486,6 +517,8 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
   if (diditCallbackDone) {
     const passed = diditCallbackStatus === 'pass';
     const checking = diditCallbackStatus === 'checking';
+    const failed = diditCallbackStatus === 'fail';
+    const isInconclusive = diditCallbackResult?.idv_status === 'Inconclusive';
     return (
       <div style={{ minHeight: '100vh', background: '#F4F6FA', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
         <div style={{ background: '#FFFFFF', borderRadius: '20px', padding: '40px 32px', textAlign: 'center', maxWidth: '360px', width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
@@ -493,6 +526,23 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
             <><div style={{ fontSize: '48px', marginBottom: '16px' }}>🔄</div><div style={{ fontWeight: 700, fontSize: '18px', color: '#1A2332', marginBottom: '8px' }}>Confirming verification…</div><div style={{ fontSize: '14px', color: '#64748B', lineHeight: 1.5 }}>Just a moment while we confirm your result.</div></>
           ) : passed ? (
             <><div style={{ fontSize: '56px', marginBottom: '16px' }}>✅</div><div style={{ fontWeight: 700, fontSize: '20px', color: '#059669', marginBottom: '10px' }}>Identity Verified!</div><div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>Your identity has been successfully verified.</div><div style={{ background: '#F0FDF4', border: '1px solid #10B981', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left' }}><span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span><div><div style={{ fontWeight: 600, fontSize: '14px', color: '#065F46', marginBottom: '4px' }}>Continue on your laptop</div><div style={{ fontSize: '13px', color: '#047857', lineHeight: 1.5 }}>Return to your laptop or desktop — it has already updated with your verification result. You can close this tab.</div></div></div></>
+          ) : failed ? (
+            <>
+              <div style={{ fontSize: '56px', marginBottom: '16px' }}>{isInconclusive ? '🪪' : '❌'}</div>
+              <div style={{ fontWeight: 700, fontSize: '18px', color: isInconclusive ? '#92400E' : '#DC2626', marginBottom: '10px' }}>
+                {isInconclusive ? 'Verification Under Review' : 'Verification Unsuccessful'}
+              </div>
+              <div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>
+                {diditCallbackResult?.idv_failure_reason || (diditCallbackResult?.idv_similarity_score != null ? `${diditCallbackResult.idv_similarity_score}% face match.` : 'The verification could not be confirmed.')}
+              </div>
+              <div style={{ background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left' }}>
+                <span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: '#92400E', marginBottom: '4px' }}>Return to your laptop</div>
+                  <div style={{ fontSize: '13px', color: '#78350F', lineHeight: 1.5 }}>Please return to your laptop or desktop to see your result and continue your application. You can close this tab.</div>
+                </div>
+              </div>
+            </>
           ) : (
             <><div style={{ fontSize: '56px', marginBottom: '16px' }}>🪪</div><div style={{ fontWeight: 700, fontSize: '18px', color: '#92400E', marginBottom: '10px' }}>Verification Complete</div><div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>Thank you for completing the verification step.</div><div style={{ background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left' }}><span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span><div><div style={{ fontWeight: 600, fontSize: '14px', color: '#92400E', marginBottom: '4px' }}>Return to your laptop</div><div style={{ fontSize: '13px', color: '#78350F', lineHeight: 1.5 }}>Please return to your laptop or desktop to see your result and continue your application. You can close this tab.</div></div></div></>
           )}
