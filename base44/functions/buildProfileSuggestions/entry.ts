@@ -11,8 +11,14 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 const CONFIDENCE_THRESHOLD = 70;
 
-// NP fields we can extract from sources
-const NP_FIELDS = ['full_name','date_of_birth','nationality','country_of_residence','id_type','id_number'];
+// NP fields we can extract from sources — includes dot-path keys for nested residential_address
+const NP_FIELDS = [
+  'full_name','first_names','last_name','initials','preferred_name','gender',
+  'date_of_birth','country_of_birth','place_of_birth','nationality','country_of_residence',
+  'id_type','id_number',
+  'residential_address.country','residential_address.street','residential_address.number',
+  'residential_address.zipcode','residential_address.city',
+];
 // ORG fields we can extract from sources
 const ORG_FIELDS = ['full_name','legal_form','registration_number','registered_country','registered_address','sector','lei_code'];
 
@@ -98,11 +104,23 @@ function extractFromOutreach(outreaches: any[], isOrg: boolean): Record<string, 
 
       if (!isOrg) {
         if (label.includes('full name') || label.includes('legal name')) push('full_name', val, ref, 80);
+        if (label.includes('first name')) push('first_names', val, ref, 78);
+        if (label.includes('last name') || label.includes('surname')) push('last_name', val, ref, 78);
+        if (label.includes('initials')) push('initials', val, ref, 70);
+        if (label.includes('preferred name')) push('preferred_name', val, ref, 70);
+        if (label.includes('gender')) push('gender', val, ref, 70);
         if (label.includes('date of birth') || label.includes('dob')) push('date_of_birth', val, ref, 75);
+        if (label.includes('country of birth') || label.includes('birth country')) push('country_of_birth', val, ref, 75);
+        if (label.includes('place of birth') || label.includes('birth place')) push('place_of_birth', val, ref, 75);
         if (label.includes('nationalit')) push('nationality', val, ref, 75);
         if (label.includes('residence') || label.includes('country of residence')) push('country_of_residence', val, ref, 75);
         if (label.includes('id type') || label.includes('document type')) push('id_type', val, ref, 75);
         if (label.includes('id number') || label.includes('document number') || label.includes('passport')) push('id_number', val, ref, 75);
+        if (label.includes('street') && !label.includes('postal')) push('residential_address.street', val, ref, 72);
+        if (label.includes('house number') || label.includes('street number')) push('residential_address.number', val, ref, 70);
+        if (label.includes('zipcode') || label.includes('postal code') || label.includes('zip code')) push('residential_address.zipcode', val, ref, 72);
+        if (label.includes('city')) push('residential_address.city', val, ref, 72);
+        if (label.includes('residential country')) push('residential_address.country', val, ref, 72);
       } else {
         if (label.includes('legal name') || label.includes('company name') || label.includes('full name')) push('full_name', val, ref, 80);
         if (label.includes('legal form') || label.includes('entity type')) push('legal_form', val, ref, 75);
@@ -140,7 +158,12 @@ function extractFromOcr(ocrResults: Array<{ doc_id: string; file_name: string; e
 
     if (!isOrg) {
       push('full_name', ex.full_name, r.doc_id, r.file_name, conf('full_name', 90));
+      push('first_names', ex.first_names, r.doc_id, r.file_name, conf('first_names', 88));
+      push('last_name', ex.last_name, r.doc_id, r.file_name, conf('last_name', 88));
+      push('gender', ex.gender, r.doc_id, r.file_name, conf('gender', 82));
       push('date_of_birth', ex.date_of_birth, r.doc_id, r.file_name, conf('date_of_birth', 90));
+      push('country_of_birth', ex.country_of_birth, r.doc_id, r.file_name, conf('country_of_birth', 80));
+      push('place_of_birth', ex.place_of_birth, r.doc_id, r.file_name, conf('place_of_birth', 80));
       push('nationality', ex.nationality, r.doc_id, r.file_name, conf('nationality', 88));
       push('country_of_residence', ex.address ? r.extracted.address : ex.country_of_issue, r.doc_id, r.file_name, conf('country_of_residence', 65));
       push('id_type', ex.id_type, r.doc_id, r.file_name, conf('id_type', 85));

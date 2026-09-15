@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { getNestedValue, buildFieldUpdatePayload } from '@/lib/clientNameUtils';
 
 const TX_TYPES = ['Payments', 'Investments', 'Transfers', 'FX', 'Other'];
 const TX_FREQUENCIES = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annually', 'Ad hoc'];
@@ -34,11 +35,23 @@ const CONFIDENCE_THRESHOLD = 70;
 
 const NP_FIELD_LABELS = {
   full_name:           'Full Name',
+  first_names:         'First Names',
+  last_name:           'Last Name',
+  initials:            'Initials',
+  preferred_name:      'Preferred Name',
+  gender:              'Gender',
   date_of_birth:       'Date of Birth',
+  country_of_birth:    'Country of Birth',
+  place_of_birth:      'Place of Birth',
   nationality:         'Nationality',
   country_of_residence:'Country of Residence',
   id_type:             'ID Type',
   id_number:           'ID Number',
+  'residential_address.country': 'Residential Address — Country',
+  'residential_address.street':  'Residential Address — Street',
+  'residential_address.number':  'Residential Address — Number',
+  'residential_address.zipcode': 'Residential Address — Zipcode',
+  'residential_address.city':    'Residential Address — City',
 };
 const ORG_FIELD_LABELS = {
   full_name:           'Legal Entity Name',
@@ -187,11 +200,11 @@ Write 2–4 sentences: (1) why the client is engaging, (2) intended products/ser
   // ── Field: Accept ────────────────────────────────────────────────────────────
   async function acceptField(fieldKey, suggestion) {
     setAcceptingField(fieldKey);
-    const before = { [fieldKey]: client?.[fieldKey] || null };
+    const before = { [fieldKey]: getNestedValue(client, fieldKey) || null };
     const after  = { [fieldKey]: suggestion.value };
 
-    // Atomic write to Client entity
-    await base44.entities.Client.update(client.id, { [fieldKey]: suggestion.value });
+    // Atomic write to Client entity — handles "parent.child" dot-path keys (e.g. residential_address.city)
+    await base44.entities.Client.update(client.id, buildFieldUpdatePayload(client, fieldKey, suggestion.value));
 
     // Update suggestion status
     const updated = {
@@ -244,9 +257,9 @@ Write 2–4 sentences: (1) why the client is engaging, (2) intended products/ser
 
   // ── Field: Manual edit ───────────────────────────────────────────────────────
   async function handleManualEdit(fieldKey, value) {
-    const before = { [fieldKey]: client?.[fieldKey] || null };
+    const before = { [fieldKey]: getNestedValue(client, fieldKey) || null };
     const after  = { [fieldKey]: value };
-    await base44.entities.Client.update(client.id, { [fieldKey]: value });
+    await base44.entities.Client.update(client.id, buildFieldUpdatePayload(client, fieldKey, value));
     const updated = {
       ...suggestions,
       client_fields: {
@@ -277,11 +290,11 @@ Write 2–4 sentences: (1) why the client is engaging, (2) intended products/ser
     });
     if (toAccept.length === 0) return;
 
-    const clientUpdates = {};
+    let clientUpdates = {};
     const fieldUpdates = { ...suggestions.client_fields };
 
     for (const [fieldKey, s] of toAccept) {
-      clientUpdates[fieldKey] = s.value;
+      clientUpdates = { ...clientUpdates, ...buildFieldUpdatePayload({ ...client, ...clientUpdates }, fieldKey, s.value) };
       fieldUpdates[fieldKey] = { ...s, status: 'confirmed' };
     }
 
@@ -299,7 +312,7 @@ Write 2–4 sentences: (1) why the client is engaging, (2) intended products/ser
         actor_name:    currentUser?.full_name,
         actor_type:    'User',
         event_type:    'profile_field_confirmed',
-        before_state:  { [fieldKey]: client?.[fieldKey] || null },
+        before_state:  { [fieldKey]: getNestedValue(client, fieldKey) || null },
         after_state:   { [fieldKey]: s.value },
         notes:         `field=${fieldKey} source=${s.source_type}:${s.source_ref} confidence=${s.confidence}% (batch accept)`,
       });
@@ -561,7 +574,7 @@ Write 2–4 sentences: (1) why the client is engaging, (2) intended products/ser
                     fieldKey={key}
                     label={fieldLabels[key]}
                     suggestion={clientFields[key] || null}
-                    currentValue={client?.[key] || ''}
+                    currentValue={getNestedValue(client, key) || ''}
                     onAccept={acceptField}
                     onReject={rejectField}
                     onManualEdit={handleManualEdit}

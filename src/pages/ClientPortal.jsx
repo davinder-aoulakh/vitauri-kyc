@@ -465,15 +465,36 @@ export default function ClientPortal() {
 
     try {
       const clientUpdates = {};
+      let addrUpdates = null;
+      let newContactEntry = null;
       for (const item of updatedItems) {
         if (!item.response_text || !['Received', 'Verified'].includes(item.status)) continue;
         const lbl = (item.label || '').toLowerCase();
         const val = item.response_text.trim();
         if (!val) continue;
-        if ((lbl.includes('email') || lbl.includes('e-mail')) && !client?.primary_contact_email) clientUpdates.primary_contact_email = val;
-        if ((lbl.includes('phone') || lbl.includes('mobile') || lbl.includes('tel')) && !client?.primary_contact_phone) clientUpdates.primary_contact_phone = val;
+        if ((lbl.includes('email') || lbl.includes('e-mail')) && !client?.primary_contact_email) {
+          clientUpdates.primary_contact_email = val;
+          if (!(client?.contact_entries || []).some(e => e.type === 'email')) newContactEntry = { type: 'email', value: val, is_preferred: true };
+        }
+        if ((lbl.includes('phone') || lbl.includes('mobile') || lbl.includes('tel')) && !client?.primary_contact_phone) {
+          clientUpdates.primary_contact_phone = val;
+          if (!(client?.contact_entries || []).some(e => e.type === 'phone' || e.type === 'mobile')) newContactEntry = { type: 'phone', value: val, is_preferred: true };
+        }
         if ((lbl.includes('country of residence') || lbl.includes('residence country') || lbl.includes('country_of_residence')) && !client?.country_of_residence) clientUpdates.country_of_residence = val;
+        if ((lbl.includes('place of birth') || lbl.includes('birth place')) && !client?.place_of_birth) clientUpdates.place_of_birth = val;
+        if ((lbl.includes('country of birth') || lbl.includes('birth country')) && !client?.country_of_birth) clientUpdates.country_of_birth = val;
+        if (lbl.includes('gender') && !client?.gender) clientUpdates.gender = val;
+        if (lbl.includes('preferred language') && !client?.language) clientUpdates.language = val;
+        if (lbl.includes('initials') && !client?.initials) clientUpdates.initials = val;
+        if (lbl.includes('preferred name') && !client?.preferred_name) clientUpdates.preferred_name = val;
+        if ((lbl.includes('street') && !lbl.includes('postal')) && !client?.residential_address?.street) addrUpdates = { ...(addrUpdates || {}), street: val };
+        if ((lbl.includes('house number') || lbl.includes('street number')) && !client?.residential_address?.number) addrUpdates = { ...(addrUpdates || {}), number: val };
+        if ((lbl.includes('zipcode') || lbl.includes('postal code') || lbl.includes('zip code')) && !client?.residential_address?.zipcode) addrUpdates = { ...(addrUpdates || {}), zipcode: val };
+        if (lbl.includes('city') && !client?.residential_address?.city) addrUpdates = { ...(addrUpdates || {}), city: val };
+        if ((lbl.includes('residential country') || lbl === 'country') && !client?.residential_address?.country) addrUpdates = { ...(addrUpdates || {}), country: val };
       }
+      if (addrUpdates) clientUpdates.residential_address = { ...(client?.residential_address || {}), ...addrUpdates };
+      if (newContactEntry) clientUpdates.contact_entries = [...(client?.contact_entries || []), newContactEntry];
       if (Object.keys(clientUpdates).length > 0 && outreach.client_id) {
         await base44.entities.Client.update(outreach.client_id, clientUpdates);
         setClient(prev => prev ? { ...prev, ...clientUpdates } : prev);

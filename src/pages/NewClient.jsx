@@ -12,6 +12,7 @@ import { findDuplicates, DEDUP_THRESHOLD } from '@/lib/dedup';
 import RestrictedClientGate from '@/components/archive/RestrictedClientGate';
 import { NaturalPersonStep2A, NaturalPersonStep2B } from '@/components/client/forms/NaturalPersonForm';
 import { OrganizationStep2A, OrganizationStep2B } from '@/components/client/forms/OrganizationForm';
+import { computeFullName, syncPreferredContacts } from '@/lib/clientNameUtils';
 
 // Steps: 1=Type, 2=Core Details, 3=Additional Details, 4=Review
 const STEP_LABELS = {
@@ -32,8 +33,12 @@ export default function NewClient() {
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
 
   const [form, setForm] = useState({
-    full_name: '', date_of_birth: '', nationality: '', country_of_residence: '',
+    full_name: '', first_names: '', last_name: '', initials: '', preferred_name: '',
+    gender: 'Unknown', category: 'Klant', external_id: '',
+    date_of_birth: '', decease_date: '', nationality: '', country_of_birth: '', place_of_birth: '',
+    country_of_residence: '', language: 'en',
     id_type: '', id_number: '', id_expiry_date: '',
+    residential_address: {}, postal_address: {}, contact_entries: [],
     primary_contact_email: '', primary_contact_phone: '', primary_contact_name: '',
     registration_number: '', lei_code: '', registered_country: '',
     registered_address: '', sector: '', legal_form: '',
@@ -42,6 +47,13 @@ export default function NewClient() {
   });
 
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }));
+
+  // Keep full_name computed for NP clients as first_names/last_name change
+  useEffect(() => {
+    if (clientType === 'NP') {
+      setForm(f => ({ ...f, full_name: computeFullName(f.first_names, f.last_name) }));
+    }
+  }, [form.first_names, form.last_name, clientType]);
 
   useEffect(() => {
     if (currentUser?.tenant_id) {
@@ -81,8 +93,10 @@ export default function NewClient() {
     }
 
     setSaving(true);
+    const contactMirror = syncPreferredContacts(form.contact_entries);
     const client = await base44.entities.Client.create({
       ...form,
+      ...(clientType === 'NP' && form.contact_entries?.length > 0 ? contactMirror : {}),
       tenant_id: currentUser.tenant_id,
       client_type: clientType,
       status: 'Prospect',
@@ -219,7 +233,7 @@ export default function NewClient() {
                     </Button>
                     <Button
                       onClick={handleStep2Next}
-                      disabled={!form.full_name}
+                      disabled={clientType === 'NP' ? (!form.first_names || !form.last_name) : !form.full_name}
                       style={{ backgroundColor: tenantColor }}
                       className="flex-1 text-white"
                     >
@@ -288,13 +302,17 @@ export default function NewClient() {
                   <ReviewRow label="Entity Classification" value={form.entity_classification} />
                 </>}
                 {clientType === 'NP' && <>
+                  <ReviewRow label="Preferred Name" value={form.preferred_name} />
+                  <ReviewRow label="Gender" value={form.gender} />
                   <ReviewRow label="Date of Birth" value={form.date_of_birth} />
+                  <ReviewRow label="Country / Place of Birth" value={[form.country_of_birth, form.place_of_birth].filter(Boolean).join(' / ')} />
                   <ReviewRow label="Nationality" value={form.nationality} />
                   <ReviewRow label="Country of Residence" value={form.country_of_residence} />
                   <ReviewRow label="ID Type" value={form.id_type} />
                   <ReviewRow label="ID Number" value={form.id_number} />
+                  <ReviewRow label="Residential Address" value={[form.residential_address?.street, form.residential_address?.city, form.residential_address?.country].filter(Boolean).join(', ')} />
                 </>}
-                <ReviewRow label="Contact Email" value={form.primary_contact_email} />
+                <ReviewRow label="Contact Email" value={clientType === 'NP' ? syncPreferredContacts(form.contact_entries).primary_contact_email : form.primary_contact_email} />
                 <ReviewRow label="Tax Residency" value={form.tax_residency} />
                 <ReviewRow label="TIN" value={form.tin} />
                 <ReviewRow label="Source Channel" value={form.source_channel} />

@@ -26,11 +26,16 @@ Deno.serve(async (req) => {
     const {
       tenant_id, full_name, legal_type,       // 'NP' | 'ORG'
       date_of_birth, nationality, country,
+      country_of_birth, residential_address_country, // optional enrichment fallbacks for `country`
       registration_number, document_number,
       case_id, client_id,                     // optional — for writing ScreeningHit records
       include_adverse_media = false,
       _test_only, api_key: testApiKey,
     } = params;
+
+    // Resolve the country sent to Didit: explicit `country` wins, then residential
+    // address country, then country of birth, then nationality.
+    const resolvedCountry = country || residential_address_country || country_of_birth || nationality;
 
     // ── TEST MODE ────────────────────────────────────────────────────────────
     if (_test_only) {
@@ -68,7 +73,7 @@ Deno.serve(async (req) => {
     };
     if (date_of_birth)    body.date_of_birth    = date_of_birth;
     if (nationality)      body.nationality       = nationality;
-    if (country)          body.country           = country;
+    if (resolvedCountry)  body.country           = resolvedCountry;
     if (document_number)  body.document_number   = document_number;
     else if (legal_type === 'ORG' && registration_number) body.document_number = registration_number;
     if (include_adverse_media) body.include_adverse_media = true;

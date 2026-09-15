@@ -142,6 +142,8 @@ Return ONLY valid JSON with no markdown, no explanation:
   "mrz_line2": string or null,
   "gender": string or null,
   "address": string or null,
+  "place_of_birth": string or null,
+  "country_of_birth": string or null,
   "field_confidence": {
     "full_name": number (0-100),
     "date_of_birth": number (0-100),
@@ -175,6 +177,8 @@ Return ONLY valid JSON with no markdown, no explanation:
           mrz_line2:        { type: ['string', 'null'] },
           gender:           { type: ['string', 'null'] },
           address:          { type: ['string', 'null'] },
+          place_of_birth:   { type: ['string', 'null'] },
+          country_of_birth: { type: ['string', 'null'] },
           field_confidence: { type: 'object' },
           confidence:       { type: 'number' },
           warnings:         { type: 'array', items: { type: 'string' } },

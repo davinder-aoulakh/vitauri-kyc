@@ -26,9 +26,56 @@
     },
     "full_name": {
       "type": "string",
-      "description": "Full name (NP) or Legal name (ORG)"
+      "description": "Full name (NP) or Legal name (ORG). For NP, auto-computed from first_names + last_name."
+    },
+    "first_names": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "last_name": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "initials": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "preferred_name": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "gender": {
+      "type": "string",
+      "enum": [
+        "Unknown",
+        "Male",
+        "Female",
+        "Other"
+      ],
+      "default": "Unknown",
+      "description": "NP only"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Klant",
+        "Prospect",
+        "Lead",
+        "Supplier",
+        "Other"
+      ],
+      "default": "Klant"
+    },
+    "external_id": {
+      "type": "string",
+      "description": "External CRM/system reference ID"
     },
     "date_of_birth": {
+      "type": "string",
+      "format": "date",
+      "description": "NP only"
+    },
+    "decease_date": {
       "type": "string",
       "format": "date",
       "description": "NP only"
@@ -37,9 +84,29 @@
       "type": "string",
       "description": "NP only"
     },
+    "country_of_birth": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "place_of_birth": {
+      "type": "string",
+      "description": "NP only"
+    },
     "country_of_residence": {
       "type": "string",
       "description": "NP only"
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "en",
+        "nl",
+        "de",
+        "fr",
+        "es",
+        "other"
+      ],
+      "default": "en"
     },
     "id_type": {
       "type": "string",
@@ -48,6 +115,78 @@
     "id_number": {
       "type": "string",
       "description": "NP only"
+    },
+    "residential_address": {
+      "type": "object",
+      "description": "Structured residential address",
+      "properties": {
+        "country": {
+          "type": "string"
+        },
+        "street": {
+          "type": "string"
+        },
+        "number": {
+          "type": "string"
+        },
+        "zipcode": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "area": {
+          "type": "string"
+        }
+      }
+    },
+    "postal_address": {
+      "type": "object",
+      "description": "Structured postal address (optional, if different from residential)",
+      "properties": {
+        "country": {
+          "type": "string"
+        },
+        "street": {
+          "type": "string"
+        },
+        "number": {
+          "type": "string"
+        },
+        "zipcode": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "area": {
+          "type": "string"
+        }
+      }
+    },
+    "contact_entries": {
+      "type": "array",
+      "description": "Multi-entry communication table \u2014 email/phone entries with a preferred flag per type",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "email",
+              "phone",
+              "mobile"
+            ]
+          },
+          "value": {
+            "type": "string"
+          },
+          "is_preferred": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
     },
     "registration_number": {
       "type": "string",
@@ -77,10 +216,12 @@
       "type": "string"
     },
     "primary_contact_email": {
-      "type": "string"
+      "type": "string",
+      "description": "Mirrors the preferred 'email' entry in contact_entries"
     },
     "primary_contact_phone": {
-      "type": "string"
+      "type": "string",
+      "description": "Mirrors the preferred 'phone'/'mobile' entry in contact_entries"
     },
     "risk_classification": {
       "type": "string",

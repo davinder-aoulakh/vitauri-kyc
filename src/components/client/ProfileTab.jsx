@@ -9,6 +9,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertTriangle, Save, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import OcrResultPanel from '@/components/client/OcrResultPanel';
+import AddressFields from '@/components/client/forms/AddressFields';
+import ContactEntriesTable from '@/components/client/forms/ContactEntriesTable';
+import { computeFullName, splitFullName, syncPreferredContacts } from '@/lib/clientNameUtils';
+
+const GENDERS = ['Unknown','Male','Female','Other'];
+const CATEGORIES = ['Klant','Prospect','Lead','Supplier','Other'];
+const LANGUAGES = [
+  { value: 'en', label: 'English' },
+  { value: 'nl', label: 'Dutch' },
+  { value: 'de', label: 'German' },
+  { value: 'fr', label: 'French' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'other', label: 'Other' },
+];
 
 const COUNTRIES = [
   'Netherlands (NL)','Belgium (BE)','Germany (DE)','France (FR)',
@@ -67,7 +81,12 @@ function SF({ label, value, onChange, options, disabled }) {
 
 export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrApplied }) {
   const { currentUser } = useTenant();
-  const [form, setForm] = useState({ ...client });
+  // Backfill first_names/last_name from full_name on first load for existing NP clients
+  const initialForm = { ...client };
+  if (client.client_type === 'NP' && !initialForm.first_names && !initialForm.last_name && initialForm.full_name) {
+    Object.assign(initialForm, splitFullName(initialForm.full_name));
+  }
+  const [form, setForm] = useState(initialForm);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -93,6 +112,10 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
   async function handleSave() {
     setSaving(true);
     const { id, created_date, updated_date, created_by, tenant_id, ...rest } = form;
+    if (!isOrg) {
+      rest.full_name = computeFullName(rest.first_names, rest.last_name);
+      Object.assign(rest, syncPreferredContacts(rest.contact_entries));
+    }
     await base44.entities.Client.update(client.id, rest);
     await base44.entities.AuditEvent.create({
       tenant_id: client.tenant_id,
@@ -145,21 +168,52 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
             </>
           ) : (
             <>
-              <F label="Full Name" {...fProps('full_name')} />
+              <F label="First Names" {...fProps('first_names')} />
+              <F label="Last Name" {...fProps('last_name')} />
+              <F label="Initials" {...fProps('initials')} />
+              <F label="Preferred Name" {...fProps('preferred_name')} />
+              <SF label="Gender" {...fProps('gender')} options={GENDERS} />
+              <SF label="Category" {...fProps('category')} options={CATEGORIES} />
+              <F label="External ID" {...fProps('external_id')} />
               <div>
                 <Label className="text-xs font-medium mb-1 block text-muted-foreground">Date of Birth</Label>
                 <Input type="date" value={form.date_of_birth || ''} onChange={e => set('date_of_birth', e.target.value)} disabled={!canEdit} className="h-8 text-sm" />
               </div>
+              <div>
+                <Label className="text-xs font-medium mb-1 block text-muted-foreground">Decease Date</Label>
+                <Input type="date" value={form.decease_date || ''} onChange={e => set('decease_date', e.target.value)} disabled={!canEdit} className="h-8 text-sm" />
+              </div>
+              <SF label="Country of Birth" {...fProps('country_of_birth')} options={COUNTRIES} />
+              <F label="Place of Birth" {...fProps('place_of_birth')} />
               <SF label="Nationality" {...fProps('nationality')} options={COUNTRIES} />
               <SF label="Country of Residence" {...fProps('country_of_residence')} options={COUNTRIES} />
               <SF label="ID Type" {...fProps('id_type')} options={ID_TYPES} />
               <F label="ID Number" {...fProps('id_number')} />
-              <F label="Contact Email" {...fProps('primary_contact_email')} type="email" />
-              <F label="Contact Phone" {...fProps('primary_contact_phone')} />
             </>
           )}
         </div>
       </div>
+
+      {!isOrg && (
+        <div>
+          <h3 className="text-sm font-semibold mb-3">Communication</h3>
+          <div className="mb-3 max-w-xs">
+            <Label className="text-xs font-medium mb-1 block text-muted-foreground">Language</Label>
+            <Select value={form.language || 'en'} onValueChange={v => set('language', v)} disabled={!canEdit}>
+              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>{LANGUAGES.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <ContactEntriesTable entries={form.contact_entries} onChange={v => set('contact_entries', v)} />
+        </div>
+      )}
+
+      {!isOrg && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <AddressFields title="Residential Address" value={form.residential_address} onChange={v => set('residential_address', v)} />
+          <AddressFields title="Postal Address" value={form.postal_address} onChange={v => set('postal_address', v)} optionalNote="Optional — if different" />
+        </div>
+      )}
 
       {/* FATCA / CRS */}
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
