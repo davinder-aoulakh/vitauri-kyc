@@ -1,9 +1,9 @@
 /**
- * ProfileFieldRow — single field row in the Step 4 structured profile grid.
- * Shows: label | current value | AI suggestion (source badge, confidence pill) | Accept / Reject actions
+ * ProfileFieldRow — single field row in the unified profile verification grid.
+ * Shows: label | current value | AI suggestion (source badge, confidence pill) | Accept new / Request info / Keep existing
  */
 import React, { useState } from 'react';
-import { Check, X, Pencil, ExternalLink, AlertTriangle, FileText, Globe, MessageSquare } from 'lucide-react';
+import { Check, X, Pencil, ExternalLink, AlertTriangle, FileText, Globe, MessageSquare, Info, Mail, Flag, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const SOURCE_ICONS = {
@@ -22,6 +22,7 @@ const STATUS_CONFIG = {
   conflict:       { label: 'Conflict', bg: 'bg-red-50 border-red-200' },
   confirmed:      { label: '✓ Confirmed', bg: 'bg-emerald-50 border-emerald-200' },
   rejected:       { label: 'Rejected', bg: 'bg-slate-50 border-slate-200' },
+  info_requested: { label: '⏳ Info requested', bg: 'bg-amber-50 border-amber-200' },
   missing:        { label: 'Missing', bg: 'bg-muted/30 border-border' },
 };
 
@@ -36,7 +37,6 @@ function SourceBadge({ source_type, source_ref }) {
   const Icon = SOURCE_ICONS[source_type] || Globe;
   const colorClass = SOURCE_COLORS[source_type] || 'bg-slate-100 text-slate-600';
 
-  // source_ref format: "docId::fileName" or "Finding title::url" or "Outreach: label"
   const parts = source_ref?.split('::') || [];
   const label = source_type === 'document' ? (parts[1] || 'Document')
     : source_type === 'osint' ? (parts[0] || 'OSINT')
@@ -56,9 +56,14 @@ function SourceBadge({ source_type, source_ref }) {
   );
 }
 
-export default function ProfileFieldRow({ fieldKey, label, suggestion, currentValue, onAccept, onReject, onManualEdit, accepting }) {
+export default function ProfileFieldRow({
+  fieldKey, label, suggestion, currentValue,
+  onAccept, onReject, onManualEdit, onRequestInfo, onReopen,
+  accepting,
+}) {
   const [editing, setEditing] = useState(false);
   const [manualValue, setManualValue] = useState('');
+  const [infoMenuOpen, setInfoMenuOpen] = useState(false);
 
   const status = suggestion?.status || 'missing';
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.missing;
@@ -67,6 +72,8 @@ export default function ProfileFieldRow({ fieldKey, label, suggestion, currentVa
   const isRejected = status === 'rejected';
   const isMissing = status === 'missing';
   const isConflict = status === 'conflict';
+  const isInfoRequested = status === 'info_requested';
+  const showActions = !editing && !isConfirmed && !isRejected && !isInfoRequested;
 
   function startEdit() {
     setManualValue(suggestion?.value || currentValue || '');
@@ -108,24 +115,32 @@ export default function ProfileFieldRow({ fieldKey, label, suggestion, currentVa
           )}
         </div>
 
-        {/* Actions */}
-        {!editing && !isConfirmed && !isRejected && (
-          <div className="flex items-center gap-1 flex-shrink-0">
+        {/* Actions — 3-button pattern */}
+        {showActions && (
+          <div className="flex items-center gap-1 flex-shrink-0 relative">
             {hasValue && (
               <button
                 onClick={() => onAccept(fieldKey, suggestion)}
                 disabled={accepting}
                 className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 font-medium"
               >
-                <Check className="w-3 h-3" /> Accept
+                <Check className="w-3 h-3" /> Accept new
+              </button>
+            )}
+            {hasValue && (
+              <button
+                onClick={() => setInfoMenuOpen(o => !o)}
+                className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600 font-medium"
+              >
+                <Info className="w-3 h-3" /> Request info
               </button>
             )}
             {hasValue && (
               <button
                 onClick={() => onReject(fieldKey)}
-                className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:bg-muted font-medium"
+                className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600 font-medium"
               >
-                <X className="w-3 h-3" />
+                <X className="w-3 h-3" /> Keep existing
               </button>
             )}
             <button
@@ -134,6 +149,23 @@ export default function ProfileFieldRow({ fieldKey, label, suggestion, currentVa
             >
               <Pencil className="w-3 h-3" />
             </button>
+
+            {infoMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 z-20 bg-popover border border-border rounded-lg shadow-lg overflow-hidden w-48">
+                <button
+                  onClick={() => { setInfoMenuOpen(false); onRequestInfo(fieldKey, 'email'); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/60 flex items-center gap-2"
+                >
+                  <Mail className="w-3 h-3 text-muted-foreground" /> Email client for clarification
+                </button>
+                <button
+                  onClick={() => { setInfoMenuOpen(false); onRequestInfo(fieldKey, 'flag'); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/60 flex items-center gap-2 border-t border-border/50"
+                >
+                  <Flag className="w-3 h-3 text-muted-foreground" /> Flag for internal review
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -148,8 +180,16 @@ export default function ProfileFieldRow({ fieldKey, label, suggestion, currentVa
 
         {isRejected && (
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground italic">Rejected</span>
+            <span className="text-xs text-muted-foreground italic">Kept existing</span>
             <button onClick={startEdit} className="text-xs text-primary hover:underline">Fill manually</button>
+          </div>
+        )}
+
+        {isInfoRequested && !editing && (
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => onReopen?.(fieldKey)} className="text-xs text-primary hover:underline flex items-center gap-1">
+              <RotateCcw className="w-3 h-3" /> Reopen
+            </button>
           </div>
         )}
       </div>
