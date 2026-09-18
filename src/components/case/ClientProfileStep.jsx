@@ -272,12 +272,12 @@ Write 2–4 sentences: (1) why the client is engaging, (2) intended products/ser
           <div>
             <h4 className="font-semibold text-sm">2 — Verified Profile Summary</h4>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Fields confirmed in the Profile Verification step. All editing happens there.
+              Fields confirmed in the Profile Verification panel (Outreach & Documents step). All editing happens there.
             </p>
           </div>
           <button
             className="flex items-center gap-1 text-xs text-primary hover:underline flex-shrink-0"
-            onClick={() => onNavigateToStep?.(9)}
+            onClick={() => onNavigateToStep?.(1)}
           >
             <Pencil className="w-3 h-3" /> Go to Profile Verification
           </button>

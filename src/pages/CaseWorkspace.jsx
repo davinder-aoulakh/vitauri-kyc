@@ -34,7 +34,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ChevronLeft, CheckCircle, Circle, AlertTriangle, Clock,
   MessageSquare, User, Shield, BarChart3, ClipboardCheck,
-  FileText, Loader2, Trash2, Lock, ShieldCheck
+  FileText, Loader2, Trash2
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -43,7 +43,6 @@ function getSteps(clientType) {
   const isORG = clientType === 'ORG';
   return [
     { id: 1, label: 'Outreach & Documents',                             icon: MessageSquare,  stepKey: 'step_1_status' },
-    { id: 9, label: 'Profile Verification',                             icon: ShieldCheck,    stepKey: 'step_9_status', requiresOutreachVerified: true },
     { id: 2, label: isORG ? 'Entity Verification' : 'Identity Verification', icon: User,      stepKey: 'step_2_status' },
     { id: 3, label: 'Screening',                                         icon: Shield,         stepKey: 'step_3_status' },
     { id: 4, label: isORG ? 'Entity Profile' : 'Client Profile',         icon: User,          stepKey: 'step_4_status' },
@@ -94,7 +93,6 @@ export default function CaseWorkspace() {
   const [amlScreeningData, setAmlScreeningData] = useState(null);
   const [idvData, setIdvData] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [outreachAllVerified, setOutreachAllVerified] = useState(false);
 
   const FLAG_REASONS = ['Missing document', 'Awaiting client response', 'QC query', 'Other'];
 
@@ -499,25 +497,20 @@ export default function CaseWorkspace() {
                 {STEPS.map(step => {
                   const s = getStepStatus(kycCase, step.id);
                   const canToggle = [5, 7].includes(step.id);
-                  const isLocked = step.requiresOutreachVerified && !outreachAllVerified;
                   return (
                     <div key={step.id} className="relative group/step">
                       <button
-                        onClick={() => s !== 'not_required' && !isLocked && setActiveStep(step.id)}
-                        disabled={isLocked}
-                        title={isLocked ? 'Complete and verify all Outreach & Documents items first' : undefined}
+                        onClick={() => s !== 'not_required' && setActiveStep(step.id)}
                         className={cn(
                           'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors text-xs',
-                          isLocked
-                            ? 'opacity-40 cursor-not-allowed'
-                            : s === 'not_required'
-                              ? 'opacity-40 cursor-default'
-                              : activeStep === step.id
-                                ? 'bg-primary/10 text-primary font-medium'
-                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                          s === 'not_required'
+                            ? 'opacity-40 cursor-default'
+                            : activeStep === step.id
+                              ? 'bg-primary/10 text-primary font-medium'
+                              : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                         )}
                       >
-                        {isLocked ? <Lock className="w-4 h-4 flex-shrink-0" /> : <StepIcon status={s} />}
+                        <StepIcon status={s} />
                         <span className="leading-tight truncate">{step.label}</span>
                       </button>
                       {canToggle && (
@@ -631,17 +624,7 @@ export default function CaseWorkspace() {
                   </div>
                 ) : (
                   <>
-                    {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} onNavigateToStep={setActiveStep} onOutreachAllVerified={setOutreachAllVerified} />}
-                    {activeStep === 9 && (
-                      <ProfileVerificationStep
-                        kycCase={kycCase}
-                        client={client}
-                        currentUser={currentUser}
-                        onCaseUpdate={setKycCase}
-                        onNavigateToStep={setActiveStep}
-                        onAddNote={addNote}
-                      />
-                    )}
+                    {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} onNavigateToStep={setActiveStep} />}
                     {activeStep === 2 && (
                       <IdentityVerificationStep
                         kycCase={kycCase}
@@ -671,8 +654,19 @@ export default function CaseWorkspace() {
               </div>
             </main>
 
-            {/* Right Panel — OSINT on step 4, AI Assistant elsewhere */}
-            {activeStep === 4 ? (
+            {/* Right Panel — Profile Verification on step 1, OSINT on step 4, AI Assistant elsewhere */}
+            {activeStep === 1 ? (
+              <div className="w-[420px] flex-shrink-0 border-l border-border overflow-y-auto p-4 bg-card">
+                <ProfileVerificationStep
+                  kycCase={kycCase}
+                  client={client}
+                  currentUser={currentUser}
+                  onCaseUpdate={setKycCase}
+                  onNavigateToStep={setActiveStep}
+                  onAddNote={addNote}
+                />
+              </div>
+            ) : activeStep === 4 ? (
               <OsintPanel
                 kycCase={kycCase}
                 client={client}
