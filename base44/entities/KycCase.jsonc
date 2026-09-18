@@ -158,6 +158,17 @@
       ],
       "default": "not_started"
     },
+    "step_9_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
+      ],
+      "default": "not_started",
+      "description": "Profile Verification \u2014 displayed as the 2nd step, right after Outreach & Documents"
+    },
     "case_notes": {
       "type": "string"
     },
@@ -174,7 +185,7 @@
     },
     "profile_suggestions": {
       "type": "object",
-      "description": "Step 4 structured field suggestions."
+      "description": "Structured field suggestions for the Profile Verification step."
     },
     "risk_assessment_meta": {
       "type": "object",

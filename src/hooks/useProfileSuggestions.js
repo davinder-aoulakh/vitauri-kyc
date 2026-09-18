@@ -38,7 +38,7 @@ export const ORG_FIELD_LABELS = {
  * Shared pipeline logic for the Structured Profile Fields grid.
  * Used by OutreachStep (Step 1 — unified verification grid).
  */
-export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVerified }) {
+export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVerified, onCaseUpdate }) {
   const isOrg = client?.client_type === 'ORG';
   const fieldLabels = isOrg ? ORG_FIELD_LABELS : NP_FIELD_LABELS;
 
@@ -73,6 +73,10 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
   async function saveSuggestions(updated) {
     setSuggestions(updated);
     await base44.entities.KycCase.update(kycCase.id, { profile_suggestions: updated });
+    // Keep the parent's kycCase in sync — otherwise re-mounting this step (e.g. switching
+    // tabs and back) re-initialises from a stale kycCase.profile_suggestions and the run
+    // appears to have been lost.
+    onCaseUpdate?.(prev => (prev ? { ...prev, profile_suggestions: updated } : prev));
   }
 
   async function acceptField(fieldKey, suggestion) {

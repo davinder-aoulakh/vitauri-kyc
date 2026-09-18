@@ -12,8 +12,8 @@ import {
 } from 'lucide-react';
 import DocumentViewer from '@/components/shared/DocumentViewer';
 import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
-import ProfileVerificationSection from '@/components/case/outreach/ProfileVerificationSection';
 import { NP_FIELD_LABELS, ORG_FIELD_LABELS } from '@/hooks/useProfileSuggestions';
+import { isFieldMappedLabel } from '@/lib/outreachFieldMatch';
 
 const SITUATION_LABELS = {
   Welcome: 'Welcome',
@@ -92,23 +92,7 @@ function buildEmailHtml(tenant, client, req, portalUrl) {
   `;
 }
 
-// Normalise a label for loose matching (case/whitespace/punctuation insensitive)
-function normalizeLabel(label) {
-  return (label || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
-// True if this outreach item's label corresponds to a structured profile field —
-// such items are represented in the Profile Verification grid instead of the raw item list.
-function isFieldMappedLabel(itemLabel, fieldLabels) {
-  const norm = normalizeLabel(itemLabel);
-  if (!norm) return false;
-  return Object.values(fieldLabels).some(fieldLabel => {
-    const fieldNorm = normalizeLabel(fieldLabel.split('—')[0]); // strip "— Country" etc. suffixes
-    return fieldNorm && (norm === fieldNorm || norm.includes(fieldNorm) || fieldNorm.includes(norm));
-  });
-}
-
-export default function OutreachStep({ kycCase, client, currentUser, tenant, onNavigateToStep, onAddNote }) {
+export default function OutreachStep({ kycCase, client, currentUser, tenant, onNavigateToStep, onOutreachAllVerified }) {
   const [requests, setRequests]   = useState([]);
   const [loading, setLoading]     = useState(true);
   const [newOpen, setNewOpen]     = useState(false);
@@ -152,42 +136,16 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
   );
   const fieldLabels = clientType === 'ORG' ? ORG_FIELD_LABELS : NP_FIELD_LABELS;
 
-  // Called after a profile field is accepted/rejected/manually edited — marks any
-  // matching outreach item(s) across all requests as Verified so progress stays accurate.
-  async function handleFieldVerified(fieldKey, fieldLabel) {
-    if (!fieldLabel) return;
-    const updates = [];
-    for (const req of requests) {
-      let changed = false;
-      const updatedItems = (req.items || []).map(item => {
-        if (item.status !== 'Verified' && isFieldMappedLabel(item.label, { [fieldKey]: fieldLabel })) {
-          changed = true;
-          return { ...item, status: 'Verified' };
-        }
-        return item;
-      });
-      if (changed) updates.push(base44.entities.OutreachRequest.update(req.id, { items: updatedItems }));
-    }
-    if (updates.length > 0) {
-      await Promise.all(updates);
-      load();
-    }
-  }
-
-  // Amber "Email client for clarification" — opens the outreach builder pre-filled for this field.
-  function handleRequestInfoEmail(fieldLabel) {
-    const matchingLib = catalogueItems.find(i => normalizeLabel(i.label) === normalizeLabel(fieldLabel));
-    setSelectedItems(matchingLib ? [matchingLib.id] : []);
-    setMessage(`Could you please confirm or clarify the following: ${fieldLabel}?`);
-    setNewOpen(true);
-  }
-
   useEffect(() => { load(); loadTemplates(); }, [kycCase.id]);
 
   async function load() {
     const reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
     setRequests(reqs || []);
     setLoading(false);
+
+    // Report overall verification status — gates the Profile Verification step
+    const allItems = (reqs || []).flatMap(r => r.items || []);
+    onOutreachAllVerified?.((reqs || []).length > 0 && allItems.length > 0 && allItems.every(i => i.status === 'Verified'));
 
     // Build consolidated Didit summary from all verified IDV items
     const allIDVItems = [];
@@ -761,17 +719,6 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
           })}
         </div>
       )}
-
-      <div className="border-t border-border pt-4">
-        <ProfileVerificationSection
-          kycCase={kycCase}
-          client={client}
-          currentUser={currentUser}
-          onFieldVerified={handleFieldVerified}
-          onRequestInfoEmail={handleRequestInfoEmail}
-          onAddNote={onAddNote}
-        />
-      </div>
 
       {viewerDoc && (
         <DocumentViewer

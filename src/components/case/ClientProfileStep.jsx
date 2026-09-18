@@ -272,12 +272,12 @@ Write 2–4 sentences: (1) why the client is engaging, (2) intended products/ser
           <div>
             <h4 className="font-semibold text-sm">2 — Verified Profile Summary</h4>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Fields confirmed in Step 1 — Profile Verification. All editing happens there.
+              Fields confirmed in the Profile Verification step. All editing happens there.
             </p>
           </div>
           <button
             className="flex items-center gap-1 text-xs text-primary hover:underline flex-shrink-0"
-            onClick={() => onNavigateToStep?.(1)}
+            onClick={() => onNavigateToStep?.(9)}
           >
             <Pencil className="w-3 h-3" /> Go to Profile Verification
           </button>
@@ -292,11 +292,11 @@ Write 2–4 sentences: (1) why the client is engaging, (2) intended products/ser
           {!suggestions ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
               No profile fields verified yet.<br />
-              <span className="text-xs">Run the pipeline in Step 1 — Profile Verification to get started.</span>
+              <span className="text-xs">Run the pipeline in the Profile Verification step to get started.</span>
             </div>
           ) : confirmedKeys.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
-              No fields confirmed yet. Accept fields in Step 1 — Profile Verification.
+              No fields confirmed yet. Accept fields in the Profile Verification step.
             </div>
           ) : (
             <div className="divide-y divide-border/50">
