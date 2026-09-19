@@ -79,12 +79,34 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
     onCaseUpdate?.(prev => (prev ? { ...prev, profile_suggestions: updated } : prev));
   }
 
+  // Marks a field key as applied on the source outreach item that produced it, so the
+  // pipeline emits it as 'confirmed' (instead of re-prompting) on the next re-run.
+  // No-op when the suggestion didn't come from a trackable IDV-extraction source.
+  async function markFieldApplied(fieldKey, suggestion) {
+    if (!suggestion?.source_request_id || !suggestion?.source_item_id) return;
+    try {
+      const reqs = await base44.entities.OutreachRequest.filter({ id: suggestion.source_request_id });
+      const outreachReq = reqs?.[0];
+      if (!outreachReq) return;
+      const items = (outreachReq.items || []).map(it => {
+        if (it.item_id !== suggestion.source_item_id) return it;
+        const applied = new Set(it.idv_profile_applied_fields || []);
+        applied.add(fieldKey);
+        return { ...it, idv_profile_applied_fields: [...applied] };
+      });
+      await base44.entities.OutreachRequest.update(outreachReq.id, { items });
+    } catch (err) {
+      console.error('Failed to mark field applied:', err);
+    }
+  }
+
   async function acceptField(fieldKey, suggestion) {
     setAcceptingField(fieldKey);
     const before = { [fieldKey]: getNestedValue(client, fieldKey) || null };
     const after  = { [fieldKey]: suggestion.value };
 
     await base44.entities.Client.update(client.id, buildFieldUpdatePayload(client, fieldKey, suggestion.value));
+    await markFieldApplied(fieldKey, suggestion);
 
     const updated = {
       ...suggestions,
@@ -137,7 +159,9 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
   async function handleManualEdit(fieldKey, value) {
     const before = { [fieldKey]: getNestedValue(client, fieldKey) || null };
     const after  = { [fieldKey]: value };
+    const existingSuggestion = suggestions?.client_fields?.[fieldKey];
     await base44.entities.Client.update(client.id, buildFieldUpdatePayload(client, fieldKey, value));
+    await markFieldApplied(fieldKey, existingSuggestion);
     const updated = {
       ...suggestions,
       client_fields: {
@@ -214,6 +238,7 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
     await saveSuggestions(updated);
 
     for (const [fieldKey, s] of toAccept) {
+      await markFieldApplied(fieldKey, s);
       await base44.entities.AuditEvent.create({
         tenant_id:     kycCase.tenant_id,
         case_id:       kycCase.id,
@@ -228,6 +253,29 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
       });
       onFieldVerified?.(fieldKey, fieldLabels[fieldKey]);
     }
+  }
+
+  // Re-writes the retained extracted value to the client profile without changing status —
+  // used when the analyst wants to force-sync a field that's already marked 'confirmed'.
+  async function reapplyField(fieldKey) {
+    const suggestion = suggestions?.client_fields?.[fieldKey];
+    if (!suggestion?.value) return;
+    const before = { [fieldKey]: getNestedValue(client, fieldKey) || null };
+    await base44.entities.Client.update(client.id, buildFieldUpdatePayload(client, fieldKey, suggestion.value));
+    await markFieldApplied(fieldKey, suggestion);
+    await base44.entities.AuditEvent.create({
+      tenant_id:     kycCase.tenant_id,
+      case_id:       kycCase.id,
+      client_id:     kycCase.client_id,
+      actor_user_id: currentUser?.id,
+      actor_name:    currentUser?.full_name,
+      actor_type:    'User',
+      event_type:    'profile_field_reapplied',
+      before_state:  before,
+      after_state:   { [fieldKey]: suggestion.value },
+      notes:         `field=${fieldKey} re-applied from ${suggestion.source_type}:${suggestion.source_ref}`,
+    });
+    onFieldVerified?.(fieldKey, fieldLabels[fieldKey]);
   }
 
   async function acceptRelatedParty(rpIndex, rp) {
@@ -289,6 +337,6 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
     confirmed, conflicts, pending, highConfPending,
     runPipeline, acceptField, rejectField, handleManualEdit,
     markInfoRequested, reopenField, acceptAllHighConfidence,
-    acceptRelatedParty, rejectRelatedParty,
+    acceptRelatedParty, rejectRelatedParty, reapplyField,
   };
 }

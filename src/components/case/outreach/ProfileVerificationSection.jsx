@@ -21,7 +21,7 @@ export default function ProfileVerificationSection({
     isOrg, fieldLabels, fieldKeys, clientFields, suggestions, pipelineRunning, acceptingField,
     confirmed, conflicts, highConfPending,
     runPipeline, acceptField, rejectField, handleManualEdit, markInfoRequested, reopenField,
-    acceptAllHighConfidence, acceptRelatedParty, rejectRelatedParty,
+    acceptAllHighConfidence, acceptRelatedParty, rejectRelatedParty, reapplyField,
   } = profile;
 
   async function handleRequestInfo(fieldKey, mode) {
@@ -125,6 +125,7 @@ export default function ProfileVerificationSection({
                   onManualEdit={handleManualEdit}
                   onRequestInfo={handleRequestInfo}
                   onReopen={reopenField}
+                  onReapply={reapplyField}
                   accepting={acceptingField === key}
                 />
               ))}

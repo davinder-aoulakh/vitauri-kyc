@@ -3,7 +3,7 @@
  * Shows: label | current value | AI suggestion (source badge, confidence pill) | Accept new / Request info / Keep existing
  */
 import React, { useState } from 'react';
-import { Check, X, Pencil, ExternalLink, AlertTriangle, FileText, Globe, MessageSquare, Info, Mail, Flag, RotateCcw } from 'lucide-react';
+import { Check, X, Pencil, ExternalLink, AlertTriangle, FileText, Globe, MessageSquare, Info, Mail, Flag, RotateCcw, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const SOURCE_ICONS = {
@@ -58,7 +58,7 @@ function SourceBadge({ source_type, source_ref }) {
 
 export default function ProfileFieldRow({
   fieldKey, label, suggestion, currentValue,
-  onAccept, onReject, onManualEdit, onRequestInfo, onReopen,
+  onAccept, onReject, onManualEdit, onRequestInfo, onReopen, onReapply,
   accepting,
 }) {
   const [editing, setEditing] = useState(false);
@@ -170,8 +170,13 @@ export default function ProfileFieldRow({
         )}
 
         {isConfirmed && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <span className="text-xs text-emerald-700 font-semibold">✓ Confirmed</span>
+            {suggestion?.applied && (
+              <button onClick={() => onReapply?.(fieldKey)} className="text-xs text-primary hover:underline flex items-center gap-1">
+                <RefreshCw className="w-3 h-3" /> Re-apply
+              </button>
+            )}
             <button onClick={startEdit} className="text-muted-foreground hover:text-foreground">
               <Pencil className="w-3 h-3" />
             </button>

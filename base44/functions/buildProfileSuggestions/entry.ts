@@ -30,12 +30,30 @@ function priorityOf(src: string): number {
 }
 
 // Merge multiple candidate values for a single field using priority + conflict detection
-function mergeField(candidates: Array<{ value: string; confidence: number; source_type: string; source_ref: string }>) {
+function mergeField(candidates: Array<{ value: string; confidence: number; source_type: string; source_ref: string; applied?: boolean; source_request_id?: string; source_item_id?: string }>) {
   if (!candidates || candidates.length === 0) return null;
 
   // Remove null/empty
   const valid = candidates.filter(c => c.value != null && String(c.value).trim() !== '');
   if (valid.length === 0) return null;
+
+  // A candidate already applied to the client profile wins outright and is returned as a
+  // durable 'confirmed' result — this is what stops the pipeline from re-prompting for it.
+  const appliedCandidate = valid.find(c => c.applied);
+  if (appliedCandidate) {
+    return {
+      value: appliedCandidate.value,
+      confidence: appliedCandidate.confidence,
+      source_type: appliedCandidate.source_type,
+      source_ref: appliedCandidate.source_ref,
+      status: 'confirmed',
+      conflict_note: null,
+      applied: true,
+      source_request_id: appliedCandidate.source_request_id,
+      source_item_id: appliedCandidate.source_item_id,
+    };
+  }
+
   if (valid.length === 1) {
     const c = valid[0];
     return {
@@ -45,6 +63,8 @@ function mergeField(candidates: Array<{ value: string; confidence: number; sourc
       source_ref: c.source_ref,
       status: c.confidence >= CONFIDENCE_THRESHOLD ? 'suggested' : 'low_confidence',
       conflict_note: null,
+      source_request_id: c.source_request_id,
+      source_item_id: c.source_item_id,
     };
   }
 
@@ -67,6 +87,8 @@ function mergeField(candidates: Array<{ value: string; confidence: number; sourc
       source_ref: best.source_ref,
       status: 'conflict',
       conflict_note: conflictNote,
+      source_request_id: best.source_request_id,
+      source_item_id: best.source_item_id,
     };
   }
 
@@ -82,6 +104,8 @@ function mergeField(candidates: Array<{ value: string; confidence: number; sourc
     source_ref: best.source_ref,
     status: best.confidence >= CONFIDENCE_THRESHOLD ? 'suggested' : 'low_confidence',
     conflict_note: null,
+    source_request_id: best.source_request_id,
+    source_item_id: best.source_item_id,
   };
 }
 
@@ -91,23 +115,30 @@ const DIDIT_GENDER_MAP: Record<string, string> = { M: 'Male', F: 'Female', U: 'U
 function extractFromOutreach(outreaches: any[], isOrg: boolean): Record<string, any[]> {
   const candidates: Record<string, any[]> = {};
 
-  const push = (field: string, value: string, ref: string, confidence: number, sourceType = 'outreach') => {
+  const push = (field: string, value: string, ref: string, confidence: number, sourceType = 'outreach', extra: Record<string, any> = {}) => {
     if (!value || String(value).trim() === '') return;
     if (!candidates[field]) candidates[field] = [];
-    candidates[field].push({ value: String(value).trim(), confidence, source_type: sourceType, source_ref: ref });
+    candidates[field].push({ value: String(value).trim(), confidence, source_type: sourceType, source_ref: ref, ...extra });
   };
 
-  // Didit IDV results carry gender/address directly on the outreach item — pull them
-  // in separately from the label-matching pass below (they don't have a matching label).
+  // Didit IDV results carry gender/address/nationality directly on the outreach item — pull
+  // them in separately from the label-matching pass below (they don't have a matching label).
+  // Each is tagged with applied (already written to the client profile) + source ids so the
+  // frontend can mark/re-apply against the exact item that produced it.
   if (!isOrg) {
     for (const req of outreaches) {
       for (const item of (req.items || [])) {
+        const appliedFields = new Set(item.idv_profile_applied_fields || []);
+        const sourceIds = { source_request_id: req.id, source_item_id: item.item_id };
         if (item.idv_extracted_gender) {
           const mapped = DIDIT_GENDER_MAP[item.idv_extracted_gender] || null;
-          if (mapped) push('gender', mapped, `Didit IDV: ${item.label}`, 80, 'outreach');
+          if (mapped) push('gender', mapped, `Didit IDV: ${item.label}`, 80, 'outreach', { applied: appliedFields.has('gender'), ...sourceIds });
         }
         if (item.idv_extracted_address) {
-          push('residential_address.street', item.idv_extracted_address, `Didit IDV: ${item.label}`, 72, 'outreach');
+          push('residential_address.street', item.idv_extracted_address, `Didit IDV: ${item.label}`, 72, 'outreach', { applied: appliedFields.has('residential_address.street'), ...sourceIds });
+        }
+        if (item.idv_extracted_nationality) {
+          push('nationality', item.idv_extracted_nationality, `Didit IDV: ${item.label}`, 80, 'outreach', { applied: appliedFields.has('nationality'), ...sourceIds });
         }
       }
     }

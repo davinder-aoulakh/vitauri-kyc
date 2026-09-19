@@ -233,6 +233,13 @@
             "type": "string",
             "description": "Raw Didit address string"
           },
+          "idv_profile_applied_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Client profile field keys already applied from this item's IDV extraction \u2014 prevents re-prompting on pipeline re-run"
+          },
           "idv_issuing_country": {
             "type": "string"
           },
