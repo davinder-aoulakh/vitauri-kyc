@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
-import { fetchDiditDecision, normaliseDateString } from '../../shared/diditDecision.js';
+import { fetchDiditDecision, normaliseDateString, ISO3_MAP } from '../../shared/diditDecision.js';
 
 export default async function(req) {
   try {
@@ -103,24 +103,6 @@ export default async function(req) {
         const client = (await base44.asServiceRole.entities.Client.filter({ id: clientId }))?.[0];
         if (client) {
           const updates = {};
-          const ISO3_MAP = {
-            'AUS':'Australia (AU)','NLD':'Netherlands (NL)','BEL':'Belgium (BE)',
-            'DEU':'Germany (DE)','FRA':'France (FR)','GBR':'United Kingdom (GB)',
-            'USA':'United States (US)','LUX':'Luxembourg (LU)','CHE':'Switzerland (CH)',
-            'CAN':'Canada (CA)','NZL':'New Zealand (NZ)','SGP':'Singapore (SG)',
-            'ZAF':'South Africa (ZA)','IND':'India (IN)','CHN':'China (CN)',
-            'JPN':'Japan (JP)','ARE':'United Arab Emirates (AE)','BRA':'Brazil (BR)',
-            'ARG':'Argentina (AR)','MYS':'Malaysia (MY)','PHL':'Philippines (PH)',
-            'IDN':'Indonesia (ID)','THA':'Thailand (TH)','KOR':'South Korea (KR)',
-            'PAK':'Pakistan (PK)','BGD':'Bangladesh (BD)','NGA':'Nigeria (NG)',
-            'KEN':'Kenya (KE)','GHA':'Ghana (GH)','EGY':'Egypt (EG)',
-            'TUR':'Turkey (TR)','ISR':'Israel (IL)','SAU':'Saudi Arabia (SA)',
-            'QAT':'Qatar (QA)','KWT':'Kuwait (KW)','PRT':'Portugal (PT)',
-            'ESP':'Spain (ES)','ITA':'Italy (IT)','SWE':'Sweden (SE)',
-            'NOR':'Norway (NO)','DNK':'Denmark (DK)','FIN':'Finland (FI)',
-            'IRL':'Ireland (IE)','POL':'Poland (PL)','CZE':'Czech Republic (CZ)',
-            'HUN':'Hungary (HU)','ROU':'Romania (RO)','GRC':'Greece (GR)',
-          };
           const diditFullName = [idvFields.idv_extracted_first_name, idvFields.idv_extracted_last_name].filter(Boolean).join(' ');
           if (diditFullName && !client.full_name) updates.full_name = diditFullName;
           if (idvFields.idv_extracted_dob && !client.date_of_birth) updates.date_of_birth = idvFields.idv_extracted_dob;

@@ -9,10 +9,16 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Loader2, UserCheck } from 'lucide-react';
 import { getNestedValue, buildFieldUpdatePayload, computeFullName } from '@/lib/clientNameUtils';
+import { ISO3_MAP } from '@/lib/diditIso3Map';
 
 // Must match buildProfileSuggestions/entry.ts exactly — shared marker + confirmed-status logic
 // relies on both sides mapping Didit codes to the same client field keys/values.
-const DIDIT_GENDER_MAP = { M: 'Male', F: 'Female', U: 'Unknown' };
+function mapDiditGender(raw) {
+  const v = (raw || '').toString().trim().toUpperCase();
+  if (v === 'M' || v === 'MALE') return 'Male';
+  if (v === 'F' || v === 'FEMALE') return 'Female';
+  return 'Other';
+}
 
 const FIELD_FULL_NAME = {
   key: 'full_name', label: 'Full Name',
@@ -31,8 +37,13 @@ const FIELD_NATIONALITY = {
 };
 const FIELD_GENDER = {
   key: 'gender', label: 'Gender',
-  extract: item => DIDIT_GENDER_MAP[item.idv_extracted_gender] || '',
+  extract: item => item.idv_extracted_gender ? mapDiditGender(item.idv_extracted_gender) : '',
   getCurrent: client => client?.gender,
+};
+const FIELD_ISSUING_COUNTRY = {
+  key: 'country_of_residence', label: 'Issuing Country',
+  extract: item => ISO3_MAP[item.idv_issuing_country] || item.idv_issuing_country || '',
+  getCurrent: client => client?.country_of_residence,
 };
 const FIELD_ADDRESS = {
   key: 'residential_address.street', label: 'Address',
@@ -58,18 +69,10 @@ function buildRowsForItem(item, client) {
   const dobRow = checkRow(FIELD_DOB, item, client);
   const nationalityRow = checkRow(FIELD_NATIONALITY, item, client);
   const genderRow = checkRow(FIELD_GENDER, item, client);
+  const issuingCountryRow = checkRow(FIELD_ISSUING_COUNTRY, item, client);
   const addressRow = checkRow(FIELD_ADDRESS, item, client);
 
-  const checkboxRows = [fullNameRow, dobRow, nationalityRow, genderRow, addressRow].filter(Boolean);
-  if (checkboxRows.length === 0) return [];
-
-  const rows = [fullNameRow, dobRow, nationalityRow, genderRow].filter(Boolean);
-  const issuingCountry = (item.idv_issuing_country || '').toString().trim();
-  if (issuingCountry) {
-    rows.push({ rowKey: `${item.item_id}:issuing_country`, label: 'Issuing Country', diditValue: issuingCountry, displayOnly: true });
-  }
-  if (addressRow) rows.push(addressRow);
-  return rows;
+  return [fullNameRow, dobRow, nationalityRow, genderRow, issuingCountryRow, addressRow].filter(Boolean);
 }
 
 export default function SuggestedProfileUpdatesCard({ diditSummary, requests, client, kycCase, currentUser, onAccepted }) {
@@ -182,6 +185,27 @@ export default function SuggestedProfileUpdatesCard({ diditSummary, requests, cl
           notes: `field=${row.fieldKey} source=Didit IDV: ${row.item.label} (accepted from Outreach step)`,
         });
       }
+
+      // 5. Combined audit event — single record showing every changed field + contributing session(s)
+      const combinedBefore = {};
+      const combinedAfter = {};
+      for (const row of toAccept) {
+        combinedBefore[row.fieldKey] = row.currentValue || null;
+        combinedAfter[row.fieldKey] = row.diditValue;
+      }
+      const sessionIds = [...new Set(toAccept.map(r => r.item.didit_session_id).filter(Boolean))];
+      await base44.entities.AuditEvent.create({
+        tenant_id: kycCase.tenant_id,
+        case_id: kycCase.id,
+        client_id: kycCase.client_id,
+        actor_user_id: currentUser?.id,
+        actor_name: currentUser?.full_name,
+        actor_type: 'User',
+        event_type: 'client_profile_updated_from_idv',
+        before_state: combinedBefore,
+        after_state: combinedAfter,
+        notes: `Accepted ${toAccept.length} field(s) from Didit IDV. Session(s): ${sessionIds.length ? sessionIds.join(', ') : 'unknown'}`,
+      });
 
       await onAccepted?.();
     } finally {

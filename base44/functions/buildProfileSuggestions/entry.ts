@@ -109,7 +109,7 @@ function mergeField(candidates: Array<{ value: string; confidence: number; sourc
   };
 }
 
-const DIDIT_GENDER_MAP: Record<string, string> = { M: 'Male', F: 'Female', U: 'Unknown' };
+const DIDIT_GENDER_MAP: Record<string, string> = { M: 'Male', F: 'Female', U: 'Other' };
 
 // Build candidate map from outreach responses
 function extractFromOutreach(outreaches: any[], isOrg: boolean): Record<string, any[]> {
