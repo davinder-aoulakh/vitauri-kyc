@@ -2,7 +2,7 @@
  * KYC Investigation Report — Professional branded PDF export
  * Sections: Cover · Client Profile · Related Parties · Screening Hits ·
  *           SoF/SoW · Risk Indicators · Consolidated Risk · Control Measures ·
- *           Sign-Off · Audit Trail Appendix
+ *           Sign-Off · Annex · Audit Trail Appendix
  */
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -12,6 +12,7 @@ import DocumentViewer from '@/components/shared/DocumentViewer';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
+import { PDFDocument } from 'pdf-lib';
 import { isStepComplete, getStepStatus } from '@/lib/caseUtils';
 
 // ── PDF design tokens ──────────────────────────────────────────────────────
@@ -38,16 +39,45 @@ function riskColor(risk) {
   return C[`risk${risk}`] || { bg: [240,240,240], text: [50,50,50] };
 }
 
+// Convert a '#RRGGBB' hex string to an [r,g,b] array. Returns null if invalid/absent.
+function hexToRgb(hex) {
+  if (!hex) return null;
+  const clean = String(hex).trim().replace('#', '');
+  if (clean.length !== 6) return null;
+  const num = parseInt(clean, 16);
+  if (Number.isNaN(num)) return null;
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
+// Fetch a remote image and convert it to a data URL for jsPDF.addImage. Returns null on any failure.
+async function loadImageDataUrl(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 // ── PDF primitives ─────────────────────────────────────────────────────────
 const PAGE_H = 297, PAGE_W = 210, MARGIN = 14, INNER_W = PAGE_W - MARGIN * 2;
 
-function addFooter(doc, dateStr, pageNum, pageCount) {
+function addFooter(doc, dateStr, pageNum, pageCount, tenant) {
+  const brandRgb = hexToRgb(tenant?.branding_primary_color) || C.navy;
+  const brandLabel = tenant?.white_label_enabled ? (tenant?.name || 'Compliance') : 'Vitauri KYC';
   doc.setPage(pageNum);
-  doc.setFillColor(...C.navy);
+  doc.setFillColor(...brandRgb);
   doc.rect(0, PAGE_H - 10, PAGE_W, 10, 'F');
   doc.setFontSize(6.5);
   doc.setTextColor(...C.white);
-  doc.text(`Vitauri KYC  ·  ${dateStr}  ·  CONFIDENTIAL — FOR COMPLIANCE USE ONLY`, MARGIN, PAGE_H - 4);
+  doc.text(`${brandLabel}  ·  ${dateStr}  ·  CONFIDENTIAL — FOR COMPLIANCE USE ONLY`, MARGIN, PAGE_H - 4);
   doc.text(`Page ${pageNum} of ${pageCount}`, PAGE_W - MARGIN, PAGE_H - 4, { align: 'right' });
 }
 
@@ -128,20 +158,23 @@ function divider(doc, y) {
 
 // ── Main generate function ─────────────────────────────────────────────────
 async function buildPDF({ kycCase, client, currentUser, screeningHits, assessments,
-  controlMeasures, auditEvents, relatedPartyLinks, relatedParties, tenant, nextVersion }) {
+  controlMeasures, auditEvents, relatedPartyLinks, relatedParties, tenant, nextVersion,
+  annexManifest = [] }) {
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const dateStr = format(new Date(), 'd MMMM yyyy');
   const risk = kycCase.risk_classification;
   const rc = riskColor(risk);
+  const brandRgb = hexToRgb(tenant?.branding_primary_color) || C.navy;
+  const brandLightRgb = hexToRgb(tenant?.branding_primary_color) || C.navyLight;
 
   // ══ COVER PAGE ════════════════════════════════════════════════════════════
-  // Navy header band
-  doc.setFillColor(...C.navy);
+  // Navy/brand header band
+  doc.setFillColor(...brandRgb);
   doc.rect(0, 0, PAGE_W, 60, 'F');
 
   // Accent stripe
-  doc.setFillColor(...C.navyLight);
+  doc.setFillColor(...brandLightRgb);
   doc.rect(0, 56, PAGE_W, 3, 'F');
 
   // Title
@@ -154,8 +187,19 @@ async function buildPDF({ kycCase, client, currentUser, screeningHits, assessmen
   doc.setFont('helvetica', 'normal');
   doc.text('CONFIDENTIAL — FOR COMPLIANCE USE ONLY', MARGIN, 32);
 
-  // Tenant name (branding)
-  if (tenant?.name) {
+  // Tenant branding — logo if configured, else tenant name text
+  let logoRendered = false;
+  if (tenant?.branding_logo_url) {
+    const logoDataUrl = await loadImageDataUrl(tenant.branding_logo_url);
+    if (logoDataUrl) {
+      try {
+        const imgFormat = /\.png(\?|$)/i.test(tenant.branding_logo_url) ? 'PNG' : 'JPEG';
+        doc.addImage(logoDataUrl, imgFormat, PAGE_W - MARGIN - 40, 14, 40, 24);
+        logoRendered = true;
+      } catch (e) { console.warn('KYC report logo render failed:', e); }
+    }
+  }
+  if (!logoRendered && tenant?.name) {
     doc.setFontSize(8);
     doc.setTextColor(180, 200, 255);
     doc.text(tenant.name.toUpperCase(), PAGE_W - MARGIN, 24, { align: 'right' });
@@ -224,7 +268,8 @@ async function buildPDF({ kycCase, client, currentUser, screeningHits, assessmen
     '6.  Consolidated Risk Classification',
     '7.  Control Measures',
     '8.  Sign-Off Record',
-    '9.  Audit Trail Appendix',
+    '9.  Annex',
+    '10.  Audit Trail Appendix',
   ];
   doc.setFontSize(8);
   toc.forEach((t, i) => {
@@ -518,11 +563,35 @@ async function buildPDF({ kycCase, client, currentUser, screeningHits, assessmen
   });
   y += 26;
 
-  // ── 9. Audit Trail Appendix ──
+  // ── 9. Annex ──
+  y = checkBreak(doc, y, 20);
+  y = sectionHeader(doc, 9, 'Annex', y);
+  y = para(doc, 'The documents listed below are attached as an annex to this report, in the order shown. Original documents (Didit identity verification report first, followed by all case documents) are embedded in full immediately following this manifest.', y);
+
+  if (!annexManifest || annexManifest.length === 0) {
+    y = para(doc, 'No supporting documents attached to this case.', y);
+  } else {
+    const manCols = [
+      { label: 'Document', w: 68 },
+      { label: 'Type',     w: 34 },
+      { label: 'Source',   w: 26 },
+      { label: 'Date',     w: 32 },
+    ];
+    y = tableHeader(doc, manCols, y);
+    annexManifest.forEach((m, i) => {
+      y = checkBreak(doc, y, 9);
+      y = tableRow(doc, manCols, m, y, i % 2 === 1);
+    });
+  }
+  y += 4;
+
+  // ── 10. Audit Trail Appendix ──
+  doc.addPage();
+  y = 22;
+  y = sectionHeader(doc, 10, 'Audit Trail Appendix', y);
+  const auditTrailStartPage = doc.getNumberOfPages();
+
   if (auditEvents?.length > 0) {
-    doc.addPage();
-    y = 22;
-    y = sectionHeader(doc, 9, 'Audit Trail Appendix', y);
     doc.setFontSize(7.5); doc.setTextColor(...C.mutedText);
     doc.text(`${auditEvents.length} events recorded — showing first 50 · Append-only audit log`, MARGIN, y); y += 8;
 
@@ -545,13 +614,108 @@ async function buildPDF({ kycCase, client, currentUser, screeningHits, assessmen
         (e.notes || '').substring(0, 60),
       ], y, i % 2 === 1);
     });
+  } else {
+    y = para(doc, 'No audit events recorded for this case.', y);
   }
 
   // ── Footers on all pages ──────────────────────────────────────────────────
   const pageCount = doc.getNumberOfPages();
-  for (let p = 1; p <= pageCount; p++) addFooter(doc, dateStr, p, pageCount);
+  for (let p = 1; p <= pageCount; p++) addFooter(doc, dateStr, p, pageCount, tenant);
 
-  return doc;
+  return { doc, auditTrailStartPage };
+}
+
+// ── Annex merging helpers (pdf-lib) ─────────────────────────────────────────
+async function fetchDiditPdfBytes(sessionId, tenantId, diditApiKey) {
+  try {
+    const res = await base44.functions.invoke('getDiditSessionDetails', {
+      session_id: sessionId, tenant_id: tenantId, didit_api_key: diditApiKey, action: 'generate_pdf',
+    });
+    const d = res?.data ?? res;
+    if (!d?.pdf_data_url) return null;
+    const base64 = d.pdf_data_url.split(',')[1];
+    if (!base64) return null;
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch (e) {
+    console.warn('Didit report fetch failed:', e);
+    return null;
+  }
+}
+
+async function fetchFileBytes(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return new Uint8Array(await res.arrayBuffer());
+  } catch (e) {
+    console.warn('Document fetch failed:', url, e);
+    return null;
+  }
+}
+
+const isPdfFile = (fileName) => /\.pdf$/i.test(fileName || '');
+const isPngFile = (fileName) => /\.png$/i.test(fileName || '');
+const isJpgFile = (fileName) => /\.jpe?g$/i.test(fileName || '');
+
+// Assembles the final report: jsPDF pages up to the Annex, then Didit report(s),
+// then case documents (PDFs merged, images embedded), then the Audit Trail pages.
+async function mergeAnnexPdfs({ doc, auditTrailStartPage, documents, diditSessionIds, tenant, kycCase }) {
+  const jsPDFBytes = doc.output('arraybuffer');
+  const fullDoc = await PDFDocument.load(jsPDFBytes);
+  const finalDoc = await PDFDocument.create();
+
+  const totalPages = fullDoc.getPageCount();
+  const preAnnexEnd = Math.min(Math.max(0, auditTrailStartPage - 1), totalPages);
+
+  // 1. Pages before the Audit Trail (cover → sections 1-9 Annex manifest)
+  const prePages = await finalDoc.copyPages(fullDoc, Array.from({ length: preAnnexEnd }, (_, i) => i));
+  prePages.forEach(p => finalDoc.addPage(p));
+
+  // 2. Didit verification report(s) — first
+  for (const sessionId of diditSessionIds || []) {
+    const bytes = await fetchDiditPdfBytes(sessionId, kycCase.tenant_id, tenant?.didit_api_key);
+    if (!bytes) continue;
+    try {
+      const diditDoc = await PDFDocument.load(bytes);
+      const pages = await finalDoc.copyPages(diditDoc, diditDoc.getPageIndices());
+      pages.forEach(p => finalDoc.addPage(p));
+    } catch (e) { console.warn('Didit PDF merge failed:', e); }
+  }
+
+  // 3. All other case documents
+  for (const document of documents || []) {
+    if (!document.file_url) continue;
+    const bytes = await fetchFileBytes(document.file_url);
+    if (!bytes) continue;
+    try {
+      if (isPdfFile(document.file_name)) {
+        const docPdf = await PDFDocument.load(bytes);
+        const pages = await finalDoc.copyPages(docPdf, docPdf.getPageIndices());
+        pages.forEach(p => finalDoc.addPage(p));
+      } else if (isPngFile(document.file_name) || isJpgFile(document.file_name)) {
+        const image = isPngFile(document.file_name)
+          ? await finalDoc.embedPng(bytes)
+          : await finalDoc.embedJpg(bytes);
+        const page = finalDoc.addPage([595.28, 841.89]);
+        const maxW = 515, maxH = 762;
+        const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+        const w = image.width * scale, h = image.height * scale;
+        page.drawImage(image, { x: (595.28 - w) / 2, y: (841.89 - h) / 2, width: w, height: h });
+      }
+      // Unsupported types (xlsx, docx, etc.) are skipped — already listed in the manifest.
+    } catch (e) { console.warn('Document merge failed:', document.file_name, e); }
+  }
+
+  // 4. Remaining Audit Trail pages
+  const remainingIndices = Array.from({ length: totalPages - preAnnexEnd }, (_, i) => preAnnexEnd + i);
+  const auditPages = await finalDoc.copyPages(fullDoc, remainingIndices);
+  auditPages.forEach(p => finalDoc.addPage(p));
+
+  const finalBytes = await finalDoc.save();
+  return new Blob([finalBytes], { type: 'application/pdf' });
 }
 
 // ── Step definitions (steps 1–7 must be complete before report) ────────────
@@ -586,7 +750,8 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
 
     // Fetch all supporting data in parallel
     const [screeningHits, assessments, controlMeasures, auditEvents,
-           relatedPartyLinks, relatedPartiesAll, tenantList] = await Promise.all([
+           relatedPartyLinks, relatedPartiesAll, tenantList,
+           caseDocs, clientDocs, outreachRequests] = await Promise.all([
       base44.entities.ScreeningHit.filter({ case_id: kycCase.id }),
       base44.entities.RiskAssessment.filter({ case_id: kycCase.id }),
       base44.entities.ControlMeasure.filter({ case_id: kycCase.id }),
@@ -594,12 +759,50 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
       base44.entities.ClientRelatedPartyLink.filter({ client_id: kycCase.client_id }),
       base44.entities.RelatedParty.filter({ tenant_id: kycCase.tenant_id }),
       base44.entities.Tenant.filter({ id: kycCase.tenant_id }),
+      base44.entities.Document.filter({ case_id: kycCase.id, is_deleted: false }),
+      base44.entities.Document.filter({ client_id: kycCase.client_id, is_deleted: false }),
+      base44.entities.OutreachRequest.filter({ case_id: kycCase.id }),
     ]);
 
     const tenant = tenantList?.[0] || null;
     const nextVersion = (reports[0]?.version_number || 0) + 1;
 
-    const doc = await buildPDF({
+    // Merge + dedupe case/client documents, excluding prior report PDFs
+    const docMap = new Map();
+    [...(caseDocs || []), ...(clientDocs || [])].forEach(d => {
+      if (d.doc_type !== 'KYC_Report' && !d.is_deleted) docMap.set(d.id, d);
+    });
+    const sourceOrder = { didit: 0, portal: 1, manual: 2 };
+    const documents = Array.from(docMap.values()).sort((a, b) => {
+      const sa = sourceOrder[a.source] ?? 3, sb = sourceOrder[b.source] ?? 3;
+      if (sa !== sb) return sa - sb;
+      return new Date(a.created_date || 0) - new Date(b.created_date || 0);
+    });
+
+    // Collect unique Didit session IDs from completed IDV items
+    const diditSessionIds = [];
+    const seenSessions = new Set();
+    (outreachRequests || []).forEach(req => {
+      (req.items || []).forEach(item => {
+        if (item.didit_session_id && item.idv_status && item.idv_status !== 'Pending' && !seenSessions.has(item.didit_session_id)) {
+          seenSessions.add(item.didit_session_id);
+          diditSessionIds.push(item.didit_session_id);
+        }
+      });
+    });
+
+    // Build the Annex manifest (Didit reports first, then documents)
+    const annexManifest = [
+      ...diditSessionIds.map(() => ['Didit Identity Verification Report', 'IDV Report', 'didit', '—']),
+      ...documents.map(d => [
+        d.file_name || '—',
+        (d.doc_type || '—').replace(/_/g, ' '),
+        d.source || 'manual',
+        d.created_date ? format(new Date(d.created_date), 'd MMM yyyy') : '—',
+      ]),
+    ];
+
+    const { doc, auditTrailStartPage } = await buildPDF({
       kycCase, client, currentUser,
       screeningHits: screeningHits || [],
       assessments: assessments || [],
@@ -609,11 +812,13 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
       relatedParties: relatedPartiesAll || [],
       tenant,
       nextVersion,
+      annexManifest,
     });
+
+    const pdfBlob = await mergeAnnexPdfs({ doc, auditTrailStartPage, documents, diditSessionIds, tenant, kycCase });
 
     const safeName = (client?.full_name || 'Client').replace(/[^a-zA-Z0-9_-]/g, '_');
     const fileName = `KYC_Report_${safeName}_v${nextVersion}_${format(new Date(), 'yyyyMMdd')}.pdf`;
-    const pdfBlob = doc.output('blob');
     const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
     const { file_url } = await base44.integrations.Core.UploadFile({ file: pdfFile });
@@ -622,7 +827,7 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
     const reportSnapshot = {
       client: client,
       case: { status: kycCase.status, risk_classification: kycCase.risk_classification },
-      summary: { total_pages: doc.getNumberOfPages(), generated_at: new Date().toISOString() }
+      summary: { total_pages: doc.getNumberOfPages(), generated_at: new Date().toISOString(), annex_documents: documents.length, didit_reports: diditSessionIds.length }
     };
 
     await base44.entities.KycReport.create({
@@ -727,7 +932,7 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
 
       {/* What's included */}
       <div className="bg-muted/30 border border-border rounded-xl p-3 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-        {['Client Profile','Related Parties','Screening Hits','Risk Indicators','Control Measures','Sign-Off & Audit Trail'].map(s => (
+        {['Client Profile','Related Parties','Screening Hits','Risk Indicators','Control Measures','Sign-Off, Annex & Audit Trail'].map(s => (
           <div key={s} className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <CheckCircle className="w-3 h-3 text-emerald-500 flex-shrink-0" />{s}
           </div>
