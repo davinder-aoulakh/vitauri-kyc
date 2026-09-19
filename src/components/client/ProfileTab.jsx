@@ -114,7 +114,12 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
     const { id, created_date, updated_date, created_by, tenant_id, ...rest } = form;
     if (!isOrg) {
       rest.full_name = computeFullName(rest.first_names, rest.last_name);
+    }
+    if (rest.contact_entries?.length > 0) {
       Object.assign(rest, syncPreferredContacts(rest.contact_entries));
+    }
+    if (isOrg) {
+      rest.registered_country = rest.residential_address?.country || rest.registered_country;
     }
     await base44.entities.Client.update(client.id, rest);
     await base44.entities.AuditEvent.create({
@@ -159,12 +164,13 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
               <SF label="Legal Form" {...fProps('legal_form')} options={LEGAL_FORMS} />
               <F label="Registration No. / KvK" {...fProps('registration_number')} />
               <F label="LEI Code" {...fProps('lei_code')} placeholder="Optional" />
-              <SF label="Registered Country" {...fProps('registered_country')} options={COUNTRIES} />
               <SF label="Sector / Industry" {...fProps('sector')} options={SECTORS} />
-              <div className="md:col-span-2"><F label="Registered Address" {...fProps('registered_address')} /></div>
               <F label="Contact Name" {...fProps('primary_contact_name')} />
-              <F label="Contact Email" {...fProps('primary_contact_email')} type="email" />
-              <F label="Contact Phone" {...fProps('primary_contact_phone')} />
+              <div>
+                <Label className="text-xs font-medium mb-1 block text-muted-foreground">Registered Country</Label>
+                <Input value={form.residential_address?.country || form.registered_country || ''} disabled className="h-8 text-sm bg-muted/40" />
+                <p className="text-xs text-muted-foreground mt-1">Synced from Residential Address country</p>
+              </div>
             </>
           ) : (
             <>
@@ -194,8 +200,7 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
         </div>
       </div>
 
-      {!isOrg && (
-        <div>
+      <div>
           <h3 className="text-sm font-semibold mb-3">Communication</h3>
           <div className="mb-3 max-w-xs">
             <Label className="text-xs font-medium mb-1 block text-muted-foreground">Language</Label>
@@ -205,15 +210,12 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
             </Select>
           </div>
           <ContactEntriesTable entries={form.contact_entries} onChange={v => set('contact_entries', v)} />
-        </div>
-      )}
+      </div>
 
-      {!isOrg && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <AddressFields title="Residential Address" value={form.residential_address} onChange={v => set('residential_address', v)} />
-          <AddressFields title="Postal Address" value={form.postal_address} onChange={v => set('postal_address', v)} optionalNote="Optional — if different" />
-        </div>
-      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <AddressFields title="Residential Address" value={form.residential_address} onChange={v => set('residential_address', v)} />
+        <AddressFields title="Postal Address" value={form.postal_address} onChange={v => set('postal_address', v)} optionalNote="Optional — if different" />
+      </div>
 
       {/* FATCA / CRS */}
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">

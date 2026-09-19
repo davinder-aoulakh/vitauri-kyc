@@ -96,7 +96,8 @@ export default function NewClient() {
     const contactMirror = syncPreferredContacts(form.contact_entries);
     const client = await base44.entities.Client.create({
       ...form,
-      ...(clientType === 'NP' && form.contact_entries?.length > 0 ? contactMirror : {}),
+      ...(form.contact_entries?.length > 0 ? contactMirror : {}),
+      ...(clientType === 'ORG' ? { registered_country: form.residential_address?.country || form.registered_country } : {}),
       tenant_id: currentUser.tenant_id,
       client_type: clientType,
       status: 'Prospect',
@@ -295,9 +296,9 @@ export default function NewClient() {
                 {clientType === 'ORG' && <>
                   <ReviewRow label="Legal Form" value={form.legal_form} />
                   <ReviewRow label="Registration No." value={form.registration_number} />
-                  <ReviewRow label="Registered Country" value={form.registered_country} />
+                  <ReviewRow label="Registered Country" value={form.residential_address?.country || form.registered_country} />
                   <ReviewRow label="Sector" value={form.sector} />
-                  <ReviewRow label="Address" value={form.registered_address} />
+                  <ReviewRow label="Residential Address" value={[form.residential_address?.street, form.residential_address?.city, form.residential_address?.country].filter(Boolean).join(', ')} />
                   <ReviewRow label="Contact Name" value={form.primary_contact_name} />
                   <ReviewRow label="Entity Classification" value={form.entity_classification} />
                 </>}
@@ -312,7 +313,7 @@ export default function NewClient() {
                   <ReviewRow label="ID Number" value={form.id_number} />
                   <ReviewRow label="Residential Address" value={[form.residential_address?.street, form.residential_address?.city, form.residential_address?.country].filter(Boolean).join(', ')} />
                 </>}
-                <ReviewRow label="Contact Email" value={clientType === 'NP' ? syncPreferredContacts(form.contact_entries).primary_contact_email : form.primary_contact_email} />
+                <ReviewRow label="Contact Email" value={syncPreferredContacts(form.contact_entries).primary_contact_email} />
                 <ReviewRow label="Tax Residency" value={form.tax_residency} />
                 <ReviewRow label="TIN" value={form.tin} />
                 <ReviewRow label="Source Channel" value={form.source_channel} />
