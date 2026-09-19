@@ -23,7 +23,7 @@ const NP_FIELDS = [
 const ORG_FIELDS = ['full_name','legal_form','registration_number','registered_country','registered_address','sector','lei_code'];
 
 // Source priority for merging (higher index = higher priority)
-const SOURCE_PRIORITY = { osint: 0, outreach: 1, document: 2 };
+const SOURCE_PRIORITY = { osint: 0, outreach: 1, document: 2, didit: 3 };
 
 function priorityOf(src: string): number {
   return SOURCE_PRIORITY[src] ?? 0;
@@ -111,6 +111,47 @@ function mergeField(candidates: Array<{ value: string; confidence: number; sourc
 
 const DIDIT_GENDER_MAP: Record<string, string> = { M: 'Male', F: 'Female', U: 'Other' };
 
+function computeFullName(first?: string, last?: string): string {
+  return [first, last].filter(Boolean).join(' ').trim();
+}
+
+// Build candidate map from Didit ID&V extraction on id_verification outreach items.
+// Higher confidence/priority than generic outreach or document-OCR candidates — this is
+// structured extraction directly from the verified ID document, not a label-matched answer
+// or a generic OCR pass. NP only.
+function extractFromDidit(outreaches: any[]): Record<string, any[]> {
+  const candidates: Record<string, any[]> = {};
+
+  const push = (field: string, value: string, ref: string, extra: Record<string, any> = {}) => {
+    if (!value || String(value).trim() === '') return;
+    if (!candidates[field]) candidates[field] = [];
+    candidates[field].push({ value: String(value).trim(), confidence: 95, source_type: 'didit', source_ref: ref, ...extra });
+  };
+
+  for (const req of outreaches) {
+    for (const item of (req.items || [])) {
+      if (item.field_type !== 'id_verification') continue;
+      const appliedFields = new Set(item.idv_profile_applied_fields || []);
+      const sourceIds = { source_request_id: req.id, source_item_id: item.item_id };
+      const ref = `Didit IDV: ${item.label}`;
+      const nameApplied = (key: string) => appliedFields.has(key) || appliedFields.has('full_name');
+
+      if (item.idv_extracted_first_name) push('first_names', item.idv_extracted_first_name, ref, { applied: nameApplied('first_names'), ...sourceIds });
+      if (item.idv_extracted_last_name) push('last_name', item.idv_extracted_last_name, ref, { applied: nameApplied('last_name'), ...sourceIds });
+      const fullName = computeFullName(item.idv_extracted_first_name, item.idv_extracted_last_name);
+      if (fullName) push('full_name', fullName, ref, { applied: nameApplied('full_name'), ...sourceIds });
+      if (item.idv_extracted_dob) push('date_of_birth', item.idv_extracted_dob, ref, { applied: appliedFields.has('date_of_birth'), ...sourceIds });
+      if (item.idv_extracted_nationality) push('nationality', item.idv_extracted_nationality, ref, { applied: appliedFields.has('nationality'), ...sourceIds });
+      if (item.idv_extracted_gender) {
+        const mapped = DIDIT_GENDER_MAP[item.idv_extracted_gender] || null;
+        if (mapped) push('gender', mapped, ref, { applied: appliedFields.has('gender'), ...sourceIds });
+      }
+      if (item.idv_extracted_address) push('residential_address.street', item.idv_extracted_address, ref, { applied: appliedFields.has('residential_address.street'), ...sourceIds });
+    }
+  }
+  return candidates;
+}
+
 // Build candidate map from outreach responses
 function extractFromOutreach(outreaches: any[], isOrg: boolean): Record<string, any[]> {
   const candidates: Record<string, any[]> = {};
@@ -120,29 +161,6 @@ function extractFromOutreach(outreaches: any[], isOrg: boolean): Record<string, 
     if (!candidates[field]) candidates[field] = [];
     candidates[field].push({ value: String(value).trim(), confidence, source_type: sourceType, source_ref: ref, ...extra });
   };
-
-  // Didit IDV results carry gender/address/nationality directly on the outreach item — pull
-  // them in separately from the label-matching pass below (they don't have a matching label).
-  // Each is tagged with applied (already written to the client profile) + source ids so the
-  // frontend can mark/re-apply against the exact item that produced it.
-  if (!isOrg) {
-    for (const req of outreaches) {
-      for (const item of (req.items || [])) {
-        const appliedFields = new Set(item.idv_profile_applied_fields || []);
-        const sourceIds = { source_request_id: req.id, source_item_id: item.item_id };
-        if (item.idv_extracted_gender) {
-          const mapped = DIDIT_GENDER_MAP[item.idv_extracted_gender] || null;
-          if (mapped) push('gender', mapped, `Didit IDV: ${item.label}`, 80, 'outreach', { applied: appliedFields.has('gender'), ...sourceIds });
-        }
-        if (item.idv_extracted_address) {
-          push('residential_address.street', item.idv_extracted_address, `Didit IDV: ${item.label}`, 72, 'outreach', { applied: appliedFields.has('residential_address.street'), ...sourceIds });
-        }
-        if (item.idv_extracted_nationality) {
-          push('nationality', item.idv_extracted_nationality, `Didit IDV: ${item.label}`, 80, 'outreach', { applied: appliedFields.has('nationality'), ...sourceIds });
-        }
-      }
-    }
-  }
 
   for (const req of outreaches) {
     for (const item of (req.items || [])) {
@@ -392,12 +410,14 @@ Return 4-6 findings. Be specific. If nothing found, say so clearly.`,
   // ── 4. Merge all sources per field ────────────────────────────────────────────
   const allFields = isOrg ? ORG_FIELDS : NP_FIELDS;
   const clientFields: Record<string, any> = {};
+  const diditCandidates = isOrg ? {} : extractFromDidit(outreaches || []);
 
   for (const field of allFields) {
     const merged: any[] = [
       ...(docCandidates[field] || []),
       ...(outreachCandidates[field] || []),
       ...(osintCandidates[field] || []),
+      ...(diditCandidates[field] || []),
     ];
     const result = mergeField(merged);
     if (result) {

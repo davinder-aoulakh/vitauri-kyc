@@ -3,18 +3,20 @@
  * Shows: label | current value | AI suggestion (source badge, confidence pill) | Accept new / Request info / Keep existing
  */
 import React, { useState } from 'react';
-import { Check, X, Pencil, ExternalLink, AlertTriangle, FileText, Globe, MessageSquare, Info, Mail, Flag, RotateCcw, RefreshCw } from 'lucide-react';
+import { Check, X, Pencil, ExternalLink, AlertTriangle, FileText, Globe, MessageSquare, Info, Mail, Flag, RotateCcw, RefreshCw, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const SOURCE_ICONS = {
   document: FileText,
   outreach: MessageSquare,
   osint:    Globe,
+  didit:    ShieldCheck,
 };
 const SOURCE_COLORS = {
   document: 'bg-blue-100 text-blue-700 border-blue-200',
   outreach: 'bg-violet-100 text-violet-700 border-violet-200',
   osint:    'bg-emerald-100 text-emerald-700 border-emerald-200',
+  didit:    'bg-teal-100 text-teal-700 border-teal-200',
 };
 const STATUS_CONFIG = {
   suggested:      { label: 'AI Suggested', bg: 'bg-purple-50 border-purple-200' },
@@ -40,6 +42,7 @@ function SourceBadge({ source_type, source_ref }) {
   const parts = source_ref?.split('::') || [];
   const label = source_type === 'document' ? (parts[1] || 'Document')
     : source_type === 'osint' ? (parts[0] || 'OSINT')
+    : source_type === 'didit' ? (source_ref || 'Didit IDV')
     : (source_ref || 'Outreach');
   const url = source_type === 'osint' && parts[1] ? parts[1] : null;
 
