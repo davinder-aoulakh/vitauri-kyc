@@ -225,6 +225,14 @@
           "idv_extracted_nationality": {
             "type": "string"
           },
+          "idv_extracted_gender": {
+            "type": "string",
+            "description": "Raw Didit gender code \u2014 M, F, or U"
+          },
+          "idv_extracted_address": {
+            "type": "string",
+            "description": "Raw Didit address string"
+          },
           "idv_issuing_country": {
             "type": "string"
           },

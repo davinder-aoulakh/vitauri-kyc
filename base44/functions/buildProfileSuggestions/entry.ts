@@ -85,15 +85,33 @@ function mergeField(candidates: Array<{ value: string; confidence: number; sourc
   };
 }
 
+const DIDIT_GENDER_MAP: Record<string, string> = { M: 'Male', F: 'Female', U: 'Unknown' };
+
 // Build candidate map from outreach responses
 function extractFromOutreach(outreaches: any[], isOrg: boolean): Record<string, any[]> {
   const candidates: Record<string, any[]> = {};
 
-  const push = (field: string, value: string, ref: string, confidence: number) => {
+  const push = (field: string, value: string, ref: string, confidence: number, sourceType = 'outreach') => {
     if (!value || String(value).trim() === '') return;
     if (!candidates[field]) candidates[field] = [];
-    candidates[field].push({ value: String(value).trim(), confidence, source_type: 'outreach', source_ref: ref });
+    candidates[field].push({ value: String(value).trim(), confidence, source_type: sourceType, source_ref: ref });
   };
+
+  // Didit IDV results carry gender/address directly on the outreach item — pull them
+  // in separately from the label-matching pass below (they don't have a matching label).
+  if (!isOrg) {
+    for (const req of outreaches) {
+      for (const item of (req.items || [])) {
+        if (item.idv_extracted_gender) {
+          const mapped = DIDIT_GENDER_MAP[item.idv_extracted_gender] || null;
+          if (mapped) push('gender', mapped, `Didit IDV: ${item.label}`, 80, 'outreach');
+        }
+        if (item.idv_extracted_address) {
+          push('residential_address.street', item.idv_extracted_address, `Didit IDV: ${item.label}`, 72, 'outreach');
+        }
+      }
+    }
+  }
 
   for (const req of outreaches) {
     for (const item of (req.items || [])) {

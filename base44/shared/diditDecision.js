@@ -59,6 +59,8 @@ export function extractIdvFields(decision, sessionId) {
     idv_extracted_last_name:    idv.last_name         || null,
     idv_extracted_dob:          normaliseDateString(idv.date_of_birth)     || null,
     idv_extracted_nationality:  idv.nationality       || null,
+    idv_extracted_gender:       idv.gender            || null,
+    idv_extracted_address:      idv.address           || null,
     idv_issuing_country:        idv.issuing_state     || null,
     idv_failure_reason:         failureReason,
     idv_aml_hits:               aml.total_hits        != null ? aml.total_hits : 0,
