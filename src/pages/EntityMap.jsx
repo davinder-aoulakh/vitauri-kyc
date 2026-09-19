@@ -1,11 +1,12 @@
 /**
- * EntityMap — Interactive network map for client entities.
+ * Org Chart Viewer — Interactive network map with AI-generated ownership analysis.
  * Features:
  *  - Related parties with role-tier layout
  *  - Cross-entity connections (shared related parties across clients)
  *  - KYC case jump links directly from any node
  *  - Ownership % on edges, drag-pan, zoom, fit-to-screen
  *  - Detail panel with verification, risk, and direct case navigation
+ *  - AI Generate Chart panel — suggests UBOs, directors and unregistered parties
  */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -15,10 +16,11 @@ import AppShell from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/button';
 import RiskBadge from '@/components/shared/RiskBadge';
 import StatusBadge from '@/components/shared/StatusBadge';
+import OrgChartAiPanel from '@/components/entitymap/OrgChartAiPanel';
 import {
   ChevronLeft, Loader2, Building2, User, Network,
   ZoomIn, ZoomOut, Maximize2, ExternalLink, FolderOpen,
-  Shield, GitFork, RefreshCw
+  Shield, GitFork, RefreshCw, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -183,6 +185,10 @@ export default function EntityMap() {
   const [pan, setPan]                 = useState({ x: 0, y: 0 });
   const [dragging, setDragging]       = useState(false);
   const [dragStart, setDragStart]     = useState(null);
+  const [aiSuggestions, setAiSuggestions] = useState(null);
+  const [generating, setGenerating]   = useState(false);
+  const [aiError, setAiError]         = useState(null);
+  const [showAiPanel, setShowAiPanel] = useState(false);
   const containerRef = useRef(null);
 
   useEffect(() => { loadData(); }, [clientId]);
@@ -239,6 +245,59 @@ export default function EntityMap() {
 
     setCasesMap(cMap);
     setLoading(false);
+  }
+
+  async function generateChart() {
+    setGenerating(true);
+    setAiError(null);
+    setShowAiPanel(true);
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `You are a KYC compliance analyst. Based on the following client information, draft an organizational structure showing ownership and control relationships.
+
+Client: ${client?.full_name}
+Type: ${client?.client_type}
+Country: ${client?.registered_country || 'Netherlands'}
+Registration: ${client?.registration_number || 'N/A'}
+Sector: ${client?.sector || 'Financial Services'}
+
+Related parties already known: ${relatedParties.map(rp => `${rp.full_name} (${rp.role || 'Unknown role'}, ${rp.ownership || 0}%)`).join(', ') || 'None'}
+
+Based on typical ownership structures for this type of entity in this jurisdiction, identify:
+1. Likely UBOs (>25% ownership)
+2. Board members/directors
+3. Any additional entities that should be investigated
+
+Return structured data for the org chart.`,
+        response_json_schema: {
+          type: 'object',
+          properties: {
+            nodes: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  type: { type: 'string' },
+                  role: { type: 'string' },
+                  ownership_percentage: { type: 'number' },
+                  flag: { type: 'string' },
+                },
+              },
+            },
+            unregistered_parties: {
+              type: 'array',
+              items: { type: 'object', properties: { name: { type: 'string' }, reason: { type: 'string' } } },
+            },
+            recommendation: { type: 'string' },
+          },
+        },
+      });
+      setAiSuggestions(result);
+    } catch (e) {
+      setAiError('Failed to generate chart. Please try again.');
+    }
+    setGenerating(false);
   }
 
   // Build nodes
@@ -331,7 +390,7 @@ export default function EntityMap() {
             <div className="flex items-center gap-2">
               <Network className="w-4 h-4 text-primary" />
               <div>
-                <h1 className="text-sm font-semibold leading-tight">Entity Network — {client?.full_name}</h1>
+                <h1 className="text-sm font-semibold leading-tight">Org Chart Viewer — {client?.full_name}</h1>
                 <p className="text-xs text-muted-foreground">
                   {positioned.length} entities · {edges.length} connections
                   {crossCount > 0 && <span className="ml-2 text-orange-500 font-medium">· {crossCount} cross-entity link{crossCount !== 1 ? 's' : ''}</span>}
@@ -350,11 +409,25 @@ export default function EntityMap() {
                 </div>
               ))}
             </div>
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs border-purple-200 text-purple-700 hover:bg-purple-50" onClick={generateChart} disabled={generating}>
+              {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              {generating ? 'Generating…' : 'Generate Chart'}
+            </Button>
             <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={loadData}>
               <RefreshCw className="w-3 h-3" /> Refresh
             </Button>
           </div>
         </div>
+
+        {showAiPanel && (generating || aiSuggestions || aiError) && (
+          <OrgChartAiPanel
+            generating={generating}
+            aiSuggestions={aiSuggestions}
+            error={aiError}
+            onRegenerate={generateChart}
+            onDismiss={() => setShowAiPanel(false)}
+          />
+        )}
 
         <div className="flex flex-1 overflow-hidden">
           {/* ── Canvas ── */}

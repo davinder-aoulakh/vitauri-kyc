@@ -48,7 +48,7 @@ export default function RelatedPartiesTab({ client, relatedParties, links, onRef
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <h3 className="font-semibold text-sm">Related Parties ({relatedParties.length})</h3>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => navigate(`/org-chart/${client.id}`)}>
+          <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => navigate(`/entity-map/${client.id}`)}>
             <Network className="w-3 h-3" /> Org Chart
           </Button>
           <Button size="sm" className="gap-1 text-xs" onClick={() => setAddOpen(true)}>

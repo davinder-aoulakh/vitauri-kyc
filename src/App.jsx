@@ -17,7 +17,6 @@ import ClientSearch from './pages/ClientSearch';
 import NewClient from './pages/NewClient';
 import ClientDetail from './pages/ClientDetail';
 import CaseWorkspace from './pages/CaseWorkspace';
-import OrgChart from './pages/OrgChart';
 import MonitoringAlerts from './pages/MonitoringAlerts';
 import TenantConfig from './pages/TenantConfig';
 import UserManagement from './pages/UserManagement';
@@ -102,7 +101,6 @@ const AuthenticatedApp = () => {
       <Route path="/batch-upload" element={<BatchUpload />} />
       <Route path="/batch-screening" element={<BatchScreening />} />
       <Route path="/client/:id" element={<ClientDetail />} />
-      <Route path="/org-chart/:clientId" element={<OrgChart />} />
       <Route path="/entity-map/:clientId" element={<EntityMap />} />
 
       {/* Monitoring */}

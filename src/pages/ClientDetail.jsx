@@ -218,13 +218,8 @@ export default function ClientDetail() {
                 </Button>
               )}
               {client.client_type === 'ORG' && (
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => navigate(`/org-chart/${id}`)}>
-                  <Network className="w-3.5 h-3.5" /> Org Chart
-                </Button>
-              )}
-              {client.client_type === 'ORG' && (
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => navigate(`/entity-map/${id}`)}>
-                  <GitFork className="w-3.5 h-3.5" /> Entity Map
+                  <GitFork className="w-3.5 h-3.5" /> Org Chart Viewer
                 </Button>
               )}
               {activeCase && (
