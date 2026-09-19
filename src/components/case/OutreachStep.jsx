@@ -14,6 +14,7 @@ import DocumentViewer from '@/components/shared/DocumentViewer';
 import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
 import { NP_FIELD_LABELS, ORG_FIELD_LABELS } from '@/hooks/useProfileSuggestions';
 import { isFieldMappedLabel } from '@/lib/outreachFieldMatch';
+import SuggestedProfileUpdatesCard from '@/components/case/outreach/SuggestedProfileUpdatesCard';
 
 const SITUATION_LABELS = {
   Welcome: 'Welcome',
@@ -510,6 +511,17 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
             ))}
           </div>
         </div>
+      )}
+
+      {diditSummary && (
+        <SuggestedProfileUpdatesCard
+          diditSummary={diditSummary}
+          requests={requests}
+          client={client}
+          kycCase={kycCase}
+          currentUser={currentUser}
+          onAccepted={load}
+        />
       )}
 
       {diditPanelItem?.didit_session_id && (
