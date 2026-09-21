@@ -4,7 +4,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Loader2, Save, CheckCircle2, XCircle, Wifi } from 'lucide-react';
+import { Loader2, Save, CheckCircle2, XCircle, Wifi, ShieldCheck, ShieldAlert, Copy, Send } from 'lucide-react';
+
+const WEBHOOK_URL = 'https://vitauri-kyc.base44.app/functions/diditWebhook';
 
 export default function DiditConfigTab({ tenant, onSave }) {
   const [apiKey,     setApiKey]     = useState(tenant?.didit_api_key      || '');
@@ -13,6 +15,59 @@ export default function DiditConfigTab({ tenant, onSave }) {
   const [testing,    setTesting]    = useState(false);
   const [testResult, setTestResult] = useState(null); // null | 'ok' | 'fail'
   const [saving,     setSaving]     = useState(false);
+
+  const [webhookSecret, setWebhookSecret]   = useState(tenant?.didit_webhook_secret || '');
+  const [registering,   setRegistering]     = useState(false);
+  const [testingHook,   setTestingHook]     = useState(false);
+  const [savingSecret,  setSavingSecret]    = useState(false);
+  const [hookMsg,       setHookMsg]         = useState(null); // { type: 'ok'|'fail', text }
+
+  async function handleRegisterWebhook() {
+    if (!tenant?.id) return;
+    setRegistering(true);
+    setHookMsg(null);
+    try {
+      const res = await base44.functions.invoke('registerDiditWebhook', { tenant_id: tenant.id, action: 'register' });
+      const data = res?.data || res;
+      if (data?.error) {
+        setHookMsg({ type: 'fail', text: data.error });
+      } else {
+        setHookMsg({ type: 'ok', text: data?.updated ? 'Webhook destination updated.' : 'Webhook registered — secret saved.' });
+        onSave?.();
+      }
+    } catch (err) {
+      setHookMsg({ type: 'fail', text: err.message || 'Registration failed' });
+    } finally {
+      setRegistering(false);
+    }
+  }
+
+  async function handleTestWebhook() {
+    if (!tenant?.id) return;
+    setTestingHook(true);
+    setHookMsg(null);
+    try {
+      const res = await base44.functions.invoke('registerDiditWebhook', { tenant_id: tenant.id, action: 'test' });
+      const data = res?.data || res;
+      if (data?.ok) {
+        setHookMsg({ type: 'ok', text: 'Test event delivered and verified successfully.' });
+      } else {
+        setHookMsg({ type: 'fail', text: data?.error || data?.result?.error || 'Test event failed verification.' });
+      }
+    } catch (err) {
+      setHookMsg({ type: 'fail', text: err.message || 'Test failed' });
+    } finally {
+      setTestingHook(false);
+    }
+  }
+
+  async function handleSaveSecret() {
+    if (!tenant?.id) return;
+    setSavingSecret(true);
+    await base44.entities.Tenant.update(tenant.id, { didit_webhook_secret: webhookSecret });
+    setSavingSecret(false);
+    onSave?.();
+  }
 
   async function handleTest() {
     setTesting(true);
@@ -112,16 +167,81 @@ export default function DiditConfigTab({ tenant, onSave }) {
         </p>
       </div>
 
-      {/* Webhook URL (read-only) */}
-      <div className="space-y-1.5">
-        <Label className="text-xs font-medium">Webhook Destination URL (for Didit Console)</Label>
-        <code className="block text-xs bg-muted px-3 py-2 rounded border border-border font-mono break-all">
-          {window.location.origin}/api/webhooks/didit
-        </code>
-        <p className="text-xs text-muted-foreground">
-          Note: for Base44 apps, leave webhook destination empty in Didit Console.
-          Verification results are fetched via callback URL instead.
-        </p>
+      {/* Webhook Configuration */}
+      <div className="space-y-3 border-t border-border pt-5">
+        <div className="flex items-center gap-2">
+          <h4 className="text-sm font-semibold">Webhook Configuration</h4>
+          {tenant?.didit_webhook_secret ? (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+              <ShieldCheck className="w-3 h-3" /> Secured
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+              <ShieldAlert className="w-3 h-3" /> Not configured
+            </span>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium">Webhook Destination URL</Label>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs bg-muted px-3 py-2 rounded border border-border font-mono break-all">
+              {WEBHOOK_URL}
+            </code>
+            <Button variant="outline" size="sm" className="h-9 w-9 p-0 flex-shrink-0"
+              onClick={() => navigator.clipboard.writeText(WEBHOOK_URL)}>
+              <Copy className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Register this URL as a webhook destination on Didit so verification decisions
+            are pushed to us in real time (recommended). Without it, the portal falls back
+            to polling for results.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" disabled={!apiKey || registering} onClick={handleRegisterWebhook} className="gap-2">
+            {registering ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+            Register Webhook
+          </Button>
+          <Button variant="outline" size="sm" disabled={!tenant?.didit_webhook_secret || testingHook} onClick={handleTestWebhook} className="gap-2">
+            {testingHook ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            Test Webhook
+          </Button>
+        </div>
+
+        {hookMsg && (
+          <div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 border ${
+            hookMsg.type === 'ok'
+              ? 'text-green-700 bg-green-50 border-green-200'
+              : 'text-red-700 bg-red-50 border-red-200'
+          }`}>
+            {hookMsg.type === 'ok' ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <XCircle className="w-4 h-4 flex-shrink-0" />}
+            {hookMsg.text}
+          </div>
+        )}
+
+        <div className="space-y-1.5 pt-1">
+          <Label className="text-xs font-medium">Webhook Secret (manual entry)</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="password"
+              value={webhookSecret}
+              onChange={e => setWebhookSecret(e.target.value)}
+              placeholder="Paste secret_shared_key if registered directly in the Didit console"
+              className="h-9 text-sm font-mono flex-1"
+            />
+            <Button size="sm" variant="outline" disabled={savingSecret} onClick={handleSaveSecret} className="gap-2 flex-shrink-0">
+              {savingSecret ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Only needed if you registered the webhook destination yourself in the Didit
+            console instead of using the button above.
+          </p>
+        </div>
       </div>
 
       {/* Test Result */}

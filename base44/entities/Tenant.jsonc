@@ -160,6 +160,10 @@
       "type": "string",
       "description": "Optional \u2014 Didit Application UUID for console deep-links"
     },
+    "didit_webhook_secret": {
+      "type": "string",
+      "description": "Shared secret used to verify the X-Signature-V2 HMAC on incoming Didit webhooks \u2014 returned by Didit when a webhook destination is registered"
+    },
     "pending_admin_email": {
       "type": "string",
       "description": "Email of the invited Tenant Admin \u2014 cleared after onboarding is complete"

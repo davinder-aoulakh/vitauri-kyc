@@ -1,0 +1,30 @@
+{
+  "name": "DiditWebhookEvent",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "event_id": {
+      "type": "string",
+      "description": "Didit event_id \u2014 unique per webhook delivery attempt, used for idempotency"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "webhook_type": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "processed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "event_id"
+  ]
+}

@@ -17,14 +17,26 @@ export function normaliseDateString(raw) {
 }
 
 export const STATUS_MAP = {
-  Approved:    'Pass',
-  Declined:    'Fail',
-  'In Review': 'Inconclusive',
-  Abandoned:   'Fail',
-  Expired:     'Expired',
+  Approved:        'Pass',
+  Declined:        'Fail',
+  'In Review':     'Inconclusive',
+  Abandoned:       'Fail',
+  Expired:         'Expired',
+  Resubmitted:     'Inconclusive',
+  'Kyc Expired':   'Expired',
+  'Not Started':   'Pending',
+  'In Progress':   'Pending',
+  'Awaiting User': 'Pending',
 };
 
-export const TERMINAL_STATUSES = ['Approved', 'Declined', 'In Review', 'Abandoned', 'Expired'];
+// Statuses for which the /decision/ endpoint returns a usable decision payload.
+export const TERMINAL_STATUSES = ['Approved', 'Declined', 'In Review', 'Abandoned', 'Expired', 'Resubmitted', 'Kyc Expired'];
+
+// All literal V3 session status strings (exact, case-sensitive).
+export const ALL_SESSION_STATUSES = [
+  'Not Started', 'In Progress', 'Awaiting User', 'In Review', 'Approved',
+  'Declined', 'Resubmitted', 'Abandoned', 'Expired', 'Kyc Expired',
+];
 
 export const ISO3_MAP = {
   'AUS':'Australia (AU)','NLD':'Netherlands (NL)','BEL':'Belgium (BE)',
