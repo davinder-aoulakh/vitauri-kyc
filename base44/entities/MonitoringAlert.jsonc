@@ -36,7 +36,8 @@
         "Didit_Ongoing_PEP",
         "Didit_Ongoing_Sanctions",
         "Didit_Ongoing_Adverse_Media",
-        "Didit_Ongoing_High_Risk"
+        "Didit_Ongoing_High_Risk",
+        "Didit_Abandoned"
       ]
     },
     "source": {

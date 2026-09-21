@@ -60,7 +60,7 @@ export default async function(req) {
       label:              `${tenant.name || tenant.slug} — Vitauri KYC`,
       url:                WEBHOOK_URL,
       webhook_version:    'v3',
-      subscribed_events:  ['status.updated', 'data.updated', 'user.status.updated'],
+      subscribed_events:  ['status.updated', 'data.updated', 'user.status.updated', 'user.data.updated'],
     };
 
     let resp = await fetch('https://verification.didit.me/v3/webhook/destinations/', {

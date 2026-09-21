@@ -5,8 +5,10 @@
  * tenant's didit_webhook_secret, enforces X-Timestamp freshness (<=300s), dedupes
  * on event_id, then dispatches on the V3 top-level envelope fields.
  *
- * If no secret is configured yet for the tenant, the event is processed in open
- * mode (backward compatibility) with a warning logged.
+ * Tenant is resolved from metadata.tenant_id (session-level events) or, when
+ * absent, via the Client entity looked up by vendor_data (user-level events).
+ * There is no open mode — any event whose tenant can't be resolved, or whose
+ * tenant has no webhook secret, or whose signature doesn't verify, is rejected.
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { waitUntil } from 'base44:runtime';
@@ -34,28 +36,44 @@ export default async function(req) {
       return Response.json({ error: 'stale or missing timestamp' }, { status: 401 });
     }
 
-    const base44   = createClientFromRequest(req);
-    const tenantId = parsed?.metadata?.tenant_id;
+    const base44 = createClientFromRequest(req);
+    let tenantId = parsed?.metadata?.tenant_id;
 
-    // 2. Look up the tenant's webhook secret and verify the HMAC.
+    // 2. Resolve the tenant. Session-level events carry metadata.tenant_id directly.
+    //    User-level events (user.status.updated / user.data.updated) have no session
+    //    metadata — resolve via the Client entity using vendor_data (client_id).
     let tenant = null;
     if (tenantId) {
       const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenantId });
       tenant = tenants?.[0] || null;
-    }
-
-    if (tenant?.didit_webhook_secret) {
-      const valid = await verifyDiditSignature(rawBody, sigHeader, tenant.didit_webhook_secret);
-      if (!valid) {
-        console.warn('diditWebhook: signature verification failed', { tenantId, sessionId: parsed.session_id });
-        return Response.json({ error: 'invalid signature' }, { status: 401 });
+    } else if (parsed?.vendor_data) {
+      const clients = await base44.asServiceRole.entities.Client.filter({ id: parsed.vendor_data });
+      const client = clients?.[0];
+      if (client?.tenant_id) {
+        tenantId = client.tenant_id;
+        const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenantId });
+        tenant = tenants?.[0] || null;
       }
-    } else {
-      // Backward compatibility — no secret registered yet for this tenant.
-      console.warn('diditWebhook: no webhook secret configured — processing in OPEN MODE', { tenantId, sessionId: parsed.session_id });
     }
 
-    // 3. Idempotency — dedupe on event_id.
+    // 3. No open mode — a tenant must be resolvable and have a webhook secret,
+    //    and the signature must verify against it, or the event is rejected.
+    if (!tenant?.didit_webhook_secret) {
+      console.warn('diditWebhook: no resolvable tenant/secret — rejecting', { tenantId, sessionId: parsed.session_id });
+      return Response.json({ error: 'unauthorized' }, { status: 401 });
+    }
+
+    const valid = await verifyDiditSignature(rawBody, sigHeader, tenant.didit_webhook_secret);
+    if (!valid) {
+      console.warn('diditWebhook: signature verification failed', { tenantId, sessionId: parsed.session_id });
+      return Response.json({ error: 'invalid signature' }, { status: 401 });
+    }
+
+    // Ensure downstream handlers always see the resolved tenant_id, even when it
+    // was derived from vendor_data rather than carried in the original metadata.
+    parsed.metadata = { ...(parsed.metadata || {}), tenant_id: tenantId };
+
+    // 4. Idempotency — dedupe on event_id.
     const eventId = parsed.event_id;
     if (eventId && tenantId) {
       const existing = await base44.asServiceRole.entities.DiditWebhookEvent.filter({ tenant_id: tenantId, event_id: eventId });
@@ -72,7 +90,7 @@ export default async function(req) {
       }).catch(() => {}));
     }
 
-    // 4. Respond immediately; process the event in the background.
+    // 5. Respond immediately; process the event in the background.
     waitUntil(processWebhookEvent(base44, parsed));
 
     return Response.json({ ok: true, received: true });
@@ -91,6 +109,12 @@ async function processWebhookEvent(base44, body) {
     // Ongoing monitoring — user-level (not session-level) events.
     if (webhookType === 'user.status.updated' || webhookType === 'user.data.updated') {
       await handleOngoingMonitoring(base44, tenantId, body);
+      return;
+    }
+
+    // Session-level data refresh — extracted fields changed without a status change.
+    if (webhookType === 'data.updated' && !TERMINAL_SESSION_STATUSES.includes(status) && status !== 'Resubmitted' && status !== 'Kyc Expired') {
+      await handleDataUpdated(base44, body);
       return;
     }
 
@@ -136,6 +160,36 @@ async function updateSessionStatusOnly(base44, body) {
     return matches ? { ...it, didit_session_status: body.status } : it;
   });
   await base44.asServiceRole.entities.OutreachRequest.update(outreachId, { items: updatedItems });
+}
+
+// ── data.updated: extracted fields refreshed without a status change ─────────
+async function handleDataUpdated(base44, body) {
+  const sessionId  = body.session_id;
+  const outreachId = body.metadata?.outreach_id;
+  const itemId      = body.metadata?.item_id;
+  const tenantId    = body.metadata?.tenant_id;
+  if (!outreachId || !tenantId) return;
+
+  const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenantId });
+  const tenant  = tenants?.[0];
+  if (!tenant?.didit_api_key) { console.warn('diditWebhook: no Didit API key for tenant', tenantId); return; }
+
+  const result = await fetchDiditDecision(sessionId, tenant.didit_api_key);
+  if (result.pending || !result.idvFields) { console.log('diditWebhook: data.updated but no usable decision yet', sessionId); return; }
+
+  const { idvFields } = result;
+
+  const outreachList = await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreachId });
+  const outreach = outreachList?.[0];
+  if (!outreach) return;
+
+  const updatedItems = (outreach.items || []).map(it => {
+    const isMatch = itemId ? it.item_id === itemId : it.didit_session_id === sessionId;
+    return isMatch ? { ...it, ...idvFields } : it;
+  });
+  await base44.asServiceRole.entities.OutreachRequest.update(outreachId, { items: updatedItems });
+
+  console.log('diditWebhook: data.updated refreshed IDV fields', { sessionId });
 }
 
 // ── Terminal decision (Approved / Declined / In Review / Abandoned / Expired) ─
@@ -201,6 +255,22 @@ async function processTerminalDecisionImpl(base44, body) {
   const caseId = freshOutreach.case_id;
   if (caseId) {
     await autoCompleteSteps(base44, caseId, resolvedTenantId, freshOutreach.client_id, idvFields);
+  }
+
+  // Abandoned — notify analysts with both an alert and an audit event.
+  if (body.status === 'Abandoned' && freshOutreach.client_id) {
+    const clients = await base44.asServiceRole.entities.Client.filter({ id: freshOutreach.client_id });
+    const client  = clients?.[0];
+    await base44.asServiceRole.entities.MonitoringAlert.create({
+      tenant_id:   resolvedTenantId,
+      client_id:   freshOutreach.client_id,
+      case_id:     caseId || null,
+      entity_name: client?.full_name || freshOutreach.client_id,
+      entity_type: 'Client',
+      alert_type:  'Didit_Abandoned',
+      source:      'Didit KYC',
+      details:     { session_id: sessionId, reason: 'Abandoned' },
+    }).catch(() => {});
   }
 
   await base44.asServiceRole.entities.AuditEvent.create({
