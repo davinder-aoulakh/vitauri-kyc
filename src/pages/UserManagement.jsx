@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Users, Plus, Mail, Shield, Loader2, CheckCircle, AlertTriangle, Info } from 'lucide-react';
+import { Users, Plus, Mail, Shield, Loader2, CheckCircle, AlertTriangle, Info, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { APP_ROLES, PERMISSIONS } from '@/lib/permissions';
 
@@ -44,6 +44,7 @@ export default function UserManagement() {
   const { currentUser } = useTenant();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -56,9 +57,14 @@ export default function UserManagement() {
   }, [currentUser]);
 
   async function loadUsers() {
+    setLoading(true);
+    setLoadError(null);
     try {
-      const data = await base44.entities.User.filter({ tenant_id: currentUser.tenant_id }).catch(() => []);
-      setUsers(data || []);
+      const res = await base44.functions.invoke('listTenantUsers', {});
+      setUsers(res.data?.users || []);
+    } catch (err) {
+      setLoadError(err?.response?.data?.error || err?.message || 'Failed to load users');
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -115,6 +121,13 @@ export default function UserManagement() {
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : loadError ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-3 text-center px-6">
+              <XCircle className="w-8 h-8 text-destructive" />
+              <p className="text-sm font-medium text-foreground">Couldn't load users</p>
+              <p className="text-xs text-muted-foreground">{loadError}</p>
+              <Button size="sm" variant="outline" onClick={loadUsers}>Retry</Button>
             </div>
           ) : users.length === 0 ? (
             <EmptyState icon={Users} title="No users found" description="Invite your first team member to get started." action={<Button onClick={() => setInviteOpen(true)}>Invite User</Button>} />
