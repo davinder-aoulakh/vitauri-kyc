@@ -14,6 +14,7 @@ import RelatedPartiesTab from '@/components/client/RelatedPartiesTab';
 import CasesTab         from '@/components/client/CasesTab';
 import DocumentsTab     from '@/components/client/DocumentsTab';
 import AuditTrailTab    from '@/components/client/AuditTrailTab';
+import OngoingMonitoringToggle from '@/components/client/OngoingMonitoringToggle';
 import { Network, ChevronRight, User, Building2, UserCog, GitFork, AlertTriangle, Trash2 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
@@ -31,6 +32,7 @@ export default function ClientDetail() {
   const [relatedParties, setRelatedParties] = useState([]);
   const [rpLinks, setRpLinks]         = useState([]);
   const [documents, setDocuments]     = useState([]);
+  const [outreachRequests, setOutreachRequests] = useState([]);
   const [auditEvents, setAuditEvents] = useState([]);
   const [users, setUsers]             = useState([]);
   const [loading, setLoading]         = useState(true);
@@ -54,13 +56,14 @@ export default function ClientDetail() {
     setLoading(true);
     setError(null);
     try {
-      const [clientData, casesData, linksData, docsData, auditData, usersData] = await Promise.all([
+      const [clientData, casesData, linksData, docsData, auditData, usersData, outreachData] = await Promise.all([
         base44.entities.Client.filter({ id }),
         base44.entities.KycCase.filter({ client_id: id }, '-created_date'),
         base44.entities.ClientRelatedPartyLink.filter({ client_id: id }),
         base44.entities.Document.filter({ client_id: id }, '-created_date'),
         base44.entities.AuditEvent.filter({ client_id: id }, '-created_date', 200),
         base44.entities.User.list().catch(() => []),
+        base44.entities.OutreachRequest.filter({ client_id: id }),
       ]);
       const c = clientData?.[0];
       setClient(c);
@@ -69,6 +72,7 @@ export default function ClientDetail() {
       setDocuments(docsData || []);
       setAuditEvents(auditData || []);
       setUsers(usersData || []);
+      setOutreachRequests(outreachData || []);
 
       if (linksData?.length > 0) {
         const rps = await Promise.all(
@@ -159,6 +163,7 @@ export default function ClientDetail() {
   const activeCase = cases.find(c => !['Approved','Closed','Rejected'].includes(c.status));
   const lastReview = cases.filter(c => c.status === 'Approved' || c.completed_at).sort((a,b) => (b.completed_at||b.updated_date||'') > (a.completed_at||a.updated_date||'') ? 1 : -1)[0];
   const assignedAnalyst = users.find(u => u.id === client.assigned_analyst_id);
+  const hasCompletedIdv = outreachRequests.some(req => (req.items || []).some(i => i.idv_status === 'Pass'));
 
   return (
     <AppShell>
@@ -212,6 +217,12 @@ export default function ClientDetail() {
             </div>
 
             <div className="flex flex-wrap gap-2 flex-shrink-0">
+              <OngoingMonitoringToggle
+                client={client}
+                canEdit={hasPermission(userRole, 'createEditClient')}
+                hasCompletedIdv={hasCompletedIdv}
+                onClientUpdated={updated => setClient(updated)}
+              />
               {canDelete && (
                 <Button variant="outline" size="sm" className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/5" onClick={() => setDeleteOpen(true)}>
                   <Trash2 className="w-3.5 h-3.5" /> Delete Client

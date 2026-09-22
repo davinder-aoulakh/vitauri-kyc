@@ -286,6 +286,20 @@
     "deletion_reason": {
       "type": "string",
       "description": "Reason provided at time of deletion"
+    },
+    "didit_ongoing_monitoring": {
+      "type": "string",
+      "enum": [
+        "NotEnrolled",
+        "Pending",
+        "Active"
+      ],
+      "default": "NotEnrolled",
+      "description": "Status of Didit ongoing AML monitoring enrollment for this client"
+    },
+    "didit_monitoring_job_id": {
+      "type": "string",
+      "description": "Didit async job ID for the most recent enable/disable monitoring request \u2014 used to confirm the outcome via webhook or poll"
     }
   },
   "required": [
