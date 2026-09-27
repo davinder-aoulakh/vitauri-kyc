@@ -8,8 +8,9 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 import NotificationBell from '@/components/layout/NotificationBell';
 import OpsBanner from '@/components/layout/OpsBanner';
 import SessionWatcher from '@/components/layout/SessionWatcher';
+import AppLogo from '@/components/shared/AppLogo';
 import {
-  LayoutDashboard, FolderOpen, Users, Search, Shield, BadgeCheck,
+  LayoutDashboard, FolderOpen, Users, Search, Shield,
   Settings, BarChart3, AlertTriangle, Calendar, Archive,
   ChevronLeft, ChevronRight, Menu, X, LogOut,
   Building2, UserCircle, Bell, ClipboardList, ScanSearch, Mail, Send
@@ -93,8 +94,8 @@ export default function AppShell({ children }) {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-          <BadgeCheck className="w-5 h-5 text-white" />
+        <div className="flex-shrink-0">
+          <AppLogo size={32} />
         </div>
         {!collapsed && (
           <div className="overflow-hidden">

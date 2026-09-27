@@ -5,8 +5,9 @@ import NewTenantDialog from '@/components/ops/NewTenantDialog';
 import TenantFeaturesPanel from '@/components/ops/TenantFeaturesPanel';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
+import AppLogo from '@/components/shared/AppLogo';
 import {
-  Shield, Building2, AlertTriangle, FolderOpen, Activity,
+  Building2, AlertTriangle, FolderOpen, Activity,
   ExternalLink, Users, Cpu, Database, TrendingUp, Ban,
   RefreshCw, Search, ChevronDown, Loader2, ToggleLeft
 } from 'lucide-react';
@@ -118,9 +119,7 @@ export default function OpsDashboard() {
       {/* Top bar */}
       <header className="h-14 bg-navy border-b border-navy-border flex items-center justify-between px-6">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-            <Shield className="w-4 h-4 text-white" />
-          </div>
+          <AppLogo size={28} />
           <span className="text-white font-semibold text-sm">Vitauri KYC</span>
           <span className="text-white/40 text-sm">|</span>
           <span className="text-white/60 text-xs font-medium uppercase tracking-widest">Ops Super-Admin</span>
