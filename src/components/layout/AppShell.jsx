@@ -46,7 +46,7 @@ const navItems = [
     group: 'MONITORING',
     items: [
       { label: 'Screening', icon: Shield, href: '/monitoring', permission: null, badge: 'alerts', featureKey: 'monitoring' },
-      { label: 'Transaction Monitoring', icon: Activity, href: '/transaction-monitoring', permission: null, featureKey: 'monitoring' },
+      { label: 'Transaction Monitoring', icon: Activity, href: '/transaction-monitoring', permission: null, featureKey: 'transaction_monitoring' },
       { label: 'Batch Screening', icon: ScanSearch, href: '/batch-screening', permission: 'createEditClient', featureKey: 'batch_screening' },
       { label: 'Review Planner', icon: Calendar, href: '/review-planner', permission: 'viewAllTenantCases', featureKey: 'review_planner' },
     ],

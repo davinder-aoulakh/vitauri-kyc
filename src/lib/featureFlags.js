@@ -32,6 +32,7 @@ export const FEATURE_DEFINITIONS = [
     group: 'Monitoring',
     features: [
       { key: 'monitoring', label: 'Screening & Monitoring', description: 'AML screening alerts and monitoring dashboard' },
+      { key: 'transaction_monitoring', label: 'Transaction Monitoring', description: 'Fiat and crypto transaction screening (AML/KYT)' },
       { key: 'batch_screening', label: 'Batch Screening', description: 'Bulk screening of multiple clients at once' },
       { key: 'review_planner', label: 'Review Planner', description: 'Periodic review scheduling and calendar' },
     ],
