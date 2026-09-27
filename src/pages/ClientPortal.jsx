@@ -8,9 +8,14 @@ import { FileText, Upload, CheckCircle, Clock, Send, Loader2, MessageCircle, Ale
 import { portalSecureUpload } from '@/lib/securityUtils';
 import SubmissionConfirmation from '@/components/portal/SubmissionConfirmation';
 import IdVerificationField from '@/components/portal/IdVerificationField';
+import DiditCallbackScreen from '@/components/portal/DiditCallbackScreen';
 import SignaturePad from '@/components/portal/SignaturePad';
 import { format, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
+
+function isMobileDevice() {
+  return typeof window !== 'undefined' && (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 900);
+}
 
 const T = {
   en: {
@@ -116,7 +121,10 @@ export default function ClientPortal() {
   const [diditCallbackStatus, setDiditCallbackStatus] = useState('');
   const [diditCallbackParams, setDiditCallbackParams] = useState(null);
   const [diditCallbackResult, setDiditCallbackResult] = useState(null);
+  const [diditReturnBanner, setDiditReturnBanner] = useState(null);
   const diditPollRef = useRef(null);
+  const desktopCompletePollRef = useRef(null);
+  const autoSaveTimers = useRef({});
 
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
@@ -129,6 +137,10 @@ export default function ClientPortal() {
   useEffect(() => { if (token) loadByToken(); else setLoading(false); }, [token]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
   useEffect(() => { setChatMessages([{ role: 'ai', text: T[lang].chat_intro }]); }, [lang]);
+  useEffect(() => () => {
+    Object.values(autoSaveTimers.current).forEach(clearTimeout);
+    clearInterval(desktopCompletePollRef.current);
+  }, []);
 
   // Didit step 1: capture URL params immediately on mount
   useEffect(() => {
@@ -176,8 +188,12 @@ export default function ClientPortal() {
         const data = res?.data || res;
         if (data?.idv_status && TERMINAL.includes(data.idv_status)) {
           clearInterval(diditPollRef.current);
-          setDiditCallbackResult(data);
-          setDiditCallbackStatus(data.idv_status === 'Pass' ? 'pass' : 'fail');
+          const bannerStatus = data.idv_status === 'Pass' ? 'pass' : data.idv_status === 'Inconclusive' ? 'inconclusive' : 'fail';
+          setDiditReturnBanner({ status: bannerStatus, ...data });
+          setDiditCallbackDone(false);
+          const reqs = await loadByToken();
+          const match = (reqs || []).find(r => r.id === outreachId);
+          if (match) { setActiveOutreach(match); setView('request'); }
           return;
         }
       } catch { /* transient — keep polling */ }
@@ -296,6 +312,25 @@ export default function ClientPortal() {
     if (visibleReqs.length === 1) { setActiveOutreach(visibleReqs[0]); setView('request'); }
     else { setActiveOutreach(primary); setView('dashboard'); }
     setLoading(false);
+    return visibleReqs;
+  }
+
+  async function persistItem(outreachId, itemId, patch) {
+    try {
+      const fresh = await base44.entities.OutreachRequest.filter({ id: outreachId });
+      const req = fresh?.[0];
+      if (!req) return;
+      const item = (req.items || []).find(i => i.item_id === itemId);
+      if (!item || item.field_type === 'id_verification' || item.field_type === 'section_header') return;
+      const updatedItems = req.items.map(i => i.item_id === itemId ? { ...i, ...patch } : i);
+      await base44.entities.OutreachRequest.update(outreachId, { items: updatedItems });
+    } catch { /* non-fatal — next change will retry the save */ }
+  }
+
+  function scheduleAutoSave(outreachId, itemId, patch) {
+    const key = `${outreachId}:${itemId}`;
+    clearTimeout(autoSaveTimers.current[key]);
+    autoSaveTimers.current[key] = setTimeout(() => persistItem(outreachId, itemId, patch), 1500);
   }
 
   async function uploadFile(outreachId, itemId, file) {
@@ -304,6 +339,7 @@ export default function ClientPortal() {
     try {
       const file_url = await portalSecureUpload(file);
       setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], uploading: false, fileUrl: file_url } } }));
+      persistItem(outreachId, itemId, { file_url });
     } catch (err) {
       setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], uploading: false } } }));
       alert(err.message || 'Upload failed. Please try again.');
@@ -312,10 +348,12 @@ export default function ClientPortal() {
 
   function setItemText(outreachId, itemId, text) {
     setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], text } } }));
+    scheduleAutoSave(outreachId, itemId, { response_text: text });
   }
 
   function setItemSelected(outreachId, itemId, selected) {
     setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], selected } } }));
+    scheduleAutoSave(outreachId, itemId, { response_text: (selected || []).join(', ') });
   }
 
   function getItemStates(outreachId) { return itemStateMap[outreachId] || {}; }
@@ -353,7 +391,28 @@ export default function ClientPortal() {
 
   const [validationErrors, setValidationErrors] = useState({});
 
+  function startDesktopCompletePoll(outreachId) {
+    clearInterval(desktopCompletePollRef.current);
+    let attempts = 0;
+    const MAX_ATTEMPTS = 90; // ~6 minutes at 4s intervals
+    desktopCompletePollRef.current = setInterval(async () => {
+      attempts++;
+      try {
+        const reqs = await base44.entities.OutreachRequest.filter({ id: outreachId });
+        const fresh = reqs?.[0];
+        if (fresh?.status === 'Complete') {
+          clearInterval(desktopCompletePollRef.current);
+          setConfirmedOutreach(fresh);
+          setSubmittedIds(s => new Set([...s, outreachId]));
+          return;
+        }
+      } catch { /* transient — keep polling */ }
+      if (attempts >= MAX_ATTEMPTS) clearInterval(desktopCompletePollRef.current);
+    }, 4000);
+  }
+
   async function handleSubmit(outreach) {
+    clearInterval(desktopCompletePollRef.current);
     const states = getItemStates(outreach.id);
     const errors = {};
     (outreach.items || []).forEach(item => {
@@ -536,41 +595,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
 
   // ── Didit mobile callback screen ──
   if (diditCallbackDone) {
-    const passed = diditCallbackStatus === 'pass';
-    const checking = diditCallbackStatus === 'checking';
-    const failed = diditCallbackStatus === 'fail';
-    const isInconclusive = diditCallbackResult?.idv_status === 'Inconclusive';
-    return (
-      <div style={{ minHeight: '100vh', background: '#F4F6FA', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-        <div style={{ background: '#FFFFFF', borderRadius: '20px', padding: '40px 32px', textAlign: 'center', maxWidth: '360px', width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
-          {checking ? (
-            <><div style={{ fontSize: '48px', marginBottom: '16px' }}>🔄</div><div style={{ fontWeight: 700, fontSize: '18px', color: '#1A2332', marginBottom: '8px' }}>Confirming verification…</div><div style={{ fontSize: '14px', color: '#64748B', lineHeight: 1.5 }}>Just a moment while we confirm your result.</div></>
-          ) : passed ? (
-            <><div style={{ fontSize: '56px', marginBottom: '16px' }}>✅</div><div style={{ fontWeight: 700, fontSize: '20px', color: '#059669', marginBottom: '10px' }}>Identity Verified!</div><div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>Your identity has been successfully verified.</div><div style={{ background: '#F0FDF4', border: '1px solid #10B981', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left' }}><span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span><div><div style={{ fontWeight: 600, fontSize: '14px', color: '#065F46', marginBottom: '4px' }}>Continue on your laptop</div><div style={{ fontSize: '13px', color: '#047857', lineHeight: 1.5 }}>Return to your laptop or desktop — it has already updated with your verification result. You can close this tab.</div></div></div></>
-          ) : failed ? (
-            <>
-              <div style={{ fontSize: '56px', marginBottom: '16px' }}>{isInconclusive ? '🪪' : '❌'}</div>
-              <div style={{ fontWeight: 700, fontSize: '18px', color: isInconclusive ? '#92400E' : '#DC2626', marginBottom: '10px' }}>
-                {isInconclusive ? 'Verification Under Review' : 'Verification Unsuccessful'}
-              </div>
-              <div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>
-                {diditCallbackResult?.idv_failure_reason || (diditCallbackResult?.idv_similarity_score != null ? `${diditCallbackResult.idv_similarity_score}% face match.` : 'The verification could not be confirmed.')}
-              </div>
-              <div style={{ background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left' }}>
-                <span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '14px', color: '#92400E', marginBottom: '4px' }}>Return to your laptop</div>
-                  <div style={{ fontSize: '13px', color: '#78350F', lineHeight: 1.5 }}>Please return to your laptop or desktop to see your result and continue your application. You can close this tab.</div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <><div style={{ fontSize: '56px', marginBottom: '16px' }}>🪪</div><div style={{ fontWeight: 700, fontSize: '18px', color: '#92400E', marginBottom: '10px' }}>Verification Complete</div><div style={{ fontSize: '14px', color: '#374151', lineHeight: 1.6, marginBottom: '24px' }}>Thank you for completing the verification step.</div><div style={{ background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', textAlign: 'left' }}><span style={{ fontSize: '24px', flexShrink: 0 }}>💻</span><div><div style={{ fontWeight: 600, fontSize: '14px', color: '#92400E', marginBottom: '4px' }}>Return to your laptop</div><div style={{ fontSize: '13px', color: '#78350F', lineHeight: 1.5 }}>Please return to your laptop or desktop to see your result and continue your application. You can close this tab.</div></div></div></>
-          )}
-          <div style={{ marginTop: '24px', fontSize: '11px', color: '#9CA3AF' }}>Powered by Didit · Secure identity verification</div>
-        </div>
-      </div>
-    );
+    return <DiditCallbackScreen status={diditCallbackStatus} result={diditCallbackResult} />;
   }
 
   const branding = getBranding(tenant);
@@ -859,6 +884,26 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
 
       <Header />
 
+      {diditReturnBanner && (
+        <div style={{
+          maxWidth: 900, margin: '12px auto 0', padding: '12px 16px', borderRadius: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          fontSize: 13, fontWeight: 600,
+          background: diditReturnBanner.status === 'pass' ? '#F0FDF4' : diditReturnBanner.status === 'inconclusive' ? '#EFF6FF' : '#FEF2F2',
+          border: `1px solid ${diditReturnBanner.status === 'pass' ? '#10B981' : diditReturnBanner.status === 'inconclusive' ? '#3B82F6' : '#EF4444'}`,
+          color: diditReturnBanner.status === 'pass' ? '#065F46' : diditReturnBanner.status === 'inconclusive' ? '#1E40AF' : '#991B1B',
+        }}>
+          <span>
+            {diditReturnBanner.status === 'pass' ? '✅ Identity verified successfully — you can continue below.'
+              : diditReturnBanner.status === 'inconclusive' ? '🪪 Identity verification is under review — you can continue below.'
+              : '❌ Identity verification was unsuccessful. Please continue or contact support.'}
+          </span>
+          <button onClick={() => setDiditReturnBanner(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', opacity: 0.6 }}>
+            <X style={{ width: 16, height: 16 }} />
+          </button>
+        </div>
+      )}
+
       <div className="portal-layout">
         {/* ── Left Sidebar ── */}
         <aside className="portal-sidebar">
@@ -1023,6 +1068,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                                   },
                                 },
                               }));
+                              if (!isMobileDevice()) startDesktopCompletePoll(outreach.id);
                             }}
                           />
                         );
@@ -1034,7 +1080,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                           <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2">
                             <CheckCircle className="w-4 h-4 flex-shrink-0" />
                             <span className="truncate text-xs">{t.uploaded}</span>
-                            <button className="ml-auto text-slate-400 hover:text-slate-600 cursor-pointer" onClick={() => setItemStateMap(m => ({ ...m, [outreach.id]: { ...m[outreach.id], [item.item_id]: { ...m[outreach.id]?.[item.item_id], fileUrl: '' } } }))}>
+                            <button className="ml-auto text-slate-400 hover:text-slate-600 cursor-pointer" onClick={() => { setItemStateMap(m => ({ ...m, [outreach.id]: { ...m[outreach.id], [item.item_id]: { ...m[outreach.id]?.[item.item_id], fileUrl: '' } } })); persistItem(outreach.id, item.item_id, { file_url: '' }); }}>
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -1135,7 +1181,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                               <img src={s.fileUrl} alt="Signature" className="w-full h-auto rounded-lg bg-white border" style={{ borderColor: 'rgba(38,105,88,.15)', maxHeight: 100, objectFit: 'contain' }} />
                               <div className="flex items-center justify-between mt-2">
                                 <span className="text-xs text-slate-500">{s.text}</span>
-                                <button className="text-slate-400 hover:text-slate-600 cursor-pointer" onClick={() => setItemStateMap(m => ({ ...m, [outreach.id]: { ...m[outreach.id], [item.item_id]: { ...m[outreach.id]?.[item.item_id], fileUrl: '', text: '', signerName: '' } } }))}>
+                                <button className="text-slate-400 hover:text-slate-600 cursor-pointer" onClick={() => { setItemStateMap(m => ({ ...m, [outreach.id]: { ...m[outreach.id], [item.item_id]: { ...m[outreach.id]?.[item.item_id], fileUrl: '', text: '', signerName: '' } } })); persistItem(outreach.id, item.item_id, { file_url: '', response_text: '' }); }}>
                                   <X className="w-3.5 h-3.5" />
                                 </button>
                               </div>
@@ -1154,7 +1200,9 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                                   const blob = await res.blob();
                                   const file = new File([blob], `signature-${item.item_id}.png`, { type: 'image/png' });
                                   const file_url = await portalSecureUpload(file);
-                                  setItemStateMap(m => ({ ...m, [outreach.id]: { ...m[outreach.id], [item.item_id]: { ...m[outreach.id]?.[item.item_id], fileUrl: file_url, text: `${s.signerName || ''} — Signed on ${timestampLabel}` } } }));
+                                  const signatureNote = `${s.signerName || ''} — Signed on ${timestampLabel}`;
+                                  setItemStateMap(m => ({ ...m, [outreach.id]: { ...m[outreach.id], [item.item_id]: { ...m[outreach.id]?.[item.item_id], fileUrl: file_url, text: signatureNote } } }));
+                                  persistItem(outreach.id, item.item_id, { file_url, response_text: signatureNote });
                                 }}
                               />
                             </div>
