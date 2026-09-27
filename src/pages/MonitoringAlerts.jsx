@@ -20,6 +20,11 @@ const ALERT_TYPE_STYLE = {
   Screening_Hit:   'bg-red-100 text-red-700 border-red-200',
   Register_Change: 'bg-blue-100 text-blue-700 border-blue-200',
   Manual_Flag:     'bg-amber-100 text-amber-700 border-amber-200',
+  Didit_Ongoing_PEP:           'bg-purple-100 text-purple-700 border-purple-200',
+  Didit_Ongoing_Sanctions:     'bg-red-100 text-red-700 border-red-200',
+  Didit_Ongoing_Adverse_Media: 'bg-orange-100 text-orange-700 border-orange-200',
+  Didit_Ongoing_High_Risk:     'bg-amber-100 text-amber-700 border-amber-200',
+  Didit_Abandoned:             'bg-slate-100 text-slate-600 border-slate-200',
 };
 const STATUS_STYLE = {
   New:              'bg-orange-100 text-orange-700',
@@ -27,6 +32,18 @@ const STATUS_STYLE = {
   Dismissed:        'bg-slate-100 text-slate-500',
   Escalated_to_EDR: 'bg-red-100 text-red-700',
 };
+
+// A Didit-sourced alert is one created by ongoing monitoring / KYC webhooks —
+// source strings vary ('Didit_Ongoing_Monitoring', 'Didit Ongoing Monitoring',
+// 'Didit KYC', 'Didit KYC Expiry') so match loosely, plus any Didit_* alert_type.
+const isDiditSource = (a) => /^didit/i.test(a?.source || '') || (a?.alert_type || '').startsWith('Didit_');
+const sourceLabel = (a) => isDiditSource(a) ? 'Didit' : (a?.source || '—');
+
+// Category matchers — combine legacy source-based alerts with Didit alert_type-based alerts
+const pepMatch           = (a) => a.source === 'PEP_List' || a.alert_type === 'Didit_Ongoing_PEP';
+const sanctionsMatch     = (a) => ['Sanctions_EU', 'Sanctions_UN'].includes(a.source) || a.alert_type === 'Didit_Ongoing_Sanctions';
+const adverseMediaMatch  = (a) => a.source === 'Adverse_Media' || a.alert_type === 'Didit_Ongoing_Adverse_Media';
+const otherMatch         = (a) => ['Internal_Flag', 'Register_Change'].includes(a.source) || ['Didit_Ongoing_High_Risk', 'Didit_Abandoned'].includes(a.alert_type);
 
 export default function MonitoringAlerts() {
   const { currentUser } = useTenant();
@@ -109,21 +126,21 @@ export default function MonitoringAlerts() {
   }).length;
 
   const SOURCE_TABS = [
-    { value: 'all',          label: 'All Sources' },
-    { value: 'PEP',          label: 'PEP',           sources: ['PEP_List'] },
-    { value: 'Sanctions',    label: 'Sanctions',     sources: ['Sanctions_EU', 'Sanctions_UN'] },
-    { value: 'Adverse_Media',label: 'Adverse Media', sources: ['Adverse_Media'] },
-    { value: 'Other',        label: 'Other',         sources: ['Internal_Flag', 'Register_Change'] },
+    { value: 'all',          label: 'All Sources',  match: () => true,       didit: false },
+    { value: 'PEP',          label: 'PEP',           match: pepMatch,          didit: true },
+    { value: 'Sanctions',    label: 'Sanctions',     match: sanctionsMatch,    didit: true },
+    { value: 'Adverse_Media',label: 'Adverse Media', match: adverseMediaMatch, didit: true },
+    { value: 'Other',        label: 'Other',         match: otherMatch,        didit: false },
   ];
 
-  const pepCount      = alerts.filter(a => a.source === 'PEP_List').length;
-  const sanctionCount = alerts.filter(a => ['Sanctions_EU','Sanctions_UN'].includes(a.source)).length;
-  const mediaCount    = alerts.filter(a => a.source === 'Adverse_Media').length;
+  const pepCount      = alerts.filter(pepMatch).length;
+  const sanctionCount = alerts.filter(sanctionsMatch).length;
+  const mediaCount    = alerts.filter(adverseMediaMatch).length;
 
   const activeTab = SOURCE_TABS.find(t => t.value === sourceTab);
 
   const filtered = alerts.filter(a => {
-    if (sourceTab !== 'all' && activeTab?.sources && !activeTab.sources.includes(a.source)) return false;
+    if (sourceTab !== 'all' && activeTab && !activeTab.match(a)) return false;
     if (filter.type !== 'all' && a.alert_type !== filter.type) return false;
     if (filter.status !== 'all' && a.status !== filter.status) return false;
     if (filter.client !== 'all' && a.client_id !== filter.client) return false;
@@ -164,34 +181,45 @@ export default function MonitoringAlerts() {
         </div>
 
         {/* Source tabs */}
-        <div className="flex gap-1.5 flex-wrap">
+        <div className="w-full flex items-center gap-3 p-4 bg-white border border-[#e6e4ef] rounded-[18px] shadow-[0_5px_16px_rgba(45,40,90,0.06)] flex-wrap">
           {SOURCE_TABS.map(tab => {
-            const count = tab.value === 'all' ? alerts.length :
-              tab.sources ? alerts.filter(a => tab.sources.includes(a.source)).length : 0;
+            const count = tab.value === 'all' ? alerts.length : alerts.filter(tab.match).length;
             const pending = tab.value === 'all'
               ? alerts.filter(a => a.status === 'New').length
-              : tab.sources
-                ? alerts.filter(a => tab.sources.includes(a.source) && a.status === 'New').length
-                : 0;
+              : alerts.filter(a => tab.match(a) && a.status === 'New').length;
+            const isSelected = sourceTab === tab.value;
             return (
               <button
                 key={tab.value}
+                type="button"
                 onClick={() => setSourceTab(tab.value)}
                 className={cn(
-                  'flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors',
-                  sourceTab === tab.value
-                    ? 'bg-primary text-white border-primary'
-                    : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground bg-card'
+                  'relative appearance-none flex items-center gap-2.5 min-h-[54px] px-[18px] py-[14px] rounded-xl border text-sm [font-weight:620] tracking-[0.005em] cursor-pointer transition-all duration-200 ease-in-out',
+                  'focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-[3px] focus-visible:outline-[#a99be8]',
+                  isSelected
+                    ? 'bg-[#51429b] border-[#51429b] text-white shadow-[0_5px_12px_rgba(81,66,155,0.2)]'
+                    : 'bg-white border-[#e8e6ef] text-[#58566a] hover:bg-[#f7f5ff] hover:border-[#c9c3e6] hover:text-[#45388a] active:shadow-[inset_0_2px_4px_rgba(53,43,112,0.12)]'
                 )}
               >
                 {tab.label}
+                {tab.didit && (
+                  <span className={cn(
+                    'text-[10px] leading-none font-bold tracking-[0.055em] rounded-[6px] px-[6px] py-[5px] border',
+                    isSelected ? 'text-white bg-white/[0.16] border-white/20' : 'text-[#6656a6] bg-[#f0edfa] border-[#dfd9f1]'
+                  )}>
+                    Didit
+                  </span>
+                )}
                 <span className={cn(
                   'text-xs rounded-full px-1.5 font-semibold',
-                  sourceTab === tab.value ? 'bg-white/20 text-white' :
+                  isSelected ? 'bg-white/20 text-white' :
                   pending > 0 ? 'bg-orange-100 text-orange-700' : 'bg-muted text-muted-foreground'
                 )}>
                   {count}
                 </span>
+                {isSelected && (
+                  <span className="absolute left-[18px] right-[18px] -bottom-[5px] h-[3px] rounded-[3px] bg-[#aa9ce8] animate-glow" />
+                )}
               </button>
             );
           })}
@@ -267,7 +295,14 @@ export default function MonitoringAlerts() {
                     onClick={() => setSelected(alert)}
                   >
                     <td className="px-4 py-3">
-                      <div className="font-medium text-xs text-foreground">{alert.entity_name || '—'}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-xs text-foreground">{alert.entity_name || '—'}</span>
+                        {isDiditSource(alert) && (
+                          <span className="text-[10px] leading-none font-bold tracking-[0.055em] text-[#6656a6] bg-[#f0edfa] border border-[#dfd9f1] rounded-[6px] px-[6px] py-[3px]">
+                            Didit
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-muted-foreground">{alert.entity_type?.replace(/_/g,' ')}</div>
                     </td>
                     <td className="px-4 py-3">
@@ -275,7 +310,7 @@ export default function MonitoringAlerts() {
                         {alert.alert_type?.replace(/_/g,' ')}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{alert.source || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{sourceLabel(alert)}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       {alert.created_date ? format(new Date(alert.created_date), 'd MMM yyyy') : '—'}
                     </td>

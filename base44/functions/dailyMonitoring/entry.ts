@@ -80,7 +80,8 @@ function extractHitsAndWarnings(data) {
   const hits     = aml.hits     || [];
   const warnings = aml.warnings || [];
   const status   = aml.status   || null;
-  return { hits, warnings, status, total_hits: hits.length };
+  const screening_id = aml.screening_id || null;
+  return { hits, warnings, status, total_hits: hits.length, screening_id };
 }
 
 Deno.serve(async (req) => {
@@ -113,7 +114,7 @@ Deno.serve(async (req) => {
           }
           errors++;
         } else {
-          const { hits, warnings, status, total_hits } = extractHitsAndWarnings(result.data);
+          const { hits, warnings, status, total_hits, screening_id } = extractHitsAndWarnings(result.data);
 
           // Create one MonitoringAlert per warning code (deduped)
           for (const warning of warnings) {
@@ -137,11 +138,13 @@ Deno.serve(async (req) => {
               alert_type:  alertType,
               source:      'Didit_Ongoing_Monitoring',
               details: {
-                risk_code:     riskCode,
-                description:   warning.short_description || warning.description || riskCode.replace(/_/g, ' '),
-                aml_status:    status,
+                risk_code:          riskCode,
+                description:        warning.short_description || warning.description || riskCode.replace(/_/g, ' '),
+                aml_status:         status,
                 total_hits,
-                checked_at:    new Date().toISOString(),
+                didit_screening_id: screening_id,
+                hit_id:             hits[0]?.id || null,
+                checked_at:         new Date().toISOString(),
               },
               status: 'New',
             });
@@ -164,7 +167,11 @@ Deno.serve(async (req) => {
                 entity_type: 'Client',
                 alert_type:  'Screening_Hit',
                 source:      'Didit_Ongoing_Monitoring',
-                details:     { total_hits, aml_status: status, hits: hits.slice(0, 10), checked_at: new Date().toISOString() },
+                details:     {
+                  total_hits, aml_status: status, hits: hits.slice(0, 10),
+                  didit_screening_id: screening_id, hit_id: hits[0]?.id || null,
+                  checked_at: new Date().toISOString(),
+                },
                 status:      'New',
               });
               screeningAlerts++;
@@ -212,7 +219,7 @@ Deno.serve(async (req) => {
           const rpResult = await screenViaDidit({ ...rp, tenant_id: client.tenant_id, client_type: rp.party_type }, apiKey2);
           if (rpResult.error || !rpResult.data) continue;
 
-          const { warnings: rpWarnings, total_hits: rpHits } = extractHitsAndWarnings(rpResult.data);
+          const { hits: rpHitsList, warnings: rpWarnings, total_hits: rpHits, screening_id: rpScreeningId } = extractHitsAndWarnings(rpResult.data);
 
           for (const warning of rpWarnings) {
             const riskCode  = warning.risk || warning.code || '';
@@ -236,9 +243,11 @@ Deno.serve(async (req) => {
               alert_type:       alertType,
               source:           'Didit_Ongoing_Monitoring',
               details: {
-                risk_code:   riskCode,
-                description: warning.short_description || riskCode.replace(/_/g, ' '),
-                checked_at:  new Date().toISOString(),
+                risk_code:          riskCode,
+                description:        warning.short_description || riskCode.replace(/_/g, ' '),
+                didit_screening_id: rpScreeningId,
+                hit_id:             rpHitsList[0]?.id || null,
+                checked_at:         new Date().toISOString(),
               },
               status: 'New',
             });

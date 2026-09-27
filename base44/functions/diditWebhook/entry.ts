@@ -440,10 +440,11 @@ async function handleOngoingMonitoring(base44, tenantId, body) {
   const hits  = aml.hits || [];
 
   let alertType = null;
-  if (hits.some(h => h.sanction_matches?.length))      alertType = 'Didit_Ongoing_Sanctions';
-  else if (hits.some(h => h.pep_matches?.length))       alertType = 'Didit_Ongoing_PEP';
-  else if (hits.some(h => h.adverse_media_matches?.length)) alertType = 'Didit_Ongoing_Adverse_Media';
-  else if ((aml.total_hits ?? 0) > 0)                   alertType = 'Didit_Ongoing_High_Risk';
+  let matchedHit = null;
+  if (hits.some(h => h.sanction_matches?.length))      { alertType = 'Didit_Ongoing_Sanctions'; matchedHit = hits.find(h => h.sanction_matches?.length); }
+  else if (hits.some(h => h.pep_matches?.length))       { alertType = 'Didit_Ongoing_PEP'; matchedHit = hits.find(h => h.pep_matches?.length); }
+  else if (hits.some(h => h.adverse_media_matches?.length)) { alertType = 'Didit_Ongoing_Adverse_Media'; matchedHit = hits.find(h => h.adverse_media_matches?.length); }
+  else if ((aml.total_hits ?? 0) > 0)                   { alertType = 'Didit_Ongoing_High_Risk'; matchedHit = hits[0] || null; }
 
   if (!alertType) return;
 
@@ -457,7 +458,13 @@ async function handleOngoingMonitoring(base44, tenantId, body) {
     entity_type: 'Client',
     alert_type:  alertType,
     source:      'Didit Ongoing Monitoring',
-    details:     { session_id: body.session_id, aml_total_hits: aml.total_hits, hits },
+    details:     {
+      didit_session_id:   body.session_id,
+      didit_screening_id: aml.id || aml.screening_id || null,
+      hit_id:              matchedHit?.id || null,
+      aml_total_hits:      aml.total_hits,
+      hits,
+    },
   }).catch(() => {});
 
   await base44.asServiceRole.entities.AuditEvent.create({

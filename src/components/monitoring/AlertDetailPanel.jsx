@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   X, AlertTriangle, CheckCircle, Loader2, Sparkles,
   Eye, MessageSquare, Shield, ArrowUpRight
@@ -17,7 +18,15 @@ const ALERT_TYPE_STYLE = {
   Screening_Hit:   'bg-red-100 text-red-700 border-red-200',
   Register_Change: 'bg-blue-100 text-blue-700 border-blue-200',
   Manual_Flag:     'bg-amber-100 text-amber-700 border-amber-200',
+  Didit_Ongoing_PEP:           'bg-purple-100 text-purple-700 border-purple-200',
+  Didit_Ongoing_Sanctions:     'bg-red-100 text-red-700 border-red-200',
+  Didit_Ongoing_Adverse_Media: 'bg-orange-100 text-orange-700 border-orange-200',
+  Didit_Ongoing_High_Risk:     'bg-amber-100 text-amber-700 border-amber-200',
+  Didit_Abandoned:             'bg-slate-100 text-slate-600 border-slate-200',
 };
+
+const isDiditSource = (a) => /^didit/i.test(a?.source || '') || (a?.alert_type || '').startsWith('Didit_');
+const sourceLabel = (a) => isDiditSource(a) ? 'Didit' : (a?.source || '—');
 
 const STATUS_STYLE = {
   New:              'bg-orange-100 text-orange-700',
@@ -33,6 +42,28 @@ export default function AlertDetailPanel({ alert, currentUser, onClose, onUpdate
   const [acknowledgeNote, setAckNote]     = useState('');
   const [submitting, setSubmitting]       = useState(false);
   const [action, setAction]               = useState(null); // 'dismiss' | 'acknowledge' | 'escalate'
+  const [reviewStatus, setReviewStatus]   = useState(alert?.details?.review_status || 'Unreviewed');
+  const [updatingReview, setUpdatingReview] = useState(false);
+
+  async function updateReviewStatus(newStatus) {
+    setUpdatingReview(true);
+    try {
+      await base44.functions.invoke('updateDiditHitStatus', {
+        session_id:    alert.details.didit_session_id,
+        screening_id:  alert.details.didit_screening_id || null,
+        hit_id:        alert.details.hit_id,
+        review_status: newStatus,
+        tenant_id:     currentUser.tenant_id,
+      });
+      await base44.entities.MonitoringAlert.update(alert.id, {
+        details: { ...alert.details, review_status: newStatus },
+      });
+      setReviewStatus(newStatus);
+      onUpdated();
+    } finally {
+      setUpdatingReview(false);
+    }
+  }
 
   async function generateAiSummary() {
     setGeneratingAi(true);
@@ -207,9 +238,44 @@ Tone: professional, regulatory-grade.`,
             <div>
               <div className="text-base font-semibold text-foreground">{alert.entity_name || '—'}</div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                {alert.entity_type?.replace(/_/g,' ')} · Source: {alert.source || '—'} · Detected: {alert.created_date ? format(new Date(alert.created_date), 'd MMM yyyy HH:mm') : '—'}
+                {alert.entity_type?.replace(/_/g,' ')} · Source: {sourceLabel(alert)} · Detected: {alert.created_date ? format(new Date(alert.created_date), 'd MMM yyyy HH:mm') : '—'}
               </div>
             </div>
+
+            {/* Didit hit review status — only when the alert carries session + hit identifiers */}
+            {alert.details?.didit_session_id && alert.details?.hit_id && (
+              <div className="space-y-1.5">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Didit Hit Review Status</div>
+                <Select value={reviewStatus} onValueChange={updateReviewStatus} disabled={updatingReview}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Unreviewed">Unreviewed</SelectItem>
+                    <SelectItem value="Confirmed Match">Confirmed Match</SelectItem>
+                    <SelectItem value="False Positive">False Positive</SelectItem>
+                    <SelectItem value="Inconclusive">Inconclusive</SelectItem>
+                  </SelectContent>
+                </Select>
+                {updatingReview && (
+                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Updating in Didit…
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Link to the underlying case's screening step */}
+            {(alert.case_id || alert.edr_case_id) && !(alert.status === 'Escalated_to_EDR' && alert.edr_case_id) && (
+              <button
+                className="w-full flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-xl p-3 hover:bg-primary/10 transition-colors"
+                onClick={() => onNavigateCase(alert.case_id || alert.edr_case_id)}
+              >
+                <Shield className="w-4 h-4 text-primary flex-shrink-0" />
+                <span className="text-xs font-semibold text-primary">View in Case Screening</span>
+                <ArrowUpRight className="w-3.5 h-3.5 text-primary ml-auto" />
+              </button>
+            )}
 
             {alert.details && Object.keys(alert.details).length > 0 && (
               <div className="bg-muted/40 rounded-lg p-3 space-y-1">
