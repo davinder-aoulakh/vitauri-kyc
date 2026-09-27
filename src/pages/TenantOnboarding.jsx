@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Shield, CheckCircle, AlertTriangle, Loader2, LogIn } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Loader2, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import AuthLayout from '@/components/AuthLayout';
 
 /**
  * Public onboarding page — /onboard/:token
@@ -82,31 +83,24 @@ export default function TenantOnboarding() {
     base44.auth.redirectToLogin(window.location.href);
   }
 
+  const phaseConfig = {
+    checking: { icon: Loader2, spin: true, title: 'Validating your link…' },
+    needs_login: { icon: LogIn, spin: false, title: 'Sign in to continue' },
+    linking: { icon: Loader2, spin: true, title: 'Setting up your account…' },
+    success: { icon: CheckCircle, spin: false, title: "You're all set!" },
+    error: { icon: AlertTriangle, spin: false, title: 'Onboarding Failed' },
+  };
+  const { icon, spin, title } = phaseConfig[phase];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-6">
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-xl p-8 max-w-md w-full text-center space-y-4">
-
-        {/* Logo / Brand */}
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
-            <Shield className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-bold text-lg text-foreground">Vitauri KYC</span>
-        </div>
-
-        {/* checking */}
+    <AuthLayout icon={icon} iconSpin={spin} title={title}>
+      <div className="text-center space-y-4">
         {phase === 'checking' && (
-          <>
-            <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
-            <p className="text-sm text-muted-foreground">Validating your onboarding link…</p>
-          </>
+          <p className="text-sm text-muted-foreground">Validating your onboarding link…</p>
         )}
 
-        {/* needs_login */}
         {phase === 'needs_login' && (
           <>
-            <LogIn className="w-10 h-10 text-primary mx-auto" />
-            <h1 className="text-xl font-bold">Sign in to continue</h1>
             <p className="text-sm text-muted-foreground">
               You need to be signed in to complete your account setup. After signing in you'll be returned here automatically.
             </p>
@@ -116,20 +110,12 @@ export default function TenantOnboarding() {
           </>
         )}
 
-        {/* linking */}
         {phase === 'linking' && (
-          <>
-            <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
-            <h1 className="text-xl font-bold">Setting up your account…</h1>
-            <p className="text-sm text-muted-foreground">Linking your account to your institution. This only takes a moment.</p>
-          </>
+          <p className="text-sm text-muted-foreground">Linking your account to your institution. This only takes a moment.</p>
         )}
 
-        {/* success */}
         {phase === 'success' && (
           <>
-            <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto" />
-            <h1 className="text-xl font-bold text-emerald-700">You're all set!</h1>
             <p className="text-sm text-muted-foreground">
               Your account has been linked to <strong>{tenantName}</strong> as <strong>Tenant Admin</strong>. Redirecting you to the dashboard…
             </p>
@@ -139,11 +125,8 @@ export default function TenantOnboarding() {
           </>
         )}
 
-        {/* error */}
         {phase === 'error' && (
           <>
-            <AlertTriangle className="w-10 h-10 text-red-500 mx-auto" />
-            <h1 className="text-xl font-bold text-red-700">Onboarding Failed</h1>
             <p className="text-sm text-muted-foreground">{errorMsg}</p>
             <Button variant="outline" className="w-full" onClick={() => window.location.href = '/'}>
               Go to Dashboard
@@ -151,6 +134,6 @@ export default function TenantOnboarding() {
           </>
         )}
       </div>
-    </div>
+    </AuthLayout>
   );
 }
