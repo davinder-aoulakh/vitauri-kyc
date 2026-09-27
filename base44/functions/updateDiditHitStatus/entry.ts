@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { session_id, hit_id, review_status, tenant_id, didit_api_key: directApiKey } = body;
+    const { session_id, hit_id, review_status, tenant_id, didit_api_key: directApiKey, outreach_id, item_id } = body;
 
     if (!session_id || !hit_id || !review_status) {
       return Response.json({ error: 'session_id, hit_id, and review_status are required' }, { status: 400 });
@@ -51,6 +51,39 @@ Deno.serve(async (req) => {
 
     let respData;
     try { respData = JSON.parse(respText); } catch { respData = { raw: respText }; }
+
+    // Persist the fresh review_status (and any other Didit-side changes) back onto the
+    // OutreachRequest item's cached idv_aml_screenings — without this, the local copy stays
+    // stale and the status reverts to "Unreviewed" whenever the case is reopened.
+    try {
+      const decisionResp = await fetch(`https://verification.didit.me/v3/session/${session_id}/decision/`, {
+        headers: { 'x-api-key': apiKey },
+      });
+      if (decisionResp.ok) {
+        const decision = await decisionResp.json();
+        const root = decision?.decision || decision || {};
+        const freshAmlScreenings = root.aml_screenings || null;
+
+        if (freshAmlScreenings) {
+          // outreach_id is passed from the frontend (it already knows which OutreachRequest
+          // the session belongs to) — this avoids an unsupported nested-array filter query.
+          let outreachReq = null;
+          if (outreach_id) {
+            const list = await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id });
+            outreachReq = list?.[0] || null;
+          }
+          if (outreachReq) {
+            const updatedItems = (outreachReq.items || []).map((it: any) => {
+              const isMatch = item_id ? it.item_id === item_id : it.didit_session_id === session_id;
+              return isMatch ? { ...it, idv_aml_screenings: freshAmlScreenings } : it;
+            });
+            await base44.asServiceRole.entities.OutreachRequest.update(outreachReq.id, { items: updatedItems });
+          }
+        }
+      }
+    } catch (persistErr) {
+      console.error('Failed to persist fresh AML screenings after status update:', persistErr);
+    }
 
     return Response.json({ ok: true, hit_id, review_status, didit_response: respData });
 

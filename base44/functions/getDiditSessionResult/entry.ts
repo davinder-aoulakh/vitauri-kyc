@@ -60,19 +60,12 @@ export default async function(req) {
     const live = root.liveness_checks?.[0]   || {};
     const aml  = root.aml_screenings?.[0]    || {};
 
-    // 4. Idempotency guard: update item only if not already processed for this session
+    // 4. Update item with fresh AML/IDV fields — always runs, even if already processed
+    //    (document creation below has its own separate dedup guard)
     try {
       const outreachList = await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id });
       const outreachReq  = outreachList?.[0];
       if (outreachReq) {
-        const existingItem = (outreachReq.items || []).find(i =>
-          item_id ? i.item_id === item_id : i.didit_session_id === session_id
-        );
-        if (existingItem?.idv_docs_created_for_session === session_id && existingItem?.idv_status && existingItem.idv_status !== 'Pending') {
-          // Already fully processed — return cached result immediately
-          return Response.json({ ok: true, ...idvFields, cached: true });
-        }
-
         const updatedItems = (outreachReq.items || []).map(it => {
           const isMatch = item_id ? it.item_id === item_id : (it.didit_session_id === session_id ||
             it.field_type === 'id_verification' ||

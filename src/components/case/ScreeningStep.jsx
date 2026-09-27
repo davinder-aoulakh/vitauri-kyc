@@ -134,8 +134,10 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
         ...(clientOutreaches || []).filter(r => !caseIds.has(r.id)),
       ];
 
-      // Find IDV items — pull from Didit for any that have no terminal status yet
+      // Find IDV items — pull from Didit for any that have no terminal status yet,
+      // plus (on forcePull) every IDV item that has a session, terminal or not.
       const pendingIdvItems = [];
+      const allIdvItemsWithSession = [];
       for (const req of allOutreaches) {
         for (const item of (req.items || [])) {
           const isIdv = item.field_type === 'id_verification' || item.didit_session_id ||
@@ -149,12 +151,16 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
           }
           const hasSession = item.didit_session_id || item.response_text;
           if (!hasTerminal && hasSession) pendingIdvItems.push({ req, item });
+          if (hasSession) allIdvItemsWithSession.push({ req, item });
         }
       }
 
       if (pendingIdvItems.length > 0 || forcePull) {
         setSyncing(true);
-        for (const { req, item } of pendingIdvItems) {
+        // On a forced sync, re-fetch every session (including terminal ones) so
+        // status changes and new hits made in Didit since the last sync show up.
+        const itemsToPull = forcePull ? allIdvItemsWithSession : pendingIdvItems;
+        for (const { req, item } of itemsToPull) {
           try {
             await base44.functions.invoke('getDiditSessionResult', {
               session_id:  item.didit_session_id || null,
@@ -225,8 +231,10 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                   dob_w:   item.idv_aml_dob_weight        ?? null,
                   country_w: item.idv_aml_country_weight  ?? null,
                 },
-                synced_at:  item.idv_checked_at,
-                session_id: item.didit_session_id,
+                synced_at:   item.idv_checked_at,
+                session_id:  item.didit_session_id,
+                outreach_id: req.id,
+                item_id:     rawItem.item_id,
               };
             }
           }
@@ -322,7 +330,35 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
         review_status: newReviewStatus,
         tenant_id:     tenantId,
         didit_api_key: tenant?.didit_api_key || null,
+        outreach_id:   diditAmlSummary.outreach_id || null,
+        item_id:       diditAmlSummary.item_id || null,
       });
+
+      // Frontend belt-and-suspenders: also patch the hit's review_status directly on the
+      // OutreachRequest item's cached idv_aml_screenings, so it survives a remount even if
+      // the backend's re-fetch-from-Didit persistence hits a snag.
+      if (diditAmlSummary.outreach_id) {
+        try {
+          const outreachList = await base44.entities.OutreachRequest.filter({ id: diditAmlSummary.outreach_id });
+          const outreachReq = outreachList?.[0];
+          if (outreachReq) {
+            const updatedItems = (outreachReq.items || []).map(it => {
+              const isMatch = diditAmlSummary.item_id ? it.item_id === diditAmlSummary.item_id : it.didit_session_id === diditAmlSummary.session_id;
+              if (!isMatch || !it.idv_aml_screenings) return it;
+              const screenings = Array.isArray(it.idv_aml_screenings) ? it.idv_aml_screenings : [it.idv_aml_screenings];
+              const patchedScreenings = screenings.map(s => ({
+                ...s,
+                hits: (s.hits || []).map(h => (h.id || h.hit_id) === hitKey ? { ...h, review_status: newReviewStatus } : h),
+              }));
+              return { ...it, idv_aml_screenings: patchedScreenings };
+            });
+            await base44.entities.OutreachRequest.update(diditAmlSummary.outreach_id, { items: updatedItems });
+          }
+        } catch (patchErr) {
+          console.error('Failed to persist hit status locally:', patchErr);
+        }
+      }
+
       // Re-check step 3 auto-complete after a hit status change
       await syncDiditAml(hits, false);
     } catch (err) {
@@ -476,6 +512,15 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
   const sourceCount   = (source) => hits.filter(h => h.source === source).length;
   const sourcePending = (source) => hits.filter(h => h.source === source && h.status === 'New').length;
 
+  // Aggregate hit count across ALL screening objects — the stored total_hits field only
+  // reflects the first screening, so the summary header must recompute it the same way
+  // the hit table does, or the two can disagree.
+  const aggregatedHitCount = (() => {
+    if (!diditAmlSummary?.screenings) return diditAmlSummary?.total_hits ?? 0;
+    const screenings = Array.isArray(diditAmlSummary.screenings) ? diditAmlSummary.screenings : [diditAmlSummary.screenings];
+    return screenings.flatMap(s => s.hits || []).length;
+  })();
+
   return (
     <div className="space-y-4 relative">
 
@@ -517,24 +562,24 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
       {diditAmlSummary && (
         <div className={cn(
           'rounded-xl border-2 overflow-hidden',
-          diditAmlSummary.total_hits === 0 ? 'border-emerald-200' : 'border-amber-300'
+          aggregatedHitCount === 0 ? 'border-emerald-200' : 'border-amber-300'
         )}>
           {/* Summary header */}
           <div className={cn(
             'flex items-center justify-between px-4 py-3 gap-3',
-            diditAmlSummary.total_hits === 0 ? 'bg-emerald-50' : 'bg-amber-50'
+            aggregatedHitCount === 0 ? 'bg-emerald-50' : 'bg-amber-50'
           )}>
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className="text-xl">{diditAmlSummary.total_hits === 0 ? '✅' : '⚠️'}</span>
+              <span className="text-xl">{aggregatedHitCount === 0 ? '✅' : '⚠️'}</span>
               <div className="min-w-0">
                 <div className="font-semibold text-sm flex items-center flex-wrap gap-1.5">
                   Didit AML Screening
                   <span className={cn('text-xs font-bold px-2 py-0.5 rounded-full',
-                    diditAmlSummary.total_hits === 0
+                    aggregatedHitCount === 0
                       ? 'bg-emerald-100 text-emerald-700'
                       : 'bg-amber-100 text-amber-700'
                   )}>
-                    {diditAmlSummary.status || (diditAmlSummary.total_hits === 0 ? 'Clear' : 'Flagged')}
+                    {diditAmlSummary.status || (aggregatedHitCount === 0 ? 'Clear' : 'Flagged')}
                   </span>
                   {/* Ongoing monitoring badge */}
                   {diditAmlSummary.ongoing_monitoring && (
@@ -550,7 +595,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
                   )}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {diditAmlSummary.total_hits} hit{diditAmlSummary.total_hits !== 1 ? 's' : ''} detected
+                  {aggregatedHitCount} hit{aggregatedHitCount !== 1 ? 's' : ''} detected
                   {diditAmlSummary.synced_at && (
                     <span className="ml-2 opacity-60">
                       · Synced {new Date(diditAmlSummary.synced_at).toLocaleDateString()}
@@ -572,9 +617,9 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
               )}
               <div className={cn(
                 'text-3xl font-bold',
-                diditAmlSummary.total_hits === 0 ? 'text-emerald-600' : 'text-amber-600'
+                aggregatedHitCount === 0 ? 'text-emerald-600' : 'text-amber-600'
               )}>
-                {diditAmlSummary.total_hits}
+                {aggregatedHitCount}
               </div>
             </div>
           </div>
@@ -583,7 +628,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
           {diditAmlSummary.warnings?.length > 0 && (
             <div className={cn(
               'px-4 py-2.5 flex flex-wrap gap-1.5 border-t',
-              diditAmlSummary.total_hits === 0 ? 'bg-emerald-50/60 border-emerald-100' : 'bg-amber-50/60 border-amber-200'
+              aggregatedHitCount === 0 ? 'bg-emerald-50/60 border-emerald-100' : 'bg-amber-50/60 border-amber-200'
             )}>
               <span className="text-xs text-muted-foreground font-medium mr-1 self-center">Risk flags:</span>
               {diditAmlSummary.warnings.map((w, i) => {
@@ -621,11 +666,12 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
           )}
 
           {/* AML hit details — Didit V3 aml_screenings[].hits[] */}
-          {diditAmlSummary.total_hits > 0 && diditAmlSummary.screenings && (() => {
+          {aggregatedHitCount > 0 && diditAmlSummary.screenings && (() => {
             const screenings = Array.isArray(diditAmlSummary.screenings) ? diditAmlSummary.screenings : [diditAmlSummary.screenings];
-            const screening = screenings[0] || {};
-            const allHits = screening.hits || [];
-            const screenedData = screening.screened_data;
+            // Aggregate hits across ALL screening objects — Didit can split hits across
+            // multiple screenings, and reading only screenings[0] silently hid some hits.
+            const allHits = screenings.flatMap(s => s.hits || []);
+            const screenedData = screenings[0]?.screened_data;
 
             return (
               <div className="px-4 pb-4 bg-card space-y-3">
@@ -868,7 +914,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
       {/* AML Hit Slide Panel — Didit hit evidence */}
       {expandedHitIdx != null && (() => {
         const screenings = Array.isArray(diditAmlSummary?.screenings) ? diditAmlSummary.screenings : [diditAmlSummary?.screenings].filter(Boolean);
-        const allHits = screenings[0]?.hits || [];
+        const allHits = screenings.flatMap(s => s?.hits || []);
         const hit = allHits.find((h, i) => (h.id || String(i)) === expandedHitIdx);
         const hitIdx = allHits.findIndex((h, i) => (h.id || String(i)) === expandedHitIdx);
         return (
