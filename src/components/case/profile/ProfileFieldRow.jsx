@@ -218,11 +218,16 @@ export default function ProfileFieldRow({
         </div>
       )}
 
-      {/* Conflict detail */}
-      {isConflict && suggestion?.conflict_note && (
-        <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1 leading-relaxed">
-          {suggestion.conflict_note}
-        </div>
+      {/* Conflict detail — clean list of disagreeing values only, no source IDs/refs */}
+      {isConflict && suggestion?.conflict_note && typeof suggestion.conflict_note === 'object' && Array.isArray(suggestion.conflict_note.values) && (
+        <ul className="text-xs text-muted-foreground space-y-0.5 pl-1">
+          {suggestion.conflict_note.values.map((v, i) => (
+            <li key={i} className="flex items-start gap-1.5">
+              <span className="text-muted-foreground/50">•</span>
+              <span>{v}</span>
+            </li>
+          ))}
+        </ul>
       )}
 
       {/* Missing state manual entry prompt */}

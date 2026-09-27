@@ -73,8 +73,14 @@ function mergeField(candidates: Array<{ value: string; confidence: number; sourc
   const unique = [...new Set(normalised)];
 
   if (unique.length > 1) {
-    // Conflict: list all sources
-    const conflictNote = valid.map(c => `${c.source_type}(${c.source_ref}): "${c.value}"`).join(' vs ');
+    // Conflict: clean list of distinct values only — no source IDs/refs exposed to end users
+    const distinctValues: string[] = [];
+    const seenVals = new Set<string>();
+    for (const c of valid) {
+      const norm = String(c.value).toLowerCase().trim();
+      if (!seenVals.has(norm)) { seenVals.add(norm); distinctValues.push(String(c.value).trim()); }
+    }
+    const conflictNote = { values: distinctValues };
     // Pick highest-priority highest-confidence candidate as provisional value
     const best = [...valid].sort((a, b) => {
       const pd = priorityOf(b.source_type) - priorityOf(a.source_type);
