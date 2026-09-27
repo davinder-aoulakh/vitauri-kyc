@@ -167,29 +167,42 @@ export default function AppShell({ children }) {
       </nav>
 
       {/* User Footer */}
-      <div className="border-t border-sidebar-border px-3 py-3">
+      <div className="border-t border-sidebar-border px-3 py-3 space-y-2">
         {!collapsed ? (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-semibold">
-                {currentUser?.full_name?.charAt(0) || '?'}
-              </span>
+          <>
+            <div className="flex items-center justify-center gap-1">
+              <ThemeToggle className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-white" />
+              <button className="p-1.5 rounded-full hover:bg-sidebar-accent text-sidebar-foreground/60 hover:text-white transition-colors">
+                <span className="text-sm">?</span>
+              </button>
+              <NotificationBell
+                userId={currentUser?.id}
+                tenantId={currentUser?.tenant_id}
+                className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-white"
+              />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-white text-xs font-medium truncate">
-                {currentUser?.full_name || 'User'}
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center flex-shrink-0">
+                <span className="text-white text-xs font-semibold">
+                  {currentUser?.full_name?.charAt(0) || '?'}
+                </span>
               </div>
-              <div className="text-sidebar-foreground/50 text-xs truncate">
-                {currentUser?.app_role} · {currentUser?.language_preference?.toUpperCase() || 'EN'}
+              <div className="flex-1 min-w-0">
+                <div className="text-white text-xs font-medium truncate">
+                  {currentUser?.full_name || 'User'}
+                </div>
+                <div className="text-sidebar-foreground/50 text-xs truncate">
+                  {currentUser?.app_role} · {currentUser?.language_preference?.toUpperCase() || 'EN'}
+                </div>
               </div>
+              <button
+                onClick={() => base44?.auth?.logout?.()}
+                className="text-sidebar-foreground/40 hover:text-white transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
             </div>
-            <button
-              onClick={() => base44?.auth?.logout?.()}
-              className="text-sidebar-foreground/40 hover:text-white transition-colors"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          </>
         ) : (
           <div className="flex justify-center">
             <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center">
@@ -240,36 +253,14 @@ export default function AppShell({ children }) {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Bar — floating blurred bar */}
-        <header className="h-14 mx-3 mt-3 rounded-full bg-card/90 backdrop-blur-md border border-border shadow-sm flex items-center justify-between px-4 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <button
-              className="md:hidden p-1.5 rounded-full hover:bg-muted transition-colors"
-              onClick={() => setMobileOpen(true)}
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <button className="p-1.5 rounded-full hover:bg-muted text-muted-foreground transition-colors">
-              <span className="text-sm">?</span>
-            </button>
-            <NotificationBell userId={currentUser?.id} tenantId={currentUser?.tenant_id} />
-            <div className="flex items-center gap-2 pl-2 border-l border-border">
-              <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground text-xs font-semibold">
-                  {currentUser?.full_name?.charAt(0) || '?'}
-                </span>
-              </div>
-              <div className="hidden sm:block">
-                <div className="text-xs font-medium text-foreground">{currentUser?.full_name}</div>
-                <div className="text-xs text-muted-foreground">{currentUser?.app_role}</div>
-              </div>
-            </div>
-          </div>
-        </header>
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        {/* Mobile-only menu trigger — sidebar header removed */}
+        <button
+          className="md:hidden absolute top-3 left-3 z-10 p-2 rounded-full bg-card/90 backdrop-blur-md border border-border shadow-sm text-foreground"
+          onClick={() => setMobileOpen(true)}
+        >
+          <Menu className="w-5 h-5" />
+        </button>
 
         {/* Page Content */}
         <main className="flex-1 overflow-auto">
