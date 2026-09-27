@@ -42,12 +42,14 @@ export default async function(req) {
     // 2. Resolve the tenant. Session-level events carry metadata.tenant_id directly.
     //    User-level events (user.status.updated / user.data.updated) have no session
     //    metadata — resolve via the Client entity using vendor_data (client_id).
+    //    Transaction events nest vendor_data under subject — check that too.
     let tenant = null;
+    const vendorDataCandidate = parsed?.vendor_data || parsed?.subject?.vendor_data;
     if (tenantId) {
       const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenantId });
       tenant = tenants?.[0] || null;
-    } else if (parsed?.vendor_data) {
-      const clients = await base44.asServiceRole.entities.Client.filter({ id: parsed.vendor_data });
+    } else if (vendorDataCandidate) {
+      const clients = await base44.asServiceRole.entities.Client.filter({ id: vendorDataCandidate });
       const client = clients?.[0];
       if (client?.tenant_id) {
         tenantId = client.tenant_id;
@@ -105,6 +107,12 @@ async function processWebhookEvent(base44, body) {
     const tenantId    = body.metadata?.tenant_id;
     const status       = body.status;
     const webhookType  = body.webhook_type;
+
+    // Transaction monitoring (AML/KYT) — separate flow from KYC sessions.
+    if (webhookType === 'transaction.created' || webhookType === 'transaction.status.updated') {
+      await handleTransactionEvent(base44, tenantId, body);
+      return;
+    }
 
     // Ongoing monitoring — user-level (not session-level) events.
     if (webhookType === 'user.status.updated' || webhookType === 'user.data.updated') {
@@ -361,6 +369,71 @@ async function autoCompleteSteps(base44, caseId, tenantId, clientId, idvFields) 
       notes:      auditNotes.join(' '),
     }).catch(() => {});
   }
+}
+
+// ── Transaction monitoring (AML/KYT) status updates ──────────────────────────
+async function handleTransactionEvent(base44, tenantId, body) {
+  const diditTransactionId = body.transaction_id || body.id;
+  const ourTransactionId   = body.metadata?.our_transaction_id;
+  if (!diditTransactionId && !ourTransactionId) {
+    console.warn('diditWebhook: transaction event with no identifiable transaction id');
+    return;
+  }
+
+  let txList = [];
+  if (diditTransactionId) {
+    txList = await base44.asServiceRole.entities.Transaction.filter({ didit_transaction_id: diditTransactionId });
+  }
+  if ((!txList || txList.length === 0) && ourTransactionId) {
+    txList = await base44.asServiceRole.entities.Transaction.filter({ our_transaction_id: ourTransactionId });
+  }
+  const txn = txList?.[0];
+  if (!txn) {
+    console.warn('diditWebhook: transaction event but no matching Transaction record', { diditTransactionId, ourTransactionId });
+    return;
+  }
+
+  const status    = body.status;
+  const riskScore = body.risk_score ?? body.decision?.risk_score ?? txn.risk_score;
+  const riskLevel = body.risk_level ?? body.decision?.risk_level ?? txn.risk_level;
+
+  await base44.asServiceRole.entities.Transaction.update(txn.id, {
+    status,
+    risk_score: riskScore,
+    risk_level: riskLevel,
+    decision_raw: body,
+  });
+
+  if (status === 'DECLINED' || status === 'IN_REVIEW' || status === 'AWAITING_USER') {
+    await base44.asServiceRole.entities.MonitoringAlert.create({
+      tenant_id:   tenantId || txn.tenant_id,
+      client_id:   txn.client_id,
+      case_id:     txn.case_id || null,
+      entity_name: txn.subject_full_name || txn.client_id,
+      entity_type: 'Client',
+      alert_type:  'Screening_Hit',
+      source:      'Didit Transaction Monitoring',
+      details: {
+        transaction_id: txn.id,
+        didit_transaction_id: diditTransactionId,
+        status,
+        risk_score: riskScore,
+        risk_level: riskLevel,
+      },
+    }).catch(() => {});
+  }
+
+  await base44.asServiceRole.entities.AuditEvent.create({
+    tenant_id:  tenantId || txn.tenant_id,
+    case_id:    txn.case_id || null,
+    client_id:  txn.client_id,
+    actor_type: 'System',
+    actor_name: 'Didit Webhook',
+    event_type: 'didit_transaction_webhook',
+    notes:      `Didit transaction webhook: ${status}. Transaction ${diditTransactionId || ourTransactionId}. Risk score: ${riskScore ?? 'n/a'}.`,
+  }).catch(() => {});
+
+  console.log('diditWebhook: transaction event processed', { diditTransactionId, status });
 }
 
 // ── Resubmitted — reviewer asked the user to redo specific steps ─────────────

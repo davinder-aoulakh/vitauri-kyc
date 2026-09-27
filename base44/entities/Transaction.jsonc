@@ -1,0 +1,140 @@
+{
+  "name": "Transaction",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "FK to Client \u2014 sent to Didit as subject.vendor_data"
+    },
+    "case_id": {
+      "type": "string",
+      "description": "nullable \u2014 FK to KycCase if linked"
+    },
+    "our_transaction_id": {
+      "type": "string",
+      "description": "Our unique ID (<=128 chars) sent to Didit as transaction_id"
+    },
+    "didit_transaction_id": {
+      "type": "string",
+      "description": "Didit's returned transaction ID"
+    },
+    "transaction_category": {
+      "type": "string",
+      "enum": [
+        "finance",
+        "kyc",
+        "travel_rule",
+        "user_event",
+        "audit_trail_event",
+        "gambling_bet",
+        "gambling_limit_change",
+        "gambling_bonus_change"
+      ]
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "inbound",
+        "outbound"
+      ]
+    },
+    "amount": {
+      "type": "number"
+    },
+    "currency": {
+      "type": "string",
+      "description": "ISO 4217 for fiat, chain:ticker for crypto (e.g. bitcoin:BTC)"
+    },
+    "currency_kind": {
+      "type": "string",
+      "enum": [
+        "fiat",
+        "crypto"
+      ]
+    },
+    "counterparty_name": {
+      "type": "string"
+    },
+    "counterparty_account_id": {
+      "type": "string",
+      "description": "IBAN / account number / wallet address"
+    },
+    "counterparty_method_type": {
+      "type": "string",
+      "enum": [
+        "bank_card",
+        "bank_account",
+        "crypto_wallet",
+        "unhosted_wallet",
+        "ewallet",
+        "other"
+      ]
+    },
+    "subject_entity_type": {
+      "type": "string",
+      "enum": [
+        "person",
+        "company"
+      ],
+      "default": "person"
+    },
+    "subject_full_name": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "PENDING",
+        "APPROVED",
+        "IN_REVIEW",
+        "DECLINED",
+        "AWAITING_USER"
+      ],
+      "default": "PENDING"
+    },
+    "risk_score": {
+      "type": "number",
+      "description": "nullable"
+    },
+    "risk_level": {
+      "type": "string",
+      "description": "nullable"
+    },
+    "decision_raw": {
+      "type": "object",
+      "description": "Full Didit response for audit"
+    },
+    "submitted_by_user_id": {
+      "type": "string"
+    },
+    "reviewed_by_user_id": {
+      "type": "string",
+      "description": "nullable"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "nullable"
+    },
+    "review_decision": {
+      "type": "string",
+      "enum": [
+        "Approved",
+        "Blocked",
+        "Escalated"
+      ],
+      "description": "nullable"
+    },
+    "review_notes": {
+      "type": "string",
+      "description": "nullable"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "client_id"
+  ]
+}

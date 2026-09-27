@@ -40,6 +40,7 @@ import OutreachDashboard from './pages/OutreachDashboard';
 import StandaloneOutreach from './pages/StandaloneOutreach';
 import TenantOnboarding from './pages/TenantOnboarding';
 import RiskDashboard from './pages/RiskDashboard';
+import TransactionMonitoring from './pages/TransactionMonitoring';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -93,6 +94,7 @@ const AuthenticatedApp = () => {
       <Route path="/monitoring" element={<MonitoringAlerts />} />
       <Route path="/outreach-dashboard" element={<OutreachDashboard />} />
       <Route path="/outreach/new" element={<StandaloneOutreach />} />
+      <Route path="/transaction-monitoring" element={<TransactionMonitoring />} />
 
       {/* Monitoring / Planning */}
       <Route path="/review-planner" element={<ReviewPlanner />} />
