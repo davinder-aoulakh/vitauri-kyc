@@ -7,6 +7,7 @@ module.exports = {
       fontFamily: {
         inter: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['IBM Plex Mono', 'monospace'],
+        serif: ['Instrument Serif', 'serif'],
       },
       borderRadius: {
         lg: 'var(--radius)',
@@ -105,6 +106,10 @@ module.exports = {
           '0%, 100%': { opacity: '0.72' },
           '50%': { opacity: '1' },
         },
+        'tech-rise': {
+          from: { opacity: '0', transform: 'translateY(10px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
@@ -112,6 +117,7 @@ module.exports = {
         'fade-in': 'fade-in 0.2s ease-out',
         'slide-in-right': 'slide-in-right 0.3s ease-out',
         glow: 'glow 2.6s ease-in-out infinite',
+        'tech-rise': 'tech-rise 0.6s ease-out both',
       },
     },
   },

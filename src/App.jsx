@@ -4,6 +4,7 @@ import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import { ThemeProvider } from '@/lib/ThemeProvider';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import { TenantProvider, useTenant } from '@/lib/tenantContext';
 import { I18nProvider } from '@/lib/i18n';
@@ -129,6 +130,7 @@ const AuthenticatedApp = () => {
 
 function App() {
   return (
+    <ThemeProvider>
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <Router>
@@ -149,6 +151,7 @@ function App() {
         <NetworkErrorToast />
       </QueryClientProvider>
     </AuthProvider>
+    </ThemeProvider>
   );
 }
 

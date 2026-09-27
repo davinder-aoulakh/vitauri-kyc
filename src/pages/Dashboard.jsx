@@ -5,6 +5,7 @@ import { useTenant } from '@/lib/tenantContext';
 import { hasPermission } from '@/lib/permissions';
 import AppShell from '@/components/layout/AppShell';
 import KpiCard from '@/components/shared/KpiCard';
+import HeroBand from '@/components/shared/HeroBand';
 import RiskBadge from '@/components/shared/RiskBadge';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
@@ -147,6 +148,7 @@ export default function Dashboard() {
       )}
 
       {/* KPI Tiles */}
+      <HeroBand>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <KpiCard
           label="Open Cases"
@@ -197,6 +199,7 @@ export default function Dashboard() {
           onClick={() => navigate('/mi-dashboard?tab=control-measures')}
         />
       </div>
+      </HeroBand>
 
         {/* Pipeline */}
         <div className="bg-card rounded-xl border border-border p-4">

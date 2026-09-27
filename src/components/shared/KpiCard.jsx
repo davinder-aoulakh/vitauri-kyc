@@ -5,13 +5,13 @@ export default function KpiCard({ label, value, subtitle, icon: Icon, accentColo
   return (
     <div
       className={cn(
-        'bg-card rounded-xl border border-border p-4 flex flex-col gap-2 relative overflow-hidden',
+        'bg-card rounded-lg border border-border p-4 flex flex-col gap-2 relative overflow-hidden',
         onClick && 'cursor-pointer hover:shadow-md transition-shadow'
       )}
       onClick={onClick}
     >
       <div
-        className="absolute top-0 left-0 w-1 h-full rounded-l-xl"
+        className="absolute top-0 left-0 w-1 h-full rounded-l-lg"
         style={{ backgroundColor: accentColor || '#1A6BFF' }}
       />
       <div className="flex items-start justify-between pl-2">

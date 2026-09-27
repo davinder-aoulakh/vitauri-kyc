@@ -8,6 +8,7 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 import NotificationBell from '@/components/layout/NotificationBell';
 import OpsBanner from '@/components/layout/OpsBanner';
 import SessionWatcher from '@/components/layout/SessionWatcher';
+import ThemeToggle from '@/components/layout/ThemeToggle';
 import AppLogo from '@/components/shared/AppLogo';
 import {
   LayoutDashboard, FolderOpen, Users, Search, Shield,
@@ -144,7 +145,7 @@ export default function AppShell({ children }) {
                     className={cn(
                       'flex items-center gap-3 px-2.5 py-2 rounded-md text-sm transition-colors group justify-between',
                       isActive(item.href)
-                        ? 'bg-sidebar-accent text-white font-medium'
+                        ? 'bg-sidebar-accent text-sidebar-primary font-medium'
                         : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-white'
                     )}
                   >
@@ -240,18 +241,19 @@ export default function AppShell({ children }) {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Bar */}
-        <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 flex-shrink-0">
+        {/* Top Bar — floating blurred bar */}
+        <header className="h-14 mx-3 mt-3 rounded-full bg-card/90 backdrop-blur-md border border-border shadow-sm flex items-center justify-between px-4 flex-shrink-0">
           <div className="flex items-center gap-3">
             <button
-              className="md:hidden p-1.5 rounded-md hover:bg-muted transition-colors"
+              className="md:hidden p-1.5 rounded-full hover:bg-muted transition-colors"
               onClick={() => setMobileOpen(true)}
             >
               <Menu className="w-5 h-5" />
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <button className="p-1.5 rounded-md hover:bg-muted text-muted-foreground transition-colors">
+            <ThemeToggle />
+            <button className="p-1.5 rounded-full hover:bg-muted text-muted-foreground transition-colors">
               <span className="text-sm">?</span>
             </button>
             <NotificationBell userId={currentUser?.id} tenantId={currentUser?.tenant_id} />

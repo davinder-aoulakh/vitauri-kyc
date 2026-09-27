@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,31 +6,31 @@
 
 @layer base {
   :root {
-    /* Core Brand */
-    --navy: 214 73% 16%;          /* #0F1F3D */
-    --navy-light: 214 50% 22%;    /* sidebar hover */
-    --navy-border: 214 40% 28%;   /* sidebar borders */
-    --accent: 218 100% 55%;       /* #1A6BFF default, overridden per tenant */
+    /* Core Brand — Vitauri navy + light-blue */
+    --navy: 215 72% 14%;          /* #0a1c3d */
+    --navy-light: 217 45% 20%;    /* sidebar hover */
+    --navy-border: 217 40% 24%;   /* sidebar borders */
+    --accent: 215 75% 47%;        /* #1E62D0 default, overridden per tenant */
 
     /* Surfaces */
-    --background: 220 20% 97%;
-    --foreground: 220 15% 12%;
+    --background: 220 33% 97%;    /* #f5f7fb */
+    --foreground: 211 59% 11%;    /* #0b1a2b */
     --card: 0 0% 100%;
-    --card-foreground: 220 15% 12%;
+    --card-foreground: 211 59% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 15% 12%;
+    --popover-foreground: 211 59% 11%;
 
     /* Primary (maps to accent) */
-    --primary: 218 100% 55%;
+    --primary: 215 75% 47%;       /* #1E62D0 */
     --primary-foreground: 0 0% 100%;
 
     /* Secondary / Muted */
-    --secondary: 220 14% 94%;
-    --secondary-foreground: 220 15% 30%;
-    --muted: 220 14% 94%;
-    --muted-foreground: 220 10% 52%;
-    --accent-bg: 218 100% 96%;
-    --accent-foreground: 218 100% 40%;
+    --secondary: 216 25% 95%;
+    --secondary-foreground: 215 20% 30%;
+    --muted: 216 25% 95%;
+    --muted-foreground: 215 20% 45%;
+    --accent-bg: 215 79% 95%;
+    --accent-foreground: 215 75% 35%;
 
     /* Status / Semantic */
     --destructive: 0 84% 60%;
@@ -39,6 +39,7 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
+    --gold: 43 64% 47%;           /* #c59b2b — reserved for high-value highlights */
 
     /* Risk Colors */
     --risk-low: 142 71% 45%;
@@ -47,55 +48,74 @@
     --risk-unacceptable: 340 82% 30%;
 
     /* Borders / Inputs */
-    --border: 220 13% 88%;
-    --input: 220 13% 88%;
-    --ring: 218 100% 55%;
+    --border: 220 30% 90%;        /* #e6eaf0 */
+    --input: 220 30% 90%;
+    --ring: 215 75% 47%;
 
     /* Radius */
-    --radius: 0.5rem;
+    --radius: 0.875rem;           /* 14px */
 
     /* Charts */
-    --chart-1: 218 100% 55%;
+    --chart-1: 215 75% 47%;
     --chart-2: 142 71% 45%;
     --chart-3: 38 92% 50%;
     --chart-4: 0 84% 60%;
-    --chart-5: 280 65% 60%;
+    --chart-5: 227 100% 71%;
 
     /* Sidebar */
-    --sidebar-background: 214 73% 16%;
+    --sidebar-background: 215 72% 14%;   /* #0a1c3d */
     --sidebar-foreground: 214 30% 85%;
-    --sidebar-primary: 218 100% 55%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 214 50% 22%;
+    --sidebar-primary: 205 100% 76%;     /* #87c9ff */
+    --sidebar-primary-foreground: 215 72% 14%;
+    --sidebar-accent: 217 45% 20%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 214 40% 22%;
-    --sidebar-ring: 218 100% 55%;
+    --sidebar-border: 217 40% 24%;
+    --sidebar-ring: 205 100% 76%;
+
+    /* Hero band glow (light mode — subtle) */
+    --hero-glow: 215 66% 40%;
   }
 
   .dark {
-    --background: 220 20% 7%;
-    --foreground: 220 15% 95%;
-    --card: 220 20% 10%;
-    --card-foreground: 220 15% 95%;
-    --popover: 220 20% 10%;
-    --popover-foreground: 220 15% 95%;
-    --primary: 218 100% 60%;
+    --background: 223 64% 8%;     /* #070e20 */
+    --foreground: 213 65% 91%;    /* #dbe5f7 */
+    --card: 217 45% 15%;
+    --card-foreground: 213 65% 91%;
+    --popover: 217 45% 15%;
+    --popover-foreground: 213 65% 91%;
+    --primary: 215 85% 58%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 14% 18%;
-    --secondary-foreground: 220 15% 80%;
-    --muted: 220 14% 18%;
-    --muted-foreground: 220 10% 55%;
-    --accent-bg: 218 100% 15%;
-    --accent-foreground: 218 100% 70%;
-    --destructive: 0 62% 50%;
+    --secondary: 217 35% 18%;
+    --secondary-foreground: 213 30% 85%;
+    --muted: 217 35% 18%;
+    --muted-foreground: 215 20% 65%;
+    --accent-bg: 217 45% 20%;
+    --accent-foreground: 205 100% 76%;
+    --destructive: 0 70% 55%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 13% 22%;
-    --input: 220 13% 22%;
-    --ring: 218 100% 60%;
-    --sidebar-background: 214 73% 10%;
+    --border: 222 35% 20%;         /* #1e2a44 */
+    --input: 222 35% 20%;
+    --ring: 215 85% 58%;
+    --sidebar-background: 223 64% 6%;
     --sidebar-foreground: 214 30% 80%;
-    --sidebar-accent: 214 50% 16%;
-    --sidebar-border: 214 40% 16%;
+    --sidebar-primary: 205 100% 76%;
+    --sidebar-primary-foreground: 223 64% 8%;
+    --sidebar-accent: 217 45% 20%;
+    --sidebar-border: 222 35% 18%;
+    --sidebar-ring: 205 100% 76%;
+
+    /* Hero band glow (dark mode — pronounced radial blue) */
+    --hero-glow: 215 66% 27%;
+  }
+}
+
+@layer components {
+  .eyebrow {
+    @apply text-[11px] font-bold uppercase tracking-[.1em] text-muted-foreground;
+  }
+  .font-serif-accent {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
   }
 }
 

@@ -6,6 +6,8 @@ import TenantFeaturesPanel from '@/components/ops/TenantFeaturesPanel';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import AppLogo from '@/components/shared/AppLogo';
+import HeroBand from '@/components/shared/HeroBand';
+import ThemeToggle from '@/components/layout/ThemeToggle';
 import {
   Building2, AlertTriangle, FolderOpen, Activity,
   ExternalLink, Users, Cpu, Database, TrendingUp, Ban,
@@ -125,6 +127,7 @@ export default function OpsDashboard() {
           <span className="text-white/60 text-xs font-medium uppercase tracking-widest">Ops Super-Admin</span>
         </div>
         <div className="flex items-center gap-3">
+          <ThemeToggle className="text-white/60 hover:text-white hover:bg-white/10" />
           <button onClick={loadData} className="text-white/60 hover:text-white transition-colors">
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -139,23 +142,25 @@ export default function OpsDashboard() {
         </div>
 
         {/* Summary KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          {[
-            { label: 'Total Tenants',    value: tenants.length,  icon: Building2, color: '' },
-            { label: 'Total Users',      value: totalUsers,      icon: Users,     color: '' },
-            { label: 'Active Cases',     value: totalActive,     icon: FolderOpen, color: '' },
-            { label: 'Overdue Cases',    value: totalOverdue,    icon: AlertTriangle, color: totalOverdue > 0 ? 'text-red-600' : '' },
-            { label: 'Open Alerts',      value: alerts.length,   icon: Activity,  color: alerts.length > 0 ? 'text-amber-600' : '' },
-          ].map(s => (
-            <div key={s.label} className="bg-card border border-border rounded-xl p-4">
-              <div className={cn('text-3xl font-bold tabular-nums', s.color)}>{loading ? '…' : s.value}</div>
-              <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                <s.icon className="w-3 h-3" />
-                {s.label}
+        <HeroBand className="mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {[
+              { label: 'Total Tenants',    value: tenants.length,  icon: Building2, color: '' },
+              { label: 'Total Users',      value: totalUsers,      icon: Users,     color: '' },
+              { label: 'Active Cases',     value: totalActive,     icon: FolderOpen, color: '' },
+              { label: 'Overdue Cases',    value: totalOverdue,    icon: AlertTriangle, color: totalOverdue > 0 ? 'text-red-600' : '' },
+              { label: 'Open Alerts',      value: alerts.length,   icon: Activity,  color: alerts.length > 0 ? 'text-amber-600' : '' },
+            ].map(s => (
+              <div key={s.label} className="bg-card border border-border rounded-lg p-4">
+                <div className={cn('text-3xl font-bold tabular-nums', s.color)}>{loading ? '…' : s.value}</div>
+                <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                  <s.icon className="w-3 h-3" />
+                  {s.label}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </HeroBand>
 
         {/* Tabs */}
         <div className="flex gap-1 bg-muted/40 rounded-xl p-1 border border-border mb-5 w-fit">
