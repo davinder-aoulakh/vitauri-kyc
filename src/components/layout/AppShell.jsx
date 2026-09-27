@@ -5,16 +5,15 @@ import { useTenant } from '@/lib/tenantContext';
 import { base44 } from '@/api/base44Client';
 import { hasPermission, isVitauriOps } from '@/lib/permissions';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import NotificationBell from '@/components/layout/NotificationBell';
 import OpsBanner from '@/components/layout/OpsBanner';
 import SessionWatcher from '@/components/layout/SessionWatcher';
-import ThemeToggle from '@/components/layout/ThemeToggle';
+import ProfileFooterCard from '@/components/layout/ProfileFooterCard';
 import AppLogo from '@/components/shared/AppLogo';
 import {
   LayoutDashboard, FolderOpen, Users, Search, Shield,
   Settings, BarChart3, AlertTriangle, Calendar, Archive,
-  ChevronLeft, ChevronRight, Menu, X, LogOut,
-  Building2, UserCircle, Bell, ClipboardList, ScanSearch, Mail, Send
+  ChevronLeft, ChevronRight, Menu, X,
+  Building2, UserCircle, ClipboardList, ScanSearch, Mail, Send
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -167,51 +166,8 @@ export default function AppShell({ children }) {
       </nav>
 
       {/* User Footer */}
-      <div className="border-t border-sidebar-border px-3 py-3 space-y-2">
-        {!collapsed ? (
-          <>
-            <div className="flex items-center justify-center gap-1">
-              <ThemeToggle className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-white" />
-              <button className="p-1.5 rounded-full hover:bg-sidebar-accent text-sidebar-foreground/60 hover:text-white transition-colors">
-                <span className="text-sm">?</span>
-              </button>
-              <NotificationBell
-                userId={currentUser?.id}
-                tenantId={currentUser?.tenant_id}
-                className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-white"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-xs font-semibold">
-                  {currentUser?.full_name?.charAt(0) || '?'}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-white text-xs font-medium truncate">
-                  {currentUser?.full_name || 'User'}
-                </div>
-                <div className="text-sidebar-foreground/50 text-xs truncate">
-                  {currentUser?.app_role} · {currentUser?.language_preference?.toUpperCase() || 'EN'}
-                </div>
-              </div>
-              <button
-                onClick={() => base44?.auth?.logout?.()}
-                className="text-sidebar-foreground/40 hover:text-white transition-colors"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="flex justify-center">
-            <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center">
-              <span className="text-white text-xs font-semibold">
-                {currentUser?.full_name?.charAt(0) || '?'}
-              </span>
-            </div>
-          </div>
-        )}
+      <div className="border-t border-sidebar-border px-3 py-3 flex justify-center">
+        <ProfileFooterCard currentUser={currentUser} collapsed={collapsed} />
       </div>
     </div>
   );

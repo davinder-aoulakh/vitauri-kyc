@@ -16,7 +16,7 @@ const TYPE_LABELS = {
   periodic_review_created: { label: 'Periodic review', color: 'bg-teal-100 text-teal-700' },
 };
 
-export default function NotificationBell({ userId, tenantId, className }) {
+export default function NotificationBell({ userId, tenantId, className, badgeVariant = 'count' }) {
   const [notifications, setNotifications] = useState([]);
   const [allNotifications, setAllNotifications] = useState([]); // includes read, for the "all" tab
   const [open, setOpen] = useState(false);
@@ -82,9 +82,13 @@ export default function NotificationBell({ userId, tenantId, className }) {
         <button className={cn('relative p-1.5 rounded-full hover:bg-muted text-muted-foreground transition-colors', className)}>
           <Bell className="w-4 h-4" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-semibold px-0.5">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
+            badgeVariant === 'dot' ? (
+              <span className="absolute top-[3px] right-[2px] w-[5px] h-[5px] rounded-full bg-[#f07576] border border-[#16264a]" />
+            ) : (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-semibold px-0.5">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )
           )}
         </button>
       </PopoverTrigger>
