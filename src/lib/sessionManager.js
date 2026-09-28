@@ -28,16 +28,18 @@ export function getSessionLimit() {
 
 export function getLastActivity() {
   const v = localStorage.getItem(ACTIVITY_KEY);
-  return v ? parseInt(v, 10) : 0; // 0 = treat as expired if no record exists
+  return v ? parseInt(v, 10) : null; // null = no record yet (fresh login), not expired
 }
 
 export function getTimeUntilExpiry() {
   const limit = getSessionLimit();
   const last  = getLastActivity();
+  if (last === null) return limit;
   return Math.max(0, last + limit - Date.now());
 }
 
 export function isSessionExpired() {
+  if (getLastActivity() === null) return false;
   return getTimeUntilExpiry() === 0;
 }
 
@@ -50,7 +52,7 @@ export function isSessionAboutToExpire() {
 const ACTIVITY_EVENTS = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
 
 export function startActivityTracking() {
-  recordActivity();
+  if (!isSessionExpired()) recordActivity();
   ACTIVITY_EVENTS.forEach(evt => window.addEventListener(evt, recordActivity, { passive: true }));
 }
 

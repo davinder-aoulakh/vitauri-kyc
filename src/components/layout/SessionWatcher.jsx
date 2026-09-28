@@ -25,7 +25,7 @@ export default function SessionWatcher() {
         clearSession();
         stopActivityTracking();
         toast.error('Your session has expired. Please sign in again.');
-        setTimeout(() => base44.auth.redirectToLogin(window.location.href), 1500);
+        setTimeout(() => base44.auth.logout('/login'), 1500);
         clearInterval(interval);
         return;
       }
