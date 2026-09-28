@@ -1,7 +1,7 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 
-export default function KpiCard({ label, value, subtitle, icon: Icon, accentColor, onClick }) {
+export default function KpiCard({ label, value, subtitle, icon: Icon, accent = 'bg-primary', accentColor, onClick }) {
   return (
     <div
       className={cn(
@@ -10,9 +10,11 @@ export default function KpiCard({ label, value, subtitle, icon: Icon, accentColo
       )}
       onClick={onClick}
     >
+      {/* accent: token class (e.g. bg-destructive, bg-warning) — respects dark mode.
+          accentColor: optional raw hex escape hatch for dynamic per-tenant branding colors only. */}
       <div
-        className="absolute top-0 left-0 w-1 h-full rounded-l-lg"
-        style={{ backgroundColor: accentColor || '#1A6BFF' }}
+        className={cn('absolute top-0 left-0 w-1 h-full rounded-l-lg', !accentColor && accent)}
+        style={accentColor ? { backgroundColor: accentColor } : undefined}
       />
       <div className="flex items-start justify-between pl-2">
         <div>

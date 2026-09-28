@@ -60,9 +60,9 @@ export default function TransactionMonitoring() {
         />
 
         <div className="grid grid-cols-3 gap-3">
-          <KpiCard label="Approved" value={loading ? '…' : approvedCount} icon={CheckCircle} accentColor="#10B981" />
-          <KpiCard label="Pending Review" value={loading ? '…' : reviewCount} icon={ShieldAlert} accentColor="#F59E0B" />
-          <KpiCard label="Declined" value={loading ? '…' : declinedCount} icon={Activity} accentColor="#DC2626" />
+          <KpiCard label="Approved" value={loading ? '…' : approvedCount} icon={CheckCircle} accent="bg-success" />
+          <KpiCard label="Pending Review" value={loading ? '…' : reviewCount} icon={ShieldAlert} accent="bg-warning" />
+          <KpiCard label="Declined" value={loading ? '…' : declinedCount} icon={Activity} accent="bg-destructive" />
         </div>
 
         <TransactionList

@@ -163,7 +163,7 @@ export default function Dashboard() {
           value={loading ? '…' : myCases.length}
           subtitle={`${myCases.filter(c => c.due_date && new Date(c.due_date).toDateString() === today.toDateString()).length} due today`}
           icon={UserCircle}
-          accentColor="#8B5CF6"
+          accent="bg-chart-5"
           onClick={() => navigate('/my-cases')}
         />
         <KpiCard
@@ -171,7 +171,7 @@ export default function Dashboard() {
           value={loading ? '…' : overdueCases.length}
           subtitle="Requires attention"
           icon={AlertTriangle}
-          accentColor="#EF4444"
+          accent="bg-destructive"
           onClick={isManager ? () => navigate('/all-cases?overdue=true') : () => navigate('/my-cases?overdue=true')}
         />
         <KpiCard
@@ -179,7 +179,7 @@ export default function Dashboard() {
           value={loading ? '…' : screeningAlerts}
           subtitle="New + under review"
           icon={Shield}
-          accentColor="#F59E0B"
+          accent="bg-warning"
           onClick={() => navigate('/monitoring')}
         />
         <KpiCard
@@ -187,7 +187,7 @@ export default function Dashboard() {
           value={loading ? '…' : clientsWithReviewDue.length}
           subtitle={clientsWithReviewDue.length > 0 ? `Next: ${format(new Date(clientsWithReviewDue[0].next_review_date), 'd MMM')}` : 'None upcoming'}
           icon={Calendar}
-          accentColor="#10B981"
+          accent="bg-success"
           onClick={() => navigate('/review-planner')}
         />
         <KpiCard
@@ -195,7 +195,7 @@ export default function Dashboard() {
           value={loading ? '…' : overdueControlMeasures}
           subtitle="Across all active cases"
           icon={ClipboardCheck}
-          accentColor="#DC2626"
+          accent="bg-destructive"
           onClick={() => navigate('/mi-dashboard?tab=control-measures')}
         />
       </div>
