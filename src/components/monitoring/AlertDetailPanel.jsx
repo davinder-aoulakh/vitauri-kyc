@@ -300,7 +300,7 @@ Tone: professional, regulatory-grade.`,
             <div className="flex items-center justify-between">
               <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">AI Impact Summary</div>
               {!isResolved && (
-                <Button size="sm" variant="ghost" className="h-6 text-xs gap-1 text-purple-600 hover:bg-purple-50"
+                <Button size="sm" variant="ghost" className="h-6 text-xs gap-1 text-primary hover:bg-primary/10"
                   onClick={generateAiSummary} disabled={generatingAi}>
                   {generatingAi ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
                   {aiSummary ? 'Regenerate' : 'Generate'}
@@ -308,7 +308,7 @@ Tone: professional, regulatory-grade.`,
               )}
             </div>
             {aiSummary ? (
-              <div className="bg-purple-50/60 border border-purple-200 rounded-xl p-3 text-xs text-purple-900 leading-relaxed">
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 text-xs text-foreground leading-relaxed">
                 {aiSummary}
               </div>
             ) : (
@@ -321,12 +321,12 @@ Tone: professional, regulatory-grade.`,
           {/* EDR link if already escalated */}
           {alert.status === 'Escalated_to_EDR' && alert.edr_case_id && (
             <button
-              className="w-full flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl p-3 hover:bg-red-100 transition-colors"
+              className="w-full flex items-center gap-2 bg-destructive/10 border border-destructive/20 rounded-xl p-3 hover:bg-destructive/15 transition-colors"
               onClick={() => onNavigateCase(alert.edr_case_id)}
             >
-              <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
-              <span className="text-xs font-semibold text-red-700">View EDR Case</span>
-              <ArrowUpRight className="w-3.5 h-3.5 text-red-500 ml-auto" />
+              <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
+              <span className="text-xs font-semibold text-destructive">View EDR Case</span>
+              <ArrowUpRight className="w-3.5 h-3.5 text-destructive ml-auto" />
             </button>
           )}
         </div>
@@ -341,11 +341,11 @@ Tone: professional, regulatory-grade.`,
                   onClick={() => setAction('dismiss')}>
                   <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Dismiss — No material impact
                 </Button>
-                <Button size="sm" variant="outline" className="w-full gap-2 text-xs justify-start border-blue-300 hover:bg-blue-50 text-blue-700"
+                <Button size="sm" variant="outline" className="w-full gap-2 text-xs justify-start border-primary/30 hover:bg-primary/5 text-primary"
                   onClick={() => setAction('acknowledge')}>
                   <Eye className="w-3.5 h-3.5" /> Acknowledge — Continue monitoring
                 </Button>
-                <Button size="sm" className="w-full gap-2 text-xs justify-start bg-red-600 hover:bg-red-700 text-white"
+                <Button size="sm" className="w-full gap-2 text-xs justify-start bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                   onClick={() => setAction('escalate')}>
                   <AlertTriangle className="w-3.5 h-3.5" /> Escalate to Event-Driven Review
                 </Button>
@@ -360,7 +360,7 @@ Tone: professional, regulatory-grade.`,
                   className="text-xs min-h-16 resize-none" />
                 <div className="flex gap-2">
                   <Button size="sm" variant="ghost" className="text-xs" onClick={() => setAction(null)}>Back</Button>
-                  <Button size="sm" className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                  <Button size="sm" className="flex-1 text-xs bg-success hover:bg-success/90 text-success-foreground gap-1"
                     onClick={dismiss} disabled={!justification.trim() || submitting}>
                     {submitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
                     Confirm Dismissal
@@ -377,7 +377,7 @@ Tone: professional, regulatory-grade.`,
                   className="text-xs min-h-12 resize-none" />
                 <div className="flex gap-2">
                   <Button size="sm" variant="ghost" className="text-xs" onClick={() => setAction(null)}>Back</Button>
-                  <Button size="sm" className="flex-1 text-xs bg-blue-600 hover:bg-blue-700 text-white gap-1"
+                  <Button size="sm" className="flex-1 text-xs bg-primary hover:bg-primary/90 text-primary-foreground gap-1"
                     onClick={acknowledge} disabled={submitting}>
                     {submitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Eye className="w-3 h-3" />}
                     Acknowledge &amp; Monitor
@@ -388,13 +388,13 @@ Tone: professional, regulatory-grade.`,
 
             {action === 'escalate' && (
               <div className="space-y-3">
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-800 space-y-1">
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-xs text-destructive space-y-1">
                   <div className="font-semibold flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Create Event-Driven Review</div>
                   <div>A new EDR case will be created for this client, pre-filled with the last approved case data and this alert as the trigger reason.</div>
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" variant="ghost" className="text-xs" onClick={() => setAction(null)}>Back</Button>
-                  <Button size="sm" className="flex-1 text-xs bg-red-600 hover:bg-red-700 text-white gap-1"
+                  <Button size="sm" className="flex-1 text-xs bg-destructive hover:bg-destructive/90 text-destructive-foreground gap-1"
                     onClick={escalateToEDR} disabled={submitting}>
                     {submitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertTriangle className="w-3 h-3" />}
                     Confirm Escalation → EDR

@@ -33,6 +33,9 @@ const STATUS_STYLE = {
   Escalated_to_EDR: 'bg-red-100 text-red-700',
 };
 
+// Neutral token-based pill for the "Didit" source badge — used in both the tabs and table rows.
+const DIDIT_BADGE_CLASS = 'text-[10px] leading-none font-bold tracking-[0.055em] text-muted-foreground bg-muted border border-border rounded-md px-1.5 py-1';
+
 // A Didit-sourced alert is one created by ongoing monitoring / KYC webhooks —
 // source strings vary ('Didit_Ongoing_Monitoring', 'Didit Ongoing Monitoring',
 // 'Didit KYC', 'Didit KYC Expiry') so match loosely, plus any Didit_* alert_type.
@@ -172,21 +175,18 @@ export default function MonitoringAlerts() {
 
         {/* KPIs */}
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-          <KpiCard label="New Alerts Today"        value={loading ? '…' : newToday}      icon={AlertTriangle} accentColor="#EF4444" />
-          <KpiCard label="Alerts Pending Review"   value={loading ? '…' : pendingReview} icon={Shield}        accentColor="#F59E0B" />
-          <KpiCard label="EDR Cases This Month"    value={loading ? '…' : edrThisMonth}  icon={AlertTriangle} accentColor="#7C3AED" />
-          <KpiCard label="PEP Hits"                value={loading ? '…' : pepCount}      icon={Shield}        accentColor="#9333EA" />
-          <KpiCard label="Sanctions Hits"          value={loading ? '…' : sanctionCount} icon={AlertTriangle} accentColor="#DC2626" />
-          <KpiCard label="Adverse Media"           value={loading ? '…' : mediaCount}    icon={Flag}          accentColor="#D97706" />
+          <KpiCard label="New Alerts Today"        value={loading ? '…' : newToday}      icon={AlertTriangle} accent="bg-destructive" />
+          <KpiCard label="Alerts Pending Review"   value={loading ? '…' : pendingReview} icon={Shield}        accent="bg-warning" />
+          <KpiCard label="EDR Cases This Month"    value={loading ? '…' : edrThisMonth}  icon={AlertTriangle} accent="bg-primary" />
+          <KpiCard label="PEP Hits"                value={loading ? '…' : pepCount}      icon={Shield}        accent="bg-risk-unacceptable" />
+          <KpiCard label="Sanctions Hits"          value={loading ? '…' : sanctionCount} icon={AlertTriangle} accent="bg-destructive" />
+          <KpiCard label="Adverse Media"           value={loading ? '…' : mediaCount}    icon={Flag}          accent="bg-warning" />
         </div>
 
         {/* Source tabs */}
-        <div className="w-full flex items-center gap-3 p-4 bg-white border border-[#e6e4ef] rounded-[18px] shadow-[0_5px_16px_rgba(45,40,90,0.06)] flex-wrap">
+        <div className="w-full flex items-center gap-2 p-3 bg-card border border-border rounded-xl flex-wrap">
           {SOURCE_TABS.map(tab => {
             const count = tab.value === 'all' ? alerts.length : alerts.filter(tab.match).length;
-            const pending = tab.value === 'all'
-              ? alerts.filter(a => a.status === 'New').length
-              : alerts.filter(a => tab.match(a) && a.status === 'New').length;
             const isSelected = sourceTab === tab.value;
             return (
               <button
@@ -194,32 +194,24 @@ export default function MonitoringAlerts() {
                 type="button"
                 onClick={() => setSourceTab(tab.value)}
                 className={cn(
-                  'relative appearance-none flex items-center gap-2.5 min-h-[54px] px-[18px] py-[14px] rounded-xl border text-sm [font-weight:620] tracking-[0.005em] cursor-pointer transition-all duration-200 ease-in-out',
-                  'focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-[3px] focus-visible:outline-[#a99be8]',
+                  'relative flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium whitespace-nowrap transition-colors',
                   isSelected
-                    ? 'bg-[#51429b] border-[#51429b] text-white shadow-[0_5px_12px_rgba(81,66,155,0.2)]'
-                    : 'bg-white border-[#e8e6ef] text-[#58566a] hover:bg-[#f7f5ff] hover:border-[#c9c3e6] hover:text-[#45388a] active:shadow-[inset_0_2px_4px_rgba(53,43,112,0.12)]'
+                    ? 'bg-primary border-primary text-primary-foreground shadow-sm'
+                    : 'bg-card border-border text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
                 {tab.label}
                 {tab.didit && (
-                  <span className={cn(
-                    'text-[10px] leading-none font-bold tracking-[0.055em] rounded-[6px] px-[6px] py-[5px] border',
-                    isSelected ? 'text-white bg-white/[0.16] border-white/20' : 'text-[#6656a6] bg-[#f0edfa] border-[#dfd9f1]'
-                  )}>
+                  <span className={cn(DIDIT_BADGE_CLASS, isSelected && 'text-primary-foreground bg-white/15 border-white/20')}>
                     Didit
                   </span>
                 )}
                 <span className={cn(
                   'text-xs rounded-full px-1.5 font-semibold',
-                  isSelected ? 'bg-white/20 text-white' :
-                  pending > 0 ? 'bg-orange-100 text-orange-700' : 'bg-muted text-muted-foreground'
+                  isSelected ? 'bg-white/20 text-primary-foreground' : 'bg-primary/10 text-primary'
                 )}>
                   {count}
                 </span>
-                {isSelected && (
-                  <span className="absolute left-[18px] right-[18px] -bottom-[5px] h-[3px] rounded-[3px] bg-[#aa9ce8] animate-glow" />
-                )}
               </button>
             );
           })}
@@ -290,7 +282,7 @@ export default function MonitoringAlerts() {
                     key={alert.id}
                     className={cn(
                       'hover:bg-muted/20 transition-colors cursor-pointer',
-                      alert.status === 'New' && 'bg-orange-50/30'
+                      alert.status === 'New' && 'bg-warning/5'
                     )}
                     onClick={() => setSelected(alert)}
                   >
@@ -298,9 +290,7 @@ export default function MonitoringAlerts() {
                       <div className="flex items-center gap-1.5">
                         <span className="font-medium text-xs text-foreground">{alert.entity_name || '—'}</span>
                         {isDiditSource(alert) && (
-                          <span className="text-[10px] leading-none font-bold tracking-[0.055em] text-[#6656a6] bg-[#f0edfa] border border-[#dfd9f1] rounded-[6px] px-[6px] py-[3px]">
-                            Didit
-                          </span>
+                          <span className={DIDIT_BADGE_CLASS}>Didit</span>
                         )}
                       </div>
                       <div className="text-xs text-muted-foreground">{alert.entity_type?.replace(/_/g,' ')}</div>
