@@ -160,8 +160,12 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
       const outreachTimeout = new Promise(resolve => setTimeout(() => resolve(null), OUTREACH_FETCH_TIMEOUT_MS));
       const outreachSummary = await Promise.race([outreachPromise, outreachTimeout]);
 
+      const confirmedFieldsSummary = confirmedKeys.length > 0
+        ? confirmedKeys.map(k => `${fieldLabels[k]}: ${getNestedValue(client, k) || clientFields[k]?.value}`).join('; ')
+        : undefined;
+
       const result = await Promise.race([
-        invokePurposeDraft('PurposeDraft', { client, caseType: kycCase?.case_type, outreachSummary: outreachSummary || undefined }),
+        invokePurposeDraft('PurposeDraft', { client, caseType: kycCase?.case_type, outreachSummary: outreachSummary || undefined, confirmedFieldsSummary }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('AI draft timed out — please try again.')), DRAFT_TIMEOUT_MS)),
       ]);
       if (!result) throw new Error('Failed to generate draft. Please try again.');

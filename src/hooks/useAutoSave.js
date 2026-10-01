@@ -28,9 +28,14 @@ export function useAutoSave(data, saveFn, delay = 1500, skip = false) {
 
     timerRef.current = setTimeout(async () => {
       setAutoSaving(true);
-      await saveFn(data);
-      setAutoSaving(false);
-      setLastSaved(new Date());
+      try {
+        await saveFn(data);
+        setLastSaved(new Date());
+      } catch (err) {
+        console.error('Auto-save failed:', err);
+      } finally {
+        setAutoSaving(false);
+      }
     }, delay);
 
     return () => clearTimeout(timerRef.current);

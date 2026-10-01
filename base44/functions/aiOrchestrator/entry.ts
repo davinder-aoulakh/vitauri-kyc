@@ -47,7 +47,7 @@ const DEFAULT_SYSTEM_PROMPTS = {
 
   ClientProfile: `You are a KYC analyst drafting a regulatory-grade client profile. Using all available client data, write a professional profile narrative in markdown format. Sections: Business Overview | Ownership Structure | Geographic Footprint | Products & Services | Notable Risk Factors. Be factual, precise, regulatory-grade.`,
 
-  PurposeDraft: `You are a senior KYC analyst. Draft a concise, regulatory-grade "Purpose and Nature of Business Relationship" statement. Write 2-4 sentences covering: (1) why the client is engaging, (2) intended products/services, (3) nature of relationship. Factual, precise. Note where information is not yet confirmed. Return JSON: { statement: string }.`,
+  PurposeDraft: `You are a senior KYC analyst drafting the "Purpose and Nature of Business Relationship" statement for a client file. Write 4-6 specific sentences that read like a real analyst's assessment, not a generic template. Use every concrete fact given in the context (nationality, residence, sector, legal form, occupation, confirmed profile fields, outreach responses) and weave them into the statement naturally — e.g. name the actual sector, residency, products, or stated purpose instead of saying "standard retail products". Cover: (1) the specific reason this client is engaging, grounded in their actual profile facts, (2) the specific products/services intended, (3) the nature and expected duration of the relationship, (4) any detail on source of funds or occupation if available. If a specific fact is genuinely unavailable, say so plainly rather than filling with boilerplate — but never pad the statement with filler when real facts exist. Return JSON: { statement: string }.`,
 
   IdentityVerificationSummary: `You are a KYC compliance analyst writing an internal case note. Using the verification facts provided, write ONLY your professional analyst opinion — do not list, echo, or repeat any raw data fields, scores, names, IDs, dates, or document numbers. Your output must read as a natural paragraph of compliance commentary, not a data summary. Cover: (1) whether the verification was satisfactory, (2) any genuine concerns or anomalies, (3) a clear recommendation (Accept / Flag / Escalate). If all checks passed cleanly, state that in one concise sentence. key_risks: list only real compliance risks — omit if none. Return JSON: { narrative: string, key_risks: [string] }.`,
 
@@ -130,9 +130,9 @@ ${customInstructions}`;
       const client = payload.client || {};
       const isOrg = client.client_type === 'ORG';
       const identityLine = isOrg
-        ? `Sector: ${client.sector || 'N/A'} | Legal Form: ${client.legal_form || 'N/A'} | Country: ${client.registered_country || 'N/A'}`
-        : `Nationality: ${client.nationality || 'N/A'} | Residence: ${client.country_of_residence || 'N/A'}`;
-      return `CLIENT: ${client.full_name || 'Unknown'} (${isOrg ? 'Organisation' : 'Natural Person'})\n${identityLine}\nCASE TYPE: ${(payload.caseType || '').replace(/_/g, ' ') || 'N/A'}\nOUTREACH RESPONSES: ${payload.outreachSummary || 'No outreach responses'}`;
+        ? `Sector: ${client.sector || 'N/A'} | Legal Form: ${client.legal_form || 'N/A'} | Country: ${client.registered_country || 'N/A'} | Registration: ${client.registration_number || 'N/A'}`
+        : `Nationality: ${client.nationality || 'N/A'} | Residence: ${client.country_of_residence || 'N/A'} | ID Type: ${client.id_type || 'N/A'}`;
+      return `CLIENT: ${client.full_name || 'Unknown'} (${isOrg ? 'Organisation' : 'Natural Person'})\n${identityLine}\nCASE TYPE: ${(payload.caseType || '').replace(/_/g, ' ') || 'N/A'}\nCONFIRMED PROFILE FACTS: ${payload.confirmedFieldsSummary || 'None confirmed yet'}\nOUTREACH RESPONSES: ${payload.outreachSummary || 'No outreach responses'}`;
     }
 
     case 'IdentityVerificationSummary': {
