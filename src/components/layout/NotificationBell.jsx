@@ -26,12 +26,9 @@ export default function NotificationBell({ userId, tenantId, className, badgeVar
   const load = useCallback(async () => {
     if (!userId) return;
     try {
-      const [unread, all] = await Promise.all([
-        base44.entities.Notification.filter({ user_id: userId, is_read: false }, '-created_date', 20),
-        base44.entities.Notification.filter({ user_id: userId }, '-created_date', 40),
-      ]);
-      setNotifications(unread || []);
+      const all = await base44.entities.Notification.filter({ user_id: userId }, '-created_date', 40);
       setAllNotifications(all || []);
+      setNotifications((all || []).filter(n => !n.is_read));
     } catch {
       // swallow transient network errors silently — polling will retry
     }
@@ -40,10 +37,10 @@ export default function NotificationBell({ userId, tenantId, className, badgeVar
   // Initial load
   useEffect(() => { load(); }, [load]);
 
-  // Poll every 30s for new notifications
+  // Poll every 60s for new notifications
   useEffect(() => {
     if (!userId) return;
-    const interval = setInterval(load, 30_000);
+    const interval = setInterval(load, 60_000);
     return () => clearInterval(interval);
   }, [userId, load]);
 

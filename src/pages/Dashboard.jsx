@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
@@ -30,72 +30,115 @@ const PIPELINE_STATUSES = [
 ];
 
 const CLOSED_STATUSES = ['Approved', 'Closed', 'Rejected'];
+const FALLBACK_REFRESH_MS = 180000; // 3 min — subscriptions handle live updates, this just catches gaps
+
+// Applies a realtime subscription event ({ id, type, data }) to a list-based state setter.
+function applyDelta(setList, event) {
+  setList(prev => {
+    if (event.type === 'delete') return prev.filter(x => x.id !== event.id);
+    if (event.type === 'update') return prev.map(x => (x.id === event.data.id ? { ...x, ...event.data } : x));
+    if (prev.some(x => x.id === event.data.id)) return prev; // dedupe
+    return [...prev, event.data];
+  });
+}
 
 export default function Dashboard() {
   const { currentUser, tenant } = useTenant();
   const navigate = useNavigate();
   const [cases, setCases] = useState([]);
-  const [clients, setClients] = useState({});   // id → client record
+  const [clientsList, setClientsList] = useState([]);
   const [users, setUsers] = useState([]);
   const [auditEvents, setAuditEvents] = useState([]);
-  const [screeningAlerts, setScreeningAlerts] = useState(0);
-  const [overdueControlMeasures, setOverdueControlMeasures] = useState(0);
+  const [screeningHits, setScreeningHits] = useState([]);
+  const [controlMeasures, setControlMeasures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const refreshTimer = useRef(null);
+  const pausedRef = useRef(false); // true after a 429 — fallback refresh skips calls until Retry succeeds
 
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
   const userRole = currentUser?.app_role;
   const isManager = hasPermission(userRole, 'viewAllTenantCases');
 
-  const loadData = useCallback(async () => {
+  const clients = useMemo(() => {
+    const m = {};
+    clientsList.forEach(c => { m[c.id] = c; });
+    return m;
+  }, [clientsList]);
+
+  const loadData = useCallback(async ({ isRetry = false } = {}) => {
     if (!currentUser?.tenant_id) return;
+    if (pausedRef.current && !isRetry) return; // rate-limited — wait for explicit Retry
     setLoading(true);
     setError(null);
     try {
       const canViewUsers = currentUser?.role === 'admin' || currentUser?.data?.role === 'admin';
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-      const [casesData, auditData, clientsData, newHits, reviewHits, usersData, controlData] = await Promise.all([
-        base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }),
+      const [casesData, auditData, clientsData, hitsData, usersData, controlData] = await Promise.all([
+        base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
         base44.entities.AuditEvent.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 20),
-        base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }),
-        base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'New' }),
-        base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: 'Under_Review' }),
+        base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
+        base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: { $in: ['New', 'Under_Review'] } }, '-created_date', 500),
         canViewUsers ? base44.entities.User.list().catch(() => []) : Promise.resolve([]),
-        base44.entities.ControlMeasure.filter({ tenant_id: currentUser.tenant_id }),
+        base44.entities.ControlMeasure.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
       ]);
       setCases(casesData || []);
       setAuditEvents(auditData || []);
-      setScreeningAlerts((newHits?.length || 0) + (reviewHits?.length || 0));
+      setScreeningHits(hitsData || []);
       setUsers(usersData || []);
-      // Count overdue control measures
-      const overdue = (controlData || []).filter(m => 
-        m.status !== 'Completed' && m.due_date && m.due_date < today
-      ).length;
-      setOverdueControlMeasures(overdue);
-      const clientMap = {};
-      (clientsData || []).forEach(c => { clientMap[c.id] = c; });
-      setClients(clientMap);
+      setControlMeasures(controlData || []);
+      setClientsList(clientsData || []);
+      pausedRef.current = false;
     } catch (err) {
       console.error('Dashboard loadData error:', err);
+      const isRateLimited = err?.status === 429 || /rate limit/i.test(err?.message || '');
+      if (isRateLimited) pausedRef.current = true;
       setError(err?.message || 'Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
   }, [currentUser?.tenant_id]);
 
-  // Initial load + 60s auto-refresh
+  // Initial load + 3-min fallback refresh (realtime subscriptions below handle live updates)
   useEffect(() => {
     if (!currentUser?.tenant_id) return;
     loadData();
-    refreshTimer.current = setInterval(loadData, 60000);
+    refreshTimer.current = setInterval(() => loadData(), FALLBACK_REFRESH_MS);
     return () => clearInterval(refreshTimer.current);
   }, [loadData]);
+
+  // Realtime subscriptions — keep KPIs, pipeline, cases table, and activity feed live without polling
+  useEffect(() => {
+    if (!currentUser?.tenant_id) return;
+    const tenantId = currentUser.tenant_id;
+    const belongsToTenant = (event) => !event.data?.tenant_id || event.data.tenant_id === tenantId;
+
+    const unsubCase = base44.entities.KycCase.subscribe(e => belongsToTenant(e) && applyDelta(setCases, e));
+    const unsubClient = base44.entities.Client.subscribe(e => belongsToTenant(e) && applyDelta(setClientsList, e));
+    const unsubHit = base44.entities.ScreeningHit.subscribe(e => belongsToTenant(e) && applyDelta(setScreeningHits, e));
+    const unsubControl = base44.entities.ControlMeasure.subscribe(e => belongsToTenant(e) && applyDelta(setControlMeasures, e));
+    const unsubAudit = base44.entities.AuditEvent.subscribe(e => {
+      if (!belongsToTenant(e)) return;
+      setAuditEvents(prev => {
+        if (e.type === 'delete') return prev.filter(x => x.id !== e.id);
+        if (e.type === 'update') return prev.map(x => (x.id === e.data.id ? { ...x, ...e.data } : x));
+        if (prev.some(x => x.id === e.data.id)) return prev;
+        return [e.data, ...prev].slice(0, 20);
+      });
+    });
+
+    return () => { unsubCase(); unsubClient(); unsubHit(); unsubControl(); unsubAudit(); };
+  }, [currentUser?.tenant_id]);
 
   const today = new Date();
   const openCases    = cases.filter(c => !CLOSED_STATUSES.includes(c.status));
   const myCases      = cases.filter(c => c.assigned_analyst_id === currentUser?.id && !CLOSED_STATUSES.includes(c.status));
   const overdueCases = openCases.filter(c => c.due_date && isAfter(today, new Date(c.due_date)));
+
+  const screeningAlerts = screeningHits.length;
+  const todayStr = today.toISOString().split('T')[0];
+  const overdueControlMeasures = controlMeasures.filter(m =>
+    m.status !== 'Completed' && m.due_date && m.due_date < todayStr
+  ).length;
 
   // Reviews Due (30d) — based on Client.next_review_date
   const clientsWithReviewDue = Object.values(clients).filter(cl => {
@@ -143,7 +186,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-3 bg-destructive/10 border border-destructive/30 rounded-xl px-4 py-3">
           <XCircle className="w-4 h-4 text-destructive flex-shrink-0" />
           <span className="text-sm text-destructive flex-1">{error}</span>
-          <Button size="sm" variant="outline" onClick={loadData}>Retry</Button>
+          <Button size="sm" variant="outline" onClick={() => loadData({ isRetry: true })}>Retry</Button>
         </div>
       )}
 
@@ -306,9 +349,9 @@ export default function Dashboard() {
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div>
                 <span className="font-semibold text-sm">Recent Activity</span>
-                <span className="ml-2 text-xs text-muted-foreground">Auto-refreshes every 60s</span>
+                <span className="ml-2 text-xs text-muted-foreground">Live</span>
               </div>
-              <button onClick={loadData} className="text-muted-foreground hover:text-foreground transition-colors" title="Refresh now">
+              <button onClick={() => loadData({ isRetry: true })} className="text-muted-foreground hover:text-foreground transition-colors" title="Refresh now">
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
             </div>

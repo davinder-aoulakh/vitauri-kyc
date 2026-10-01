@@ -80,7 +80,7 @@ export default function AppShell({ children }) {
     queryKey: ['outreachBadgeCount', currentUser?.tenant_id],
     queryFn: async () => {
       if (!currentUser?.tenant_id) return 0;
-      const all = await base44.entities.OutreachRequest.filter({ tenant_id: currentUser.tenant_id });
+      const all = await base44.entities.OutreachRequest.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 200);
       return (all || []).filter(r => r.status !== 'Complete').length;
     },
     staleTime: 60000,
