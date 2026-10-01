@@ -201,11 +201,11 @@ export default function CaseWorkspace() {
     // network call is slow or times out; reconciled below once we hear back.
     const previousStepValue = kycCase?.[stepKey];
     setKycCase(prev => prev ? { ...prev, [stepKey]: status } : prev);
-    try {
-      await Promise.race([
-        base44.entities.KycCase.update(id, { [stepKey]: status }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out — please try again.')), 20000)),
-      ]);
+    // Run the full save → refresh → audit chain as one unit, raced against a
+    // single hard deadline — guards against ANY step in the chain hanging,
+    // not just the first call, so the button can never stay stuck forever.
+    const stepWork = (async () => {
+      await base44.entities.KycCase.update(id, { [stepKey]: status });
       // Refresh from DB — authoritative state for all child components
       const fresh = await base44.entities.KycCase.filter({ id });
       if (fresh?.[0]) setKycCase(fresh[0]);
@@ -221,6 +221,13 @@ export default function CaseWorkspace() {
       // Refresh audit
       const auditData = await base44.entities.AuditEvent.filter({ case_id: id }, '-created_date', 100);
       setAuditEvents(auditData || []);
+    })();
+
+    try {
+      await Promise.race([
+        stepWork,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out — please try again.')), 20000)),
+      ]);
     } catch (err) {
       console.error('updateStepStatus error:', err);
       // Revert the optimistic update since we couldn't confirm the change saved

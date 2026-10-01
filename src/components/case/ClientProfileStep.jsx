@@ -164,18 +164,25 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
         ? confirmedKeys.map(k => `${fieldLabels[k]}: ${getNestedValue(client, k) || clientFields[k]?.value}`).join('; ')
         : undefined;
 
-      const result = await Promise.race([
-        invokePurposeDraft('PurposeDraft', { client, caseType: kycCase?.case_type, outreachSummary: outreachSummary || undefined, confirmedFieldsSummary }),
+      // Race the WHOLE chain (LLM call + persist save) against one deadline —
+      // guards against the persist step hanging after the LLM call already
+      // returned, not just the LLM call itself.
+      const draftWork = (async () => {
+        const result = await invokePurposeDraft('PurposeDraft', { client, caseType: kycCase?.case_type, outreachSummary: outreachSummary || undefined, confirmedFieldsSummary });
+        if (!result) throw new Error('Failed to generate draft. Please try again.');
+        const draftText = result?.statement || '';
+        setPurposeText(draftText);
+        // Persist immediately — don't rely on the debounced autosave, which can be
+        // skipped if the user navigates to another step before it fires.
+        if (kycCase?.id) {
+          await base44.entities.KycCase.update(kycCase.id, { purpose_nature_text: draftText });
+        }
+      })();
+
+      await Promise.race([
+        draftWork,
         new Promise((_, reject) => setTimeout(() => reject(new Error('AI draft timed out — please try again.')), DRAFT_TIMEOUT_MS)),
       ]);
-      if (!result) throw new Error('Failed to generate draft. Please try again.');
-      const draftText = result?.statement || '';
-      setPurposeText(draftText);
-      // Persist immediately — don't rely on the debounced autosave, which can be
-      // skipped if the user navigates to another step before it fires.
-      if (kycCase?.id) {
-        await base44.entities.KycCase.update(kycCase.id, { purpose_nature_text: draftText });
-      }
     } catch (err) {
       console.error('generatePurposeDraft error:', err);
       setPurposeError(err?.message || 'Failed to generate draft. Please try again.');
