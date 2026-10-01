@@ -34,18 +34,34 @@ export default function NotificationBell({ userId, tenantId, className, badgeVar
     }
   }, [userId]);
 
-  // Initial load — slight delay so it doesn't burst alongside other page-load requests
-  useEffect(() => {
-    const t = setTimeout(load, 800);
-    return () => clearTimeout(t);
-  }, [load]);
+  // Initial load
+  useEffect(() => { load(); }, [load]);
 
-  // Poll every 60s for new notifications
+  // Realtime subscription — keep notifications live without polling
   useEffect(() => {
     if (!userId) return;
-    const interval = setInterval(load, 60_000);
-    return () => clearInterval(interval);
-  }, [userId, load]);
+    const unsub = base44.entities.Notification.subscribe(event => {
+      if (event.type !== 'delete' && event.data?.user_id !== userId) return;
+      if (event.type === 'delete') {
+        setAllNotifications(prev => prev.filter(n => n.id !== event.id));
+        setNotifications(prev => prev.filter(n => n.id !== event.id));
+        return;
+      }
+      const n = event.data;
+      if (event.type === 'update') {
+        setAllNotifications(prev => prev.map(x => (x.id === n.id ? { ...x, ...n } : x)));
+        setNotifications(prev => {
+          const next = prev.filter(x => x.id !== n.id);
+          return n.is_read ? next : [n, ...next];
+        });
+        return;
+      }
+      // create
+      setAllNotifications(prev => (prev.some(x => x.id === n.id) ? prev : [n, ...prev].slice(0, 40)));
+      if (!n.is_read) setNotifications(prev => (prev.some(x => x.id === n.id) ? prev : [n, ...prev]));
+    });
+    return unsub;
+  }, [userId]);
 
   // Load again when popover opens
   useEffect(() => { if (open) load(); }, [open]);

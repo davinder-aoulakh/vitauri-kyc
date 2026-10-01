@@ -16,6 +16,7 @@ import DocumentsTab     from '@/components/client/DocumentsTab';
 import AuditTrailTab    from '@/components/client/AuditTrailTab';
 import OngoingMonitoringToggle from '@/components/client/OngoingMonitoringToggle';
 import { Network, ChevronRight, User, Building2, UserCog, GitFork, AlertTriangle, Trash2 } from 'lucide-react';
+import { useTenantUsers } from '@/hooks/useTenantData';
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -34,7 +35,6 @@ export default function ClientDetail() {
   const [documents, setDocuments]     = useState([]);
   const [outreachRequests, setOutreachRequests] = useState([]);
   const [auditEvents, setAuditEvents] = useState([]);
-  const [users, setUsers]             = useState([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
   const [reassignOpen, setReassignOpen] = useState(false);
@@ -50,19 +50,20 @@ export default function ClientDetail() {
   const canReassign = hasPermission(userRole, 'viewAllTenantCases');
   const canDelete = hasPermission(userRole, 'deleteClient');
 
+  const { data: users = [] } = useTenantUsers(currentUser?.tenant_id);
+
   useEffect(() => { loadAll(); }, [id]);
 
   async function loadAll() {
     setLoading(true);
     setError(null);
     try {
-      const [clientData, casesData, linksData, docsData, auditData, usersData, outreachData] = await Promise.all([
+      const [clientData, casesData, linksData, docsData, auditData, outreachData] = await Promise.all([
         base44.entities.Client.filter({ id }),
         base44.entities.KycCase.filter({ client_id: id }, '-created_date'),
         base44.entities.ClientRelatedPartyLink.filter({ client_id: id }),
         base44.entities.Document.filter({ client_id: id }, '-created_date'),
         base44.entities.AuditEvent.filter({ client_id: id }, '-created_date', 200),
-        base44.entities.User.list().catch(() => []),
         base44.entities.OutreachRequest.filter({ client_id: id }),
       ]);
       const c = clientData?.[0];
@@ -71,14 +72,14 @@ export default function ClientDetail() {
       setRpLinks(linksData || []);
       setDocuments(docsData || []);
       setAuditEvents(auditData || []);
-      setUsers(usersData || []);
       setOutreachRequests(outreachData || []);
 
       if (linksData?.length > 0) {
-        const rps = await Promise.all(
-          linksData.map(link => base44.entities.RelatedParty.filter({ id: link.related_party_id }))
-        );
-        setRelatedParties(rps.flat().filter(Boolean));
+        const partyIds = [...new Set(linksData.map(link => link.related_party_id).filter(Boolean))];
+        const rps = await base44.entities.RelatedParty.filter({ id: { $in: partyIds } });
+        setRelatedParties(rps || []);
+      } else {
+        setRelatedParties([]);
       }
     } catch (err) {
       console.error('ClientDetail loadAll error:', err);

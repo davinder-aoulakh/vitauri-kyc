@@ -3,12 +3,97 @@ import { appParams } from '@/lib/app-params';
 
 const { appId, token, functionsVersion, appBaseUrl } = appParams;
 
-//Create a client with authentication required
-export const base44 = createClient({
+const rawClient = createClient({
   appId,
   token,
   functionsVersion,
   serverUrl: '',
   requiresAuth: false,
   appBaseUrl
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Central request throttle + 429 retry for entity calls.
+// Caps concurrent in-flight entity requests app-wide and automatically
+// retries rate-limited (429) responses with exponential backoff, so every
+// page benefits without per-page changes. Does not touch auth, integrations,
+// functions, or `.subscribe()` (realtime, not an HTTP request).
+// ─────────────────────────────────────────────────────────────────────────
+const MAX_CONCURRENT = 3;
+const MAX_RETRIES = 3;
+let active = 0;
+const queue = [];
+
+function acquire() {
+  return new Promise((resolve) => {
+    const tryAcquire = () => {
+      if (active < MAX_CONCURRENT) {
+        active++;
+        resolve();
+      } else {
+        queue.push(tryAcquire);
+      }
+    };
+    tryAcquire();
+  });
+}
+
+function release() {
+  active--;
+  const next = queue.shift();
+  if (next) next();
+}
+
+function isRateLimited(err) {
+  return err?.status === 429 || /rate limit/i.test(err?.message || '');
+}
+
+function throttle(fn) {
+  return async function throttled(...args) {
+    let attempt = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      await acquire();
+      try {
+        return await fn(...args);
+      } catch (err) {
+        if (isRateLimited(err) && attempt < MAX_RETRIES) {
+          attempt++;
+          await new Promise((r) => setTimeout(r, 1000 * 2 ** (attempt - 1)));
+          continue;
+        }
+        throw err;
+      } finally {
+        release();
+      }
+    }
+  };
+}
+
+const entityProxyCache = new Map();
+
+const entitiesProxy = new Proxy(rawClient.entities, {
+  get(target, entityName) {
+    const entity = target[entityName];
+    if (typeof entity !== 'object' || entity === null) return entity;
+    if (entityProxyCache.has(entityName)) return entityProxyCache.get(entityName);
+    const wrapped = new Proxy(entity, {
+      get(entityTarget, methodName) {
+        const method = entityTarget[methodName];
+        if (typeof method !== 'function') return method;
+        // Realtime subscriptions are websocket-based, not HTTP — never throttle them
+        if (methodName === 'subscribe') return method.bind(entityTarget);
+        return throttle(method.bind(entityTarget));
+      },
+    });
+    entityProxyCache.set(entityName, wrapped);
+    return wrapped;
+  },
+});
+
+export const base44 = new Proxy(rawClient, {
+  get(target, prop) {
+    if (prop === 'entities') return entitiesProxy;
+    return target[prop];
+  },
 });

@@ -1,8 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { hasPermission } from '@/lib/permissions';
+import {
+  useTenantCases, useTenantClients, useTenantUsers,
+  useTenantScreeningHits, useTenantControlMeasures, useTenantAuditEvents,
+} from '@/hooks/useTenantData';
 import AppShell from '@/components/layout/AppShell';
 import KpiCard from '@/components/shared/KpiCard';
 import HeroBand from '@/components/shared/HeroBand';
@@ -30,11 +35,12 @@ const PIPELINE_STATUSES = [
 ];
 
 const CLOSED_STATUSES = ['Approved', 'Closed', 'Rejected'];
-const FALLBACK_REFRESH_MS = 180000; // 3 min — subscriptions handle live updates, this just catches gaps
+const AUDIT_LIMIT = 20;
 
-// Applies a realtime subscription event ({ id, type, data }) to a list-based state setter.
-function applyDelta(setList, event) {
-  setList(prev => {
+// Applies a realtime subscription event ({ id, type, data }) to a react-query list cache entry.
+function patchListCache(queryClient, queryKey, event, belongsToTenant) {
+  if (!belongsToTenant(event)) return;
+  queryClient.setQueryData(queryKey, (prev = []) => {
     if (event.type === 'delete') return prev.filter(x => x.id !== event.id);
     if (event.type === 'update') return prev.map(x => (x.id === event.data.id ? { ...x, ...event.data } : x));
     if (prev.some(x => x.id === event.data.id)) return prev; // dedupe
@@ -45,20 +51,28 @@ function applyDelta(setList, event) {
 export default function Dashboard() {
   const { currentUser, tenant } = useTenant();
   const navigate = useNavigate();
-  const [cases, setCases] = useState([]);
-  const [clientsList, setClientsList] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [auditEvents, setAuditEvents] = useState([]);
-  const [screeningHits, setScreeningHits] = useState([]);
-  const [controlMeasures, setControlMeasures] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const refreshTimer = useRef(null);
-  const pausedRef = useRef(false); // true after a 429 — fallback refresh skips calls until Retry succeeds
+  const queryClient = useQueryClient();
+  const tenantId = currentUser?.tenant_id;
 
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
   const userRole = currentUser?.app_role;
   const isManager = hasPermission(userRole, 'viewAllTenantCases');
+
+  const { data: cases = [], isLoading: casesLoading, isError: casesErr, refetch: refetchCases } = useTenantCases(tenantId);
+  const { data: clientsList = [], isLoading: clientsLoading, isError: clientsErr, refetch: refetchClients } = useTenantClients(tenantId);
+  const { data: screeningHits = [], isLoading: hitsLoading, isError: hitsErr, refetch: refetchHits } = useTenantScreeningHits(tenantId);
+  const { data: controlMeasures = [], isLoading: cmLoading, isError: cmErr, refetch: refetchCm } = useTenantControlMeasures(tenantId);
+  const { data: auditEvents = [], isLoading: auditLoading, isError: auditErr, refetch: refetchAudit } = useTenantAuditEvents(tenantId, { limit: AUDIT_LIMIT });
+  // Only Managers see the Workflow Optimisation widget, which is the only consumer of the user list here
+  const { data: users = [], refetch: refetchUsers } = useTenantUsers(tenantId, { enabled: isManager });
+
+  const loading = casesLoading || clientsLoading || hitsLoading || cmLoading || auditLoading;
+  const error = (casesErr || clientsErr || hitsErr || cmErr || auditErr) ? 'Failed to load dashboard data' : null;
+
+  function retryAll() {
+    refetchCases(); refetchClients(); refetchHits(); refetchCm(); refetchAudit();
+    if (isManager) refetchUsers();
+  }
 
   const clients = useMemo(() => {
     const m = {};
@@ -66,79 +80,34 @@ export default function Dashboard() {
     return m;
   }, [clientsList]);
 
-  const loadData = useCallback(async ({ isRetry = false } = {}) => {
-    if (!currentUser?.tenant_id) return;
-    if (pausedRef.current && !isRetry) return; // rate-limited — wait for explicit Retry
-    setLoading(true);
-    setError(null);
-    try {
-      const canViewUsers = currentUser?.role === 'admin' || currentUser?.data?.role === 'admin';
-      // Split into two smaller batches with a short gap to avoid bursting the rate limit
-      const [casesData, auditData, clientsData] = await Promise.all([
-        base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
-        base44.entities.AuditEvent.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 20),
-        base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
-      ]);
-      await new Promise(r => setTimeout(r, 400));
-      const [hitsData, usersData, controlData] = await Promise.all([
-        base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: { $in: ['New', 'Under_Review'] } }, '-created_date', 500),
-        canViewUsers ? base44.entities.User.list().catch(() => []) : Promise.resolve([]),
-        base44.entities.ControlMeasure.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
-      ]);
-      setCases(casesData || []);
-      setAuditEvents(auditData || []);
-      setScreeningHits(hitsData || []);
-      setUsers(usersData || []);
-      setControlMeasures(controlData || []);
-      setClientsList(clientsData || []);
-      pausedRef.current = false;
-    } catch (err) {
-      console.error('Dashboard loadData error:', err);
-      const isRateLimited = err?.status === 429 || /rate limit/i.test(err?.message || '');
-      if (isRateLimited) pausedRef.current = true;
-      setError(err?.message || 'Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUser?.tenant_id]);
-
-  // Initial load + 3-min fallback refresh (realtime subscriptions below handle live updates)
-  useEffect(() => {
-    if (!currentUser?.tenant_id) return;
-    loadData();
-    refreshTimer.current = setInterval(() => loadData(), FALLBACK_REFRESH_MS);
-    return () => clearInterval(refreshTimer.current);
-  }, [loadData]);
-
   // Realtime subscriptions — keep KPIs, pipeline, cases table, and activity feed live without polling
   useEffect(() => {
-    if (!currentUser?.tenant_id) return;
-    const tenantId = currentUser.tenant_id;
+    if (!tenantId) return;
     const belongsToTenant = (event) => !event.data?.tenant_id || event.data.tenant_id === tenantId;
 
-    const unsubCase = base44.entities.KycCase.subscribe(e => belongsToTenant(e) && applyDelta(setCases, e));
-    const unsubClient = base44.entities.Client.subscribe(e => belongsToTenant(e) && applyDelta(setClientsList, e));
-    const unsubHit = base44.entities.ScreeningHit.subscribe(e => belongsToTenant(e) && applyDelta(setScreeningHits, e));
-    const unsubControl = base44.entities.ControlMeasure.subscribe(e => belongsToTenant(e) && applyDelta(setControlMeasures, e));
+    const unsubCase = base44.entities.KycCase.subscribe(e => patchListCache(queryClient, ['cases', tenantId], e, belongsToTenant));
+    const unsubClient = base44.entities.Client.subscribe(e => patchListCache(queryClient, ['clients', tenantId], e, belongsToTenant));
+    const unsubHit = base44.entities.ScreeningHit.subscribe(e => patchListCache(queryClient, ['screeningHits', tenantId], e, belongsToTenant));
+    const unsubControl = base44.entities.ControlMeasure.subscribe(e => patchListCache(queryClient, ['controlMeasures', tenantId], e, belongsToTenant));
     const unsubAudit = base44.entities.AuditEvent.subscribe(e => {
       if (!belongsToTenant(e)) return;
-      setAuditEvents(prev => {
+      queryClient.setQueryData(['auditEvents', tenantId, AUDIT_LIMIT], (prev = []) => {
         if (e.type === 'delete') return prev.filter(x => x.id !== e.id);
         if (e.type === 'update') return prev.map(x => (x.id === e.data.id ? { ...x, ...e.data } : x));
         if (prev.some(x => x.id === e.data.id)) return prev;
-        return [e.data, ...prev].slice(0, 20);
+        return [e.data, ...prev].slice(0, AUDIT_LIMIT);
       });
     });
 
     return () => { unsubCase(); unsubClient(); unsubHit(); unsubControl(); unsubAudit(); };
-  }, [currentUser?.tenant_id]);
+  }, [tenantId, queryClient]);
 
   const today = new Date();
   const openCases    = cases.filter(c => !CLOSED_STATUSES.includes(c.status));
   const myCases      = cases.filter(c => c.assigned_analyst_id === currentUser?.id && !CLOSED_STATUSES.includes(c.status));
   const overdueCases = openCases.filter(c => c.due_date && isAfter(today, new Date(c.due_date)));
 
-  const screeningAlerts = screeningHits.length;
+  const screeningAlerts = screeningHits.filter(h => ['New', 'Under_Review'].includes(h.status)).length;
   const todayStr = today.toISOString().split('T')[0];
   const overdueControlMeasures = controlMeasures.filter(m =>
     m.status !== 'Completed' && m.due_date && m.due_date < todayStr
@@ -190,7 +159,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-3 bg-destructive/10 border border-destructive/30 rounded-xl px-4 py-3">
           <XCircle className="w-4 h-4 text-destructive flex-shrink-0" />
           <span className="text-sm text-destructive flex-1">{error}</span>
-          <Button size="sm" variant="outline" onClick={() => loadData({ isRetry: true })}>Retry</Button>
+          <Button size="sm" variant="outline" onClick={retryAll}>Retry</Button>
         </div>
       )}
 
@@ -281,7 +250,7 @@ export default function Dashboard() {
             clients={clients}
             users={users}
             currentUser={currentUser}
-            tenantId={currentUser?.tenant_id}
+            tenantId={tenantId}
             onNavigate={path => navigate(path)}
           />
         )}
@@ -355,7 +324,7 @@ export default function Dashboard() {
                 <span className="font-semibold text-sm">Recent Activity</span>
                 <span className="ml-2 text-xs text-muted-foreground">Live</span>
               </div>
-              <button onClick={() => loadData({ isRetry: true })} className="text-muted-foreground hover:text-foreground transition-colors" title="Refresh now">
+              <button onClick={() => refetchAudit()} className="text-muted-foreground hover:text-foreground transition-colors" title="Refresh now">
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
             </div>

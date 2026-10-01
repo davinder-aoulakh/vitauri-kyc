@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Shield, AlertTriangle, Flag, Search, Plus, Loader2, ChevronRight } from 'lucide-react';
 import { format, startOfMonth, isWithinInterval } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useTenantClients } from '@/hooks/useTenantData';
 
 const ALERT_TYPE_STYLE = {
   Screening_Hit:   'bg-red-100 text-red-700 border-red-200',
@@ -52,9 +53,10 @@ export default function MonitoringAlerts() {
   const { currentUser } = useTenant();
   const navigate = useNavigate();
   const [alerts, setAlerts]       = useState([]);
-  const [clients, setClients]     = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
+  const { data: activeClients = [] } = useTenantClients(currentUser?.tenant_id);
+  const clients = useMemo(() => activeClients.filter(c => c.status === 'Active'), [activeClients]);
   const [sourceTab, setSourceTab] = useState('all');
   const [filter, setFilter]       = useState({ type: 'all', status: 'all', client: 'all', search: '' });
   const [selected, setSelected]   = useState(null);
@@ -70,12 +72,8 @@ export default function MonitoringAlerts() {
     setLoading(true);
     setError(null);
     try {
-      const [alertData, clientData] = await Promise.all([
-        base44.entities.MonitoringAlert.filter({ tenant_id: currentUser.tenant_id }, '-created_date'),
-        base44.entities.Client.filter({ tenant_id: currentUser.tenant_id, status: 'Active' }),
-      ]);
+      const alertData = await base44.entities.MonitoringAlert.filter({ tenant_id: currentUser.tenant_id }, '-created_date');
       setAlerts(alertData || []);
-      setClients(clientData || []);
     } catch (err) {
       console.error('MonitoringAlerts loadAll error:', err);
       setError(err?.message || 'Failed to load monitoring data');

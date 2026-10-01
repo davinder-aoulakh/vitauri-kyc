@@ -80,12 +80,12 @@ export default function AppShell({ children }) {
     queryKey: ['outreachBadgeCount', currentUser?.tenant_id],
     queryFn: async () => {
       if (!currentUser?.tenant_id) return 0;
-      // Slight delay so this doesn't burst alongside the main page's load requests
-      await new Promise(r => setTimeout(r, 1200));
       const all = await base44.entities.OutreachRequest.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 200);
       return (all || []).filter(r => r.status !== 'Complete').length;
     },
-    staleTime: 60000,
+    // Fetch once per session — the central request throttler (base44Client.js) now
+    // handles burst protection, so this no longer needs its own artificial delay
+    staleTime: Infinity,
   });
 
   const isActive = (href) => {

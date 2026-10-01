@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import DeleteCaseConfirmDialog from '@/components/case/DeleteCaseConfirmDialog';
 import { deleteCase } from '@/lib/caseDelete';
+import { useTenantCases, useTenantClients, useTenantUsers } from '@/hooks/useTenantData';
 import { format, differenceInDays, isAfter } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -117,10 +118,6 @@ export default function CasesList({ myOnly = false }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const [cases, setCases]       = useState([]);
-  const [clients, setClients]   = useState({});   // id → client
-  const [users, setUsers]       = useState([]);
-  const [loading, setLoading]   = useState(true);
   const [page, setPage]         = useState(1);
 
   // Sort state
@@ -150,26 +147,20 @@ export default function CasesList({ myOnly = false }) {
 
   const [deletingCase, setDeletingCase] = useState(null);
 
-  useEffect(() => {
-    if (currentUser?.tenant_id) loadAll();
-  }, [currentUser?.tenant_id, myOnly]);
+  const { data: allCases = [], isLoading: casesLoading, refetch: refetchCases } = useTenantCases(currentUser?.tenant_id);
+  const { data: clientsList = [], isLoading: clientsLoading } = useTenantClients(currentUser?.tenant_id);
+  const { data: users = [], isLoading: usersLoading } = useTenantUsers(currentUser?.tenant_id);
 
-  async function loadAll() {
-    setLoading(true);
-    const query = { tenant_id: currentUser.tenant_id };
-    if (myOnly) query.assigned_analyst_id = currentUser.id;
-    const [casesData, clientsData, usersData] = await Promise.all([
-      base44.entities.KycCase.filter(query, '-created_date', 1000),
-      base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }),
-      base44.entities.User.filter({ tenant_id: currentUser.tenant_id }).catch(() => []),
-    ]);
-    setCases(casesData || []);
-    const cm = {};
-    (clientsData || []).forEach(c => { cm[c.id] = c; });
-    setClients(cm);
-    setUsers(usersData || []);
-    setLoading(false);
-  }
+  const loading = casesLoading || clientsLoading || usersLoading;
+  const cases = useMemo(
+    () => (myOnly ? allCases.filter(c => c.assigned_analyst_id === currentUser?.id) : allCases),
+    [allCases, myOnly, currentUser?.id]
+  );
+  const clients = useMemo(() => {
+    const m = {};
+    clientsList.forEach(c => { m[c.id] = c; });
+    return m;
+  }, [clientsList]);
 
   function clearFilters() {
     setSearch(''); setCaseTypes([]); setStatuses([]); setRisks([]);
@@ -255,7 +246,7 @@ export default function CasesList({ myOnly = false }) {
     if (!reassignTo || selected.size === 0) return;
     setBulkWorking(true);
     await Promise.all([...selected].map(id => base44.entities.KycCase.update(id, { assigned_analyst_id: reassignTo })));
-    await loadAll();
+    await refetchCases();
     setSelected(new Set()); setReassignTo('');
     setBulkWorking(false);
   }
@@ -563,7 +554,7 @@ export default function CasesList({ myOnly = false }) {
         onConfirm={async () => {
           await deleteCase(deletingCase, currentUser);
           setDeletingCase(null);
-          await loadAll();
+          await refetchCases();
         }}
       />
     </AppShell>

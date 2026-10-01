@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { format, subMonths, isWithinInterval, startOfMonth, endOfMonth, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useTenantCases, useTenantClients, useTenantUsers, useTenantControlMeasures, useTenantScreeningHits } from '@/hooks/useTenantData';
 
 const RISK_COLORS  = { Low: '#22c55e', Medium: '#f59e0b', High: '#ef4444', Unacceptable: '#881337' };
 const STATUS_COLORS = ['#3b82f6','#f59e0b','#22c55e','#ef4444','#8b5cf6','#6b7280','#14b8a6','#f97316'];
@@ -51,14 +52,19 @@ export default function MIDashboard() {
   const userRole = currentUser?.app_role;
   const isManager = hasPermission(userRole, 'viewAllTenantCases');
 
-  const [cases, setCases]           = useState([]);
-  const [clients, setClients]       = useState([]);
-  const [hits, setHits]             = useState([]);
   const [aiRuns, setAiRuns]         = useState([]);
-  const [users, setUsers]           = useState([]);
-  const [controlMeasures, setControlMeasures] = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState(null);
+  const [aiRunsLoading, setAiRunsLoading] = useState(true);
+  const [aiRunsError, setAiRunsError] = useState(null);
+
+  const { data: cases = [], isLoading: casesLoading, isError: casesErr, refetch: refetchCases } = useTenantCases(currentUser?.tenant_id);
+  const { data: clients = [], isLoading: clientsLoading, isError: clientsErr, refetch: refetchClients } = useTenantClients(currentUser?.tenant_id);
+  const { data: hits = [], isLoading: hitsLoading, isError: hitsErr, refetch: refetchHits } = useTenantScreeningHits(currentUser?.tenant_id);
+  const { data: users = [], isLoading: usersLoading, refetch: refetchUsers } = useTenantUsers(currentUser?.tenant_id);
+  const { data: controlMeasures = [], isLoading: cmLoading, isError: cmErr, refetch: refetchCm } = useTenantControlMeasures(currentUser?.tenant_id);
+
+  const loading = casesLoading || clientsLoading || hitsLoading || usersLoading || cmLoading || aiRunsLoading;
+  const error = (casesErr || clientsErr || hitsErr || cmErr || aiRunsError)
+    ? (aiRunsError || 'Failed to load MI data') : null;
 
   // Date range filter
   const [fromDate, setFromDate] = useState(format(subMonths(new Date(), 12), 'yyyy-MM-dd'));
@@ -73,33 +79,25 @@ export default function MIDashboard() {
     if (params.get('tab') === 'control-measures') setActiveTab('control-measures');
   }, []);
 
-  useEffect(() => { if (currentUser?.tenant_id) loadData(); }, [currentUser]);
+  useEffect(() => { if (currentUser?.tenant_id) loadAiRuns(); }, [currentUser]);
 
-  async function loadData() {
-    setLoading(true);
-    setError(null);
+  async function loadAiRuns() {
+    setAiRunsLoading(true);
+    setAiRunsError(null);
     try {
-      const canViewUsers = currentUser?.role === 'admin' || currentUser?.data?.role === 'admin';
-      const [casesData, clientsData, hitsData, aiData, usersData, controlData] = await Promise.all([
-        base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 1000),
-        base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 1000),
-        base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
-        base44.entities.AiAgentRun.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
-        canViewUsers ? base44.entities.User.list().catch(() => []) : Promise.resolve([]),
-        base44.entities.ControlMeasure.filter({ tenant_id: currentUser.tenant_id }),
-      ]);
-      setCases(casesData || []);
-      setClients(clientsData || []);
-      setHits(hitsData || []);
+      const aiData = await base44.entities.AiAgentRun.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500);
       setAiRuns(aiData || []);
-      setUsers(usersData || []);
-      setControlMeasures(controlData || []);
     } catch (err) {
-      console.error('MIDashboard loadData error:', err);
-      setError(err?.message || 'Failed to load MI data');
+      console.error('MIDashboard loadAiRuns error:', err);
+      setAiRunsError(err?.message || 'Failed to load MI data');
     } finally {
-      setLoading(false);
+      setAiRunsLoading(false);
     }
+  }
+
+  function loadData() {
+    refetchCases(); refetchClients(); refetchHits(); refetchUsers(); refetchCm();
+    loadAiRuns();
   }
 
   // Apply date range + analyst filters

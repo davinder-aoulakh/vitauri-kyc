@@ -26,6 +26,7 @@ import CaseAssignmentPicker from '@/components/case/CaseAssignmentPicker';
 import CaseNoteThread       from '@/components/case/CaseNoteThread';
 import DeleteCaseConfirmDialog from '@/components/case/DeleteCaseConfirmDialog';
 import { deleteCase } from '@/lib/caseDelete';
+import { useTenantUsers } from '@/hooks/useTenantData';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -72,7 +73,6 @@ export default function CaseWorkspace() {
 
   const [kycCase, setKycCase] = useState(null);
   const [client, setClient]   = useState(null);
-  const [users, setUsers]     = useState([]);
   const [auditEvents, setAuditEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -98,6 +98,7 @@ export default function CaseWorkspace() {
 
   const userRole = currentUser?.app_role;
   const canOverrideStatus = hasPermission(userRole, 'viewAllTenantCases');
+  const { data: users = [] } = useTenantUsers(currentUser?.tenant_id);
 
   useEffect(() => { loadAll(); }, [id]);
 
@@ -117,16 +118,13 @@ export default function CaseWorkspace() {
       setNoteThreads(c?.case_notes_threads || []);
 
       const clientDataPromise = c?.client_id ? base44.entities.Client.filter({ id: c.client_id }) : Promise.resolve([]);
-      const usersDataPromise = base44.entities.User.list().catch(() => []);
       const auditDataPromise = base44.entities.AuditEvent.filter({ case_id: id }, '-created_date', 100).catch(() => []);
 
-      const [clientData, usersData, auditData] = await Promise.all([
+      const [clientData, auditData] = await Promise.all([
         clientDataPromise,
-        usersDataPromise,
         auditDataPromise,
       ]);
       setClient(clientData?.[0] || null);
-      setUsers(usersData || []);
       setAuditEvents(auditData || []);
     } catch (err) {
       console.error('CaseWorkspace refreshCaseData error:', err);
