@@ -169,6 +169,24 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
   const [evidencePickerOpen, setEvidencePickerOpen] = useState(false);
   const [viewerDoc, setViewerDoc] = useState(null);
 
+  // Load previously saved sof/sow/narrative/evidence from the case record on mount —
+  // without this, re-visiting this step (or reloading the page) wipes the AI draft.
+  const loaded = useRef(false);
+  useEffect(() => {
+    if (kycCase?.sof_narrative) {
+      try {
+        const parsed = JSON.parse(kycCase.sof_narrative);
+        if (parsed.sof) setSof(parsed.sof);
+        if (parsed.sow) setSow(parsed.sow);
+        if (parsed.narrative) setNarrative(parsed.narrative);
+        if (parsed.evidence) setEvidence(parsed.evidence);
+      } catch (err) {
+        console.error('Failed to parse saved sof_narrative:', err);
+      }
+    }
+    loaded.current = true;
+  }, [kycCase?.id]);
+
   // Auto-save sof, sow, narrative and evidence to KycCase as JSON fields
   const { autoSaving, lastSaved } = useAutoSave(
     { sof, sow, narrative, evidence, sowApplicable },
@@ -179,6 +197,7 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
       });
     },
     1500,
+    !loaded.current,
   );
 
   useEffect(() => {
