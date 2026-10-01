@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import AutoSaveIndicator from '@/components/shared/AutoSaveIndicator';
 import { base44 } from '@/api/base44Client';
@@ -187,27 +187,47 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
     }
   }, [kycCase?.client_id]);
 
+  // Always flush the latest SoF/SoW data on unmount — the debounced autosave
+  // above is cancelled by React when the user navigates to another step
+  // before its timer fires, which would otherwise drop unsaved changes.
+  const latestDataRef = useRef({ sof, sow, narrative, evidence, sowApplicable });
+  useEffect(() => {
+    latestDataRef.current = { sof, sow, narrative, evidence, sowApplicable };
+  }, [sof, sow, narrative, evidence, sowApplicable]);
+
+  useEffect(() => {
+    return () => {
+      if (!kycCase?.id) return;
+      const d = latestDataRef.current;
+      base44.entities.KycCase.update(kycCase.id, {
+        sof_narrative: JSON.stringify({ sof: d.sof, sow: d.sow, narrative: d.narrative, evidence: d.evidence }),
+      });
+    };
+  }, [kycCase?.id]);
+
   async function generateNarrative() {
     setGenerating(true);
     setAccepted(false);
     setNarrativeError(null);
 
     try {
-      const [outreachData] = await Promise.all([
-        base44.entities.OutreachRequest.filter({ case_id: kycCase.id }),
-      ]);
+      // Run the whole chain (outreach fetch + LLM call + persist) as one unit,
+      // raced against a single deadline — guards against ANY step hanging,
+      // not just the LLM call, so the button can never stay stuck forever.
+      const narrativeWork = (async () => {
+        const outreachData = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
 
-      const outreachSoF = outreachData?.flatMap(o =>
-        (o.items || []).filter(i => i.label?.toLowerCase().includes('fund') || i.label?.toLowerCase().includes('wealth') || i.label?.toLowerCase().includes('income'))
-          .map(i => `${i.label}: ${i.response_text || 'no response'}`)
-      ).join('\n') || 'No outreach responses for SoF/SoW';
+        const outreachSoF = outreachData?.flatMap(o =>
+          (o.items || []).filter(i => i.label?.toLowerCase().includes('fund') || i.label?.toLowerCase().includes('wealth') || i.label?.toLowerCase().includes('income'))
+            .map(i => `${i.label}: ${i.response_text || 'no response'}`)
+        ).join('\n') || 'No outreach responses for SoF/SoW';
 
-      const docList = documents.map(d => `${d.doc_type}: ${d.file_name}`).join('\n') || 'No documents uploaded';
-      const evidenceList = evidence.map(e => `${e.claim} — supported by: ${e.doc_name} (${e.verified ? 'Verified' : 'Unverified'})`).join('\n') || '';
+        const docList = documents.map(d => `${d.doc_type}: ${d.file_name}`).join('\n') || 'No documents uploaded';
+        const evidenceList = evidence.map(e => `${e.claim} — supported by: ${e.doc_name} (${e.verified ? 'Verified' : 'Unverified'})`).join('\n') || '';
 
-      const includeSoW = isNP && sowApplicable;
+        const includeSoW = isNP && sowApplicable;
 
-      const prompt = `You are a senior KYC analyst at a regulated financial institution.
+        const prompt = `You are a senior KYC analyst at a regulated financial institution.
 
 CLIENT: ${client?.full_name} (${client?.client_type})
 ${isNP ? `
@@ -244,13 +264,24 @@ ${!includeSoW && isNP ? '6. Note that SoW assessment is not applicable and brief
 
 Write in factual, neutral, third-person tone. 3–6 paragraphs.`;
 
-      const result = await Promise.race([
-        base44.integrations.Core.InvokeLLM({ prompt, model: 'claude_sonnet_4_6' }),
+        const result = await base44.integrations.Core.InvokeLLM({ prompt, model: 'claude_sonnet_4_6' });
+
+        if (!result) throw new Error('Failed to generate assessment. Please try again.');
+        const narrativeText = typeof result === 'string' ? result : result?.narrative || result?.assessment || JSON.stringify(result);
+        setNarrative(narrativeText);
+        // Persist immediately — don't rely on the debounced autosave, which can
+        // be cancelled if the user navigates to another step before it fires.
+        if (kycCase?.id) {
+          await base44.entities.KycCase.update(kycCase.id, {
+            sof_narrative: JSON.stringify({ sof, sow, narrative: narrativeText, evidence }),
+          });
+        }
+      })();
+
+      await Promise.race([
+        narrativeWork,
         new Promise((_, reject) => setTimeout(() => reject(new Error('AI draft timed out — please try again.')), NARRATIVE_TIMEOUT_MS)),
       ]);
-
-      if (!result) throw new Error('Failed to generate assessment. Please try again.');
-      setNarrative(typeof result === 'string' ? result : result?.narrative || result?.assessment || JSON.stringify(result));
     } catch (err) {
       console.error('generateNarrative error:', err);
       setNarrativeError(err?.message || 'Failed to generate assessment. Please try again.');
