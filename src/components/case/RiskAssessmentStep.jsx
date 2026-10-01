@@ -8,7 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Loader2, User, Building2, BarChart3, ArrowRight, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import IndicatorPicker from '@/components/risk/IndicatorPicker';
+import IndicatorPicker, { ALL_INDICATORS } from '@/components/risk/IndicatorPicker';
 import IndicatorAssessment from '@/components/risk/IndicatorAssessment';
 import ConsolidatedRiskView from '@/components/risk/ConsolidatedRiskView';
 import InlineError from '@/components/shared/InlineError';
@@ -150,7 +150,10 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
 
         {/* S-091 — Per-Entity Assessment */}
         {entities.map((e, idx) => {
-          const selectedIds = selections[e.key] || [];
+          // Only count IDs that resolve to a real indicator — a stale/unrecognised
+          // indicator_id in selections (e.g. from an old AI Suggest run) can never be
+          // scored, which would otherwise block proceeding forever.
+          const selectedIds = (selections[e.key] || []).filter(id => ALL_INDICATORS.some(i => i.id === id));
           const entityScores = allScores[e.key] || {};
           const scoredCount = selectedIds.filter(id => entityScores[id]?.score).length;
           const totalCount = selectedIds.length;
