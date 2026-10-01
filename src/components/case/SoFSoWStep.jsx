@@ -16,7 +16,7 @@ import InlineError from '@/components/shared/InlineError';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const NARRATIVE_TIMEOUT_MS = 30000;
+const NARRATIVE_TIMEOUT_MS = 60000;
 
 const SOF_SOURCES_NP  = ['Salary / Employment Income','Business Income / Dividends','Sale of Property','Inheritance','Investment Returns','Pension','Loan / Credit Facility','Gift','Other'];
 const SOF_SOURCES_ORG = ['Trading / Operating Revenue','Investment Income','Dividend Income','Loan / Debt Facility','Capital Raise / Equity','Asset Sale Proceeds','Other'];
