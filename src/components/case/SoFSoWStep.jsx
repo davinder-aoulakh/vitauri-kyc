@@ -12,8 +12,11 @@ import {
 } from 'lucide-react';
 import DocumentViewer from '@/components/shared/DocumentViewer';
 import DocUploadPicker from '@/components/shared/DocUploadPicker';
+import InlineError from '@/components/shared/InlineError';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+
+const NARRATIVE_TIMEOUT_MS = 30000;
 
 const SOF_SOURCES_NP  = ['Salary / Employment Income','Business Income / Dividends','Sale of Property','Inheritance','Investment Returns','Pension','Loan / Credit Facility','Gift','Other'];
 const SOF_SOURCES_ORG = ['Trading / Operating Revenue','Investment Income','Dividend Income','Loan / Debt Facility','Capital Raise / Equity','Asset Sale Proceeds','Other'];
@@ -158,6 +161,7 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
   const [overrideJustification, setOverrideJustification] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [narrativeError, setNarrativeError] = useState(null);
 
   // Documents for evidence linking — declared before useAutoSave so `evidence` is in scope
   const [documents, setDocuments] = useState([]);
@@ -186,23 +190,24 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
   async function generateNarrative() {
     setGenerating(true);
     setAccepted(false);
+    setNarrativeError(null);
 
-    const [outreachData] = await Promise.all([
-      base44.entities.OutreachRequest.filter({ case_id: kycCase.id }),
-    ]);
+    try {
+      const [outreachData] = await Promise.all([
+        base44.entities.OutreachRequest.filter({ case_id: kycCase.id }),
+      ]);
 
-    const outreachSoF = outreachData?.flatMap(o =>
-      (o.items || []).filter(i => i.label?.toLowerCase().includes('fund') || i.label?.toLowerCase().includes('wealth') || i.label?.toLowerCase().includes('income'))
-        .map(i => `${i.label}: ${i.response_text || 'no response'}`)
-    ).join('\n') || 'No outreach responses for SoF/SoW';
+      const outreachSoF = outreachData?.flatMap(o =>
+        (o.items || []).filter(i => i.label?.toLowerCase().includes('fund') || i.label?.toLowerCase().includes('wealth') || i.label?.toLowerCase().includes('income'))
+          .map(i => `${i.label}: ${i.response_text || 'no response'}`)
+      ).join('\n') || 'No outreach responses for SoF/SoW';
 
-    const docList = documents.map(d => `${d.doc_type}: ${d.file_name}`).join('\n') || 'No documents uploaded';
-    const evidenceList = evidence.map(e => `${e.claim} — supported by: ${e.doc_name} (${e.verified ? 'Verified' : 'Unverified'})`).join('\n') || '';
+      const docList = documents.map(d => `${d.doc_type}: ${d.file_name}`).join('\n') || 'No documents uploaded';
+      const evidenceList = evidence.map(e => `${e.claim} — supported by: ${e.doc_name} (${e.verified ? 'Verified' : 'Unverified'})`).join('\n') || '';
 
-    const includeSoW = isNP && sowApplicable;
+      const includeSoW = isNP && sowApplicable;
 
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are a senior KYC analyst at a regulated financial institution.
+      const prompt = `You are a senior KYC analyst at a regulated financial institution.
 
 CLIENT: ${client?.full_name} (${client?.client_type})
 ${isNP ? `
@@ -237,12 +242,21 @@ Draft a professional, regulatory-grade Source of Funds${includeSoW ? ' and Sourc
 5. Risk observation / conclusion
 ${!includeSoW && isNP ? '6. Note that SoW assessment is not applicable and briefly justify why (e.g. lower risk profile / SoF deemed sufficient).' : ''}
 
-Write in factual, neutral, third-person tone. 3–6 paragraphs.`,
-      model: 'claude_sonnet_4_6',
-    });
+Write in factual, neutral, third-person tone. 3–6 paragraphs.`;
 
-    setNarrative(typeof result === 'string' ? result : result?.narrative || result?.assessment || JSON.stringify(result));
-    setGenerating(false);
+      const result = await Promise.race([
+        base44.integrations.Core.InvokeLLM({ prompt, model: 'claude_sonnet_4_6' }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('AI draft timed out — please try again.')), NARRATIVE_TIMEOUT_MS)),
+      ]);
+
+      if (!result) throw new Error('Failed to generate assessment. Please try again.');
+      setNarrative(typeof result === 'string' ? result : result?.narrative || result?.assessment || JSON.stringify(result));
+    } catch (err) {
+      console.error('generateNarrative error:', err);
+      setNarrativeError(err?.message || 'Failed to generate assessment. Please try again.');
+    } finally {
+      setGenerating(false);
+    }
   }
 
   function addEvidence(doc, claim) {
@@ -457,6 +471,10 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`,
           className="text-sm min-h-48 resize-y leading-relaxed"
         />
         <div className="text-xs text-muted-foreground">{narrative.length} characters</div>
+
+        {narrativeError && (
+          <InlineError message={narrativeError} onRetry={generateNarrative} />
+        )}
 
         {narrative && !accepted && (
           <div className="flex flex-wrap gap-2">
