@@ -19,10 +19,30 @@ const rawClient = createClient({
 // page benefits without per-page changes. Does not touch auth, integrations,
 // functions, or `.subscribe()` (realtime, not an HTTP request).
 // ─────────────────────────────────────────────────────────────────────────
-const MAX_CONCURRENT = 3;
+const MAX_CONCURRENT = 6;
 const MAX_RETRIES = 3;
+const TIMEOUT_MS = 60000;
 let active = 0;
 const queue = [];
+
+class TimeoutError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'TimeoutError';
+    this.status = 408;
+  }
+}
+
+// Races a throttled call against a 60s timeout. On timeout the slot is
+// released (via the throttle()'s finally) and a TimeoutError is thrown,
+// which flows into the caller's normal catch block like any other error.
+function withTimeout(promise) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new TimeoutError('Request timed out after 60s')), TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 function acquire() {
   return new Promise((resolve) => {
@@ -55,7 +75,7 @@ function throttle(fn) {
     while (true) {
       await acquire();
       try {
-        return await fn(...args);
+        return await withTimeout(fn(...args));
       } catch (err) {
         if (isRateLimited(err) && attempt < MAX_RETRIES) {
           attempt++;
