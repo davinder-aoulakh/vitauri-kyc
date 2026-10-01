@@ -34,8 +34,11 @@ export default function NotificationBell({ userId, tenantId, className, badgeVar
     }
   }, [userId]);
 
-  // Initial load
-  useEffect(() => { load(); }, [load]);
+  // Initial load — slight delay so it doesn't burst alongside other page-load requests
+  useEffect(() => {
+    const t = setTimeout(load, 800);
+    return () => clearTimeout(t);
+  }, [load]);
 
   // Poll every 60s for new notifications
   useEffect(() => {

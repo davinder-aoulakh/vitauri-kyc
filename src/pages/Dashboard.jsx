@@ -73,10 +73,14 @@ export default function Dashboard() {
     setError(null);
     try {
       const canViewUsers = currentUser?.role === 'admin' || currentUser?.data?.role === 'admin';
-      const [casesData, auditData, clientsData, hitsData, usersData, controlData] = await Promise.all([
+      // Split into two smaller batches with a short gap to avoid bursting the rate limit
+      const [casesData, auditData, clientsData] = await Promise.all([
         base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
         base44.entities.AuditEvent.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 20),
         base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
+      ]);
+      await new Promise(r => setTimeout(r, 400));
+      const [hitsData, usersData, controlData] = await Promise.all([
         base44.entities.ScreeningHit.filter({ tenant_id: currentUser.tenant_id, status: { $in: ['New', 'Under_Review'] } }, '-created_date', 500),
         canViewUsers ? base44.entities.User.list().catch(() => []) : Promise.resolve([]),
         base44.entities.ControlMeasure.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 500),
