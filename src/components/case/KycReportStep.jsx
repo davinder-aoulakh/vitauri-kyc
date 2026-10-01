@@ -9,6 +9,7 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { FileText, Download, Loader2, Share2, CheckCircle, XCircle, Eye, RefreshCw, Shield } from 'lucide-react';
 import DocumentViewer from '@/components/shared/DocumentViewer';
+import InlineError from '@/components/shared/InlineError';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
@@ -734,15 +735,23 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
   const [generating, setGenerating] = useState(false);
   const [reports, setReports]       = useState([]);
   const [loading, setLoading]       = useState(true);
+  const [loadError, setLoadError]   = useState(null);
   const [shareLink, setShareLink]   = useState(null);
   const [viewerDoc, setViewerDoc]   = useState(null);
 
   useEffect(() => { loadReports(); }, [kycCase.id]);
 
   async function loadReports() {
-    const kycReports = await base44.entities.KycReport.filter({ case_id: kycCase.id });
-    setReports((kycReports || []).sort((a, b) => b.version_number - a.version_number));
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const kycReports = await base44.entities.KycReport.filter({ case_id: kycCase.id });
+      setReports((kycReports || []).sort((a, b) => b.version_number - a.version_number));
+    } catch (err) {
+      console.error('KycReportStep loadReports error:', err);
+      setLoadError(err?.message || 'Failed to load reports.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function generateReport() {
@@ -939,7 +948,9 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
         ))}
       </div>
 
-      {loading ? (
+      {loadError ? (
+        <InlineError message={loadError} onRetry={loadReports} />
+      ) : loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>

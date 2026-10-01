@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, CheckCircle, Clock, AlertTriangle, Loader2, ClipboardCheck, Pencil, Info } from 'lucide-react';
+import InlineError from '@/components/shared/InlineError';
 import { format, addDays, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +32,7 @@ export default function ControlMeasuresStep({ kycCase, currentUser }) {
   const [measures, setMeasures] = useState([]);
   const [users, setUsers]       = useState([]);
   const [loading, setLoading]   = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing]   = useState(null); // null = new
   const [form, setForm]         = useState(EMPTY_FORM);
@@ -42,6 +44,7 @@ export default function ControlMeasuresStep({ kycCase, currentUser }) {
   useEffect(() => { load(); }, [kycCase.id]);
 
   async function load() {
+    setLoadError(null);
     try {
       const measures = await base44.entities.ControlMeasure.filter({ case_id: kycCase.id });
       let usersData = [];
@@ -61,6 +64,7 @@ export default function ControlMeasuresStep({ kycCase, currentUser }) {
       setLoading(false);
     } catch (error) {
       console.error('Error loading control measures:', error);
+      setLoadError(error?.message || 'Failed to load control measures.');
       setLoading(false);
     }
   }
@@ -177,7 +181,9 @@ export default function ControlMeasuresStep({ kycCase, currentUser }) {
         </div>
       )}
 
-      {loading ? (
+      {loadError ? (
+        <InlineError message={loadError} onRetry={load} />
+      ) : loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>

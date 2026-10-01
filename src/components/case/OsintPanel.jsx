@@ -4,12 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Globe, Loader2, AlertTriangle, Plus, CheckCircle, ExternalLink, RefreshCw, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import InlineError from '@/components/shared/InlineError';
+
+const LLM_TIMEOUT_MS = 60000;
 
 export default function OsintPanel({ kycCase, client, onAddToProfile }) {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [runAt, setRunAt] = useState(null);
   const [added, setAdded] = useState([]);
+  const [searchError, setSearchError] = useState(null);
 
   // Load cached results on mount
   useEffect(() => {
@@ -24,10 +28,13 @@ export default function OsintPanel({ kycCase, client, onAddToProfile }) {
 
   async function runSearch() {
     setLoading(true);
+    setSearchError(null);
     const name = client?.full_name || '';
     const country = client?.registered_country || client?.nationality || '';
 
-    const result = await base44.integrations.Core.InvokeLLM({
+    try {
+    const result = await Promise.race([
+      base44.integrations.Core.InvokeLLM({
       prompt: `You are an OSINT intelligence analyst at a regulated financial institution. Conduct thorough open-source intelligence research on the following entity.
 
 Entity Name: "${name}"
@@ -70,7 +77,9 @@ Return 4–8 findings. Be specific and factual. If no results found, state clear
           }
         }
       }
-    });
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('OSINT search timed out — please try again.')), LLM_TIMEOUT_MS)),
+    ]);
 
     const now = new Date().toISOString();
     setResults(result);
@@ -83,8 +92,12 @@ Return 4–8 findings. Be specific and factual. If no results found, state clear
         osint_cache: JSON.stringify({ results: result, run_at: now }),
       });
     }
-
-    setLoading(false);
+    } catch (err) {
+      console.error('OSINT runSearch error:', err);
+      setSearchError(err?.message || 'Search failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   function handleAdd(finding) {
@@ -110,8 +123,13 @@ Return 4–8 findings. Be specific and factual. If no results found, state clear
       {/* Body */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
 
+        {/* Error — shown above any cached results, with Retry */}
+        {searchError && !loading && (
+          <InlineError message={searchError} onRetry={runSearch} retryLabel="Retry Search" />
+        )}
+
         {/* Idle — no results yet */}
-        {!results && !loading && (
+        {!results && !loading && !searchError && (
           <div className="flex flex-col items-center py-8 gap-4 text-center">
             <div className="w-12 h-12 rounded-full bg-navy-light border border-navy-border flex items-center justify-center">
               <Globe className="w-5 h-5 text-blue-300" />

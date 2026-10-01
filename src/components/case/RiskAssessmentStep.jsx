@@ -11,11 +11,13 @@ import { cn } from '@/lib/utils';
 import IndicatorPicker from '@/components/risk/IndicatorPicker';
 import IndicatorAssessment from '@/components/risk/IndicatorAssessment';
 import ConsolidatedRiskView from '@/components/risk/ConsolidatedRiskView';
+import InlineError from '@/components/shared/InlineError';
 import { useRiskAssessmentPersistence } from '@/hooks/useRiskAssessmentPersistence';
 
 export default function RiskAssessmentStep({ kycCase, client, currentUser, onCaseUpdate }) {
   const [relatedParties, setRelatedParties] = useState([]);
   const [rpLoading, setRpLoading] = useState(true);
+  const [rpError, setRpError] = useState(null);
   const [activeTab, setActiveTab] = useState('picker');
 
   const {
@@ -34,12 +36,19 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
 
   async function loadRelatedParties() {
     if (!kycCase?.client_id) { setRpLoading(false); return; }
-    const links = await base44.entities.ClientRelatedPartyLink.filter({ client_id: kycCase.client_id });
-    if (links?.length > 0) {
-      const rps = await Promise.all(links.map(l => base44.entities.RelatedParty.filter({ id: l.related_party_id })));
-      setRelatedParties(rps.flat().filter(Boolean));
+    setRpError(null);
+    try {
+      const links = await base44.entities.ClientRelatedPartyLink.filter({ client_id: kycCase.client_id });
+      if (links?.length > 0) {
+        const rps = await Promise.all(links.map(l => base44.entities.RelatedParty.filter({ id: l.related_party_id })));
+        setRelatedParties(rps.flat().filter(Boolean));
+      }
+    } catch (err) {
+      console.error('RiskAssessmentStep loadRelatedParties error:', err);
+      setRpError(err?.message || 'Failed to load related parties.');
+    } finally {
+      setRpLoading(false);
     }
-    setRpLoading(false);
   }
 
   const entities = [
@@ -94,6 +103,10 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
         <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
       </div>
     );
+  }
+
+  if (rpError) {
+    return <InlineError message={rpError} onRetry={loadRelatedParties} />;
   }
 
   return (

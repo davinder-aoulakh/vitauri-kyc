@@ -6,6 +6,7 @@ import { Shield, AlertTriangle, CheckCircle, Loader2, RefreshCw, ExternalLink, C
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { addDays, format } from 'date-fns';
+import InlineError from '@/components/shared/InlineError';
 import HitsTable from '@/components/case/screening/HitsTable';
 import HitDetailPanel from '@/components/case/screening/HitDetailPanel';
 import AmlHitSlidePanel from '@/components/case/screening/AmlHitSlidePanel';
@@ -75,6 +76,7 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
   const [monitoringAlerts, setMonitoringAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const [selectedHit, setSelectedHit] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmedOnboardingHits, setConfirmedOnboardingHits] = useState([]);
@@ -109,19 +111,25 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
   async function loadAll(opts = {}) {
     if (opts.sync) setSyncing(true);
     else setLoading(true);
+    setLoadError(null);
 
-    const [hitsData, alertsData] = await Promise.all([
-      base44.entities.ScreeningHit.filter({ case_id: caseId }, '-created_date'),
-      tenantId ? base44.entities.MonitoringAlert.filter({ tenant_id: tenantId }, '-created_date', 50) : Promise.resolve([]),
-    ]);
-    setHits(hitsData || []);
-    setMonitoringAlerts(alertsData || []);
+    try {
+      const [hitsData, alertsData] = await Promise.all([
+        base44.entities.ScreeningHit.filter({ case_id: caseId }, '-created_date'),
+        tenantId ? base44.entities.MonitoringAlert.filter({ tenant_id: tenantId }, '-created_date', 50) : Promise.resolve([]),
+      ]);
+      setHits(hitsData || []);
+      setMonitoringAlerts(alertsData || []);
 
-    // Pull latest Didit AML results for any pending IDV items
-    await syncDiditAml(hitsData || [], opts.sync);
-
-    if (!opts.sync) setLoading(false);
-    setSyncing(false);
+      // Pull latest Didit AML results for any pending IDV items
+      await syncDiditAml(hitsData || [], opts.sync);
+    } catch (err) {
+      console.error('ScreeningStep loadAll error:', err);
+      setLoadError(err?.message || 'Failed to load screening data.');
+    } finally {
+      if (!opts.sync) setLoading(false);
+      setSyncing(false);
+    }
   }
 
   async function syncDiditAml(existingHits, forcePull = false) {
@@ -823,7 +831,9 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
       )}
 
       {/* Legacy ScreeningHit records — only show when no Didit AML summary */}
-      {loading ? (
+      {loadError ? (
+        <InlineError message={loadError} onRetry={() => loadAll()} />
+      ) : loading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>

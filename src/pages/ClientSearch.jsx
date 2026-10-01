@@ -9,9 +9,10 @@ import EmptyState from '@/components/shared/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Plus, AlertTriangle, Upload, ExternalLink } from 'lucide-react';
+import { Search, Plus, AlertTriangle, Upload, ExternalLink, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { dedupScore, DEDUP_THRESHOLD } from '@/lib/dedup';
+import InlineError from '@/components/shared/InlineError';
 
 const RESTRICTED = ['Rejected', 'Unacceptable'];
 
@@ -26,24 +27,33 @@ export default function ClientSearch() {
   const [loading, setLoading]       = useState(false);
   const [searched, setSearched]     = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [initialError, setInitialError]     = useState(null);
 
   const debounceRef = useRef(null);
 
   // Load all clients once on mount so dedup runs client-side
-  useEffect(() => {
-    if (currentUser?.tenant_id) {
-      base44.entities.Client.filter({ tenant_id: currentUser.tenant_id })
-        .then(d => setAllClients((d || []).filter(c => !c.is_deleted)))
-        .catch(err => console.error('ClientSearch load clients error:', err));
-      base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id })
-        .then(cases => {
-          const counts = {};
-          (cases || []).forEach(c => { counts[c.client_id] = (counts[c.client_id] || 0) + 1; });
-          setCasesCounts(counts);
-        })
-        .catch(err => console.error('ClientSearch load cases error:', err));
+  useEffect(() => { if (currentUser?.tenant_id) loadInitial(); }, [currentUser]);
+
+  async function loadInitial() {
+    setInitialLoading(true);
+    setInitialError(null);
+    try {
+      const [clientsData, casesData] = await Promise.all([
+        base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }),
+        base44.entities.KycCase.filter({ tenant_id: currentUser.tenant_id }),
+      ]);
+      setAllClients((clientsData || []).filter(c => !c.is_deleted));
+      const counts = {};
+      (casesData || []).forEach(c => { counts[c.client_id] = (counts[c.client_id] || 0) + 1; });
+      setCasesCounts(counts);
+    } catch (err) {
+      console.error('ClientSearch loadInitial error:', err);
+      setInitialError(err?.message || 'Failed to load clients.');
+    } finally {
+      setInitialLoading(false);
     }
-  }, [currentUser]);
+  }
 
   useEffect(() => {
     setAcknowledged(false);

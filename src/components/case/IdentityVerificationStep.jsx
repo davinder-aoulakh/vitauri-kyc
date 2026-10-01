@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
+import InlineError from '@/components/shared/InlineError';
 import { CheckCircle, XCircle, AlertTriangle, Loader2, Clock, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -66,6 +67,7 @@ function ApplyOcrButton({ extractedData, clientId, onDone }) {
 export default function IdentityVerificationStep({ kycCase, client, currentUser, tenant, onStepComplete, onCaseChanged, onIdvDataLoaded }) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const [idvResults, setIdvResults] = useState([]);
   const [extractedData, setExtractedData] = useState(null);
   const [showExtractedPrompt, setShowExtractedPrompt] = useState(false);
@@ -81,6 +83,7 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
   async function loadResults(opts = {}) {
     if (opts.sync) setSyncing(true);
     else setLoading(true);
+    setLoadError(null);
 
     try {
       const caseOutreaches = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
@@ -247,6 +250,7 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
       }
     } catch (err) {
       console.error('IDV load error:', err);
+      setLoadError(err?.message || 'Failed to load verification results.');
     } finally {
       setLoading(false);
       setSyncing(false);
@@ -259,6 +263,10 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
         <Loader2 className="w-4 h-4 animate-spin" /> Loading Didit verification results…
       </div>
     );
+  }
+
+  if (loadError) {
+    return <InlineError message={loadError} onRetry={() => loadResults()} />;
   }
 
   // Pending state — no Didit result yet

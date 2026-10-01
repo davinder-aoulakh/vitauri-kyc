@@ -20,6 +20,9 @@ import {
 import { cn } from '@/lib/utils';
 import { getNestedValue } from '@/lib/clientNameUtils';
 import { NP_FIELD_LABELS, ORG_FIELD_LABELS } from '@/hooks/useProfileSuggestions';
+import InlineError from '@/components/shared/InlineError';
+
+const LLM_TIMEOUT_MS = 60000;
 
 const TX_TYPES = ['Payments', 'Investments', 'Transfers', 'FX', 'Other'];
 const TX_FREQUENCIES = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annually', 'Ad hoc'];
@@ -86,6 +89,7 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
   // ── Section 1A ───────────────────────────────────────────────────────────────
   const [purposeText, setPurposeText]           = useState('');
   const [generatingPurpose, setGeneratingPurpose] = useState(false);
+  const [purposeError, setPurposeError]         = useState(null);
 
   // ── Section 1B ───────────────────────────────────────────────────────────────
   const [txExpanded, setTxExpanded] = useState(false);
@@ -133,13 +137,16 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
   // ── Section 1A AI draft ──────────────────────────────────────────────────────
   async function generatePurposeDraft() {
     setGeneratingPurpose(true);
-    const outreachData = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
-    const outreachContext = outreachData?.map(o =>
-      o.items?.map(i => `${i.label}: ${i.response_text || 'pending'}`).join('; ')
-    ).join('\n') || 'No outreach responses';
+    setPurposeError(null);
+    try {
+      const outreachData = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
+      const outreachContext = outreachData?.map(o =>
+        o.items?.map(i => `${i.label}: ${i.response_text || 'pending'}`).join('; ')
+      ).join('\n') || 'No outreach responses';
 
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are a senior KYC analyst. Draft a concise, regulatory-grade "Purpose and Nature of Business Relationship" statement for:
+      const result = await Promise.race([
+        base44.integrations.Core.InvokeLLM({
+          prompt: `You are a senior KYC analyst. Draft a concise, regulatory-grade "Purpose and Nature of Business Relationship" statement for:
 
 CLIENT: ${client?.full_name} (${isOrg ? 'Organisation' : 'Natural Person'})
 ${isOrg
@@ -150,10 +157,17 @@ CASE TYPE: ${kycCase?.case_type?.replace(/_/g, ' ')}
 OUTREACH RESPONSES: ${outreachContext}
 
 Write 2–4 sentences: (1) why the client is engaging, (2) intended products/services, (3) nature of relationship. Factual, precise. Note where information is not yet confirmed.`,
-      model: 'claude_sonnet_4_6',
-    });
-    setPurposeText(typeof result === 'string' ? result : result?.statement || JSON.stringify(result));
-    setGeneratingPurpose(false);
+          model: 'claude_sonnet_4_6',
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('AI draft timed out — please try again.')), LLM_TIMEOUT_MS)),
+      ]);
+      setPurposeText(typeof result === 'string' ? result : result?.statement || JSON.stringify(result));
+    } catch (err) {
+      console.error('generatePurposeDraft error:', err);
+      setPurposeError(err?.message || 'Failed to generate draft. Please try again.');
+    } finally {
+      setGeneratingPurpose(false);
+    }
   }
 
   // ── Computed stats (read-only summary) ───────────────────────────────────────
@@ -213,11 +227,14 @@ Write 2–4 sentences: (1) why the client is engaging, (2) intended products/ser
           placeholder={`Describe the nature of the client relationship, intended products/services…`}
           className={cn('text-sm min-h-24 resize-none', !purposeText && 'border-amber-300 focus:ring-amber-400')}
         />
-        {!purposeText && (
+        {!purposeText && !purposeError && (
           <div className="flex items-center gap-1.5 text-xs text-amber-600">
             <AlertTriangle className="w-3 h-3" />
             This field is required to complete this step.
           </div>
+        )}
+        {purposeError && (
+          <InlineError message={purposeError} onRetry={generatePurposeDraft} />
         )}
       </div>
 

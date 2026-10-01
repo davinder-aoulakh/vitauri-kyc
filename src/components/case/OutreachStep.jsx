@@ -11,6 +11,7 @@ import {
   AlertTriangle, Sparkles, Eye, Copy, ExternalLink, ShieldCheck, Mail, ChevronDown, LibraryBig
 } from 'lucide-react';
 import DocumentViewer from '@/components/shared/DocumentViewer';
+import InlineError from '@/components/shared/InlineError';
 import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
 import { NP_FIELD_LABELS, ORG_FIELD_LABELS } from '@/hooks/useProfileSuggestions';
 import { isFieldMappedLabel } from '@/lib/outreachFieldMatch';
@@ -96,6 +97,8 @@ function buildEmailHtml(tenant, client, req, portalUrl) {
 export default function OutreachStep({ kycCase, client, currentUser, tenant, onNavigateToStep, onOutreachAllVerified }) {
   const [requests, setRequests]   = useState([]);
   const [loading, setLoading]     = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [templatesError, setTemplatesError] = useState(null);
   const [newOpen, setNewOpen]     = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [viewerDoc, setViewerDoc] = useState(null); // { url, name }
@@ -140,49 +143,65 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
   useEffect(() => { load(); loadTemplates(); }, [kycCase.id]);
 
   async function load() {
-    const reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
-    setRequests(reqs || []);
-    setLoading(false);
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
+      setRequests(reqs || []);
 
-    // Report overall verification status — gates the Profile Verification step
-    const allItems = (reqs || []).flatMap(r => r.items || []);
-    onOutreachAllVerified?.((reqs || []).length > 0 && allItems.length > 0 && allItems.every(i => i.status === 'Verified'));
+      // Report overall verification status — gates the Profile Verification step
+      const allItems = (reqs || []).flatMap(r => r.items || []);
+      onOutreachAllVerified?.((reqs || []).length > 0 && allItems.length > 0 && allItems.every(i => i.status === 'Verified'));
 
-    // Build consolidated Didit summary from all verified IDV items
-    const allIDVItems = [];
-    for (const req of (reqs || [])) {
-      for (const item of (req.items || [])) {
-        if (item.field_type === 'id_verification' &&
-            item.idv_status && item.idv_status !== 'Pending') {
-          allIDVItems.push({ ...item, outreach_id: req.id });
+      // Build consolidated Didit summary from all verified IDV items
+      const allIDVItems = [];
+      for (const req of (reqs || [])) {
+        for (const item of (req.items || [])) {
+          if (item.field_type === 'id_verification' &&
+              item.idv_status && item.idv_status !== 'Pending') {
+            allIDVItems.push({ ...item, outreach_id: req.id });
+          }
         }
       }
-    }
-    if (allIDVItems.length > 0) {
-      const passed   = allIDVItems.filter(i => i.idv_status === 'Pass').length;
-      const failed   = allIDVItems.filter(i => i.idv_status === 'Fail').length;
-      const scored   = allIDVItems.filter(i => i.idv_similarity_score != null);
-      const avgScore = scored.length > 0
-        ? Math.round(scored.reduce((sum, i) => sum + i.idv_similarity_score, 0) / scored.length)
-        : 0;
-      const amlHits  = allIDVItems.reduce((sum, i) => sum + (i.idv_aml_hits || 0), 0);
-      setDiditSummary({ items: allIDVItems, passed, failed, avgScore, amlHits });
-    } else {
-      setDiditSummary(null);
+      if (allIDVItems.length > 0) {
+        const passed   = allIDVItems.filter(i => i.idv_status === 'Pass').length;
+        const failed   = allIDVItems.filter(i => i.idv_status === 'Fail').length;
+        const scored   = allIDVItems.filter(i => i.idv_similarity_score != null);
+        const avgScore = scored.length > 0
+          ? Math.round(scored.reduce((sum, i) => sum + i.idv_similarity_score, 0) / scored.length)
+          : 0;
+        const amlHits  = allIDVItems.reduce((sum, i) => sum + (i.idv_aml_hits || 0), 0);
+        setDiditSummary({ items: allIDVItems, passed, failed, avgScore, amlHits });
+      } else {
+        setDiditSummary(null);
+      }
+    } catch (err) {
+      console.error('OutreachStep load error:', err);
+      setLoadError(err?.message || 'Failed to load outreach requests.');
+    } finally {
+      setLoading(false);
     }
   }
 
   async function loadTemplates() {
     if (!kycCase.tenant_id) return;
-    const [emailTmplData, libraryData, formTmplData] = await Promise.all([
-      base44.entities.EmailTemplate.filter({ tenant_id: kycCase.tenant_id, is_active: true }),
-      base44.entities.OutreachTemplate.filter({ tenant_id: kycCase.tenant_id, is_active: true }, 'sort_order'),
-      base44.entities.OutreachFormTemplate.filter({ tenant_id: kycCase.tenant_id, is_active: true }),
-    ]);
-    setEmailTemplates(emailTmplData || []);
-    setLibraryItems(libraryData || []);
-    setFormTemplates(formTmplData || []);
-    setLibraryLoading(false);
+    setLibraryLoading(true);
+    setTemplatesError(null);
+    try {
+      const [emailTmplData, libraryData, formTmplData] = await Promise.all([
+        base44.entities.EmailTemplate.filter({ tenant_id: kycCase.tenant_id, is_active: true }),
+        base44.entities.OutreachTemplate.filter({ tenant_id: kycCase.tenant_id, is_active: true }, 'sort_order'),
+        base44.entities.OutreachFormTemplate.filter({ tenant_id: kycCase.tenant_id, is_active: true }),
+      ]);
+      setEmailTemplates(emailTmplData || []);
+      setLibraryItems(libraryData || []);
+      setFormTemplates(formTmplData || []);
+    } catch (err) {
+      console.error('OutreachStep loadTemplates error:', err);
+      setTemplatesError(err?.message || 'Failed to load your field library.');
+    } finally {
+      setLibraryLoading(false);
+    }
   }
 
   function resolveTemplateVars(text, portalUrl) {
@@ -544,7 +563,9 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
         </Button>
       </div>
 
-      {loading ? (
+      {loadError ? (
+        <InlineError message={loadError} onRetry={load} />
+      ) : loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
@@ -1083,7 +1104,9 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                   <div className="text-xs text-muted-foreground">{selectedItems.length} item(s) selected</div>
                 )}
               </div>
-              {libraryLoading ? (
+              {templatesError ? (
+                <InlineError message={templatesError} onRetry={loadTemplates} />
+              ) : libraryLoading ? (
                 <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading your field library…
                 </div>
