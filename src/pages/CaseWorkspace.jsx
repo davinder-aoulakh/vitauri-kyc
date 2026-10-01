@@ -29,6 +29,7 @@ import { deleteCase } from '@/lib/caseDelete';
 import { useTenantUsers } from '@/hooks/useTenantData';
 
 import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -191,23 +192,34 @@ export default function CaseWorkspace() {
     setNoteSaving(false);
   }
 
+  const [updatingStepKey, setUpdatingStepKey] = useState(null);
+
   async function updateStepStatus(stepKey, status) {
-    await base44.entities.KycCase.update(id, { [stepKey]: status });
-    // Refresh from DB — authoritative state for all child components
-    const fresh = await base44.entities.KycCase.filter({ id });
-    if (fresh?.[0]) setKycCase(fresh[0]);
-    await base44.entities.AuditEvent.create({
-      tenant_id: kycCase.tenant_id,
-      case_id: id,
-      actor_user_id: currentUser?.id,
-      actor_name: currentUser?.full_name,
-      actor_type: 'User',
-      event_type: `step_${stepKey.replace('_status','')}_${status}`,
-      notes: `Step ${stepKey} marked as ${status}`,
-    });
-    // Refresh audit
-    const auditData = await base44.entities.AuditEvent.filter({ case_id: id }, '-created_date', 100);
-    setAuditEvents(auditData || []);
+    if (updatingStepKey) return; // prevent double-fire while a previous click is still in flight
+    setUpdatingStepKey(stepKey);
+    try {
+      await base44.entities.KycCase.update(id, { [stepKey]: status });
+      // Refresh from DB — authoritative state for all child components
+      const fresh = await base44.entities.KycCase.filter({ id });
+      if (fresh?.[0]) setKycCase(fresh[0]);
+      await base44.entities.AuditEvent.create({
+        tenant_id: kycCase.tenant_id,
+        case_id: id,
+        actor_user_id: currentUser?.id,
+        actor_name: currentUser?.full_name,
+        actor_type: 'User',
+        event_type: `step_${stepKey.replace('_status','')}_${status}`,
+        notes: `Step ${stepKey} marked as ${status}`,
+      });
+      // Refresh audit
+      const auditData = await base44.entities.AuditEvent.filter({ case_id: id }, '-created_date', 100);
+      setAuditEvents(auditData || []);
+    } catch (err) {
+      console.error('updateStepStatus error:', err);
+      toast({ variant: 'destructive', title: 'Could not update step', description: err?.message || 'Please try again.' });
+    } finally {
+      setUpdatingStepKey(null);
+    }
   }
 
   async function handleStatusOverride() {
@@ -561,18 +573,20 @@ export default function CaseWorkspace() {
                         {stepStatus !== 'in_progress' && stepStatus !== 'complete' && (
                           <Button
                             variant="outline" size="sm" className="text-xs gap-1"
+                            disabled={!!updatingStepKey}
                             onClick={() => updateStepStatus(activeStepData.stepKey, 'in_progress')}
                           >
-                            <Clock className="w-3 h-3" /> Start
+                            {updatingStepKey === activeStepData.stepKey ? <Loader2 className="w-3 h-3 animate-spin" /> : <Clock className="w-3 h-3" />} Start
                           </Button>
                         )}
                         <Button
                           size="sm"
                           className={cn('text-xs gap-1', stepStatus === 'complete' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : '')}
                           variant={stepStatus === 'complete' ? 'default' : 'outline'}
+                          disabled={!!updatingStepKey}
                           onClick={() => updateStepStatus(activeStepData.stepKey, stepStatus === 'complete' ? 'in_progress' : 'complete')}
                         >
-                          <CheckCircle className="w-3 h-3" />
+                          {updatingStepKey === activeStepData.stepKey ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
                           {stepStatus === 'complete' ? '✓ Complete' : 'Mark Complete'}
                         </Button>
                         {stepStatus === 'flagged' ? (
