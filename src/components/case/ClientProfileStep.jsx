@@ -23,7 +23,7 @@ import { NP_FIELD_LABELS, ORG_FIELD_LABELS } from '@/hooks/useProfileSuggestions
 import InlineError from '@/components/shared/InlineError';
 import { useAiOrchestrator } from '@/hooks/useAiOrchestrator';
 
-const DRAFT_TIMEOUT_MS = 30000;
+const DRAFT_TIMEOUT_MS = 60000;
 const OUTREACH_FETCH_TIMEOUT_MS = 3000;
 
 const TX_TYPES = ['Payments', 'Investments', 'Transfers', 'FX', 'Other'];
@@ -94,7 +94,7 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
   const [purposeError, setPurposeError]         = useState(null);
   const [draftStage, setDraftStage]             = useState('drafting'); // 'gathering' | 'drafting'
 
-  const { invoke: invokePurposeDraft } = useAiOrchestrator({
+  const { invoke: invokePurposeDraft, cancel: cancelPurposeDraft } = useAiOrchestrator({
     caseId: kycCase?.id,
     tenantId: client?.tenant_id,
     currentUser,
@@ -164,28 +164,27 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
         ? confirmedKeys.map(k => `${fieldLabels[k]}: ${getNestedValue(client, k) || clientFields[k]?.value}`).join('; ')
         : undefined;
 
-      // Race the WHOLE chain (LLM call + persist save) against one deadline —
-      // guards against the persist step hanging after the LLM call already
-      // returned, not just the LLM call itself.
-      const draftWork = (async () => {
-        const result = await invokePurposeDraft('PurposeDraft', { client, caseType: kycCase?.case_type, outreachSummary: outreachSummary || undefined, confirmedFieldsSummary });
-        if (!result) throw new Error('Failed to generate draft. Please try again.');
-        const draftText = result?.statement || '';
-        setPurposeText(draftText);
-        // Persist immediately — don't rely on the debounced autosave, which can be
-        // skipped if the user navigates to another step before it fires.
-        if (kycCase?.id) {
-          await base44.entities.KycCase.update(kycCase.id, { purpose_nature_text: draftText });
-        }
-      })();
-
-      await Promise.race([
-        draftWork,
+      // Race only the LLM call against the deadline. The DB persist runs
+      // AFTER the race resolves — a slow entity-throttle queue should never
+      // eat into the AI generation budget, and the debounced autosave is a
+      // backstop if the user navigates away before the persist completes.
+      const result = await Promise.race([
+        invokePurposeDraft('PurposeDraft', { client, caseType: kycCase?.case_type, outreachSummary: outreachSummary || undefined, confirmedFieldsSummary }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('AI draft timed out — please try again.')), DRAFT_TIMEOUT_MS)),
       ]);
+
+      if (!result) throw new Error('Failed to generate draft. Please try again.');
+      const draftText = result?.statement || '';
+      setPurposeText(draftText);
+      if (kycCase?.id) {
+        base44.entities.KycCase.update(kycCase.id, { purpose_nature_text: draftText })
+          .catch(err => console.error('Failed to persist AI draft:', err));
+      }
     } catch (err) {
       console.error('generatePurposeDraft error:', err);
       setPurposeError(err?.message || 'Failed to generate draft. Please try again.');
+      // The invoke() call may still resolve later — tell the hook to ignore it.
+      cancelPurposeDraft?.();
     } finally {
       clearTimeout(stageTimer);
       setGeneratingPurpose(false);

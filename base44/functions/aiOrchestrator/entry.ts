@@ -18,11 +18,20 @@ async function getDailyTokensUsed(base44, tenantId, caseId) {
   if (!caseId) return 0;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const runs = await base44.asServiceRole.entities.AiAgentRun.filter({ tenant_id: tenantId, case_id: caseId });
-  return (runs || [])
-    .filter(r => r.created_date && new Date(r.created_date) >= today)
-    .reduce((sum, r) => sum + (r.tokens_input || 0) + (r.tokens_output || 0), 0);
+  const runs = await base44.asServiceRole.entities.AiAgentRun.filter({
+    tenant_id: tenantId,
+    case_id: caseId,
+    created_date: { $gte: today.toISOString() },
+  });
+  return (runs || []).reduce((sum, r) => sum + (r.tokens_input || 0) + (r.tokens_output || 0), 0);
 }
+
+// Agents whose output is a short text/narrative — safe to use a faster model.
+// Structured/analytical agents (OrgChart, WorkflowOptimisation, OutreachCopilot,
+// IndicatorApplicability) keep the default "automatic" model for output quality.
+const FAST_MODEL_AGENTS = new Set([
+  'PurposeDraft', 'IdentityVerificationSummary', 'RiskNarrative', 'ClientProfile', 'SoFSoW', 'ScreeningTriage',
+]);
 
 // ── Prompt hash (simple but deterministic) ────────────────────────────────────
 function hashPrompt(str) {
@@ -264,8 +273,12 @@ Deno.serve(async (req) => {
 
   if (!agent_type) return Response.json({ error: 'agent_type is required' }, { status: 400 });
 
-  // ── 1. Token cost guard ──
-  const dailyTokens = await getDailyTokensUsed(base44, tenantId, case_id);
+  // ── 1 & 2. Token cost guard + tenant prompt override — run concurrently, independent reads ──
+  const [dailyTokens, customConfigs] = await Promise.all([
+    getDailyTokensUsed(base44, tenantId, case_id),
+    base44.asServiceRole.entities.AiPromptConfig.filter({ tenant_id: tenantId, agent_key: agent_type }),
+  ]);
+
   if (dailyTokens >= DEFAULT_DAILY_TOKEN_CAP) {
     return Response.json({
       error: 'daily_token_cap_exceeded',
@@ -273,9 +286,7 @@ Deno.serve(async (req) => {
     }, { status: 429 });
   }
 
-  // ── 2. Load tenant-specific system prompt (S-210 override or default) ──
   let systemPrompt = DEFAULT_SYSTEM_PROMPTS[agent_type];
-  const customConfigs = await base44.asServiceRole.entities.AiPromptConfig.filter({ tenant_id: tenantId, agent_key: agent_type });
   if (customConfigs?.length > 0) {
     systemPrompt = customConfigs[0].system_prompt || systemPrompt;
   }
@@ -294,9 +305,11 @@ Deno.serve(async (req) => {
 
   // ── 4. Call AI ──
   const schema = OUTPUT_SCHEMAS[agent_type];
+  const useFastModel = FAST_MODEL_AGENTS.has(agent_type);
   const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
     prompt: fullPrompt,
     response_json_schema: schema || undefined,
+    ...(useFastModel ? { model: 'gpt_5_mini' } : {}),
   });
 
   // Estimate tokens (rough: 1 token ≈ 4 chars)
@@ -304,21 +317,21 @@ Deno.serve(async (req) => {
   const tokensOutput = Math.ceil(JSON.stringify(result).length / 4);
   const outputSummary = JSON.stringify(result).substring(0, 500);
 
-  // ── 5. Log AiAgentRun ──
-  const runRecord = await base44.asServiceRole.entities.AiAgentRun.create({
+  // ── 5. Log AiAgentRun — fire-and-forget so the audit write never delays the response ──
+  base44.asServiceRole.entities.AiAgentRun.create({
     tenant_id: tenantId,
     case_id: case_id || null,
     agent_type,
     prompt_hash: promptHash,
-    model_used: 'gpt-4o-mini',
+    model_used: useFastModel ? 'gpt-5-mini' : 'automatic',
     tokens_input: tokensInput,
     tokens_output: tokensOutput,
     output_summary: outputSummary,
-  });
+  }).catch(err => console.error('AiAgentRun log failed:', err));
 
   return Response.json({
     output: result,
-    run_id: runRecord?.id,
+    run_id: null,
     tokens_used: tokensInput + tokensOutput,
     daily_tokens_remaining: Math.max(0, DEFAULT_DAILY_TOKEN_CAP - dailyTokens - tokensInput - tokensOutput),
   });

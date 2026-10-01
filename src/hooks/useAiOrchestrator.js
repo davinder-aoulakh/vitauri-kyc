@@ -3,7 +3,7 @@
  * Handles: invocation, analyst action logging (Accept/Edit/Override/Reject),
  * token cap error surfacing, and AiAgentRun update after analyst action.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 
 export function useAiOrchestrator({ caseId, tenantId, currentUser } = {}) {
@@ -12,8 +12,15 @@ export function useAiOrchestrator({ caseId, tenantId, currentUser } = {}) {
   const [runId, setRunId]       = useState(null);
   const [error, setError]       = useState(null);
   const [tokenInfo, setTokenInfo] = useState(null);
+  // Tracks the most recent invoke() call — if the caller cancels (e.g. its own
+  // timeout race rejected) before the request resolves, the late resolution
+  // is ignored instead of writing stale state into an unmounted/moved-on component.
+  const abortRef = useRef({ aborted: false });
 
   const invoke = useCallback(async (agentType, payload = {}) => {
+    const callToken = { aborted: false };
+    abortRef.current = callToken;
+
     setLoading(true);
     setOutput(null);
     setError(null);
@@ -24,6 +31,8 @@ export function useAiOrchestrator({ caseId, tenantId, currentUser } = {}) {
       payload,
       case_id: caseId || null,
     });
+
+    if (callToken.aborted) return null;
 
     const data = res.data;
 
@@ -39,6 +48,12 @@ export function useAiOrchestrator({ caseId, tenantId, currentUser } = {}) {
     setLoading(false);
     return data.output;
   }, [caseId]);
+
+  // Call this when the caller's own timeout/race has already given up on this
+  // invocation, so the eventual response can't trigger stale state updates.
+  const cancel = useCallback(() => {
+    abortRef.current.aborted = true;
+  }, []);
 
   const logAction = useCallback(async (action, justification = '') => {
     if (!runId) return;
@@ -70,5 +85,5 @@ export function useAiOrchestrator({ caseId, tenantId, currentUser } = {}) {
     setLoading(false);
   }, []);
 
-  return { invoke, logAction, reset, loading, output, error, tokenInfo };
+  return { invoke, logAction, reset, cancel, loading, output, error, tokenInfo };
 }
