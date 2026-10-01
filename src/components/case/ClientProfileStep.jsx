@@ -169,7 +169,13 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
         new Promise((_, reject) => setTimeout(() => reject(new Error('AI draft timed out — please try again.')), DRAFT_TIMEOUT_MS)),
       ]);
       if (!result) throw new Error('Failed to generate draft. Please try again.');
-      setPurposeText(result?.statement || '');
+      const draftText = result?.statement || '';
+      setPurposeText(draftText);
+      // Persist immediately — don't rely on the debounced autosave, which can be
+      // skipped if the user navigates to another step before it fires.
+      if (kycCase?.id) {
+        await base44.entities.KycCase.update(kycCase.id, { purpose_nature_text: draftText });
+      }
     } catch (err) {
       console.error('generatePurposeDraft error:', err);
       setPurposeError(err?.message || 'Failed to generate draft. Please try again.');
