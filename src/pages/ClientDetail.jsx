@@ -58,13 +58,16 @@ export default function ClientDetail() {
     setLoading(true);
     setError(null);
     try {
-      const [clientData, casesData, linksData, docsData, auditData, outreachData] = await Promise.all([
-        base44.entities.Client.filter({ id }),
-        base44.entities.KycCase.filter({ client_id: id }, '-created_date'),
-        base44.entities.ClientRelatedPartyLink.filter({ client_id: id }),
-        base44.entities.Document.filter({ client_id: id }, '-created_date'),
-        base44.entities.AuditEvent.filter({ client_id: id }, '-created_date', 200),
-        base44.entities.OutreachRequest.filter({ client_id: id }),
+      const [clientData, casesData, linksData, docsData, auditData, outreachData] = await Promise.race([
+        Promise.all([
+          base44.entities.Client.filter({ id }),
+          base44.entities.KycCase.filter({ client_id: id }, '-created_date'),
+          base44.entities.ClientRelatedPartyLink.filter({ client_id: id }),
+          base44.entities.Document.filter({ client_id: id }, '-created_date'),
+          base44.entities.AuditEvent.filter({ client_id: id }, '-created_date', 200),
+          base44.entities.OutreachRequest.filter({ client_id: id }),
+        ]),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Loading timed out — please try again.')), 20000)),
       ]);
       const c = clientData?.[0];
       setClient(c);
