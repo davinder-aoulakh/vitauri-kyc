@@ -200,34 +200,32 @@ export default function CaseWorkspace() {
     // Optimistic local update — UI reflects the click immediately even if the
     // network call is slow or times out; reconciled below once we hear back.
     const previousStepValue = kycCase?.[stepKey];
+    const tenantIdForAudit = kycCase?.tenant_id;
     setKycCase(prev => prev ? { ...prev, [stepKey]: status } : prev);
-    // Run the full save → refresh → audit chain as one unit, raced against a
-    // single hard deadline — guards against ANY step in the chain hanging,
-    // not just the first call, so the button can never stay stuck forever.
-    const stepWork = (async () => {
-      await base44.entities.KycCase.update(id, { [stepKey]: status });
-      // Refresh from DB — authoritative state for all child components
-      const fresh = await base44.entities.KycCase.filter({ id });
-      if (fresh?.[0]) setKycCase(fresh[0]);
-      await base44.entities.AuditEvent.create({
-        tenant_id: kycCase.tenant_id,
-        case_id: id,
-        actor_user_id: currentUser?.id,
-        actor_name: currentUser?.full_name,
-        actor_type: 'User',
-        event_type: `step_${stepKey.replace('_status','')}_${status}`,
-        notes: `Step ${stepKey} marked as ${status}`,
-      });
-      // Refresh audit
-      const auditData = await base44.entities.AuditEvent.filter({ case_id: id }, '-created_date', 100);
-      setAuditEvents(auditData || []);
-    })();
+    // Only the save itself is on the critical path — the UI already has the
+    // optimistic update, and the step's own update() response is authoritative,
+    // so no extra refetch is needed before unblocking the button.
+    const stepWork = base44.entities.KycCase.update(id, { [stepKey]: status })
+      .then(updated => { if (updated) setKycCase(updated); });
 
     try {
       await Promise.race([
         stepWork,
         new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out — please try again.')), 20000)),
       ]);
+      // Audit logging is informational — fire-and-forget so a slow audit write
+      // or refetch never blocks or times out the Mark Complete/Start button.
+      base44.entities.AuditEvent.create({
+        tenant_id: tenantIdForAudit,
+        case_id: id,
+        actor_user_id: currentUser?.id,
+        actor_name: currentUser?.full_name,
+        actor_type: 'User',
+        event_type: `step_${stepKey.replace('_status','')}_${status}`,
+        notes: `Step ${stepKey} marked as ${status}`,
+      }).then(() => base44.entities.AuditEvent.filter({ case_id: id }, '-created_date', 100))
+        .then(auditData => setAuditEvents(auditData || []))
+        .catch(err => console.error('Audit log failed:', err));
     } catch (err) {
       console.error('updateStepStatus error:', err);
       // Revert the optimistic update since we couldn't confirm the change saved
