@@ -29,7 +29,10 @@ export function useAutoSave(data, saveFn, delay = 1500, skip = false) {
     timerRef.current = setTimeout(async () => {
       setAutoSaving(true);
       try {
-        await saveFn(data);
+        await Promise.race([
+          saveFn(data),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Auto-save timed out')), 15000)),
+        ]);
         setLastSaved(new Date());
       } catch (err) {
         console.error('Auto-save failed:', err);
