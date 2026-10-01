@@ -296,7 +296,13 @@ export default function ClientSearch() {
         {/* Initial state — show recent clients */}
         {!searched && (
           <>
-            {allClients.length > 0 ? (
+            {initialLoading ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading clients…
+              </div>
+            ) : initialError ? (
+              <InlineError message={initialError} onRetry={loadInitial} />
+            ) : allClients.length > 0 ? (
               <div className="bg-card border border-border rounded-xl overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-border">
                   <span className="text-xs text-muted-foreground font-medium">
