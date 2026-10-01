@@ -42,6 +42,7 @@ export default function IndicatorPicker({ client, relatedParties, selections, on
   const [search, setSearch] = useState('');
   const [scopeFilter, setScopeFilter] = useState('All');
   const [suggesting, setSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState(null);
   const [aiBadges, setAiBadges] = useState({});
   const [reviewed, setReviewed] = useState(new Set());
   const [activeEntityKey, setActiveEntityKey] = useState(null);
@@ -100,21 +101,26 @@ export default function IndicatorPicker({ client, relatedParties, selections, on
   }, [search, scopeFilter, byCategory]);
 
   const hasSearchResults = CATEGORIES.some(cat => (filteredByCategory[cat] || []).length > 0);
+  const filteredCount = CATEGORIES.reduce((sum, cat) => sum + (filteredByCategory[cat]?.length || 0), 0);
+  const isFiltering = search.trim().length > 0 || scopeFilter !== 'All';
 
   // Active entity for AI suggest label
   const activeEntity = entities.find(e => e.key === resolvedActiveKey) || entities[0];
 
   async function suggestIndicators() {
     setSuggesting(true);
+    setSuggestError(null);
     setAiBadges({});
 
-    const entitySummaries = entities.map(e => {
-      const d = e.data;
-      return `${e.key}|${e.label} (${e.type}): ${d?.sector || d?.nationality || ''} ${d?.country_of_residence || d?.registered_country || ''}`.trim();
-    }).join('\n');
+    try {
+      const entitySummaries = entities.map(e => {
+        const d = e.data;
+        return `${e.key}|${e.label} (${e.type}): ${d?.sector || d?.nationality || ''} ${d?.country_of_residence || d?.registered_country || ''}`.trim();
+      }).join('\n');
 
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are a KYC compliance expert. Based on the following client and related party data, recommend which risk indicators apply and briefly explain why.
+      const result = await Promise.race([
+        base44.integrations.Core.InvokeLLM({
+          prompt: `You are a KYC compliance expert. Based on the following client and related party data, recommend which risk indicators apply and briefly explain why.
 
 ENTITIES (format: key|name type: details):
 ${entitySummaries}
@@ -125,47 +131,56 @@ ${ALL_INDICATORS.map(i => `${i.id}: ${i.name} — ${i.description}`).join('\n')}
 For each entity, return the indicator IDs that apply with a one-sentence reason.
 Use the exact entity key (before the | separator) in entity_key.
 Return JSON only.`,
-      response_json_schema: {
-        type: 'object',
-        properties: {
-          suggestions: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                entity_key:   { type: 'string' },
-                indicator_id: { type: 'string' },
-                reason:       { type: 'string' },
+          response_json_schema: {
+            type: 'object',
+            properties: {
+              suggestions: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    entity_key:   { type: 'string' },
+                    indicator_id: { type: 'string' },
+                    reason:       { type: 'string' },
+                  }
+                }
               }
             }
           }
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('AI Suggest timed out — please try again.')), 30000)),
+      ]);
+
+      if (!result?.suggestions?.length) throw new Error('AI did not return any suggestions — please try again.');
+
+      const newBadges = {};
+      const newSelections = { ...selections };
+
+      result.suggestions.forEach(s => {
+        const matchedEntity = entities.find(e =>
+          e.key === s.entity_key ||
+          e.label.toLowerCase().includes((s.entity_key || '').toLowerCase())
+        ) || entities[0];
+
+        if (!matchedEntity || !s.indicator_id) return;
+
+        if (!newBadges[s.indicator_id]) newBadges[s.indicator_id] = {};
+        newBadges[s.indicator_id][matchedEntity.key] = { reason: s.reason, dismissed: false };
+
+        const current = newSelections[matchedEntity.key] || [];
+        if (!current.includes(s.indicator_id)) {
+          newSelections[matchedEntity.key] = [...current, s.indicator_id];
         }
-      }
-    });
+      });
 
-    const newBadges = {};
-    const newSelections = { ...selections };
-
-    (result?.suggestions || []).forEach(s => {
-      const matchedEntity = entities.find(e =>
-        e.key === s.entity_key ||
-        e.label.toLowerCase().includes((s.entity_key || '').toLowerCase())
-      ) || entities[0];
-
-      if (!matchedEntity || !s.indicator_id) return;
-
-      if (!newBadges[s.indicator_id]) newBadges[s.indicator_id] = {};
-      newBadges[s.indicator_id][matchedEntity.key] = { reason: s.reason, dismissed: false };
-
-      const current = newSelections[matchedEntity.key] || [];
-      if (!current.includes(s.indicator_id)) {
-        newSelections[matchedEntity.key] = [...current, s.indicator_id];
-      }
-    });
-
-    setAiBadges(newBadges);
-    onChange(newSelections);
-    setSuggesting(false);
+      setAiBadges(newBadges);
+      onChange(newSelections);
+    } catch (err) {
+      console.error('suggestIndicators error:', err);
+      setSuggestError(err?.message || 'AI Suggest failed — please try again.');
+    } finally {
+      setSuggesting(false);
+    }
   }
 
   return (
@@ -217,6 +232,16 @@ Return JSON only.`,
             {suggesting ? 'Analysing…' : `AI Suggest${activeEntity ? ` for ${activeEntity.label}` : ''}`}
           </button>
         </div>
+
+        {isFiltering && (
+          <div className="text-xs text-muted-foreground px-1">
+            Showing <span className="font-semibold text-foreground">{filteredCount}</span> of {ALL_INDICATORS.length} indicators
+          </div>
+        )}
+
+        {suggestError && (
+          <InlineError message={suggestError} onRetry={suggestIndicators} />
+        )}
       </div>
 
       {/* Main two-column layout */}
