@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { useRiskIndicators } from '@/hooks/useRiskIndicators';
 import IndicatorCategoryGroup from '@/components/risk/IndicatorCategoryGroup';
 import SelectionSummaryRail from '@/components/risk/SelectionSummaryRail';
+import InlineError from '@/components/shared/InlineError';
 import { useTenant } from '@/lib/tenantContext';
 
 // ─── Re-export for backward compat (IndicatorAssessment imports ALL_INDICATORS from here) ───
@@ -36,7 +37,7 @@ const SCOPE_FILTERS = [
 
 export default function IndicatorPicker({ client, relatedParties, selections, onChange, onConfirm, allScores }) {
   const { tenant } = useTenant();
-  const { byCategory, loading } = useRiskIndicators(tenant?.id);
+  const { byCategory, loading, error, reload } = useRiskIndicators(tenant?.id);
 
   const [search, setSearch] = useState('');
   const [scopeFilter, setScopeFilter] = useState('All');
@@ -222,7 +223,9 @@ Return JSON only.`,
       <div className="grid grid-cols-3 gap-4 items-start">
         {/* Left: category groups */}
         <div className="col-span-2 space-y-3">
-          {loading ? (
+          {error ? (
+            <InlineError message={error} onRetry={reload} />
+          ) : loading ? (
             <div className="flex items-center justify-center py-12 bg-card border border-border rounded-xl">
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             </div>
