@@ -308,7 +308,7 @@ export default function CaseWorkspace() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             {/* Breadcrumb */}
             <button
-              onClick={() => navigate(client ? `/client/${kycCase.client_id}` : '/')}
+              onClick={() => navigate(kycCase?.client_id ? `/client/${kycCase.client_id}` : '/')}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
