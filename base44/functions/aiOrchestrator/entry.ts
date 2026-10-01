@@ -47,6 +47,8 @@ const DEFAULT_SYSTEM_PROMPTS = {
 
   ClientProfile: `You are a KYC analyst drafting a regulatory-grade client profile. Using all available client data, write a professional profile narrative in markdown format. Sections: Business Overview | Ownership Structure | Geographic Footprint | Products & Services | Notable Risk Factors. Be factual, precise, regulatory-grade.`,
 
+  PurposeDraft: `You are a senior KYC analyst. Draft a concise, regulatory-grade "Purpose and Nature of Business Relationship" statement. Write 2-4 sentences covering: (1) why the client is engaging, (2) intended products/services, (3) nature of relationship. Factual, precise. Note where information is not yet confirmed. Return JSON: { statement: string }.`,
+
   IdentityVerificationSummary: `You are a KYC compliance analyst writing an internal case note. Using the verification facts provided, write ONLY your professional analyst opinion — do not list, echo, or repeat any raw data fields, scores, names, IDs, dates, or document numbers. Your output must read as a natural paragraph of compliance commentary, not a data summary. Cover: (1) whether the verification was satisfactory, (2) any genuine concerns or anomalies, (3) a clear recommendation (Accept / Flag / Escalate). If all checks passed cleanly, state that in one concise sentence. key_risks: list only real compliance risks — omit if none. Return JSON: { narrative: string, key_risks: [string] }.`,
 
   SoFSoW: `You are a KYC compliance analyst. Write a Source of Funds (SoF) and Source of Wealth (SoW) assessment. Structure: (1) Stated Sources, (2) Supporting Evidence, (3) Plausibility Assessment, (4) Documentation Gaps, (5) Overall Adequacy. Use FATF-aligned language. Return JSON: {narrative: string, evidence_gaps: [string], adequacy: "Adequate"|"Partial"|"Inadequate"}.`,
@@ -122,6 +124,15 @@ ${customInstructions}`;
       const client = entityData?.client || {};
       const outreachResponses = entityData?.outreachSummary || '';
       return `Client name: ${client.full_name}. Type: ${client.client_type}. Sector: ${client.sector || 'N/A'}. Jurisdiction: ${client.registered_country || client.country_of_residence || 'N/A'}. Legal form: ${client.legal_form || 'N/A'}. Registration: ${client.registration_number || 'N/A'}. Outreach responses: ${outreachResponses}. OSINT: ${entityData?.osintSummary || 'Not yet completed'}.`;
+    }
+
+    case 'PurposeDraft': {
+      const client = payload.client || {};
+      const isOrg = client.client_type === 'ORG';
+      const identityLine = isOrg
+        ? `Sector: ${client.sector || 'N/A'} | Legal Form: ${client.legal_form || 'N/A'} | Country: ${client.registered_country || 'N/A'}`
+        : `Nationality: ${client.nationality || 'N/A'} | Residence: ${client.country_of_residence || 'N/A'}`;
+      return `CLIENT: ${client.full_name || 'Unknown'} (${isOrg ? 'Organisation' : 'Natural Person'})\n${identityLine}\nCASE TYPE: ${(payload.caseType || '').replace(/_/g, ' ') || 'N/A'}\nOUTREACH RESPONSES: ${payload.outreachSummary || 'No outreach responses'}`;
     }
 
     case 'IdentityVerificationSummary': {
@@ -208,6 +219,7 @@ const OUTPUT_SCHEMAS = {
     },
   },
   ClientProfile: { type: 'object', properties: { narrative: { type: 'string' }, key_risks: { type: 'array', items: { type: 'string' } } } },
+  PurposeDraft: { type: 'object', properties: { statement: { type: 'string' } } },
   IdentityVerificationSummary: { type: 'object', properties: { narrative: { type: 'string' }, key_risks: { type: 'array', items: { type: 'string' } } } },
   SoFSoW: {
     type: 'object', properties: {

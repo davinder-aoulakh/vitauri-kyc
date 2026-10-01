@@ -21,8 +21,10 @@ import { cn } from '@/lib/utils';
 import { getNestedValue } from '@/lib/clientNameUtils';
 import { NP_FIELD_LABELS, ORG_FIELD_LABELS } from '@/hooks/useProfileSuggestions';
 import InlineError from '@/components/shared/InlineError';
+import { useAiOrchestrator } from '@/hooks/useAiOrchestrator';
 
-const LLM_TIMEOUT_MS = 60000;
+const DRAFT_TIMEOUT_MS = 30000;
+const OUTREACH_FETCH_TIMEOUT_MS = 3000;
 
 const TX_TYPES = ['Payments', 'Investments', 'Transfers', 'FX', 'Other'];
 const TX_FREQUENCIES = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annually', 'Ad hoc'];
@@ -90,6 +92,13 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
   const [purposeText, setPurposeText]           = useState('');
   const [generatingPurpose, setGeneratingPurpose] = useState(false);
   const [purposeError, setPurposeError]         = useState(null);
+  const [draftStage, setDraftStage]             = useState('drafting'); // 'gathering' | 'drafting'
+
+  const { invoke: invokePurposeDraft } = useAiOrchestrator({
+    caseId: kycCase?.id,
+    tenantId: client?.tenant_id,
+    currentUser,
+  });
 
   // ── Section 1B ───────────────────────────────────────────────────────────────
   const [txExpanded, setTxExpanded] = useState(false);
@@ -138,34 +147,30 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
   async function generatePurposeDraft() {
     setGeneratingPurpose(true);
     setPurposeError(null);
+    setDraftStage('gathering');
+    const stageTimer = setTimeout(() => setDraftStage('drafting'), 1000);
+
     try {
-      const outreachData = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
-      const outreachContext = outreachData?.map(o =>
-        o.items?.map(i => `${i.label}: ${i.response_text || 'pending'}`).join('; ')
-      ).join('\n') || 'No outreach responses';
+      // Best-effort outreach context — never blocks the draft call
+      const outreachPromise = base44.entities.OutreachRequest.filter({ case_id: kycCase.id })
+        .then(outreachData => outreachData?.map(o =>
+          o.items?.map(i => `${i.label}: ${i.response_text || 'pending'}`).join('; ')
+        ).join('\n') || null)
+        .catch(() => null);
+      const outreachTimeout = new Promise(resolve => setTimeout(() => resolve(null), OUTREACH_FETCH_TIMEOUT_MS));
+      const outreachSummary = await Promise.race([outreachPromise, outreachTimeout]);
 
       const result = await Promise.race([
-        base44.integrations.Core.InvokeLLM({
-          prompt: `You are a senior KYC analyst. Draft a concise, regulatory-grade "Purpose and Nature of Business Relationship" statement for:
-
-CLIENT: ${client?.full_name} (${isOrg ? 'Organisation' : 'Natural Person'})
-${isOrg
-  ? `Sector: ${client?.sector || 'N/A'} | Legal Form: ${client?.legal_form || 'N/A'} | Country: ${client?.registered_country || 'N/A'}`
-  : `Nationality: ${client?.nationality || 'N/A'} | Residence: ${client?.country_of_residence || 'N/A'}`}
-
-CASE TYPE: ${kycCase?.case_type?.replace(/_/g, ' ')}
-OUTREACH RESPONSES: ${outreachContext}
-
-Write 2–4 sentences: (1) why the client is engaging, (2) intended products/services, (3) nature of relationship. Factual, precise. Note where information is not yet confirmed.`,
-          model: 'claude_sonnet_4_6',
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('AI draft timed out — please try again.')), LLM_TIMEOUT_MS)),
+        invokePurposeDraft('PurposeDraft', { client, caseType: kycCase?.case_type, outreachSummary: outreachSummary || undefined }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('AI draft timed out — please try again.')), DRAFT_TIMEOUT_MS)),
       ]);
-      setPurposeText(typeof result === 'string' ? result : result?.statement || JSON.stringify(result));
+      if (!result) throw new Error('Failed to generate draft. Please try again.');
+      setPurposeText(result?.statement || '');
     } catch (err) {
       console.error('generatePurposeDraft error:', err);
       setPurposeError(err?.message || 'Failed to generate draft. Please try again.');
     } finally {
+      clearTimeout(stageTimer);
       setGeneratingPurpose(false);
     }
   }
@@ -218,7 +223,7 @@ Write 2–4 sentences: (1) why the client is engaging, (2) intended products/ser
           <Button size="sm" className="gap-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white flex-shrink-0"
             onClick={generatePurposeDraft} disabled={generatingPurpose}>
             {generatingPurpose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            {generatingPurpose ? 'Drafting…' : 'AI Draft'}
+            {generatingPurpose ? (draftStage === 'gathering' ? 'Gathering context…' : 'Drafting…') : 'AI Draft'}
           </Button>
         </div>
         <Textarea
