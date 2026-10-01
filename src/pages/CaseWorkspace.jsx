@@ -197,8 +197,15 @@ export default function CaseWorkspace() {
   async function updateStepStatus(stepKey, status) {
     if (updatingStepKey) return; // prevent double-fire while a previous click is still in flight
     setUpdatingStepKey(stepKey);
+    // Optimistic local update — UI reflects the click immediately even if the
+    // network call is slow or times out; reconciled below once we hear back.
+    const previousStepValue = kycCase?.[stepKey];
+    setKycCase(prev => prev ? { ...prev, [stepKey]: status } : prev);
     try {
-      await base44.entities.KycCase.update(id, { [stepKey]: status });
+      await Promise.race([
+        base44.entities.KycCase.update(id, { [stepKey]: status }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out — please try again.')), 20000)),
+      ]);
       // Refresh from DB — authoritative state for all child components
       const fresh = await base44.entities.KycCase.filter({ id });
       if (fresh?.[0]) setKycCase(fresh[0]);
@@ -216,6 +223,8 @@ export default function CaseWorkspace() {
       setAuditEvents(auditData || []);
     } catch (err) {
       console.error('updateStepStatus error:', err);
+      // Revert the optimistic update since we couldn't confirm the change saved
+      setKycCase(prev => prev ? { ...prev, [stepKey]: previousStepValue } : prev);
       toast({ variant: 'destructive', title: 'Could not update step', description: err?.message || 'Please try again.' });
     } finally {
       setUpdatingStepKey(null);
