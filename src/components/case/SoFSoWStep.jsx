@@ -127,7 +127,7 @@ function SectionCard({ title, state, setState, sources }) {
   );
 }
 
-export default function SoFSoWStep({ kycCase, client, currentUser }) {
+export default function SoFSoWStep({ kycCase, client, currentUser, onCaseUpdate }) {
   const isNP = client?.client_type === 'NP';
 
   const [sof, setSof] = useState({ sources: [], explanation: '', adequacy: '' });
@@ -150,6 +150,7 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
     if (!val) setSow({ sources: [], explanation: '', adequacy: '' });
     if (kycCase?.id) {
       base44.entities.KycCase.update(kycCase.id, { sow_applicable: val });
+      onCaseUpdate?.(prev => prev ? { ...prev, sow_applicable: val } : prev);
     }
   }
 
@@ -193,9 +194,9 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
     { sof, sow, narrative, evidence, sowApplicable, accepted, acceptedBy },
     async (data) => {
       if (!kycCase?.id) return;
-      await base44.entities.KycCase.update(kycCase.id, {
-        sof_narrative: JSON.stringify({ sof: data.sof, sow: data.sow, narrative: data.narrative, evidence: data.evidence, accepted: data.accepted, acceptedBy: data.acceptedBy }),
-      });
+      const sof_narrative = JSON.stringify({ sof: data.sof, sow: data.sow, narrative: data.narrative, evidence: data.evidence, accepted: data.accepted, acceptedBy: data.acceptedBy });
+      await base44.entities.KycCase.update(kycCase.id, { sof_narrative });
+      onCaseUpdate?.(prev => prev ? { ...prev, sof_narrative } : prev);
     },
     1500,
     !loaded.current,
@@ -219,9 +220,9 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
     return () => {
       if (!kycCase?.id) return;
       const d = latestDataRef.current;
-      base44.entities.KycCase.update(kycCase.id, {
-        sof_narrative: JSON.stringify({ sof: d.sof, sow: d.sow, narrative: d.narrative, evidence: d.evidence, accepted: d.accepted, acceptedBy: d.acceptedBy }),
-      });
+      const sof_narrative = JSON.stringify({ sof: d.sof, sow: d.sow, narrative: d.narrative, evidence: d.evidence, accepted: d.accepted, acceptedBy: d.acceptedBy });
+      base44.entities.KycCase.update(kycCase.id, { sof_narrative });
+      onCaseUpdate?.(prev => prev ? { ...prev, sof_narrative } : prev);
     };
   }, [kycCase?.id]);
 
@@ -292,9 +293,9 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`;
         // Persist immediately — don't rely on the debounced autosave, which can
         // be cancelled if the user navigates to another step before it fires.
         if (kycCase?.id) {
-          await base44.entities.KycCase.update(kycCase.id, {
-            sof_narrative: JSON.stringify({ sof, sow, narrative: narrativeText, evidence }),
-          });
+          const sof_narrative = JSON.stringify({ sof, sow, narrative: narrativeText, evidence });
+          await base44.entities.KycCase.update(kycCase.id, { sof_narrative });
+          onCaseUpdate?.(prev => prev ? { ...prev, sof_narrative } : prev);
         }
       })();
 
@@ -341,9 +342,9 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`;
     // Persist immediately — don't rely on the debounced autosave, which can
     // be cancelled if the user navigates to another step right after accepting.
     if (kycCase?.id) {
-      await base44.entities.KycCase.update(kycCase.id, {
-        sof_narrative: JSON.stringify({ sof, sow, narrative, evidence, accepted: true, acceptedBy: mode }),
-      });
+      const sof_narrative = JSON.stringify({ sof, sow, narrative, evidence, accepted: true, acceptedBy: mode });
+      await base44.entities.KycCase.update(kycCase.id, { sof_narrative });
+      onCaseUpdate?.(prev => prev ? { ...prev, sof_narrative } : prev);
     }
 
     setSaving(false);
@@ -370,9 +371,9 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`;
     setOverrideMode(false);
 
     if (kycCase?.id) {
-      await base44.entities.KycCase.update(kycCase.id, {
-        sof_narrative: JSON.stringify({ sof, sow, narrative, evidence, accepted: true, acceptedBy: 'override' }),
-      });
+      const sof_narrative = JSON.stringify({ sof, sow, narrative, evidence, accepted: true, acceptedBy: 'override' });
+      await base44.entities.KycCase.update(kycCase.id, { sof_narrative });
+      onCaseUpdate?.(prev => prev ? { ...prev, sof_narrative } : prev);
     }
 
     setSaving(false);
