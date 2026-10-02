@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
@@ -291,6 +291,11 @@ export default function CaseWorkspace() {
   }
 
   const STEPS = React.useMemo(() => getSteps(client?.client_type), [client?.client_type]);
+
+  // Stable identity — passing a fresh inline function here would retrigger
+  // ClientProfileStep's registration effect every render, which calls back
+  // into this state setter and causes an infinite render loop.
+  const handleRegisterOsintAdd = useCallback((cb) => setOsintAddCallback(() => cb), []);
 
   const canReopen = kycCase?.status === 'Approved' && (userRole === 'Director' || userRole === 'Compliance Admin');
 
@@ -663,7 +668,7 @@ export default function CaseWorkspace() {
                       />
                     )}
                     {activeStep === 3 && <ScreeningStep caseId={id} tenantId={kycCase?.tenant_id} currentUser={currentUser} kycCase={kycCase} client={client} onCaseChanged={loadAll} onAmlSummaryLoaded={setAmlScreeningData} />}
-                    {activeStep === 4 && <ClientProfileStep kycCase={kycCase} client={client} currentUser={currentUser} onRegisterOsintAdd={cb => setOsintAddCallback(() => cb)} onNavigateToStep={setActiveStep} />}
+                    {activeStep === 4 && <ClientProfileStep kycCase={kycCase} client={client} currentUser={currentUser} onRegisterOsintAdd={handleRegisterOsintAdd} onNavigateToStep={setActiveStep} />}
                     {activeStep === 5 && <SoFSoWStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />}
                     {activeStep === 6 && <RiskAssessmentStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} />}
                     {activeStep === 7 && <ControlMeasuresStep kycCase={kycCase} currentUser={currentUser} />}
