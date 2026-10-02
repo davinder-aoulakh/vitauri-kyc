@@ -180,6 +180,7 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
         if (parsed.sow) setSow(parsed.sow);
         if (parsed.narrative) setNarrative(parsed.narrative);
         if (parsed.evidence) setEvidence(parsed.evidence);
+        if (parsed.accepted) { setAccepted(true); setAcceptedBy(parsed.acceptedBy || 'accept'); }
       } catch (err) {
         console.error('Failed to parse saved sof_narrative:', err);
       }
@@ -187,13 +188,13 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
     loaded.current = true;
   }, [kycCase?.id]);
 
-  // Auto-save sof, sow, narrative and evidence to KycCase as JSON fields
+  // Auto-save sof, sow, narrative, evidence and accepted status to KycCase as JSON fields
   const { autoSaving, lastSaved } = useAutoSave(
-    { sof, sow, narrative, evidence, sowApplicable },
+    { sof, sow, narrative, evidence, sowApplicable, accepted, acceptedBy },
     async (data) => {
       if (!kycCase?.id) return;
       await base44.entities.KycCase.update(kycCase.id, {
-        sof_narrative: JSON.stringify({ sof: data.sof, sow: data.sow, narrative: data.narrative, evidence: data.evidence }),
+        sof_narrative: JSON.stringify({ sof: data.sof, sow: data.sow, narrative: data.narrative, evidence: data.evidence, accepted: data.accepted, acceptedBy: data.acceptedBy }),
       });
     },
     1500,
@@ -209,17 +210,17 @@ export default function SoFSoWStep({ kycCase, client, currentUser }) {
   // Always flush the latest SoF/SoW data on unmount — the debounced autosave
   // above is cancelled by React when the user navigates to another step
   // before its timer fires, which would otherwise drop unsaved changes.
-  const latestDataRef = useRef({ sof, sow, narrative, evidence, sowApplicable });
+  const latestDataRef = useRef({ sof, sow, narrative, evidence, sowApplicable, accepted, acceptedBy });
   useEffect(() => {
-    latestDataRef.current = { sof, sow, narrative, evidence, sowApplicable };
-  }, [sof, sow, narrative, evidence, sowApplicable]);
+    latestDataRef.current = { sof, sow, narrative, evidence, sowApplicable, accepted, acceptedBy };
+  }, [sof, sow, narrative, evidence, sowApplicable, accepted, acceptedBy]);
 
   useEffect(() => {
     return () => {
       if (!kycCase?.id) return;
       const d = latestDataRef.current;
       base44.entities.KycCase.update(kycCase.id, {
-        sof_narrative: JSON.stringify({ sof: d.sof, sow: d.sow, narrative: d.narrative, evidence: d.evidence }),
+        sof_narrative: JSON.stringify({ sof: d.sof, sow: d.sow, narrative: d.narrative, evidence: d.evidence, accepted: d.accepted, acceptedBy: d.acceptedBy }),
       });
     };
   }, [kycCase?.id]);
@@ -337,6 +338,14 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`;
       notes: `SoF/SoW assessment ${mode === 'accept' ? 'accepted as-is' : 'edited and accepted'}. SoF: ${(sof.sources || []).join(', ')} (${sof.adequacy}) | ${isNP ? `SoW: ${(sow.sources || []).join(', ')} (${sow.adequacy})` : ''}. Evidence items: ${evidence.length}.`,
     });
 
+    // Persist immediately — don't rely on the debounced autosave, which can
+    // be cancelled if the user navigates to another step right after accepting.
+    if (kycCase?.id) {
+      await base44.entities.KycCase.update(kycCase.id, {
+        sof_narrative: JSON.stringify({ sof, sow, narrative, evidence, accepted: true, acceptedBy: mode }),
+      });
+    }
+
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
@@ -359,6 +368,13 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`;
     setAccepted(true);
     setAcceptedBy('override');
     setOverrideMode(false);
+
+    if (kycCase?.id) {
+      await base44.entities.KycCase.update(kycCase.id, {
+        sof_narrative: JSON.stringify({ sof, sow, narrative, evidence, accepted: true, acceptedBy: 'override' }),
+      });
+    }
+
     setSaving(false);
     setSaved(true);
   }
