@@ -21,7 +21,7 @@ export default function ProfileFooterCard({ currentUser, collapsed }) {
   }
 
   return (
-    <div className="w-[200px] h-12 box-border p-[6px_7px] flex items-center gap-[7px] rounded-[10px] border border-white/[0.08] bg-[#16264a] shadow-[0_5px_14px_rgba(0,0,0,0.22)] transition-[background-color,box-shadow] duration-[180ms] ease-in-out hover:bg-[#20365f] hover:shadow-[0_7px_18px_rgba(0,0,0,0.28)] animate-card-arrive">
+    <div className="w-[200px] h-12 box-border p-[6px_7px] flex items-center gap-[7px] rounded-[10px] border border-white/[0.08] bg-[#16264a] shadow-[0_5px_14px_rgba(0,0,0,0.22)] transition-[background-color,box-shadow] duration-[180ms] ease-in-out hover:bg-[#20365f] hover:shadow-[0_7px_18px_rgba(0,0,0,0.28)]">
       {/* Avatar */}
       <div className="w-[30px] h-[30px] flex-none rounded-full bg-[#294674] flex items-center justify-center">
         <span className="text-[#e8f1ff] text-xs font-semibold">
