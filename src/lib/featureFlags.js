@@ -48,21 +48,41 @@ export const FEATURE_DEFINITIONS = [
       { key: 'user_management', label: 'User Management', description: 'User invitation and role management' },
     ],
   },
+  {
+    group: 'Transaction Monitoring (new)',
+    features: [
+      { key: 'tm_core', label: 'TM core', description: 'Canonical transactions, alerts, cases, coverage, Customer 360 monitoring tab', defaultOff: true },
+      { key: 'tm_ingest_api', label: 'TM ingest API', description: 'Tenant API keys and the ingestTransactions endpoint', defaultOff: true },
+      { key: 'tm_kyc_analysis', label: 'KYC transaction analysis', description: 'Statement analysis panel in the SoF/SoW step', defaultOff: true },
+      { key: 'tm_rules', label: 'TM rule builder', description: 'Rules authored in Vitauri and synced to Didit', defaultOff: true },
+      { key: 'tm_fiu', label: 'FIU reporting', description: 'One-click FIU reports for FIU Curaçao and FIU-Netherlands', defaultOff: true },
+      { key: 'tm_quality', label: 'TM quality control', description: 'Coverage matrix, below-the-line samples, AI shadow metrics', defaultOff: true },
+    ],
+  },
 ];
+
+export function getFeatureDefinition(key) {
+  for (const g of FEATURE_DEFINITIONS) {
+    const f = g.features.find(x => x.key === key);
+    if (f) return f;
+  }
+  return undefined;
+}
 
 /**
  * Check if a feature is enabled for a tenant.
- * Defaults to TRUE if not explicitly set.
+ * Missing key: ON, unless the feature definition has defaultOff: true.
  */
 export function isFeatureEnabled(tenant, featureKey) {
-  if (!tenant?.features_enabled) return true;
   try {
+    const defaultValue = !getFeatureDefinition(featureKey)?.defaultOff;
+    if (!tenant?.features_enabled) return defaultValue;
     const flags = typeof tenant.features_enabled === 'string'
       ? JSON.parse(tenant.features_enabled)
       : tenant.features_enabled;
-    if (featureKey in flags) return flags[featureKey] !== false;
-    return true;
+    if (featureKey in flags) return defaultValue ? flags[featureKey] !== false : flags[featureKey] === true;
+    return defaultValue;
   } catch {
-    return true;
+    return !getFeatureDefinition(featureKey)?.defaultOff;
   }
 }

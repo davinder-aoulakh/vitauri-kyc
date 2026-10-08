@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { FEATURE_DEFINITIONS } from '@/lib/featureFlags';
+import { FEATURE_DEFINITIONS, isFeatureEnabled } from '@/lib/featureFlags';
+import { useTenant } from '@/lib/tenantContext';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { X, ToggleLeft, Loader2, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function TenantFeaturesPanel({ tenant, onClose, onSaved }) {
+  const { currentUser } = useTenant();
   const [flags, setFlags] = useState({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -25,23 +27,36 @@ export default function TenantFeaturesPanel({ tenant, onClose, onSaved }) {
     }
   }, [tenant]);
 
-  function toggle(key) {
-    setFlags(prev => {
-      const current = key in prev ? prev[key] : true;
-      return { ...prev, [key]: !current };
-    });
-    setSaved(false);
+  function isOn(key) {
+    return isFeatureEnabled({ features_enabled: flags }, key);
   }
 
-  function isOn(key) {
-    return key in flags ? flags[key] !== false : true;
+  function toggle(key) {
+    setFlags(prev => ({ ...prev, [key]: !isFeatureEnabled({ features_enabled: prev }, key) }));
+    setSaved(false);
   }
 
   async function handleSave() {
     setSaving(true);
+    const allFeatures = FEATURE_DEFINITIONS.flatMap(g => g.features);
+    const changes = allFeatures
+      .map(f => ({ key: f.key, before: isFeatureEnabled(tenant, f.key), after: isOn(f.key) }))
+      .filter(c => c.before !== c.after);
     await base44.entities.Tenant.update(tenant.id, {
       features_enabled: JSON.stringify(flags),
     });
+    if (changes.length > 0) {
+      await base44.entities.AuditEvent.bulkCreate(changes.map(c => ({
+        tenant_id: tenant.id,
+        actor_user_id: currentUser?.id,
+        actor_name: currentUser?.full_name || currentUser?.email,
+        actor_type: 'User',
+        event_type: 'feature_flag_changed',
+        before_state: { feature: c.key, enabled: c.before },
+        after_state: { feature: c.key, enabled: c.after },
+        notes: `Feature "${c.key}" turned ${c.after ? 'ON' : 'OFF'} for ${tenant.name}`,
+      })));
+    }
     setSaving(false);
     setSaved(true);
     setTimeout(() => { onSaved?.(); }, 800);
