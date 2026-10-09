@@ -1,0 +1,132 @@
+{
+  "name": "ExpectedProfile",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "proposed",
+        "approved",
+        "superseded",
+        "rejected"
+      ],
+      "default": "draft"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "kyc_case",
+        "kyc_txn_analysis",
+        "manual",
+        "tm_review"
+      ]
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "currency": {
+      "type": "string",
+      "default": "USD"
+    },
+    "inbound_max_month": {
+      "type": "number"
+    },
+    "inbound_max_count_month": {
+      "type": "number"
+    },
+    "outbound_max_month": {
+      "type": "number"
+    },
+    "outbound_foreign_max_month": {
+      "type": "number"
+    },
+    "allowed_countries": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "cash_max_month": {
+      "type": "number"
+    },
+    "expected_categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "string"
+    },
+    "rationale": {
+      "type": "string",
+      "description": "Required when status is approved (enforced in business logic)"
+    },
+    "valid_from": {
+      "type": "string",
+      "format": "date"
+    },
+    "valid_until": {
+      "type": "string",
+      "format": "date"
+    },
+    "proposed_by_user_id": {
+      "type": "string"
+    },
+    "approved_by_user_id": {
+      "type": "string"
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "rejection_reason": {
+      "type": "string"
+    },
+    "didit_synced_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "didit_sync_error": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "client_id",
+    "version"
+  ],
+  "rls": {
+    "create": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "delete": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    }
+  }
+}

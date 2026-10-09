@@ -1,0 +1,107 @@
+{
+  "name": "Decision",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "subject_type": {
+      "type": "string",
+      "enum": [
+        "transaction",
+        "alert",
+        "case",
+        "client",
+        "fiu_report"
+      ]
+    },
+    "subject_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "decision_type": {
+      "type": "string",
+      "enum": [
+        "kyc_approval",
+        "aml_assessment",
+        "payment_release",
+        "alert_close",
+        "report_decision",
+        "profile_approval"
+      ]
+    },
+    "outcome": {
+      "type": "string"
+    },
+    "rationale": {
+      "type": "string"
+    },
+    "decided_by_user_id": {
+      "type": "string"
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "four_eyes_user_id": {
+      "type": "string"
+    },
+    "snapshot": {
+      "type": "object",
+      "properties": {
+        "profile_version": {
+          "type": "number"
+        },
+        "rule_versions": {
+          "type": "object"
+        },
+        "fx_rate": {
+          "type": "number"
+        },
+        "screening_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "model_version": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "required": [
+    "tenant_id",
+    "subject_type",
+    "subject_id",
+    "decision_type",
+    "outcome",
+    "rationale",
+    "decided_by_user_id"
+  ],
+  "rls": {
+    "create": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "delete": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    }
+  }
+}

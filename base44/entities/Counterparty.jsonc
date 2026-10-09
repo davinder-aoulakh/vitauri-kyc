@@ -1,0 +1,124 @@
+{
+  "name": "Counterparty",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "identifiers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "iban",
+              "account",
+              "wallet",
+              "registration",
+              "other"
+            ]
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "country": {
+      "type": "string"
+    },
+    "entity_kind": {
+      "type": "string",
+      "enum": [
+        "person",
+        "company",
+        "unknown"
+      ],
+      "default": "unknown"
+    },
+    "screening_status": {
+      "type": "string",
+      "enum": [
+        "not_screened",
+        "clear",
+        "potential_match",
+        "confirmed_match"
+      ],
+      "default": "not_screened"
+    },
+    "last_screened_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "screening_hit_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "merged_into": {
+      "type": "string"
+    },
+    "merge_history": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "provenance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "tenant_id",
+    "display_name"
+  ],
+  "rls": {
+    "create": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "delete": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    }
+  }
+}
