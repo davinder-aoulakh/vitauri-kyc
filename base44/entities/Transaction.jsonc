@@ -131,6 +131,132 @@
     "review_notes": {
       "type": "string",
       "description": "nullable"
+    },
+    "lifecycle": {
+      "type": "string",
+      "enum": [
+        "intended",
+        "declined",
+        "booked",
+        "reversed",
+        "corrected"
+      ],
+      "default": "booked"
+    },
+    "related_to": {
+      "type": "string",
+      "description": "Transaction id of the original booking for a reversal/correction"
+    },
+    "intended_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "executed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "api",
+        "psd2",
+        "upload_csv",
+        "upload_xlsx",
+        "upload_mt940",
+        "upload_camt",
+        "upload_pdf"
+      ],
+      "default": "manual"
+    },
+    "source_file_id": {
+      "type": "string",
+      "description": "StatementUpload id"
+    },
+    "ingest_batch_id": {
+      "type": "string"
+    },
+    "dedupe_key": {
+      "type": "string"
+    },
+    "external_id": {
+      "type": "string"
+    },
+    "coverage_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "bank_account_id": {
+      "type": "string"
+    },
+    "own_transfer": {
+      "type": "boolean",
+      "default": false
+    },
+    "fx": {
+      "type": "object",
+      "properties": {
+        "rate": {
+          "type": "number"
+        },
+        "rate_date": {
+          "type": "string"
+        },
+        "reporting_currency": {
+          "type": "string"
+        },
+        "amount_reporting": {
+          "type": "number"
+        }
+      }
+    },
+    "description_raw": {
+      "type": "string"
+    },
+    "counterparty_id": {
+      "type": "string"
+    },
+    "counterparty_country": {
+      "type": "string",
+      "description": "ISO 3166-1 alpha-2"
+    },
+    "counterparty_match_confidence": {
+      "type": "number"
+    },
+    "category": {
+      "type": "string"
+    },
+    "category_confidence": {
+      "type": "number"
+    },
+    "didit_last_event_id": {
+      "type": "string"
+    },
+    "didit_rule_runs": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "didit_submission_status": {
+      "type": "string",
+      "enum": [
+        "not_submitted",
+        "submitted",
+        "failed"
+      ],
+      "default": "not_submitted"
+    },
+    "didit_submission_error": {
+      "type": "string"
+    },
+    "historical": {
+      "type": "boolean",
+      "default": false
     }
   },
   "required": [

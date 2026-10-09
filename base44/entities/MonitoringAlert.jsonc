@@ -37,7 +37,8 @@
         "Didit_Ongoing_Sanctions",
         "Didit_Ongoing_Adverse_Media",
         "Didit_Ongoing_High_Risk",
-        "Didit_Abandoned"
+        "Didit_Abandoned",
+        "Transaction_Rule_Hit"
       ]
     },
     "source": {
@@ -68,6 +69,9 @@
     "edr_case_id": {
       "type": "string",
       "description": "If escalated to EDR, FK to new KycCase"
+    },
+    "tm_alert_id": {
+      "type": "string"
     }
   },
   "required": [

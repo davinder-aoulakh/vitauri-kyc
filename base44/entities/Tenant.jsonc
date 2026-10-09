@@ -184,6 +184,18 @@
     "sign_off_matrix": {
       "type": "object",
       "description": "Sign-off requirements per risk class. Keys: Low, Medium, High, Unacceptable. Each value: { approver: string, compliance_mandatory: boolean }"
+    },
+    "tm_reporting_currency": {
+      "type": "string",
+      "default": "USD"
+    },
+    "tm_settings": {
+      "type": "object",
+      "description": "Free-form: thresholds, risk weights, auto_draft_objective_reports (boolean)"
+    },
+    "tm_timezone": {
+      "type": "string",
+      "default": "America/Curacao"
     }
   },
   "required": [

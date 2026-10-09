@@ -300,6 +300,37 @@
     "didit_monitoring_job_id": {
       "type": "string",
       "description": "Didit async job ID for the most recent enable/disable monitoring request \u2014 used to confirm the outcome via webhook or poll"
+    },
+    "customer_risk_score": {
+      "type": "number"
+    },
+    "customer_risk_band": {
+      "type": "string",
+      "enum": [
+        "Low",
+        "Medium",
+        "High",
+        "Unacceptable"
+      ]
+    },
+    "current_profile_id": {
+      "type": "string",
+      "description": "ExpectedProfile id"
+    },
+    "tipping_off_lock": {
+      "type": "boolean",
+      "default": false
+    },
+    "tipping_off_reason": {
+      "type": "string"
+    },
+    "tipping_off_locked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "tm_enabled": {
+      "type": "boolean",
+      "default": false
     }
   },
   "required": [

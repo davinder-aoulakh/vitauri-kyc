@@ -20,7 +20,14 @@
         "SoFSoW",
         "IndicatorApplicability",
         "RiskNarrative",
-        "WorkflowOptimisation"
+        "WorkflowOptimisation",
+        "StatementExtract",
+        "KycTxnAnalysis",
+        "ProfileProposal",
+        "TmTriage",
+        "TmEvidence",
+        "TmNarrative",
+        "TmRuleDraft"
       ]
     },
     "prompt_hash": {
@@ -49,6 +56,28 @@
     },
     "analyst_justification": {
       "type": "string"
+    },
+    "tm_case_id": {
+      "type": "string"
+    },
+    "tm_alert_id": {
+      "type": "string"
+    },
+    "model_version": {
+      "type": "string"
+    },
+    "prompt_version": {
+      "type": "string"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "abstained": {
+      "type": "boolean",
+      "default": false
     }
   },
   "required": [

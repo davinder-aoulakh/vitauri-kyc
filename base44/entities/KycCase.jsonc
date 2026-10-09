@@ -233,6 +233,15 @@
     },
     "previous_case_id": {
       "type": "string"
+    },
+    "profile_proposal_id": {
+      "type": "string"
+    },
+    "kyc_txn_analysis_id": {
+      "type": "string"
+    },
+    "tm_case_id": {
+      "type": "string"
     }
   },
   "required": [
