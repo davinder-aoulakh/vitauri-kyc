@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { X, Plus, Trash2, Star, Save, Wifi,
          CheckCircle2, XCircle, Loader2, ShieldCheck, ShieldAlert, Copy, Send } from 'lucide-react';
@@ -9,7 +9,16 @@ import { cn } from '@/lib/utils';
 const WEBHOOK_URL = 'https://vitauri-kyc.base44.app/functions/diditWebhook';
 
 export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
-  const [apiKey,     setApiKey]     = useState(tenant?.didit_api_key || '');
+  const [apiKey,     setApiKey]     = useState('');
+  const [status,     setStatus]     = useState({ api_key_configured: false, api_key_last4: null, webhook_secret_configured: false });
+
+  async function loadStatus() {
+    if (!tenant?.id) return;
+    const res = await base44.functions.invoke('diditProxy', { action: 'credential_status', tenant_id: tenant.id });
+    const d = res?.data || res;
+    if (!d?.error) setStatus(d);
+  }
+  useEffect(() => { loadStatus(); }, [tenant?.id]);
   const [workflows,  setWorkflows]  = useState(() => {
     try { return JSON.parse(tenant?.didit_workflows || '[]'); }
     catch { return []; }
@@ -20,7 +29,7 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
   const [newWf,      setNewWf]      = useState({ name: '', workflow_id: '', description: '' });
   const [addingWf,   setAddingWf]   = useState(false);
 
-  const [webhookSecret, setWebhookSecret] = useState(tenant?.didit_webhook_secret || '');
+  const [webhookSecret, setWebhookSecret] = useState('');
   const [registering,   setRegistering]   = useState(false);
   const [testingHook,   setTestingHook]   = useState(false);
   const [savingSecret,  setSavingSecret]  = useState(false);
@@ -36,7 +45,7 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
       if (data?.error) {
         setHookMsg({ type: 'fail', text: data.error });
       } else {
-        if (data?.secret_configured) setWebhookSecret(tenant?.didit_webhook_secret || webhookSecret || '••• saved •••');
+        if (data?.secret_configured) { setWebhookSecret(''); loadStatus(); }
         setHookMsg({ type: 'ok', text: data?.updated ? 'Webhook destination updated.' : 'Webhook registered — secret saved.' });
         onSaved?.();
       }
@@ -67,9 +76,11 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
   }
 
   async function handleSaveSecret() {
-    if (!tenant?.id) return;
+    if (!tenant?.id || !webhookSecret) return;
     setSavingSecret(true);
-    await base44.entities.Tenant.update(tenant.id, { didit_webhook_secret: webhookSecret });
+    await base44.functions.invoke('diditProxy', { action: 'save_webhook_secret', tenant_id: tenant.id, didit_webhook_secret: webhookSecret });
+    setWebhookSecret('');
+    await loadStatus();
     setSavingSecret(false);
     onSaved?.();
   }
@@ -89,13 +100,17 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
 
   async function save() {
     setSaving(true);
-    await base44.entities.Tenant.update(tenant.id, {
-      didit_api_key:    apiKey,
+    await base44.functions.invoke('diditProxy', {
+      action: 'save_credentials',
+      tenant_id: tenant.id,
+      ...(apiKey ? { didit_api_key: apiKey } : {}),
       didit_workflows:  JSON.stringify(workflows),
       didit_workflow_id: workflows.find(w => w.is_default)?.workflow_id
                        || workflows[0]?.workflow_id
                        || '',
     });
+    setApiKey('');
+    await loadStatus();
     setSaving(false);
     onSaved?.();
   }
@@ -167,7 +182,7 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
               type="password"
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
-              placeholder="ddt_live_xxxxxxxxxxxxxxxx"
+              placeholder={status.api_key_configured ? `•••• ${status.api_key_last4 || ''}` : 'ddt_live_xxxxxxxxxxxxxxxx'}
               className="font-mono text-xs h-9"
             />
             <div className="flex items-center gap-2">
@@ -293,7 +308,7 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
               <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 Webhook Configuration
               </div>
-              {tenant?.didit_webhook_secret ? (
+              {status.webhook_secret_configured ? (
                 <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
                   <ShieldCheck className="w-3 h-3" /> Secured
                 </span>
@@ -319,11 +334,11 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" disabled={!apiKey || registering} onClick={handleRegisterWebhook}>
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" disabled={(!apiKey && !status.api_key_configured) || registering} onClick={handleRegisterWebhook}>
                 {registering ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
                 Register Webhook
               </Button>
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" disabled={!tenant?.didit_webhook_secret || testingHook} onClick={handleTestWebhook}>
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" disabled={!status.webhook_secret_configured || testingHook} onClick={handleTestWebhook}>
                 {testingHook ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                 Test Webhook
               </Button>

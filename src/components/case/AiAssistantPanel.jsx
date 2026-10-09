@@ -182,7 +182,6 @@ export default function AiAssistantPanel({ kycCase, client, activeStep, currentU
               const res = await base44.functions.invoke('getDiditSessionDetails', {
                 session_id: sessionId,
                 tenant_id: tenant?.id || null,
-                didit_api_key: tenant?.didit_api_key || null,
                 action: 'details',
               });
               const data = res?.data ?? res;

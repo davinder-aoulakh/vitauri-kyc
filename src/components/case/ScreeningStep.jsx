@@ -337,7 +337,6 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
         hit_id:        hitKey,
         review_status: newReviewStatus,
         tenant_id:     tenantId,
-        didit_api_key: tenant?.didit_api_key || null,
         outreach_id:   diditAmlSummary.outreach_id || null,
         item_id:       diditAmlSummary.item_id || null,
       });
@@ -400,7 +399,6 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
       const res = await base44.functions.invoke('getDiditSessionDetails', {
         session_id:    diditAmlSummary.session_id,
         tenant_id:     tenantId,
-        didit_api_key: tenant?.didit_api_key || null,
         action:        'details',
       });
       const data = res?.data ?? res;
