@@ -46,7 +46,7 @@ export default async function (req) {
     const batchRef = batch.id;
 
     // ── Clients: must belong to this tenant ──
-    const clientIds = [...new Set(items.map((i) => i?.client_id).filter(Boolean))];
+    const clientIds = [...new Set(items.map((i) => i?.client_id).filter((v) => typeof v === 'string' && /^[0-9a-f]{24}$/i.test(v)))];
     const clients = new Map();
     for (const c of chunk(clientIds, 100)) {
       for (const cl of asList(await E.Client.filter({ tenant_id: tenantId, id: { $in: c } }))) clients.set(cl.id, cl);
