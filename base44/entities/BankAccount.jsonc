@@ -1,0 +1,94 @@
+{
+  "name": "BankAccount",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "iban_or_number": {
+      "type": "string"
+    },
+    "institution": {
+      "type": "string"
+    },
+    "bic": {
+      "type": "string"
+    },
+    "currency": {
+      "type": "string"
+    },
+    "holder_name": {
+      "type": "string"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "api",
+        "psd2",
+        "upload",
+        "manual"
+      ]
+    },
+    "is_customer_owned": {
+      "type": "boolean",
+      "default": true
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "closed",
+        "paused"
+      ],
+      "default": "active"
+    },
+    "opened_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "closed_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "expected_frequency": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "weekly",
+        "monthly"
+      ],
+      "default": "daily"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "client_id",
+    "iban_or_number"
+  ],
+  "rls": {
+    "create": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "delete": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    }
+  }
+}
