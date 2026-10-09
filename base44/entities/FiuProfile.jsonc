@@ -1,0 +1,120 @@
+{
+  "name": "FiuProfile",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "code": {
+      "type": "string",
+      "enum": [
+        "CW",
+        "NL"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "law": {
+      "type": "string"
+    },
+    "system": {
+      "type": "string",
+      "default": "goAML"
+    },
+    "language": {
+      "type": "string"
+    },
+    "objective_deadline_hours": {
+      "type": "number"
+    },
+    "subjective_escalation_hours": {
+      "type": "number"
+    },
+    "co_investigation_working_days": {
+      "type": "number"
+    },
+    "report_deadline_hours": {
+      "type": "number"
+    },
+    "report_without_delay": {
+      "type": "boolean"
+    },
+    "mandatory_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "goAML paths"
+    },
+    "indicator_codes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "sector": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "didit_template_ids": {
+      "type": "object"
+    },
+    "submission_method": {
+      "type": "string",
+      "enum": [
+        "portal_upload",
+        "xml_upload",
+        "m2m"
+      ],
+      "default": "portal_upload"
+    },
+    "holiday_calendar": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "date"
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "code"
+  ],
+  "rls": {
+    "create": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "delete": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    }
+  }
+}

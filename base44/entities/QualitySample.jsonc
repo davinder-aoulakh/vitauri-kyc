@@ -1,0 +1,109 @@
+{
+  "name": "QualitySample",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "sample_type": {
+      "type": "string",
+      "enum": [
+        "below_the_line",
+        "file_review",
+        "ai_shadow"
+      ]
+    },
+    "period_from": {
+      "type": "string",
+      "format": "date"
+    },
+    "period_to": {
+      "type": "string",
+      "format": "date"
+    },
+    "population_size": {
+      "type": "number"
+    },
+    "sample_size": {
+      "type": "number"
+    },
+    "scenario_id": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ref_type": {
+            "type": "string"
+          },
+          "ref_id": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "missed_signal",
+              "wrongly_closed",
+              "citation_error",
+              "pending"
+            ]
+          },
+          "reviewer_user_id": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "findings_count": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "completed"
+      ],
+      "default": "open"
+    },
+    "reviewer_user_id": {
+      "type": "string"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "sample_type"
+  ],
+  "rls": {
+    "create": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "delete": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    }
+  }
+}

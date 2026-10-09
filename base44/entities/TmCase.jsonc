@@ -1,0 +1,163 @@
+{
+  "name": "TmCase",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "case_ref": {
+      "type": "string",
+      "description": "e.g. CASE-2026-0412"
+    },
+    "client_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "First = primary"
+    },
+    "primary_client_id": {
+      "type": "string"
+    },
+    "alert_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "title": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "investigating",
+        "pending_co",
+        "decided_report",
+        "decided_no_report",
+        "closed"
+      ],
+      "default": "open"
+    },
+    "assigned_to_user_id": {
+      "type": "string"
+    },
+    "four_eyes_user_id": {
+      "type": "string"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "risk",
+              "ok",
+              "unclear",
+              "gap"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "by": {
+            "type": "string",
+            "enum": [
+              "ai",
+              "user"
+            ]
+          },
+          "accepted": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "escalated_to_co_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "co_decision": {
+      "type": "string",
+      "enum": [
+        "report",
+        "no_report"
+      ]
+    },
+    "co_decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "co_decided_by_user_id": {
+      "type": "string"
+    },
+    "co_rationale": {
+      "type": "string"
+    },
+    "didit_case_id": {
+      "type": "string"
+    },
+    "kyc_edr_case_id": {
+      "type": "string"
+    },
+    "due_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "tenant_id"
+  ],
+  "rls": {
+    "create": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "delete": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    }
+  }
+}

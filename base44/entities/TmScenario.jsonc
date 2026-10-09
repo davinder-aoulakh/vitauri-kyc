@@ -1,0 +1,104 @@
+{
+  "name": "TmScenario",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "code": {
+      "type": "string",
+      "description": "e.g. S-07a"
+    },
+    "name": {
+      "type": "string"
+    },
+    "risk_id": {
+      "type": "string"
+    },
+    "jurisdiction": {
+      "type": "string",
+      "enum": [
+        "CW",
+        "NL",
+        "ALL"
+      ],
+      "default": "ALL"
+    },
+    "sector": {
+      "type": "string"
+    },
+    "indicator_type": {
+      "type": "string",
+      "enum": [
+        "objective",
+        "subjective"
+      ]
+    },
+    "fiu_indicator_codes": {
+      "type": "object",
+      "properties": {
+        "CW": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "NL": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "required_data": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "description": {
+      "type": "string"
+    },
+    "is_library": {
+      "type": "boolean",
+      "default": false
+    },
+    "bulk_close_released": {
+      "type": "boolean",
+      "default": false
+    },
+    "ai_sample_review_released": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "tenant_id",
+    "code",
+    "name"
+  ],
+  "rls": {
+    "create": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "delete": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    }
+  }
+}

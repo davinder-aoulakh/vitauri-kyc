@@ -1,0 +1,106 @@
+{
+  "name": "TmRule",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "scenario_id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "number",
+      "default": 1
+    },
+    "definition": {
+      "type": "object",
+      "description": "Didit rule JSON"
+    },
+    "nl_source": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "test",
+        "active",
+        "disabled"
+      ],
+      "default": "draft"
+    },
+    "didit_rule_id": {
+      "type": "string"
+    },
+    "sync_status": {
+      "type": "string",
+      "enum": [
+        "not_synced",
+        "synced",
+        "failed",
+        "drift"
+      ],
+      "default": "not_synced"
+    },
+    "last_synced_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sync_error": {
+      "type": "string"
+    },
+    "created_by_user_id": {
+      "type": "string"
+    },
+    "approved_by_user_id": {
+      "type": "string"
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "review_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "backtest_id": {
+      "type": "string"
+    },
+    "change_note": {
+      "type": "string"
+    },
+    "previous_version_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "name"
+  ],
+  "rls": {
+    "create": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "delete": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    }
+  }
+}
