@@ -47,7 +47,7 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
       } else {
         if (data?.secret_configured) { setWebhookSecret(''); loadStatus(); }
         setHookMsg({ type: 'ok', text: data?.updated ? 'Webhook destination updated.' : 'Webhook registered — secret saved.' });
-        onSaved?.();
+        await loadStatus();
       }
     } catch (err) {
       setHookMsg({ type: 'fail', text: err.message || 'Registration failed' });
@@ -359,7 +359,7 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
                   type="password"
                   value={webhookSecret}
                   onChange={e => setWebhookSecret(e.target.value)}
-                  placeholder="Paste secret_shared_key if registered directly in the Didit console"
+                  placeholder={status.webhook_secret_configured ? '•••••••••••• saved (paste a new one to replace)' : 'Paste secret_shared_key if registered directly in the Didit console'}
                   className="h-9 text-xs font-mono flex-1"
                 />
                 <Button size="sm" variant="outline" disabled={savingSecret} onClick={handleSaveSecret} className="h-9 text-xs gap-1.5 flex-shrink-0">
