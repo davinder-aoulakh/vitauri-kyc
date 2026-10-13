@@ -20,7 +20,8 @@
         "control_measure_due",
         "periodic_review_created",
         "tm_coverage_summary",
-        "edr_proposed"
+        "edr_proposed",
+        "tm_deadline"
       ]
     },
     "title": {
@@ -38,6 +39,18 @@
     "is_read": {
       "type": "boolean",
       "default": false
+    },
+    "link_alert_id": {
+      "type": "string",
+      "description": "TmAlert this notification is about"
+    },
+    "link_tm_case_id": {
+      "type": "string",
+      "description": "TmCase this notification is about"
+    },
+    "dedupe_key": {
+      "type": "string",
+      "description": "user:item:kind - used to avoid duplicate deadline notifications within 12h"
     }
   },
   "required": [

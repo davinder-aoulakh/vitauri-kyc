@@ -116,6 +116,42 @@
         "quality_sample"
       ],
       "default": "didit_rule"
+    },
+    "ai_reason_refs": {
+      "type": "array",
+      "description": "AI triage reasons with their cited sources",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "ai_insufficient_evidence": {
+      "type": "boolean",
+      "default": false
+    },
+    "ai_missing": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "phase": {
+      "type": "string",
+      "description": "Deadline clock phase: escalate | investigate | report"
+    },
+    "expired_on_arrival": {
+      "type": "boolean",
+      "default": false
     }
   },
   "required": [
