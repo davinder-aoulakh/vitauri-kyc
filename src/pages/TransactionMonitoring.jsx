@@ -9,10 +9,15 @@ import TransactionList from '@/components/transactions/TransactionList';
 import TransactionDetailPanel from '@/components/transactions/TransactionDetailPanel';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Activity, Plus, CheckCircle, ShieldAlert } from 'lucide-react';
+import { Activity, Plus, CheckCircle, ShieldAlert, Upload } from 'lucide-react';
+import StatementUploadDrawer from '@/components/tm/StatementUploadDrawer';
+import { isFeatureEnabled } from '@/lib/featureFlags';
+import { hasPermission } from '@/lib/permissions';
 
 export default function TransactionMonitoring() {
-  const { currentUser } = useTenant();
+  const { currentUser, tenant } = useTenant();
+  const [showStatement, setShowStatement] = useState(false);
+  const canUploadStatement = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmWorkCase');
   const [transactions, setTransactions] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -53,9 +58,16 @@ export default function TransactionMonitoring() {
           title="Transaction Monitoring"
           subtitle="Screen fiat and crypto transactions for sanctions and wallet risk via Didit"
           actions={
-            <Button size="sm" className="gap-1.5 text-xs" onClick={() => setShowForm(true)}>
-              <Plus className="w-3.5 h-3.5" /> New Transaction
-            </Button>
+            <div className="flex items-center gap-2">
+              {canUploadStatement && (
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setShowStatement(true)}>
+                  <Upload className="w-3.5 h-3.5" /> Upload statement
+                </Button>
+              )}
+              <Button size="sm" className="gap-1.5 text-xs" onClick={() => setShowForm(true)}>
+                <Plus className="w-3.5 h-3.5" /> New Transaction
+              </Button>
+            </div>
           }
         />
 
@@ -82,6 +94,15 @@ export default function TransactionMonitoring() {
           currentUser={currentUser}
           onClose={() => setSelected(null)}
           onUpdated={loadAll}
+        />
+      )}
+
+      {canUploadStatement && (
+        <StatementUploadDrawer
+          open={showStatement}
+          onOpenChange={setShowStatement}
+          clients={clients}
+          onCommitted={loadAll}
         />
       )}
 

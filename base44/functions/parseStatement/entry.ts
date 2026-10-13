@@ -20,11 +20,11 @@ import { STATEMENT_SCHEMA, STATEMENT_SYSTEM_PROMPT, STATEMENT_SOURCE } from '../
 const acctNorm = (v) => String(v ?? '').toUpperCase().replace(/[\s-]/g, '');
 const DAY_MS = 86400000;
 
-async function parsePdf(base44, tenantId, upload) {
+async function parsePdf(base44, tenantId, upload, fileUrl) {
   const { output, ai_run_id } = await runTmAgent(base44, {
     tenantId, agent: 'StatementExtract', schema: STATEMENT_SCHEMA, systemPrompt: STATEMENT_SYSTEM_PROMPT,
     input: { task: 'Extract all transactions and balances from the attached bank statement.', file_name: upload.file_name },
-    sources: [STATEMENT_SOURCE], defaultSourceRef: STATEMENT_SOURCE, fileUrls: [upload.file_url],
+    sources: [STATEMENT_SOURCE], defaultSourceRef: STATEMENT_SOURCE, fileUrls: [fileUrl],
   });
   if (output.insufficient_evidence && !(output.rows || []).length) {
     throw httpError(422, `The PDF could not be read as a bank statement${output.missing.length ? `: ${output.missing.join(', ')}` : ''}`);
@@ -85,7 +85,11 @@ export default async function (req) {
     const accounts = asList(await E.BankAccount.filter({ tenant_id: tenantId, client_id: client.id }, undefined, 1000));
 
     // ── File ──
-    const res = await fetch(upload.file_url, { signal: AbortSignal.timeout(30000) });
+    // Files are stored privately (file_url holds the private file_uri); read through a short-lived signed URL.
+    const fileUrl = /^https?:\/\//.test(upload.file_url)
+      ? upload.file_url
+      : (await base44.asServiceRole.integrations.Core.CreateFileSignedUrl({ file_uri: upload.file_url, expires_in: 600 })).signed_url;
+    const res = await fetch(fileUrl, { signal: AbortSignal.timeout(30000) });
     if (!res.ok) throw httpError(422, `Could not read the uploaded file (${res.status})`);
     const bytes = new Uint8Array(await res.arrayBuffer());
     const file_hash = await sha256Bytes(bytes);
@@ -95,7 +99,7 @@ export default async function (req) {
     // ── Parse ──
     let parsed;
     const warnings = [];
-    if (format === 'pdf') parsed = await parsePdf(base44, tenantId, upload);
+    if (format === 'pdf') parsed = await parsePdf(base44, tenantId, upload, fileUrl);
     else if (format === 'mt940') parsed = parseMt940(new TextDecoder().decode(bytes));
     else if (format === 'camt053') parsed = parseCamt053(new TextDecoder().decode(bytes));
     else parsed = await parseTabular(E, tenantId, format, bytes);
