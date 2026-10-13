@@ -92,6 +92,75 @@
     "signed_off_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "currency": {
+      "type": "string"
+    },
+    "avg_inbound_count_month": {
+      "type": "number"
+    },
+    "cash_share": {
+      "type": "number",
+      "description": "Cash volume as a share (0-1) of total volume"
+    },
+    "countries": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "consistency_with_occupation": {
+      "type": "string",
+      "enum": [
+        "consistent",
+        "partly",
+        "inconsistent",
+        "unknown"
+      ],
+      "default": "unknown"
+    },
+    "insufficient_evidence": {
+      "type": "boolean",
+      "default": false
+    },
+    "missing": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "properties": {
+        "reconciles": {
+          "type": "boolean"
+        },
+        "gap_count": {
+          "type": "number"
+        },
+        "tamper_signals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "proposed_profile_limits": {
+      "type": "object",
+      "description": "AI proposed limits: inbound_max_month, inbound_max_count_month, outbound_foreign_max_month, allowed_countries, cash_max_month"
+    },
+    "proposed_profile_version": {
+      "type": "number"
+    },
+    "run_by_user_id": {
+      "type": "string"
+    },
+    "run_by_name": {
+      "type": "string"
+    },
+    "signed_off_by_name": {
+      "type": "string"
     }
   },
   "required": [

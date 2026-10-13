@@ -160,7 +160,7 @@ function divider(doc, y) {
 // ── Main generate function ─────────────────────────────────────────────────
 async function buildPDF({ kycCase, client, currentUser, screeningHits, assessments,
   controlMeasures, auditEvents, relatedPartyLinks, relatedParties, tenant, nextVersion,
-  annexManifest = [] }) {
+  annexManifest = [], txnAnalysis = null }) {
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const dateStr = format(new Date(), 'd MMMM yyyy');
@@ -265,6 +265,7 @@ async function buildPDF({ kycCase, client, currentUser, screeningHits, assessmen
     '2.  Related Parties',
     '3.  Screening & Adverse Media',
     '4.  Source of Funds / Wealth',
+    ...(txnAnalysis ? ['4A.  Transaction Analysis (statements)'] : []),
     '5.  Risk Indicators & Assessment',
     '6.  Consolidated Risk Classification',
     '7.  Control Measures',
@@ -444,6 +445,60 @@ async function buildPDF({ kycCase, client, currentUser, screeningHits, assessmen
     'Source of Funds and Source of Wealth assessment conducted. Supporting documentation on file. Refer to case documents for full details.';
   y = para(doc, sofText, y);
   y = divider(doc, y + 4);
+
+  // ── 4A. Transaction Analysis (only when a signed-off analysis exists) ──
+  if (txnAnalysis) {
+    const a = txnAnalysis;
+    const cur = a.currency || '';
+    const num = (n) => (n == null ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 }));
+    y = checkBreak(doc, y, 20);
+    y = sectionHeader(doc, '4A', 'Transaction Analysis (statements)', y);
+    [
+      ['Period',              `${a.period_from} to ${a.period_to}`],
+      ['Statements',          a.statement_upload_ids?.length ?? 0],
+      ['Transactions',        a.txn_count],
+      ['Avg inbound / month', `${cur} ${num(a.avg_inbound_month)}`],
+      ['Avg outbound / month', `${cur} ${num(a.avg_outbound_month)}`],
+      ['Integrity',           a.integrity_summary],
+      ['Occupation consistency', a.consistency_with_occupation],
+    ].forEach(([l, v]) => { y = checkBreak(doc, y, 8); y = kvRow(doc, l, v, y); });
+    y += 2;
+
+    const catCols = [{ label: 'Category', w: 70 }, { label: 'Amount', w: 40 }];
+    [['Income by category', a.income_by_category], ['Spending by category', a.spend_by_category]].forEach(([title, data]) => {
+      const rows = Object.entries(data || {}).sort((p, q) => q[1] - p[1]).slice(0, 6);
+      if (!rows.length) return;
+      y = checkBreak(doc, y, 16);
+      doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...C.sectionText);
+      doc.text(title, MARGIN, y); y += 5;
+      y = tableHeader(doc, catCols, y);
+      rows.forEach(([cat, amount], i) => {
+        y = checkBreak(doc, y, 8);
+        y = tableRow(doc, catCols, [cat.replace(/_/g, ' '), `${cur} ${num(amount)}`], y, i % 2 === 1);
+      });
+      y += 3;
+    });
+
+    if (a.ai_conclusion) {
+      y = checkBreak(doc, y, 14);
+      doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...C.sectionText);
+      doc.text('AI conclusion', MARGIN, y); y += 5;
+      y = para(doc, a.ai_conclusion, y);
+    }
+    if (a.risk_indicators?.length) {
+      y = checkBreak(doc, y, 14);
+      doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...C.sectionText);
+      doc.text('Risk indicators', MARGIN, y); y += 5;
+      a.risk_indicators.forEach((r) => { y = checkBreak(doc, y, 8); y = para(doc, `- [${r.severity || 'n/a'}] ${r.label || r.code}`, y); });
+    }
+    y = checkBreak(doc, y, 14);
+    doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...C.sectionText);
+    doc.text('Analyst conclusion', MARGIN, y); y += 5;
+    y = para(doc, a.analyst_conclusion, y);
+    y = kvRow(doc, 'Signed off by', a.signed_off_by_name || '—', y);
+    y = kvRow(doc, 'Signed off at', a.signed_off_at ? format(new Date(a.signed_off_at), 'd MMM yyyy HH:mm') : '—', y);
+    y = divider(doc, y + 4);
+  }
 
   // ── 5. Risk Indicators & Assessment ──
   y = checkBreak(doc, y, 20);
@@ -771,6 +826,11 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
     ]);
 
     const tenant = tenantList?.[0] || null;
+    // Optional: only a signed-off transaction analysis is included in the report.
+    const signedAnalyses = await base44.entities.KycTransactionAnalysis
+      .filter({ tenant_id: kycCase.tenant_id, case_id: kycCase.id, status: 'signed_off' }, '-signed_off_at', 1)
+      .catch(() => []);
+    const txnAnalysis = signedAnalyses?.[0] || null;
     const nextVersion = (reports[0]?.version_number || 0) + 1;
 
     // Merge + dedupe case/client documents, excluding prior report PDFs
@@ -819,6 +879,7 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
       tenant,
       nextVersion,
       annexManifest,
+      txnAnalysis,
     });
 
     const pdfBlob = await mergeAnnexPdfs({ doc, auditTrailStartPage, documents, diditSessionIds, tenant, kycCase });

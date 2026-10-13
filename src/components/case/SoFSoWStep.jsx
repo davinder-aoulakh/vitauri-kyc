@@ -13,6 +13,7 @@ import {
 import DocumentViewer from '@/components/shared/DocumentViewer';
 import DocUploadPicker from '@/components/shared/DocUploadPicker';
 import InlineError from '@/components/shared/InlineError';
+import TxnAnalysisSection from '@/components/case/TxnAnalysisSection';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -571,6 +572,8 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`;
 
         {saved && <div className="text-xs text-emerald-600 font-medium">✓ Assessment saved</div>}
       </div>
+
+      <TxnAnalysisSection kycCase={kycCase} client={client} onCaseUpdate={onCaseUpdate} />
 
       {/* Evidence Picker Modal */}
       {evidencePickerOpen && (
