@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 import { hasPermission } from '@/lib/permissions';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import ApiKeysTab from '@/components/tenantconfig/ApiKeysTab';
+import FiuProfilesTab from '@/components/tenantconfig/FiuProfilesTab';
 
 // Tab components
 import BrandingTab          from '@/components/tenantconfig/BrandingTab';
@@ -69,7 +70,8 @@ export default function TenantConfig() {
   const canConfig = hasPermission(userRole, 'tenantConfig');
   const hydrated = useRef(false);
   const showApiKeys = isFeatureEnabled(tenant, 'tm_ingest_api') && hasPermission(userRole, 'tmManageIngest');
-  const visibleTabs = showApiKeys ? [...TABS, { id: 'api_keys', label: 'API keys' }] : TABS;
+  const showFiu = isFeatureEnabled(tenant, 'tm_fiu') && canConfig;
+  const visibleTabs = [...TABS, ...(showApiKeys ? [{ id: 'api_keys', label: 'API keys' }] : []), ...(showFiu ? [{ id: 'fiu_profiles', label: 'FIU profiles' }] : [])];
 
   useEffect(() => {
     if (tenant && !hydrated.current) {
@@ -239,6 +241,12 @@ export default function TenantConfig() {
           {showApiKeys && (
             <TabsContent value="api_keys" className="mt-5">
               <ApiKeysTab tenant={tenant} />
+            </TabsContent>
+          )}
+
+          {showFiu && (
+            <TabsContent value="fiu_profiles" className="mt-5">
+              <FiuProfilesTab tenant={tenant} currentUser={currentUser} />
             </TabsContent>
           )}
 
