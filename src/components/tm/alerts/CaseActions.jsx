@@ -4,13 +4,16 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FolderPlus, FolderInput, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import InlineError from '@/components/shared/InlineError';
+import CreateCaseDialog from '@/components/tm/case/CreateCaseDialog';
 import { errorMessage } from '@/lib/tmAlerts';
 
 const OPEN_CASE = ['open', 'investigating', 'pending_co'];
 
 export default function CaseActions({ alert, tenantId, onChanged }) {
   const [adding, setAdding] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [caseId, setCaseId] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -35,13 +38,15 @@ export default function CaseActions({ alert, tenantId, onChanged }) {
     }
   };
 
-  if (alert.tm_case_id) return <p className="text-xs text-muted-foreground">Linked to a TM case.</p>;
+  if (alert.tm_case_id) {
+    return <Link to={`/tm/case/${alert.tm_case_id}`} className="text-xs text-primary hover:underline">Linked to a TM case. Open case</Link>;
+  }
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" className="gap-1.5" disabled={!!busy} onClick={() => run('create_case')}>
-          {busy === 'create_case' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderPlus className="w-3.5 h-3.5" />} Create case
+        <Button size="sm" variant="outline" className="gap-1.5" disabled={!!busy} onClick={() => setCreating(true)}>
+          <FolderPlus className="w-3.5 h-3.5" /> Create case
         </Button>
         <Button size="sm" variant="outline" className="gap-1.5" disabled={!!busy} onClick={() => setAdding((v) => !v)}>
           <FolderInput className="w-3.5 h-3.5" /> Add to case
@@ -61,6 +66,9 @@ export default function CaseActions({ alert, tenantId, onChanged }) {
         </div>
       )}
       {error && <InlineError message={error} />}
+      {creating && (
+        <CreateCaseDialog open alertIds={[alert.id]} defaultTitle={alert.title} onOpenChange={(v) => !v && setCreating(false)} onCreated={onChanged} />
+      )}
     </div>
   );
 }

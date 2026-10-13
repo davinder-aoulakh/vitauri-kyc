@@ -21,7 +21,8 @@
         "periodic_review_created",
         "tm_coverage_summary",
         "edr_proposed",
-        "tm_deadline"
+        "tm_deadline",
+        "tm_escalation"
       ]
     },
     "title": {

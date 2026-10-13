@@ -16,8 +16,9 @@ import AlertFilters from '@/components/tm/alerts/AlertFilters';
 import AlertsTable from '@/components/tm/alerts/AlertsTable';
 import AlertSidePanel from '@/components/tm/alerts/AlertSidePanel';
 import CloseAlertDialog from '@/components/tm/alerts/CloseAlertDialog';
+import CreateCaseDialog from '@/components/tm/case/CreateCaseDialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, Lock, Inbox, Sparkles, XCircle } from 'lucide-react';
+import { Loader2, Lock, Inbox, Sparkles, XCircle, FolderPlus } from 'lucide-react';
 
 const EMPTY_COPY = {
   all: 'No open alerts. New alerts appear here as soon as monitoring rules or profile checks raise them.',
@@ -42,6 +43,7 @@ export default function TmAlerts() {
   const [openId, setOpenId] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [closeIds, setCloseIds] = useState(null);
+  const [caseIds, setCaseIds] = useState(null);
   const [triaging, setTriaging] = useState(false);
   const [now, setNow] = useState(Date.now());
 
@@ -93,6 +95,11 @@ export default function TmAlerts() {
         actions={
           <>
             {canWork && selected.size > 0 && (
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setCaseIds([...selected])}>
+                <FolderPlus className="w-3.5 h-3.5" /> Create case from {selected.size}
+              </Button>
+            )}
+            {canWork && selected.size > 0 && (
               <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setCloseIds([...selected])}>
                 <XCircle className="w-3.5 h-3.5" /> Close {selected.size} selected
               </Button>
@@ -121,6 +128,12 @@ export default function TmAlerts() {
         alert={openAlert} client={openAlert ? clientsById.get(openAlert.client_id) : null} tenantId={tenantId} userId={userId}
         canWork={canWork} now={now} onClose={() => setOpenId(null)} onChanged={refresh} onCloseAlert={setCloseIds}
       />
+      {caseIds && (
+        <CreateCaseDialog
+          open alertIds={caseIds} defaultTitle={alerts.find((a) => a.id === caseIds[0])?.title}
+          onOpenChange={(v) => !v && setCaseIds(null)} onCreated={() => { setOpenId(null); refresh(); }}
+        />
+      )}
       <CloseAlertDialog
         alertIds={closeIds || []} open={!!closeIds} onOpenChange={(v) => !v && setCloseIds(null)}
         onClosed={() => { setOpenId(null); refresh(); }}

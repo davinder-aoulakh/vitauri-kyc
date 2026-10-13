@@ -81,6 +81,9 @@
           },
           "accepted": {
             "type": "boolean"
+          },
+          "edited": {
+            "type": "boolean"
           }
         }
       }
@@ -97,6 +100,12 @@
             "type": "string"
           },
           "kind": {
+            "type": "string"
+          },
+          "by": {
+            "type": "string"
+          },
+          "ref_id": {
             "type": "string"
           }
         }
@@ -132,6 +141,24 @@
     "due_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "phase": {
+      "type": "string",
+      "description": "Active clock phase: escalate | investigate | report"
+    },
+    "network_client_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Clients added because they share counterparties"
+    },
+    "network_origin_case_id": {
+      "type": "string",
+      "description": "Case this network case was opened from"
+    },
+    "last_evidence_run_id": {
+      "type": "string"
     }
   },
   "required": [
