@@ -6,7 +6,7 @@ Read the attached bank statement and return every transaction line exactly as pr
 - Never invent or infer rows, amounts or balances. If a value is not visible, use null and add a note to "missing".
 - Dates are YYYY-MM-DD. Amounts are positive numbers; "direction" is "inbound" for credits and "outbound" for debits.
 - "balance" is the running balance printed on that line, or null when not printed.
-- Every row must have source_refs: ["${'statement'}"].
+- Every row must have source_refs: ["${STATEMENT_SOURCE}"].
 - Report opening_balance, closing_balance, currency (ISO 4217), account (IBAN or account number) and the statement period.
 - If the statement prints total credits / total debits, return them as stated_total_credits / stated_total_debits.
 - In tamper_observations list anything that suggests the document was edited: inconsistent fonts or alignment, pasted-looking numbers, mismatched totals, odd metadata. Leave it empty if nothing looks wrong.

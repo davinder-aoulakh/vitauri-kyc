@@ -101,7 +101,8 @@
         "parsing",
         "review",
         "committed",
-        "failed"
+        "failed",
+        "committing"
       ],
       "default": "uploaded"
     },
@@ -117,6 +118,27 @@
     "committed_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "reconcile_diff": {
+      "type": "number",
+      "description": "Opening + movements - closing, set by parseStatement"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "account_ref": {
+      "type": "string",
+      "description": "Account number / IBAN read from the statement"
+    },
+    "ai_run_id": {
+      "type": "string"
+    },
+    "batch_id": {
+      "type": "string",
+      "description": "TransactionIngestBatch created on commit"
     }
   },
   "required": [

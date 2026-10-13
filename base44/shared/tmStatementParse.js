@@ -145,7 +145,7 @@ function locateHeader(matrix, saved) {
       const h = matrix[i].map(norm);
       const map = {};
       for (const [f, name] of want) { const idx = h.indexOf(name); if (idx >= 0) map[f] = idx; }
-      if (Object.keys(map).length === want.length && hasCore(map)) return { headerIdx: i, map };
+      if (Object.keys(map).length === want.length && hasCore(map)) return { headerIdx: i, map, fromSaved: true };
     }
   }
   for (let i = 0; i < limit; i++) {
@@ -157,6 +157,10 @@ function locateHeader(matrix, saved) {
 
 const DEBIT_WORDS = /^(d|dr|debit|dbit|af|out|outgoing|withdrawal|soll)$/i;
 const CREDIT_WORDS = /^(c|cr|credit|crdt|bij|in|incoming|deposit|haben)$/i;
+
+export function matchesSavedMap(matrix, saved) {
+  return !!locateHeader(matrix, saved)?.fromSaved;
+}
 
 /** matrix: array of arrays. saved: previously stored column_map for the same template. */
 export function parseMatrix(matrix, saved) {
