@@ -9,6 +9,8 @@ import { canApproveRisk } from '@/lib/permissions';
 import { RISK_COLORS } from '@/lib/riskColors';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { useTenant } from '@/lib/tenantContext';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 
 const SIGN_OFF_MATRIX = {
   Low:          'Analyst (self-sign-off)',
@@ -20,6 +22,7 @@ const SIGN_OFF_MATRIX = {
 const COMPLIANCE_RISKS = ['Medium', 'High', 'Unacceptable'];
 
 export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate, onRefresh, refreshing }) {
+  const { tenant } = useTenant();
   const [approvalNote, setApprovalNote]       = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   const [advisoryNote, setAdvisoryNote]       = useState(kycCase?.compliance_advisory_note || '');
@@ -110,6 +113,16 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
       });
     }
     onCaseUpdate?.(prev => ({ ...prev, status: 'Approved', step_8_status: 'complete' }));
+    // TM: propose an expected profile once sign-off is saved. Never blocks sign-off.
+    try {
+      if (isFeatureEnabled(tenant, 'tm_core')) {
+        await base44.functions.invoke('proposeExpectedProfile', {
+          client_id: kycCase.client_id, case_id: kycCase.id, source: 'kyc_case',
+        });
+      }
+    } catch (e) {
+      console.warn('proposeExpectedProfile failed (sign-off unaffected):', e?.message);
+    }
     setAction(null);
     setSubmitting(false);
   }

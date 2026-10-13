@@ -99,6 +99,17 @@
     },
     "didit_sync_error": {
       "type": "string"
+    },
+    "case_id": {
+      "type": "string",
+      "description": "KycCase this proposal was made for"
+    },
+    "proposed_by_name": {
+      "type": "string"
+    },
+    "approved_by_name": {
+      "type": "string",
+      "description": "Name of the user who approved or rejected"
     }
   },
   "required": [

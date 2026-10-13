@@ -41,6 +41,10 @@ async function request(tenant, method, path, body) {
 export const postTransaction = (tenant, body) => request(tenant, 'POST', '/v3/transactions/', body);
 export const getTransaction = (tenant, id) => request(tenant, 'GET', `/v3/transactions/${encodeURIComponent(id)}/`);
 
+// TODO verify against docs.didit.me — update a Didit user's custom properties by vendor_data.
+export const updateUserCustomProperties = (tenant, vendorData, customProperties) =>
+  request(tenant, 'PATCH', `/v3/users/${encodeURIComponent(vendorData)}/`, { custom_properties: customProperties });
+
 export const upsertRule = (tenant, ruleJson, diditRuleId) =>
   diditRuleId
     ? request(tenant, 'PATCH', RULE_PATH(encodeURIComponent(diditRuleId)), ruleJson)
