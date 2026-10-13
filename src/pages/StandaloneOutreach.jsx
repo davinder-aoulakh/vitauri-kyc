@@ -15,6 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { format, addDays } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
+import { fetchLocked, LOCK_BANNER } from '@/lib/tippingOff';
 
 
 function generateToken() {
@@ -280,6 +281,10 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
     const created = [];
 
     for (const client of recipients) {
+      if (await fetchLocked(tenant.id, client.id)) {
+        results.failed.push({ name: client.full_name, reason: LOCK_BANNER });
+        continue;
+      }
       try {
         const token       = generateToken();
         const tokenExpiry = new Date(deadline);

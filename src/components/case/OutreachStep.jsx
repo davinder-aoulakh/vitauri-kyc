@@ -27,6 +27,8 @@ const SITUATION_LABELS = {
 };
 import { format, addDays, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
+import TippingOffBanner from '@/components/shared/TippingOffBanner';
+import { isLocked, fetchLocked } from '@/lib/tippingOff';
 
 
 
@@ -348,6 +350,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
 
   async function sendEmail(req) {
     if (!client?.primary_contact_email) return;
+    if (await fetchLocked(kycCase.tenant_id, kycCase.client_id)) { load(); return; }
     setSending(true);
     const portalUrl = getPortalUrl(req);
     const fromName = tenant?.email_from_name || tenant?.name || 'Compliance Team';
@@ -392,6 +395,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
   }
 
   async function markSent(req) {
+    if (await fetchLocked(kycCase.tenant_id, kycCase.client_id)) return;
     await base44.entities.OutreachRequest.update(req.id, { status: 'Sent' });
     await base44.entities.AuditEvent.create({
       tenant_id: kycCase.tenant_id,
@@ -455,6 +459,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
 
   return (
     <div className="space-y-4">
+      <TippingOffBanner client={client} userRole={currentUser?.app_role} />
       {diditSummary && (
         <div className={cn(
           'rounded-xl border p-4',
@@ -618,12 +623,12 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                       <>
                         {client?.primary_contact_email && (
                           <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-primary border-primary/30 hover:bg-primary/5"
-                            onClick={() => sendEmail(req)} disabled={sending}>
+                            onClick={() => sendEmail(req)} disabled={sending || isLocked(client)}>
                             {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
                             Send Email
                           </Button>
                         )}
-                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => markSent(req)}>
+                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => markSent(req)} disabled={isLocked(client)}>
                           <Send className="w-3 h-3" /> Mark Sent
                         </Button>
                       </>

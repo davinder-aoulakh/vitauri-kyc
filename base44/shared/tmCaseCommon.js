@@ -2,6 +2,7 @@
 import { asList, httpError } from './tmAuth.js';
 import { writeAudit } from './tmAudit.js';
 import { caseClock, loadFiuProfile } from './tmDeadline.js';
+import { assertClientNotLocked } from './tippingOff.js';
 
 export const OPEN_CASE = ['open', 'investigating', 'pending_co'];
 export const WORKABLE_CASE = ['open', 'investigating'];
@@ -69,7 +70,7 @@ export async function fiuUnderway(E, tenantId, tmCaseId) {
 export async function assertCustomerRequestAllowed(ctx, tmCase) {
   const client = asList(await ctx.E.Client.filter({ tenant_id: ctx.tenantId, id: tmCase.primary_client_id }))[0];
   if (!client) throw httpError(404, 'Client not found');
-  if (client.tipping_off_lock) throw httpError(423, 'Customer requests are blocked: a tipping-off lock is active for this client.');
+  assertClientNotLocked(client);
   if (await fiuUnderway(ctx.E, ctx.tenantId, tmCase.id)) throw httpError(423, 'Customer requests are locked once an FIU report is being prepared.');
   return client;
 }

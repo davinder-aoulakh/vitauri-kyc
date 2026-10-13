@@ -48,7 +48,7 @@ export default function TmCaseWorkspace() {
     <AppShell>
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
         <CaseHeader tmCase={c} users={users} client={client.data} pill={pill} />
-        {isFeatureEnabled(tenant, 'tm_fiu') && canWork && <FiuCtaBar caseId={c.id} />}
+        {isFeatureEnabled(tenant, 'tm_fiu') && canWork && <FiuCtaBar caseId={c.id} tenantId={tenantId} report={(fiuReports.data || []).find((r) => r.status !== 'rejected')} />}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-5">
             <EvidencePanel tmCase={c} canWork={canWork} run={run} busy={busy} />

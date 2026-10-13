@@ -1,0 +1,41 @@
+{
+  "name": "Auto-draft FIU Report",
+  "description": "When an objective-indicator TM alert arrives, prepares an FIU report draft if the tenant enabled auto_draft_objective_reports. The function skips tenants without the setting and never duplicates a report for the same case.",
+  "trigger": {
+    "condition": "${ .trigger.data.indicator_type == \"objective\" }",
+    "config": {
+      "trigger_type": "entity",
+      "entity_name": "TmAlert",
+      "events": [
+        "create"
+      ]
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "auto_draft_fiu_report",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "prepare_report": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "prepareFiuReport",
+            "args": {
+              "auto": true,
+              "alert_id": "${ .trigger.entity_id }"
+            }
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Prepare FIU report draft",
+            "description": "Objective alert"
+          }
+        }
+      }
+    ]
+  }
+}

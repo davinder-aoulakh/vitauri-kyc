@@ -24,6 +24,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CLIENT_STATUS_COLORS } from '@/lib/riskColors';
 import { deleteCase } from '@/lib/caseDelete';
+import TippingOffBanner from '@/components/shared/TippingOffBanner';
 
 export default function ClientDetail() {
   const { id } = useParams();
@@ -175,6 +176,8 @@ export default function ClientDetail() {
   return (
     <AppShell>
       <div className="p-6 max-w-screen-xl mx-auto space-y-5">
+
+        <TippingOffBanner client={client} userRole={userRole} onChanged={loadAll} />
 
         {/* ── Header Card ── */}
         <div className="bg-card border border-border rounded-xl p-5">
