@@ -10,6 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Save, Lock, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { hasPermission } from '@/lib/permissions';
+import { isFeatureEnabled } from '@/lib/featureFlags';
+import ApiKeysTab from '@/components/tenantconfig/ApiKeysTab';
 
 // Tab components
 import BrandingTab          from '@/components/tenantconfig/BrandingTab';
@@ -66,6 +68,8 @@ export default function TenantConfig() {
   const userRole = currentUser?.app_role;
   const canConfig = hasPermission(userRole, 'tenantConfig');
   const hydrated = useRef(false);
+  const showApiKeys = isFeatureEnabled(tenant, 'tm_ingest_api') && hasPermission(userRole, 'tmManageIngest');
+  const visibleTabs = showApiKeys ? [...TABS, { id: 'api_keys', label: 'API keys' }] : TABS;
 
   useEffect(() => {
     if (tenant && !hydrated.current) {
@@ -134,7 +138,7 @@ export default function TenantConfig() {
 
         <Tabs defaultValue="branding">
           <TabsList className="bg-card border border-border p-1 flex flex-wrap gap-1 h-auto">
-            {TABS.map(t => (
+            {visibleTabs.map(t => (
               <TabsTrigger
                 key={t.id} value={t.id}
                 className="text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap"
@@ -231,6 +235,12 @@ export default function TenantConfig() {
           <TabsContent value="integrations" className="mt-5">
             <IntegrationsTab tenant={tenant} />
           </TabsContent>
+
+          {showApiKeys && (
+            <TabsContent value="api_keys" className="mt-5">
+              <ApiKeysTab tenant={tenant} />
+            </TabsContent>
+          )}
 
         </Tabs>
       </div>

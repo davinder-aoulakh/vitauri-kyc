@@ -113,6 +113,8 @@ export async function toCanonical(raw, channel, context = {}) {
     source_file_id: context.source_file_id,
     ingest_batch_id: context.ingest_batch_id,
     related_to: raw.related_to,
+    intended_at: raw.intended_at && !isNaN(new Date(raw.intended_at).getTime()) ? new Date(raw.intended_at).toISOString() : undefined,
+    historical: typeof raw.historical === 'boolean' ? raw.historical : undefined,
   };
   record.dedupe_key = await dedupeKey({
     tenant_id: tenantId,
