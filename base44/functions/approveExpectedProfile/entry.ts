@@ -6,6 +6,7 @@ import { writeAudit } from '../../shared/tmAudit.js';
 import { authenticate, errorResponse, httpError, loadTenant, asList } from '../../shared/tmAuth.js';
 import { canDecideProfile } from '../../shared/tmProfileAuth.js';
 import { updateUserCustomProperties } from '../../shared/diditTm.js';
+import { safeRecompute } from '../../shared/tmRisk.js';
 
 const ALL_ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'];
 
@@ -116,6 +117,8 @@ export default async function (req) {
     await E.ExpectedProfile.update(profile.id, syncError
       ? { didit_sync_error: syncError }
       : { didit_synced_at: new Date().toISOString(), didit_sync_error: '' });
+
+    await safeRecompute(base44, { tenantId, tenant, clientId: client.id, trigger: 'profile_approved', actor: auth });
 
     return Response.json({ ok: true, status: 'approved', didit_sync_error: syncError });
   } catch (error) {

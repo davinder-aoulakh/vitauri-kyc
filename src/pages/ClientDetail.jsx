@@ -15,6 +15,8 @@ import CasesTab         from '@/components/client/CasesTab';
 import DocumentsTab     from '@/components/client/DocumentsTab';
 import AuditTrailTab    from '@/components/client/AuditTrailTab';
 import OngoingMonitoringToggle from '@/components/client/OngoingMonitoringToggle';
+import MonitoringTab from '@/components/client/MonitoringTab';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 import { Network, ChevronRight, User, Building2, UserCog, GitFork, AlertTriangle, Trash2 } from 'lucide-react';
 import { useTenantUsers } from '@/hooks/useTenantData';
 import { Textarea } from '@/components/ui/textarea';
@@ -26,7 +28,7 @@ import { deleteCase } from '@/lib/caseDelete';
 export default function ClientDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { currentUser } = useTenant();
+  const { currentUser, tenant } = useTenant();
 
   const [client, setClient]           = useState(null);
   const [cases, setCases]             = useState([]);
@@ -49,6 +51,7 @@ export default function ClientDetail() {
   const userRole = currentUser?.app_role;
   const canReassign = hasPermission(userRole, 'viewAllTenantCases');
   const canDelete = hasPermission(userRole, 'deleteClient');
+  const showMonitoring = isFeatureEnabled(tenant, 'tm_core') && hasPermission(userRole, 'createRunCase');
 
   const { data: users = [] } = useTenantUsers(currentUser?.tenant_id);
 
@@ -270,6 +273,7 @@ export default function ClientDetail() {
               { value: 'cases',            label: `Cases (${cases.length})` },
               { value: 'documents',        label: `Documents (${documents.length})` },
               { value: 'audit-trail',      label: 'Audit Trail' },
+              ...(showMonitoring ? [{ value: 'monitoring', label: 'Monitoring' }] : []),
             ].map(t => (
               <TabsTrigger key={t.value} value={t.value}
                 className="text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-primary data-[state=active]:text-white">
@@ -320,6 +324,12 @@ export default function ClientDetail() {
           <TabsContent value="audit-trail">
             <AuditTrailTab auditEvents={auditEvents} />
           </TabsContent>
+
+          {showMonitoring && (
+            <TabsContent value="monitoring">
+              <MonitoringTab client={client} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 

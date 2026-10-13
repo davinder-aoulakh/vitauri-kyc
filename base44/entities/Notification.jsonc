@@ -19,7 +19,8 @@
         "monitoring_alert",
         "control_measure_due",
         "periodic_review_created",
-        "tm_coverage_summary"
+        "tm_coverage_summary",
+        "edr_proposed"
       ]
     },
     "title": {

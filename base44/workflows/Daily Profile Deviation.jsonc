@@ -1,0 +1,41 @@
+{
+  "name": "Daily Profile Deviation",
+  "description": "Runs daily at 03:00 UTC: compares each client's rolling 30-day activity with the approved expected profile, raises profile_deviation alerts (S-30) and recomputes dynamic customer risk.",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "0 3 * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "daily_profile_deviation",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "profileDeviationJob",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  }
+}

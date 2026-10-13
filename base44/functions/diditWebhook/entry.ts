@@ -17,6 +17,7 @@ import { verifyDiditSignature, isTimestampFresh } from '../../shared/diditWebhoo
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { getTransaction as getDiditTmTransaction } from '../../shared/diditTm.js';
 import { computeDue } from '../../shared/tmClock.js';
+import { safeRecompute } from '../../shared/tmRisk.js';
 
 const NON_TERMINAL_STATUSES = ['Not Started', 'In Progress', 'Awaiting User'];
 const TERMINAL_SESSION_STATUSES = ['Approved', 'Declined', 'In Review', 'Abandoned', 'Expired'];
@@ -637,6 +638,12 @@ async function tmTransactionEvent(base44, tenant, body, txn, diditTransactionId,
   // c + d. Alert + legacy MonitoringAlert.
   if (TM_ALERT_STATUSES.includes(status)) {
     const tmAlert = await upsertTmAlert(base44, { tenant_id: tenantId, transaction: updatedTxn, rule_runs: ruleRuns });
+    if (tenantRec && txn.client_id) {
+      await safeRecompute(base44, {
+        tenantId, tenant: tenantRec, clientId: txn.client_id, trigger: 'tm_alert',
+        actor: { actorType: 'System', actorName: 'Didit Webhook' },
+      });
+    }
 
     const existingMon = tmAlert?.id
       ? await E.MonitoringAlert.filter({ tenant_id: tenantId, tm_alert_id: tmAlert.id })
