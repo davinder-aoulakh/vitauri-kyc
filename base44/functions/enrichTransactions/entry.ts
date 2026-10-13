@@ -5,7 +5,7 @@ import { categoriseByRules, CATEGORIES, CATEGORY_SCHEMA, CATEGORY_SYSTEM_PROMPT 
 import { resolveAndStore } from '../../shared/tmResolve.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import {
-  authenticate, errorResponse, httpError, invokeNext, loadTenant, chunk, asList, INGEST_ROLES,
+  authenticate, errorResponse, httpError, invokeNext, loadTenant, chunk, asList, INGEST_ROLES, WORK_ROLES,
 } from '../../shared/tmAuth.js';
 
 const MAX_IDS = 50;
@@ -15,7 +15,7 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
-    const auth = await authenticate(base44, req, body, { roles: INGEST_ROLES, scope: 'ingest:write' });
+    const auth = await authenticate(base44, req, body, { roles: [...INGEST_ROLES, ...WORK_ROLES], scope: 'ingest:write' });
     const tenantId = auth.tenantId;
     const E = base44.asServiceRole.entities;
 

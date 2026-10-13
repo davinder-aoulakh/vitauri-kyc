@@ -25,7 +25,8 @@ function validateSchema(schema) {
  * input.documents (string | string[]) and input.document_text are treated as untrusted evidence.
  * sources: array of valid source ref strings.
  */
-export async function runTmAgent(base44, { tenantId, agent, caseId, alertId, tmCaseId, input = {}, sources = [], schema, systemPrompt }) {
+// Optional: fileUrls (documents passed to the model), defaultSourceRef (applied to claims that omit source_refs).
+export async function runTmAgent(base44, { tenantId, agent, caseId, alertId, tmCaseId, input = {}, sources = [], schema, systemPrompt, fileUrls, defaultSourceRef }) {
   if (!tenantId) throw new Error('tenantId is required');
   validateSchema(schema);
 
@@ -52,10 +53,17 @@ export async function runTmAgent(base44, { tenantId, agent, caseId, alertId, tmC
   const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
     prompt: fullPrompt,
     response_json_schema: schema,
+    ...(fileUrls?.length ? { file_urls: fileUrls } : {}),
   });
 
   const allowed = new Set(sources);
   const output = { ...result };
+  if (defaultSourceRef) {
+    for (const [key, def] of Object.entries(schema.properties)) {
+      if (key === 'missing' || def?.type !== 'array' || def.items?.type !== 'object' || !Array.isArray(output[key])) continue;
+      output[key] = output[key].map((c) => (Array.isArray(c?.source_refs) && c.source_refs.length ? c : { ...c, source_refs: [defaultSourceRef] }));
+    }
+  }
   let dropped_claims = 0;
   for (const [key, def] of Object.entries(schema.properties)) {
     if (key === 'missing' || def?.type !== 'array' || def.items?.type !== 'object') continue;

@@ -6,7 +6,7 @@ import { getRate } from '../../shared/tmFx.js';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import {
-  authenticate, errorResponse, httpError, invokeNext, loadTenant, chunk, asList, mapLimit, INGEST_ROLES,
+  authenticate, errorResponse, httpError, invokeNext, loadTenant, chunk, asList, mapLimit, INGEST_ROLES, WORK_ROLES,
 } from '../../shared/tmAuth.js';
 
 const MAX_ITEMS = 200;
@@ -18,7 +18,7 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
-    const auth = await authenticate(base44, req, body, { roles: INGEST_ROLES, scope: 'ingest:write' });
+    const auth = await authenticate(base44, req, body, { roles: [...INGEST_ROLES, ...WORK_ROLES], scope: 'ingest:write' });
     const tenantId = auth.tenantId;
     const E = base44.asServiceRole.entities;
 
