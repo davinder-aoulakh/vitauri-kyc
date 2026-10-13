@@ -18,7 +18,8 @@
         "outreach_response",
         "monitoring_alert",
         "control_measure_due",
-        "periodic_review_created"
+        "periodic_review_created",
+        "tm_coverage_summary"
       ]
     },
     "title": {

@@ -1,0 +1,86 @@
+// Pure helpers for the daily TM coverage check. Dates are 'YYYY-MM-DD' strings (UTC).
+const DAY_MS = 86400000;
+
+export const toIso = (d) => d.toISOString().slice(0, 10);
+export const parseIso = (s) => new Date(`${s}T00:00:00Z`);
+export const addDays = (s, n) => toIso(new Date(parseIso(s).getTime() + n * DAY_MS));
+export const daysBetween = (a, b) => Math.round((parseIso(b).getTime() - parseIso(a).getTime()) / DAY_MS);
+
+export function addMonth(s) {
+  const d = parseIso(s);
+  const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(d.getUTCDate(), lastDay));
+  return toIso(target);
+}
+
+export const addCycle = (s, freq) => (freq === 'weekly' ? addDays(s, 7) : addMonth(s));
+
+export function monthEnd(s) {
+  const d = parseIso(s);
+  return toIso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)));
+}
+
+/** Upload accounts: days of a statement period that is still open (or just closed) are 'awaiting', not 'missing'. */
+const UPLOAD_GRACE_DAYS = 7;
+function isAwaiting(account, day, today) {
+  if (account.source_type !== 'upload') return false;
+  return daysBetween(monthEnd(day), today) <= UPLOAD_GRACE_DAYS;
+}
+
+/** Page through a filter() call that supports cursors. run(cursor) -> array | {items, next_cursor, has_more}. */
+export async function fetchAll(run, maxPages = 10) {
+  const out = [];
+  let cursor;
+  for (let i = 0; i < maxPages; i++) {
+    const page = await run(cursor);
+    if (Array.isArray(page)) { out.push(...page); break; }
+    out.push(...(page?.items || []));
+    if (!page?.has_more) break;
+    cursor = page.next_cursor;
+  }
+  return out;
+}
+
+/**
+ * Plan CoverageDay changes for one account.
+ * rowsByDate: Map<date, CoverageDay>; priorReceipt: last date before the window with data (or null);
+ * blockedDates: Set<date> of days that still hold transactions under review (open alert or Didit IN_REVIEW without a closed alert).
+ * Weekly/monthly accounts are expected only on cycle due dates, counted from the last day data was received.
+ */
+export function planAccount({ account, rowsByDate, priorReceipt, floor, yesterday, today, blockedDates }) {
+  const freq = account.expected_frequency || 'daily';
+  const start = account.opened_at && account.opened_at > floor ? account.opened_at : floor;
+  const create = [];
+  const update = [];
+  let missing = 0;
+  let lastReceipt = priorReceipt || null;
+  let nextDue = freq === 'daily' ? null : addCycle(priorReceipt || account.opened_at || start, freq);
+
+  for (let d = start; d <= yesterday; d = addDays(d, 1)) {
+    const row = rowsByDate.get(d);
+    const got = row && ((row.txn_count || 0) > 0 || ['received', 'processed', 'reviewed'].includes(row.state));
+    if (got) {
+      lastReceipt = d;
+      if (freq !== 'daily') nextDue = addCycle(d, freq);
+      if (row.state === 'processed' || row.state === 'reviewed') {
+        const want = blockedDates.has(d) ? 'processed' : 'reviewed';
+        if (want !== row.state) update.push({ id: row.id, patch: { state: want } });
+      }
+      continue;
+    }
+    let expected = freq === 'daily';
+    if (!expected && d >= nextDue) { expected = true; nextDue = addCycle(nextDue, freq); }
+    const state = expected && isAwaiting(account, d, today) ? 'awaiting' : 'missing';
+    if (expected && state === 'missing') missing++;
+    if (!row) {
+      create.push({
+        bank_account_id: account.id, client_id: account.client_id, date: d, expected, state, txn_count: 0,
+        source_type: account.source_type, ...(state === 'missing' && expected ? { gap_reason: 'no_data_received' } : {}),
+      });
+    } else if (row.expected !== expected || row.state !== state) {
+      update.push({ id: row.id, patch: { expected, state } });
+    }
+  }
+  return { create, update, missing, lastReceipt };
+}
