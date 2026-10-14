@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useToast } from '@/components/ui/use-toast';
 import { errorMessage } from '@/lib/tmAlerts';
@@ -9,6 +10,7 @@ import { Loader2 } from 'lucide-react';
 
 export default function FiuCtaBar({ caseId, tenantId, report }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -21,6 +23,7 @@ export default function FiuCtaBar({ caseId, tenantId, report }) {
       const res = (await base44.functions.invoke('prepareFiuReport', { tm_case_id: caseId }))?.data || {};
       toast({ title: `FIU report ${res.report_ref} ${res.status === 'draft' ? 'saved as draft' : 'ready for review'}` });
       qc.invalidateQueries({ queryKey: ['tmCaseData', tenantId, caseId] });
+      navigate(`/tm/report/${res.report_id}`);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -39,6 +42,9 @@ export default function FiuCtaBar({ caseId, tenantId, report }) {
             {report && !isDraft && 'Customer communications are locked while this report is in progress.'}
           </div>
         </div>
+        {report && (
+          <Button size="sm" variant="outline" className="bg-transparent text-white border-white/50 hover:bg-white/10 hover:text-white" onClick={() => navigate(`/tm/report/${report.id}`)}>Open report</Button>
+        )}
         {(!report || isDraft) && (
           <Button size="sm" disabled={busy} className="bg-white text-purple-700 hover:bg-purple-50" onClick={prepare}>
             {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} {report ? 'Refresh draft' : '✦ Prepare FIU report'}

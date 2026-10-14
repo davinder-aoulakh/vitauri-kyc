@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
 import DeadlineCell from '@/components/tm/alerts/DeadlineCell';
 import AiProposalPill from '@/components/tm/alerts/AiProposalPill';
+import FiuRowAction from '@/components/tm/alerts/FiuRowAction';
 import { shortId, CLOSABLE_STATUSES } from '@/lib/tmAlerts';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +22,7 @@ export default function AlertsTable({ alerts, clientsById, now, selected, onTogg
             <th className="px-3 py-3 font-semibold">Score</th>
             <th className="px-3 py-3 font-semibold">AI proposal and reason</th>
             <th className="px-3 py-3 font-semibold">Deadline</th>
+            <th className="px-3 py-3 font-semibold"><span className="sr-only">FIU report</span></th>
           </tr>
         </thead>
         <tbody>
@@ -45,6 +47,7 @@ export default function AlertsTable({ alerts, clientsById, now, selected, onTogg
                 </td>
                 <td className="px-3 py-3"><AiProposalPill alert={a} /></td>
                 <td className="px-3 py-3"><DeadlineCell alert={a} now={now} /></td>
+                <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}><FiuRowAction alert={a} /></td>
               </tr>
             );
           })}
