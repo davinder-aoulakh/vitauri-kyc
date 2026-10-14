@@ -45,6 +45,7 @@ import TmCoverage from './pages/TmCoverage';
 import TmAlerts from './pages/TmAlerts';
 import TmCaseWorkspace from './pages/TmCaseWorkspace';
 import FiuReportWorkspace from './pages/FiuReportWorkspace';
+import TmRules from './pages/TmRules';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -103,6 +104,7 @@ const AuthenticatedApp = () => {
       <Route path="/tm/alerts" element={<TmAlerts />} />
       <Route path="/tm/case/:id" element={<TmCaseWorkspace />} />
       <Route path="/tm/report/:id" element={<FiuReportWorkspace />} />
+      <Route path="/tm/rules" element={<TmRules />} />
 
       {/* Monitoring / Planning */}
       <Route path="/review-planner" element={<ReviewPlanner />} />

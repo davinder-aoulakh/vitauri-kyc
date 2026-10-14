@@ -2,10 +2,10 @@
 
 const BASE_URL = 'https://verification.didit.me';
 
-// TODO verify against docs.didit.me/transaction-monitoring/rules
-export const RULES_PATH = '/v3/transaction-monitoring/rules/';
-export const RULE_PATH = (id) => `/v3/transaction-monitoring/rules/${id}/`;
-export const RULE_BACKTEST_PATH = (id) => `/v3/transaction-monitoring/rules/${id}/backtest/`;
+// Verified against docs.didit.me/management-api/transactions/rules-* (create, update, get, backtest).
+export const RULES_PATH = '/v3/transactions/rules/';
+export const RULE_PATH = (id) => `/v3/transactions/rules/${id}/`;
+export const RULE_BACKTEST_PATH = '/v3/transactions/rules/backtest/';
 
 // TODO verify against docs.didit.me/console/case-management/fiu-reports
 export const FIU_REPORTS_PATH = '/v3/fiu-reports/';
@@ -50,8 +50,10 @@ export const upsertRule = (tenant, ruleJson, diditRuleId) =>
     ? request(tenant, 'PATCH', RULE_PATH(encodeURIComponent(diditRuleId)), ruleJson)
     : request(tenant, 'POST', RULES_PATH, ruleJson);
 
-export const backtestRule = (tenant, diditRuleId, from, to) =>
-  request(tenant, 'POST', RULE_BACKTEST_PATH(encodeURIComponent(diditRuleId)), { from, to });
+export const getRule = (tenant, diditRuleId) => request(tenant, 'GET', RULE_PATH(encodeURIComponent(diditRuleId)));
+
+/** Stateless: evaluates a candidate configuration against recent history. Returns { evaluated, matched, affected_entities, period_days }. */
+export const backtestRule = (tenant, payload) => request(tenant, 'POST', RULE_BACKTEST_PATH, payload);
 
 export const createFiuReport = (tenant, payload) => request(tenant, 'POST', FIU_REPORTS_PATH, payload);
 export const getFiuReport = (tenant, id) => request(tenant, 'GET', FIU_REPORT_PATH(encodeURIComponent(id)));

@@ -13,7 +13,7 @@ import {
   LayoutDashboard, FolderOpen, Users, Search, Shield,
   Settings, BarChart3, AlertTriangle, Calendar, Archive,
   ChevronLeft, ChevronRight, Menu, X,
-  Building2, UserCircle, ClipboardList, ScanSearch, Mail, Send, Activity
+  Building2, UserCircle, ClipboardList, ScanSearch, Mail, Send, Activity, SlidersHorizontal
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -48,6 +48,7 @@ const navItems = [
       { label: 'Screening', icon: Shield, href: '/monitoring', permission: null, badge: 'alerts', featureKey: 'monitoring' },
       { label: 'Transaction Monitoring', icon: Activity, href: '/transaction-monitoring', permission: null, featureKey: 'transaction_monitoring' },
       { label: 'Alerts', icon: AlertTriangle, href: '/tm/alerts', permission: 'tmViewAlerts', featureKey: 'tm_core' },
+      { label: 'Rules', icon: SlidersHorizontal, href: '/tm/rules', anyPermission: ['tmManageRules', 'tmApproveRules'], featureKey: 'tm_rules' },
       { label: 'Batch Screening', icon: ScanSearch, href: '/batch-screening', permission: 'createEditClient', featureKey: 'batch_screening' },
       { label: 'Review Planner', icon: Calendar, href: '/review-planner', permission: 'viewAllTenantCases', featureKey: 'review_planner' },
     ],
@@ -121,6 +122,7 @@ export default function AppShell({ children }) {
 
           const visibleItems = group.items.filter(item =>
             (!item.permission || hasPermission(userRole, item.permission)) &&
+            (!item.anyPermission || item.anyPermission.some(p => hasPermission(userRole, p))) &&
             (!item.featureKey || isFeatureEnabled(tenant, item.featureKey))
           );
           if (visibleItems.length === 0) return null;

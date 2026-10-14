@@ -28,7 +28,8 @@
         "draft",
         "test",
         "active",
-        "disabled"
+        "disabled",
+        "retired"
       ],
       "default": "draft"
     },
@@ -74,6 +75,48 @@
     },
     "previous_version_id": {
       "type": "string"
+    },
+    "lineage_id": {
+      "type": "string",
+      "description": "Shared by every version of the same rule"
+    },
+    "owner_user_id": {
+      "type": "string"
+    },
+    "approval_status": {
+      "type": "string",
+      "enum": [
+        "not_requested",
+        "requested",
+        "approved",
+        "rejected"
+      ],
+      "default": "not_requested"
+    },
+    "requested_by_user_id": {
+      "type": "string"
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "rejection_reason": {
+      "type": "string"
+    },
+    "retired_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "retired_by_user_id": {
+      "type": "string"
+    },
+    "drift_detected_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "seed_key": {
+      "type": "string",
+      "description": "Makes starter-rule seeding idempotent, e.g. starter:S-07a"
     }
   },
   "required": [

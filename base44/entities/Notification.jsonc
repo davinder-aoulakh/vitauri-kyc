@@ -23,7 +23,9 @@
         "edr_proposed",
         "tm_deadline",
         "tm_escalation",
-        "fiu_report_review"
+        "fiu_report_review",
+        "tm_rule_approval",
+        "tm_rule_drift"
       ]
     },
     "title": {

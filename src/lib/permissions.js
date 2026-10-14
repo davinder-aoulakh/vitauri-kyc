@@ -36,7 +36,7 @@ export const PERMISSIONS = {
   tmFourEyes:           ['QC Reviewer', 'Compliance Officer', 'Manager', 'Director'],
   tmApproveFiuReport:   ['Compliance Officer'],
   tmManageRules:        ['Compliance Admin', 'Compliance Officer'],
-  tmApproveRules:       ['Compliance Officer', 'Director'],
+  tmApproveRules:       ['Compliance Officer', 'Compliance Admin', 'Tenant Admin'],
   tmManageIngest:       ['Tenant Admin', 'Compliance Admin'],
   tmQuality:            ['QC Reviewer', 'Compliance Officer', 'Director'],
 };
