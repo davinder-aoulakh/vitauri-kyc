@@ -22,7 +22,8 @@
         "tm_coverage_summary",
         "edr_proposed",
         "tm_deadline",
-        "tm_escalation"
+        "tm_escalation",
+        "fiu_report_review"
       ]
     },
     "title": {
@@ -52,6 +53,10 @@
     "dedupe_key": {
       "type": "string",
       "description": "user:item:kind - used to avoid duplicate deadline notifications within 12h"
+    },
+    "link_fiu_report_id": {
+      "type": "string",
+      "description": "FiuReport this notification is about"
     }
   },
   "required": [

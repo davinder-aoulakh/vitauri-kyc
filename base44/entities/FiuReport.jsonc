@@ -196,6 +196,30 @@
     },
     "snapshot": {
       "type": "object"
+    },
+    "lateness_reason": {
+      "type": "string"
+    },
+    "generation_error": {
+      "type": "string"
+    },
+    "generation_error_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "approval": {
+      "type": "object",
+      "description": "Checks and decision recorded at approval"
+    },
+    "decision_id": {
+      "type": "string"
+    },
+    "submitted_for_approval_by": {
+      "type": "string"
+    },
+    "submitted_for_approval_at": {
+      "type": "string",
+      "format": "date-time"
     }
   },
   "required": [
