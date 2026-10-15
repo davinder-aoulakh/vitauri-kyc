@@ -248,5 +248,64 @@
     "tenant_id",
     "client_id",
     "case_type"
-  ]
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    }
+  }
 }

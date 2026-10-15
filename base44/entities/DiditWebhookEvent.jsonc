@@ -26,5 +26,19 @@
   "required": [
     "tenant_id",
     "event_id"
-  ]
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "read": false,
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false
+  }
 }

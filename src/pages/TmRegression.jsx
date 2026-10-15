@@ -8,6 +8,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import InlineError from '@/components/shared/InlineError';
 import FixtureList from '@/components/ops/regression/FixtureList';
 import ResultsTable from '@/components/ops/regression/ResultsTable';
+import RlsCoverageTable from '@/components/ops/regression/RlsCoverageTable';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, FlaskConical, Loader2, Play } from 'lucide-react';
@@ -95,6 +96,7 @@ export default function TmRegression() {
             <ResultsTable results={run.results || []} />
           </div>
         )}
+        <RlsCoverageTable />
       </div>
     </div>
   );
