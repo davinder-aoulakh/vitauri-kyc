@@ -8,6 +8,7 @@
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.44';
 import { waitUntil } from 'base44:runtime';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 
 export default async function(req) {
   try {
@@ -25,7 +26,7 @@ export default async function(req) {
     if (!client) return Response.json({ error: 'Client not found' }, { status: 404 });
 
     const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: client.tenant_id });
-    const tenant = tenants?.[0];
+    const tenant = await withDiditCredentials(base44, tenants?.[0]);
     if (!tenant?.didit_api_key) {
       return Response.json({ error: 'Identity verification is not configured for this institution.' }, { status: 400 });
     }

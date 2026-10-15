@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.43';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 
 /**
  * Updates the review_status of a specific AML hit in Didit.
@@ -28,7 +29,7 @@ Deno.serve(async (req) => {
     let apiKey = directApiKey?.trim();
     if (!apiKey && tenant_id) {
       const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
-      apiKey = tenants?.[0]?.didit_api_key?.trim();
+      apiKey = (await withDiditCredentials(base44, tenants?.[0]))?.didit_api_key?.trim();
     }
     if (!apiKey) return Response.json({ error: 'Didit API key not configured' }, { status: 400 });
 

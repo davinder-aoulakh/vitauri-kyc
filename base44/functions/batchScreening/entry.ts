@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 
 /**
  * Batch Screening Function
@@ -39,7 +40,7 @@ Deno.serve(async (req) => {
   }
 
   const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
-  const tenant  = tenants?.[0];
+  const tenant  = await withDiditCredentials(base44, tenants?.[0]);
   if (!tenant?.didit_api_key) {
     return Response.json({ error: 'AML screening is not configured for this institution. Contact support.' }, { status: 400 });
   }

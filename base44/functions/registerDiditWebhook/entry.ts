@@ -10,6 +10,7 @@
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { computeDiditSignature } from '../../shared/diditWebhookVerify.js';
+import { withDiditCredentials, saveDiditCredentials } from '../../shared/diditCredentials.js';
 
 const WEBHOOK_URL = 'https://vitauri-kyc.base44.app/functions/diditWebhook';
 
@@ -23,7 +24,7 @@ export default async function(req) {
     if (!tenant_id) return Response.json({ error: 'tenant_id is required' });
 
     const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
-    const tenant  = tenants?.[0];
+    const tenant  = await withDiditCredentials(base44, tenants?.[0]);
     if (!tenant?.didit_api_key) return Response.json({ error: 'Didit API key not configured for this tenant' });
 
     if (action === 'test') {
@@ -108,7 +109,7 @@ export default async function(req) {
       return Response.json({ error: 'Didit did not return a webhook secret — check the console.' });
     }
 
-    await base44.asServiceRole.entities.Tenant.update(tenant_id, { didit_webhook_secret: secret });
+    await saveDiditCredentials(base44, tenant_id, { didit_webhook_secret: secret }, { actorUserId: user.id, actorName: user.full_name || user.email, actorType: 'User' });
 
     return Response.json({ ok: true, webhook_url: WEBHOOK_URL, secret_configured: true });
   } catch (error) {

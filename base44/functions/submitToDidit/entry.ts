@@ -1,6 +1,7 @@
 // submitToDidit — push canonical transactions to Didit TM (same body shape as createDiditTransaction, plus timestamp + profile).
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { postTransaction } from '../../shared/diditTm.js';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 import { sha256Hex } from '../../shared/tmCanonical.js';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { writeAudit } from '../../shared/tmAudit.js';
@@ -23,7 +24,7 @@ export default async function (req) {
     if (!ids.length) throw httpError(400, 'transaction_ids is required');
     if (ids.length > MAX_IDS) throw httpError(413, `Max ${MAX_IDS} transaction_ids per call`);
 
-    const tenant = await loadTenant(base44, tenantId);
+    const tenant = await withDiditCredentials(base44, await loadTenant(base44, tenantId));
     const txns = asList(await E.Transaction.filter({ tenant_id: tenantId, id: { $in: ids } }, undefined, MAX_IDS));
     const clientIds = [...new Set(txns.map((t) => t.client_id))];
     const auditClient = clientIds.length === 1 ? clientIds[0] : undefined;

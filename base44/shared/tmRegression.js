@@ -2,6 +2,7 @@
 // Every query is filtered by the Demo tenant id; all records created for a replay are deleted afterwards.
 import { computeDiditSignature } from './diditWebhookVerify.js';
 import { asList, httpError, loadTenant, mapLimit } from './tmAuth.js';
+import { withDiditCredentials } from './diditCredentials.js';
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -11,7 +12,7 @@ export async function requireOpsDemo(base44, tenantId) {
   const role = user.app_role || user.data?.app_role;
   if (role !== 'Vitauri Ops') throw httpError(403, 'Vitauri Ops only');
   if (!tenantId || typeof tenantId !== 'string') throw httpError(400, 'tenant_id is required');
-  const tenant = await loadTenant(base44, tenantId);
+  const tenant = await withDiditCredentials(base44, await loadTenant(base44, tenantId));
   if (tenant.status !== 'Demo') throw httpError(403, 'Regression runs are only allowed on Demo tenants');
   return { user, tenant, actorName: user.full_name || user.email };
 }

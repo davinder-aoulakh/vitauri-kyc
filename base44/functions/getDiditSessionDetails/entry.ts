@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 
 Deno.serve(async (req) => {
   try {
@@ -25,7 +26,7 @@ Deno.serve(async (req) => {
     if (!apiKey) {
       if (!tenant_id) return Response.json({ error: 'Either didit_api_key or tenant_id is required' });
       const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
-      apiKey = tenants?.[0]?.didit_api_key?.trim();
+      apiKey = (await withDiditCredentials(base44, tenants?.[0]))?.didit_api_key?.trim();
       console.log('API key from tenant lookup:', !!apiKey, 'length:', apiKey?.length ?? 0);
     } else {
       console.log('API key from direct param: length', apiKey.length, 'prefix:', apiKey.substring(0, 8));

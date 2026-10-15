@@ -18,6 +18,7 @@ import { isTmEnabled } from '../../shared/tmGuards.js';
 import { getTransaction as getDiditTmTransaction } from '../../shared/diditTm.js';
 import { computeDue } from '../../shared/tmClock.js';
 import { safeRecompute } from '../../shared/tmRisk.js';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 
 const NON_TERMINAL_STATUSES = ['Not Started', 'In Progress', 'Awaiting User'];
 const TERMINAL_SESSION_STATUSES = ['Approved', 'Declined', 'In Review', 'Abandoned', 'Expired'];
@@ -61,6 +62,8 @@ export default async function(req) {
         tenant = tenants?.[0] || null;
       }
     }
+
+    tenant = await withDiditCredentials(base44, tenant);
 
     // 3. No open mode — a tenant must be resolvable and have a webhook secret,
     //    and the signature must verify against it, or the event is rejected.

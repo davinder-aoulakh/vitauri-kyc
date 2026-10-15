@@ -7,6 +7,7 @@ import { authenticate, errorResponse, httpError, loadTenant } from '../../shared
 import { MANAGE_ROLES } from '../../shared/tmRuleSchema.js';
 import { loadRule } from '../../shared/tmRuleActions.js';
 import { runRuleBacktest } from '../../shared/tmRuleBacktest.js';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 
 export default async function (req) {
   try {
@@ -14,7 +15,7 @@ export default async function (req) {
     const body = await req.json();
     const auth = await authenticate(base44, req, body, { roles: MANAGE_ROLES, allowApiKey: false });
     const tenantId = auth.tenantId;
-    const tenant = await loadTenant(base44, tenantId);
+    const tenant = await withDiditCredentials(base44, await loadTenant(base44, tenantId));
     if (!isTmEnabled(tenant, 'tm_rules')) throw httpError(403, 'Feature tm_rules is not enabled');
     if (!tenant.didit_api_key) throw httpError(400, 'Didit is not connected for this organisation');
     const E = base44.asServiceRole.entities;

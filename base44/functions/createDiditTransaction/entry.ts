@@ -3,6 +3,7 @@
  * Uses the tenant's existing didit_api_key (same key used by createDiditSession).
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.49';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 
 export default async function(req) {
   try {
@@ -14,7 +15,7 @@ export default async function(req) {
     if (!tenantId) return Response.json({ error: 'No tenant associated with this user' }, { status: 400 });
 
     const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenantId });
-    const tenant = tenants?.[0];
+    const tenant = await withDiditCredentials(base44, tenants?.[0]);
     if (!tenant?.didit_api_key) {
       return Response.json({ error: 'Didit is not configured for this institution. Contact your Tenant Admin.' }, { status: 400 });
     }

@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { fetchDiditDecision, normaliseDateString, ISO3_MAP } from '../../shared/diditDecision.js';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 
 export default async function(req) {
   try {
@@ -12,7 +13,7 @@ export default async function(req) {
 
     // 1. Load tenant API key
     const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
-    const tenant  = tenants?.[0];
+    const tenant  = await withDiditCredentials(base44, tenants?.[0]);
     if (!tenant?.didit_api_key) return Response.json({ error: 'Didit not configured' });
 
     // 2. Resolve session_id if not provided — try item, then fallback parse response_text JSON

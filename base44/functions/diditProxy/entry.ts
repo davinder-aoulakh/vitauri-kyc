@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
+import { withDiditCredentials, saveDiditCredentials, credentialStatus } from '../../shared/diditCredentials.js';
 
 const ADMIN_ROLES = ['Vitauri Ops', 'Tenant Admin'];
 
@@ -16,7 +17,8 @@ Deno.serve(async (req) => {
     if (!tenantId) return Response.json({ error: 'No tenant resolved' }, { status: 403 });
 
     const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenantId });
-    const tenant = tenants?.[0];
+    const tenant = await withDiditCredentials(base44, tenants?.[0]);
+    const actor = { actorUserId: user.id, actorName: user.full_name || user.email, actorType: 'User' };
     if (!tenant) return Response.json({ error: 'Tenant not found' }, { status: 404 });
 
     const requireAdmin = () => ADMIN_ROLES.includes(role);
@@ -67,11 +69,8 @@ Deno.serve(async (req) => {
 
     if (action === 'credential_status') {
       if (!requireAdmin()) return forbidden();
-      const key = tenant.didit_api_key || '';
       return Response.json({
-        api_key_configured: !!key,
-        api_key_last4: key ? key.slice(-4) : null,
-        webhook_secret_configured: !!tenant.didit_webhook_secret,
+        ...credentialStatus(await withDiditCredentials(base44, tenant)),
         workflow_id: tenant.didit_workflow_id || null,
         app_id: tenant.didit_app_id || null,
       });
@@ -85,9 +84,11 @@ Deno.serve(async (req) => {
         if (body[f] !== undefined && body[f] !== null && !(f === 'didit_api_key' && body[f] === '')) update[f] = body[f];
       }
       const wasConfigured = !!tenant.didit_api_key;
-      if (Object.keys(update).length > 0) {
-        await base44.asServiceRole.entities.Tenant.update(tenantId, update);
+      const { didit_api_key: newApiKey, ...otherFields } = update;
+      if (Object.keys(otherFields).length > 0) {
+        await base44.asServiceRole.entities.Tenant.update(tenantId, otherFields);
       }
+      if (newApiKey) await saveDiditCredentials(base44, tenantId, { didit_api_key: newApiKey as string }, actor);
       const configured = update.didit_api_key ? true : wasConfigured;
       const changed = Object.keys(update).map(k => k === 'didit_api_key' ? 'api_key' : k);
       await audit(
@@ -103,7 +104,7 @@ Deno.serve(async (req) => {
       if (!requireAdmin()) return forbidden();
       if (!body.didit_webhook_secret) return Response.json({ error: 'didit_webhook_secret is required' }, { status: 400 });
       const before = !!tenant.didit_webhook_secret;
-      await base44.asServiceRole.entities.Tenant.update(tenantId, { didit_webhook_secret: body.didit_webhook_secret });
+      await saveDiditCredentials(base44, tenantId, { didit_webhook_secret: body.didit_webhook_secret }, actor);
       await audit(
         'didit_webhook_secret_updated',
         { secret_configured: before },

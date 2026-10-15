@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 
 Deno.serve(async (req) => {
   try {
@@ -32,7 +33,7 @@ Deno.serve(async (req) => {
 
     // 1. Load tenant credentials (service role — portal user is unauthenticated)
     const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
-    const tenant  = tenants?.[0];
+    const tenant  = await withDiditCredentials(base44, tenants?.[0]);
     if (!tenant?.didit_api_key) {
       return Response.json({
         error: 'Identity verification is not configured for this institution. Contact support.'

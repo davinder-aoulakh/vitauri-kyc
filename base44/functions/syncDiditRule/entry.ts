@@ -7,6 +7,7 @@ import { isTmEnabled } from '../../shared/tmGuards.js';
 import { asList, authenticate, errorResponse, httpError, loadTenant } from '../../shared/tmAuth.js';
 import { MANAGE_ROLES } from '../../shared/tmRuleSchema.js';
 import { loadRule } from '../../shared/tmRuleActions.js';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 import { syncRule, driftCheckTenant, errText } from '../../shared/tmRuleSync.js';
 
 export default async function (req) {
@@ -17,7 +18,7 @@ export default async function (req) {
 
     if (body.rule_id) {
       const auth = await authenticate(base44, req, body, { roles: MANAGE_ROLES, allowApiKey: false });
-      const tenant = await loadTenant(base44, auth.tenantId);
+      const tenant = await withDiditCredentials(base44, await loadTenant(base44, auth.tenantId));
       if (!isTmEnabled(tenant, 'tm_rules')) throw httpError(403, 'Feature tm_rules is not enabled');
       const E = base44.asServiceRole.entities;
       const rule = await loadRule(E, auth.tenantId, body.rule_id);
@@ -36,8 +37,13 @@ export default async function (req) {
       onlyTenant = user.tenant_id || user.data?.tenant_id;
       if (!onlyTenant) throw httpError(403, 'No tenant associated with this user');
     }
-    const tenants = asList(await base44.asServiceRole.entities.Tenant.list('-created_date', 1000))
-      .filter((t) => t.status !== 'Suspended' && t.didit_api_key && isTmEnabled(t, 'tm_rules') && (!onlyTenant || t.id === onlyTenant));
+    const candidates = asList(await base44.asServiceRole.entities.Tenant.list('-created_date', 1000))
+      .filter((t) => t.status !== 'Suspended' && isTmEnabled(t, 'tm_rules') && (!onlyTenant || t.id === onlyTenant));
+    const tenants = [];
+    for (const c of candidates) {
+      const withCreds = await withDiditCredentials(base44, c);
+      if (withCreds.didit_api_key) tenants.push(withCreds);
+    }
     const results = [];
     for (const tenant of tenants) {
       try { results.push(await driftCheckTenant(base44, tenant)); } catch (e) { results.push({ tenant_id: tenant.id, error: errText(e) }); }

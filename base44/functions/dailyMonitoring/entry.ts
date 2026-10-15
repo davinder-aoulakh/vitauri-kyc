@@ -6,6 +6,7 @@
  * Intended to run on a daily scheduled automation.
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 
 const DIDIT_AML_URL = 'https://verification.didit.me/v3/aml/';
 
@@ -92,7 +93,8 @@ Deno.serve(async (req) => {
   // Get all active tenants to look up API keys
   const tenants = await base44.asServiceRole.entities.Tenant.filter({}, null, 200);
   const tenantApiKeys: Record<string, string> = {};
-  for (const t of (tenants || [])) {
+  for (const rawTenant of (tenants || [])) {
+    const t = await withDiditCredentials(base44, rawTenant);
     if (t.didit_api_key) tenantApiKeys[t.id] = t.didit_api_key;
   }
 
