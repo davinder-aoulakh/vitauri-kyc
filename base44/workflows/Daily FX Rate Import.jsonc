@@ -1,0 +1,41 @@
+{
+  "name": "Daily FX Rate Import",
+  "description": "Runs daily at 16:30 UTC (after the ECB publishes its reference rates): imports EUR and USD based FX rates for every tenant with TM core enabled. Does nothing when there is no new ECB file.",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "30 16 * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "daily_fx_rate_import",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "fxRateImport",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  }
+}

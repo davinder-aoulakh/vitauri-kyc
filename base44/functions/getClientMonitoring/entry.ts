@@ -63,7 +63,7 @@ export default async function (req) {
     const months = sixMonthKeys();
     const since6m = `${months[0]}-01T00:00:00.000Z`;
 
-    const [profiles, scores, cases, alerts, audits, hits, outreach, coverage, tmCases, txns6m] = await Promise.all([
+    const [profiles, scores, cases, alerts, audits, hits, outreach, coverage, tmCases, txns6m, fxMissing] = await Promise.all([
       E.ExpectedProfile.filter({ tenant_id: tenantId, client_id: cid }, '-version', 50).then(asList),
       E.CustomerRiskScore.filter({ tenant_id: tenantId, client_id: cid }, '-computed_at', 200).then(asList),
       E.KycCase.filter({ tenant_id: tenantId, client_id: cid }, '-created_date', 100).then(asList),
@@ -74,6 +74,8 @@ export default async function (req) {
       E.CoverageDay.filter({ tenant_id: tenantId, client_id: cid, date: { $gte: new Date(now - 30 * DAY_MS).toISOString().slice(0, 10) } }, undefined, 1000).then(asList),
       E.TmCase.filter({ tenant_id: tenantId, client_ids: cid, status: { $in: OPEN_TM_CASE } }, '-created_date', 5).then(asList),
       fetchAll((cursor) => E.Transaction.filter({ tenant_id: tenantId, client_id: cid, direction: 'inbound', executed_at: { $gte: since6m } }, { limit: 1000, cursor }), 20),
+      // Fiat transactions in the 6-month view that have no fx block (excluded from reporting-currency totals).
+      E.Transaction.count({ tenant_id: tenantId, client_id: cid, currency_kind: 'fiat', executed_at: { $gte: since6m }, $or: [{ fx: { $exists: false } }, { fx: null }] }),
     ]);
 
     const profile = profiles.find((p) => p.status === 'approved') || null;
@@ -124,6 +126,7 @@ export default async function (req) {
         new_countries: cmp.newCountries, breaches: cmp.breaches.map((b) => b.key), unconverted: actuals.unconverted,
       },
       coverage: { covered, of: 30 },
+      fx_missing: Number(fxMissing) || 0,
       monthly: months.map((m) => ({ month: m, inbound: Math.round(monthly[m]) })),
       open_tm_case: tmCases[0] ? { id: tmCases[0].id, case_ref: tmCases[0].case_ref } : null,
       open_edr_case_id: openEdr?.id || null,

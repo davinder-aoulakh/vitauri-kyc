@@ -39,6 +39,7 @@ export const PERMISSIONS = {
   tmApproveRules:       ['Compliance Officer', 'Compliance Admin', 'Tenant Admin'],
   tmManageIngest:       ['Tenant Admin', 'Compliance Admin'],
   tmQuality:            ['QC Reviewer', 'Compliance Officer', 'Director'],
+  tmManageFx:           ['Tenant Admin'],
 };
 
 export function hasPermission(userRole, permission) {

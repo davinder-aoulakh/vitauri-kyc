@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { hasPermission } from '@/lib/permissions';
+import { isFeatureEnabled } from '@/lib/featureFlags';
+import FxRatesCard from '@/components/tenantconfig/tm/FxRatesCard';
 import { errorMessage } from '@/lib/tmAlerts';
 import TmExportButton from '@/components/tenantconfig/tm/TmExportButton';
 import ThresholdsEditor from '@/components/tenantconfig/tm/ThresholdsEditor';
@@ -95,6 +97,9 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
         </Button>
       </div>
+      {isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tenantConfig') && (
+        <FxRatesCard tenantId={tenant?.id} canManage={hasPermission(currentUser?.app_role, 'tmManageFx')} />
+      )}
       {hasPermission(currentUser?.app_role, 'exportData') && <TmExportButton />}
     </div>
   );

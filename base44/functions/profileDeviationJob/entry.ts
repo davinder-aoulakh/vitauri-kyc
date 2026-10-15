@@ -13,7 +13,7 @@ const CALLER_ROLES = ['Vitauri Ops', 'Tenant Admin', 'Compliance Admin', 'Compli
 const SYSTEM_ACTOR = { actorType: 'System', actorName: 'Profile Deviation Job', actorUserId: undefined };
 const DAY_MS = 86400000;
 
-async function processTenant(base44, tenant) {
+async function processTenant(base44, tenant, onlyClients) {
   const E = base44.asServiceRole.entities;
   const tid = tenant.id;
   const cur = tenant.tm_reporting_currency || 'USD';
@@ -40,7 +40,7 @@ async function processTenant(base44, tenant) {
   let alerts = 0;
   let recomputed = 0;
   const errors = [];
-  const list = [...clients.values()].filter((c) => !c.is_deleted);
+  const list = [...clients.values()].filter((c) => !c.is_deleted && (!onlyClients || onlyClients.has(c.id)));
   const results = await mapLimit(list, 3, async (client) => {
     const profile = asList(await E.ExpectedProfile.filter({ tenant_id: tid, client_id: client.id, status: 'approved' }, '-version', 1))[0];
     if (profile) {
@@ -64,6 +64,9 @@ export default async function (req) {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me().catch(() => null);
     let onlyTenant = null;
+    // Optional client_ids (used by recomputeFx) limits the run to those clients of the caller's tenant.
+    const body = await req.json().catch(() => ({}));
+    const onlyClients = Array.isArray(body?.client_ids) && body.client_ids.length ? new Set(body.client_ids.map(String)) : null;
     if (user) {
       const role = user.app_role || user.data?.app_role;
       if (!CALLER_ROLES.includes(role)) throw httpError(403, 'Forbidden');
@@ -76,7 +79,7 @@ export default async function (req) {
       .filter((t) => t.status !== 'Suspended' && isTmEnabled(t, 'tm_core') && (!onlyTenant || t.id === onlyTenant));
     const results = [];
     for (const tenant of tenants) {
-      try { results.push(await processTenant(base44, tenant)); } catch (e) {
+      try { results.push(await processTenant(base44, tenant, onlyClients)); } catch (e) {
         results.push({ tenant_id: tenant.id, error: String(e?.message || e).slice(0, 300) });
       }
     }

@@ -5,6 +5,7 @@ import { useTenant } from '@/lib/tenantContext';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { hasPermission } from '@/lib/permissions';
 import InlineError from '@/components/shared/InlineError';
+import FxMissingBadge from '@/components/shared/FxMissingBadge';
 import ExpectedProfileCard from '@/components/tm/ExpectedProfileCard';
 import RiskGauge from './monitoring/RiskGauge';
 import StatusPills from './monitoring/StatusPills';
@@ -46,6 +47,7 @@ export default function MonitoringTab({ client }) {
           <MonitoringActions client={client} currentUser={currentUser} data={data} onChanged={refresh} />
         </div>
       </div>
+      {data.fx_missing > 0 && <FxMissingBadge count={data.fx_missing} />}
       <ProfileKvStrip data={data} />
       <InboundChart monthly={data.monthly} ceiling={data.profile?.inbound_max_month ?? null} currency={data.reporting_currency} />
       <div className="grid gap-4 lg:grid-cols-2">

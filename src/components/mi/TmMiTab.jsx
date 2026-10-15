@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/components/ui/use-toast';
 import KpiCard from '@/components/shared/KpiCard';
 import InlineError from '@/components/shared/InlineError';
+import FxMissingBadge from '@/components/shared/FxMissingBadge';
 import FiuReportsTable from '@/components/mi/FiuReportsTable';
 import { AlertsPerWeekChart, CoverageChart } from '@/components/mi/TmMiCharts';
 import { errorMessage } from '@/lib/tmAlerts';
@@ -58,6 +59,7 @@ export default function TmMiTab({ tenantId }) {
       {q.isLoading && <div className="flex justify-center py-10" role="status"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>}
       {k && (
         <>
+          <FxMissingBadge count={d.fxMissing} />
           {d.truncated && <p className="text-xs text-amber-700">This month has more records than can be shown; figures cover the first 5,000 per type.</p>}
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
             <KpiCard label="Alerts" value={k.alerts} icon={Bell} accent="bg-primary" />

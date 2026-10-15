@@ -19,7 +19,8 @@
       "type": "number"
     },
     "source": {
-      "type": "string"
+      "type": "string",
+      "description": "ECB, CSV. (tenant_id, date, base, quote, source) is unique; written by upsert."
     }
   },
   "required": [
@@ -31,7 +32,32 @@
   ],
   "rls": {
     "create": {
-      "data.tenant_id": "{{user.data.tenant_id}}"
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            }
+          ]
+        }
+      ]
     },
     "read": {
       "$or": [
@@ -51,17 +77,58 @@
       ]
     },
     "update": {
-      "data.tenant_id": "{{user.data.tenant_id}}"
-    },
-    "delete": {
-      "$and": [
+      "$or": [
         {
-          "data.tenant_id": "{{user.data.tenant_id}}"
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
         },
         {
-          "user_condition": {
-            "data.app_role": "Tenant Admin"
-          }
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            }
+          ]
         }
       ]
     }

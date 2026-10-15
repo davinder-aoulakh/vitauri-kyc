@@ -24,13 +24,15 @@ export async function fetchAllRows(entity, query, sort = '-created_date', cap = 
 export async function loadMonth(tenantId, ym) {
   const { from, to } = monthRange(ym);
   const range = { $gte: from.toISOString(), $lte: to.toISOString() };
-  const [alerts, reports, coverage, scenarios] = await Promise.all([
+  const [alerts, reports, coverage, scenarios, fxMissing] = await Promise.all([
     fetchAllRows(base44.entities.TmAlert, { tenant_id: tenantId, created_date: range }),
     fetchAllRows(base44.entities.FiuReport, { tenant_id: tenantId, created_date: range }),
     fetchAllRows(base44.entities.CoverageDay, { tenant_id: tenantId, date: { $gte: format(from, 'yyyy-MM-dd'), $lte: format(to, 'yyyy-MM-dd') }, expected: true }, 'date'),
     fetchAllRows(base44.entities.TmScenario, { tenant_id: tenantId }, 'code', 500),
+    // Fiat transactions in the month without fx (excluded from reporting-currency totals).
+    base44.entities.Transaction.count({ tenant_id: tenantId, currency_kind: 'fiat', executed_at: range, $or: [{ fx: { $exists: false } }, { fx: null }] }),
   ]);
-  return { alerts: alerts.rows, reports: reports.rows, coverage: coverage.rows, scenarios: scenarios.rows, truncated: alerts.truncated || reports.truncated || coverage.truncated };
+  return { fxMissing: Number(fxMissing) || 0, alerts: alerts.rows, reports: reports.rows, coverage: coverage.rows, scenarios: scenarios.rows, truncated: alerts.truncated || reports.truncated || coverage.truncated };
 }
 
 const doneAt = (a) => a.updated_date;
