@@ -1,0 +1,89 @@
+{
+  "name": "TmRegressionRun",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "description": "Demo tenant the run was executed against"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "running",
+        "completed",
+        "failed"
+      ],
+      "default": "running"
+    },
+    "run_by_user_id": {
+      "type": "string"
+    },
+    "run_by_name": {
+      "type": "string"
+    },
+    "original_tm_core": {
+      "type": "boolean"
+    },
+    "original_features_enabled": {
+      "type": "string",
+      "description": "Raw features_enabled value before the run, kept for recovery"
+    },
+    "flag_restored": {
+      "type": "boolean"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "off_results": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "passed": {
+      "type": "number"
+    },
+    "failed": {
+      "type": "number"
+    },
+    "error": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    }
+  }
+}

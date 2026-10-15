@@ -1,0 +1,74 @@
+{
+  "name": "TmTestFixture",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "description": "Demo tenant this fixture is stored for"
+    },
+    "name": {
+      "type": "string"
+    },
+    "webhook_type": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "session",
+        "user",
+        "transaction"
+      ],
+      "default": "session"
+    },
+    "order": {
+      "type": "number",
+      "default": 0
+    },
+    "setup_group": {
+      "type": "string",
+      "description": "Fixtures with the same group share one set of test records and run in order"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Sample Didit webhook body. {{tokens}} are filled with test record ids at replay time"
+    },
+    "expected": {
+      "type": "object",
+      "description": "{ off: {...}, on: {...}, identical: boolean } expected snapshot values for tm_core OFF and ON"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "tenant_id",
+    "name"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    }
+  }
+}

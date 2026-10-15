@@ -14,7 +14,10 @@
     },
     "key_hash": {
       "type": "string",
-      "description": "SHA-256 hex of the key"
+      "description": "SHA-256 hex of the key. Never returned to app users.",
+      "rls": {
+        "read": false
+      }
     },
     "scopes": {
       "type": "array",
@@ -45,25 +48,105 @@
   ],
   "rls": {
     "create": {
-      "data.tenant_id": "{{user.data.tenant_id}}"
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            }
+          ]
+        }
+      ]
     },
     "read": {
       "$or": [
         {
-          "data.tenant_id": "{{user.data.tenant_id}}"
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            }
+          ]
         },
         {
           "user_condition": {
-            "role": "admin"
+            "data.app_role": "Vitauri Ops"
           }
         }
       ]
     },
     "update": {
-      "data.tenant_id": "{{user.data.tenant_id}}"
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            }
+          ]
+        }
+      ]
     },
     "delete": {
-      "data.tenant_id": "{{user.data.tenant_id}}"
+      "$and": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Tenant Admin"
+          }
+        }
+      ]
     }
   }
 }
