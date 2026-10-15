@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { hasPermission } from '@/lib/permissions';
 import { isFeatureEnabled } from '@/lib/featureFlags';
+import Psd2PartnerSelect from '@/components/tenantconfig/tm/Psd2PartnerSelect';
 import FxRatesCard from '@/components/tenantconfig/tm/FxRatesCard';
 import { errorMessage } from '@/lib/tmAlerts';
 import TmExportButton from '@/components/tenantconfig/tm/TmExportButton';
@@ -28,6 +29,7 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
   const [thresholds, setThresholds] = useState(s.objective_thresholds || (s.objective_threshold ? { [currency]: s.objective_threshold } : {}));
   const [autoDraft, setAutoDraft] = useState(s.auto_draft_objective_reports === true);
   const [maxPct, setMaxPct] = useState(String(s.max_wrongly_closed_pct ?? 2));
+  const [psd2Partner, setPsd2Partner] = useState(s.psd2_partner || 'manual');
 
   const sum = WEIGHTS.reduce((t, [k]) => t + (Number(weights[k]) || 0), 0);
   const pct = Number(maxPct);
@@ -44,6 +46,7 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
         objective_thresholds: clean,
         auto_draft_objective_reports: autoDraft,
         max_wrongly_closed_pct: pct,
+        psd2_partner: psd2Partner,
         ...(clean[cur] ? { objective_threshold: clean[cur] } : {}), // read by the rule starters
       };
       const before = { tm_reporting_currency: tenant.tm_reporting_currency, tm_timezone: tenant.tm_timezone, tm_settings: s };
@@ -93,6 +96,9 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
           <Label className="text-xs mb-1.5 block">Max wrongly closed (%) for release</Label>
           <Input type="number" min="0" max="100" step="0.5" value={maxPct} onChange={(e) => setMaxPct(e.target.value)} className="h-9 text-sm" />
         </div>
+        {isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tenantConfig') && (
+          <Psd2PartnerSelect value={psd2Partner} onChange={setPsd2Partner} />
+        )}
         <Button onClick={save} disabled={saving || !valid} className="gap-2">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
         </Button>

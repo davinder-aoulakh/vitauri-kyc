@@ -10,6 +10,8 @@ import InlineError from '@/components/shared/InlineError';
 import CoverageStrip from '@/components/tm/coverage/CoverageStrip';
 import StatementUploadDrawer from '@/components/tm/StatementUploadDrawer';
 import AccountFormDialog from '@/components/client/bankaccounts/AccountFormDialog';
+import ConnectionCell from '@/components/client/bankaccounts/ConnectionCell';
+import RecordConsentDialog from '@/components/client/bankaccounts/RecordConsentDialog';
 import CloseAccountDialog from '@/components/client/bankaccounts/CloseAccountDialog';
 import { Loader2, Plus } from 'lucide-react';
 
@@ -23,6 +25,7 @@ export default function BankAccountsCard({ client }) {
   const [form, setForm] = useState(null); // { account | null }
   const [closing, setClosing] = useState(null);
   const [upload, setUpload] = useState(null); // account id
+  const [consent, setConsent] = useState(null); // account
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: key,
@@ -34,12 +37,22 @@ export default function BankAccountsCard({ client }) {
         fetchAll((cursor) => base44.entities.BankAccount.filter({ tenant_id: tenantId, client_id: client.id }, { limit: 200, cursor })),
         fetchAll((cursor) => base44.entities.CoverageDay.filter({ tenant_id: tenantId, client_id: client.id, date: { $gte: start, $lte: end } }, { sort: 'date', limit: 1000, cursor }), 5),
       ]);
-      return { accounts, rows, start, end };
+      const ids = accounts.map((a) => a.id);
+      const conns = ids.length
+        ? await fetchAll((cursor) => base44.entities.BankConnection.filter({ tenant_id: tenantId, bank_account_id: { $in: ids } }, { sort: '-created_date', limit: 200, cursor }))
+        : [];
+      const connections = {}; // newest connection per account
+      for (const c of conns) if (!connections[c.bank_account_id]) connections[c.bank_account_id] = c;
+      return { accounts, rows, connections, start, end };
     },
   });
 
   if (!enabled) return null;
   const refresh = () => qc.invalidateQueries({ queryKey: key });
+  const withdraw = async (conn) => {
+    await base44.functions.invoke('manageBankConnection', { action: 'withdraw', id: conn.id });
+    refresh();
+  };
   const reopen = async (a) => {
     await base44.functions.invoke('manageBankAccount', { action: 'reopen', id: a.id });
     refresh();
@@ -59,7 +72,7 @@ export default function BankAccountsCard({ client }) {
           <table className="w-full text-sm">
             <thead className="text-xs text-muted-foreground">
               <tr className="border-b border-border">
-                {['Account', 'Institution', 'Currency', 'Source', 'Frequency', 'Owned', 'Status', 'Last 30 days', ''].map((h) => <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}
+                {['Account', 'Institution', 'Currency', 'Source', 'Frequency', 'Owned', 'Status', 'Connection', 'Last 30 days', ''].map((h) => <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -72,6 +85,9 @@ export default function BankAccountsCard({ client }) {
                   <td className="px-3 py-2">{a.expected_frequency || 'daily'}</td>
                   <td className="px-3 py-2">{a.is_customer_owned === false ? 'No' : 'Yes'}</td>
                   <td className="px-3 py-2 capitalize">{a.status || 'active'}{a.status === 'closed' && a.closed_at ? ` · ${a.closed_at}` : ''}</td>
+                  <td className="px-3 py-2">
+                    <ConnectionCell connection={data.connections[a.id]} onRecord={() => setConsent(a)} onWithdraw={() => withdraw(data.connections[a.id])} />
+                  </td>
                   <td className="px-3 py-2"><CoverageStrip cells={stripCells(data.rows.filter((r) => r.bank_account_id === a.id), data.start, data.end)} /></td>
                   <td className="px-3 py-2 whitespace-nowrap text-right">
                     <Button variant="ghost" size="sm" onClick={() => setForm({ account: a })}>Edit</Button>
@@ -88,6 +104,9 @@ export default function BankAccountsCard({ client }) {
       )}
       {form && (
         <AccountFormDialog key={form.account?.id || 'new'} open onOpenChange={(o) => !o && setForm(null)} clientId={client.id} account={form.account} onSaved={refresh} />
+      )}
+      {consent && (
+        <RecordConsentDialog key={consent.id} account={consent} connection={data?.connections[consent.id]} onOpenChange={(o) => !o && setConsent(null)} onDone={refresh} />
       )}
       {closing && <CloseAccountDialog key={closing.id} account={closing} onOpenChange={(o) => !o && setClosing(null)} onDone={refresh} />}
       <StatementUploadDrawer

@@ -1,0 +1,41 @@
+{
+  "name": "PSD2 Sync",
+  "description": "Every 6 hours at minute 15: pulls new transactions for active PSD2 connections. With no PSD2 partner configured it only records a note on the connection.",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "15 */6 * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "psd2_sync",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "syncBankConnection",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  }
+}
