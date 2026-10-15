@@ -71,9 +71,11 @@ export default async function (req) {
     let onlyTenant = null;
     if (user) {
       const role = user.app_role || user.data?.app_role;
-      if (!ADMIN_ROLES.includes(role)) throw httpError(403, 'Forbidden');
-      onlyTenant = user.tenant_id || user.data?.tenant_id;
-      if (!onlyTenant) throw httpError(403, 'No tenant associated with this user');
+      if (user.role !== 'admin') {
+        if (!ADMIN_ROLES.includes(role)) throw httpError(403, 'Forbidden');
+        onlyTenant = user.tenant_id || user.data?.tenant_id;
+        if (!onlyTenant) throw httpError(403, 'No tenant associated with this user');
+      }
     }
     const E = base44.asServiceRole.entities;
     const tenants = asList(await E.Tenant.list('-created_date', 1000))
