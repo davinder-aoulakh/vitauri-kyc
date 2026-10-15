@@ -4,11 +4,64 @@
   "properties": {
     "tenant_id": {
       "type": "string",
-      "description": "Demo tenant the probe ran against"
+      "description": "Tenant the probe ran against"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "endpoints",
+        "credentials"
+      ],
+      "description": "Missing = endpoints (legacy records). 'credentials' = credential self-test."
     },
     "checked_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "checked_by_user_id": {
+      "type": "string"
+    },
+    "credentials": {
+      "type": "object",
+      "description": "kind=credentials only. Sources and probe outcome. Never holds key material.",
+      "properties": {
+        "tenant_name": {
+          "type": "string"
+        },
+        "api_key_source": {
+          "type": "string",
+          "enum": [
+            "TenantSecret",
+            "Tenant (legacy)",
+            "missing"
+          ]
+        },
+        "webhook_secret_source": {
+          "type": "string",
+          "enum": [
+            "TenantSecret",
+            "Tenant (legacy)",
+            "missing"
+          ]
+        },
+        "probe": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "auth_error",
+            "unreachable"
+          ]
+        },
+        "http_status": {
+          "type": "number"
+        },
+        "path": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
     },
     "results": {
       "type": "array",

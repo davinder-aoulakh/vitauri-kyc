@@ -25,7 +25,7 @@ export default function EndpointCheckPanel({ tenantId }) {
   const load = async () => {
     setLoading(true); setError('');
     try {
-      const page = await base44.entities.DiditEndpointCheck.filter({ tenant_id: tenantId }, { sort: '-checked_at', limit: 1 });
+      const page = await base44.entities.DiditEndpointCheck.filter({ tenant_id: tenantId, kind: { $ne: 'credentials' } }, { sort: '-checked_at', limit: 1 });
       setCheck((page.items || page)[0] || null);
     } catch (e) { setError(errMsg(e)); }
     setLoading(false);

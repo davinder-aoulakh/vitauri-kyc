@@ -53,7 +53,7 @@ export default function ResultsTable({ results }) {
                   <td className="px-4 py-2"><Pill ok={r.off?.diffs?.length === 0 && !r.off?.error} /></td>
                   <td className="px-4 py-2"><Pill ok={r.on?.diffs?.length === 0 && !r.on?.error} /></td>
                   <td className="px-4 py-2"><Pill ok={r.identical_ok} /></td>
-                  <td className="px-4 py-2"><Pill ok={r.pass} /></td>
+                  <td className="px-4 py-2">{r.skipped ? <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-muted text-muted-foreground">Skipped: not configured</span> : <Pill ok={r.pass} />}</td>
                   <td className="px-4 py-2"><ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform', open === r.fixture_id && 'rotate-180')} /></td>
                 </tr>
                 {open === r.fixture_id && (

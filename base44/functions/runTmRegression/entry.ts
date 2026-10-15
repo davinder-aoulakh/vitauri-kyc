@@ -64,22 +64,24 @@ export default async function (req) {
     const results = fixtures.map((f) => {
       const o = off?.[f.id];
       const n = on?.[f.id];
-      const offDiffs = o ? compare(f.expected?.off, o.snapshot) : [{ field: 'run', expected: 'completed', actual: failure || 'not run' }];
-      const onDiffs = n ? compare(f.expected?.on, n.snapshot) : [{ field: 'run', expected: 'completed', actual: failure || 'not run' }];
+      const skipped = f.kind === 'real_session' && !!o?.skipped && !!n?.skipped;
+      const offDiffs = skipped ? [] : o ? compare(f.expected?.off, o.snapshot) : [{ field: 'run', expected: 'completed', actual: failure || 'not run' }];
+      const onDiffs = skipped ? [] : n ? compare(f.expected?.on, n.snapshot) : [{ field: 'run', expected: 'completed', actual: failure || 'not run' }];
       const identicalRequired = f.kind === 'session';
       const identicalOk = identicalRequired && o && n ? JSON.stringify(o.snapshot) === JSON.stringify(n.snapshot) : null;
       return {
         fixture_id: f.id, name: f.name, kind: f.kind, webhook_type: f.webhook_type,
         off: { ...(o || {}), diffs: offDiffs, expected: f.expected?.off },
         on: { ...(n || {}), diffs: onDiffs, expected: f.expected?.on },
-        identical_required: identicalRequired, identical_ok: identicalOk,
+        identical_required: identicalRequired, identical_ok: identicalOk, skipped,
         pass: offDiffs.length === 0 && onDiffs.length === 0 && identicalOk !== false && !o?.error && !n?.error,
       };
     });
-    const passed = results.filter((r) => r.pass).length;
+    const passed = results.filter((r) => r.pass && !r.skipped).length;
+    const skippedCount = results.filter((r) => r.skipped).length;
     const finished = await E.TmRegressionRun.update(run.id, {
       status: failure ? 'failed' : 'completed', finished_at: new Date().toISOString(), flag_restored: restored,
-      results, passed, failed: results.length - passed, error: failure || undefined,
+      results, passed, failed: results.length - passed - skippedCount, error: failure || undefined,
     });
     await audit(E, tenantId, actorName, 'tm_regression_finished', { run_id: run.id }, { passed, failed: results.length - passed, flag_restored: restored }, `Regression run ${run.id} finished: ${passed}/${results.length} passed.`);
     return Response.json({ run: finished });

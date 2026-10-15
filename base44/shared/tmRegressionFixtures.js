@@ -117,4 +117,17 @@ export const SEED_FIXTURES = [
       ? 'tm_core ON: one TmAlert, one Transaction_Rule_Hit linked by tm_alert_id, a didit_transaction_webhook audit event and customer risk recompute evidence.'
       : 'Same payload delivered again: still exactly one TmAlert and one MonitoringAlert.',
   })),
+  // Real-session fixtures: use tm_settings.regression_session_id / regression_outreach_ref (Demo tenant). Skipped when those are empty.
+  {
+    name: 'Terminal Approved — real session', kind: 'real_session', order: 40, setup_group: 'real-40', webhook_type: 'status.updated',
+    payload: {},
+    expected: { off: { real_result: 'pass' }, on: { real_result: 'pass' }, identical: false },
+    notes: 'Sets the configured outreach item to Pending, replays a signed status.updated Approved for the real session, expects idv_status to change and a webhook AuditEvent; the item is then restored.',
+  },
+  {
+    name: 'data.updated — real session', kind: 'real_session', order: 41, setup_group: 'real-41', webhook_type: 'data.updated',
+    payload: {},
+    expected: { off: { real_result: 'pass' }, on: { real_result: 'pass' }, identical: false },
+    notes: 'Replays a signed data.updated for the same real session; expects an AuditEvent or an outreach update after the replay; the item is then restored.',
+  },
 ];

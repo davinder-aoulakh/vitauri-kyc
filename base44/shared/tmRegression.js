@@ -3,6 +3,7 @@
 import { computeDiditSignature } from './diditWebhookVerify.js';
 import { asList, httpError, loadTenant, mapLimit } from './tmAuth.js';
 import { withDiditCredentials } from './diditCredentials.js';
+import { runRealFixture } from './tmRegressionReal.js';
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -137,12 +138,15 @@ export async function replayFixtures(base44, { tenant, fixtures, origin, actorNa
   const E = base44.asServiceRole.entities;
   if (!tenant.didit_webhook_secret) throw httpError(409, 'This Demo tenant has no Didit webhook secret, so signed replays cannot be accepted.');
   const groups = new Map();
-  for (const f of fixtures) {
+  const out = {};
+  for (const f of fixtures.filter((x) => x.kind === 'real_session')) {
+    out[f.id] = await runRealFixture({ E, tenant, fixture: f, actorName, tag: `${tag}-${f.order}`, post: (t, body) => postSigned(origin, t, body) });
+  }
+  for (const f of fixtures.filter((x) => x.kind !== 'real_session')) {
     const g = f.setup_group || f.id;
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(f);
   }
-  const out = {};
   await mapLimit([...groups.values()], 4, async (list) => {
     list.sort((a, b) => (a.order || 0) - (b.order || 0));
     const ctx = await setupGroup(E, tenant.id, list);

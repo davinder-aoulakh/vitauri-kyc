@@ -9,6 +9,8 @@ import InlineError from '@/components/shared/InlineError';
 import FixtureList from '@/components/ops/regression/FixtureList';
 import ResultsTable from '@/components/ops/regression/ResultsTable';
 import EndpointCheckPanel from '@/components/ops/regression/EndpointCheckPanel';
+import CredentialsPanel from '@/components/ops/regression/CredentialsPanel';
+import CredentialReadersTable from '@/components/ops/regression/CredentialReadersTable';
 import RlsCoverageTable from '@/components/ops/regression/RlsCoverageTable';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -98,6 +100,8 @@ export default function TmRegression() {
           </div>
         )}
         {tenantId && <EndpointCheckPanel tenantId={tenantId} />}
+        <CredentialsPanel />
+        <CredentialReadersTable />
         <RlsCoverageTable />
       </div>
     </div>

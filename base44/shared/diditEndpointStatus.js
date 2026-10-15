@@ -2,7 +2,7 @@
 import { asList } from './tmAuth.js';
 
 export async function latestEndpointCheck(E, tenantId) {
-  return asList(await E.DiditEndpointCheck.filter({ tenant_id: tenantId }, '-checked_at', 1))[0] || null;
+  return asList(await E.DiditEndpointCheck.filter({ tenant_id: tenantId, kind: { $ne: 'credentials' } }, '-checked_at', 1))[0] || null;
 }
 
 /** True when the check classified the named endpoint as missing (404/405). */

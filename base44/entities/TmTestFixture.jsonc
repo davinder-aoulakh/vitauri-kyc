@@ -17,7 +17,8 @@
       "enum": [
         "session",
         "user",
-        "transaction"
+        "transaction",
+        "real_session"
       ],
       "default": "session"
     },

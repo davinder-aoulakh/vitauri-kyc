@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
-import { hasPermission } from '@/lib/permissions';
+import { hasPermission, isVitauriOps } from '@/lib/permissions';
+import RegressionRefFields from '@/components/tenantconfig/tm/RegressionRefFields';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import AiModelCard from '@/components/tenantconfig/tm/AiModelCard';
 import { MODEL_CHANGE_ROLES, MIN_NOTE } from '@/lib/tmAiModels';
@@ -33,6 +34,8 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
   const [maxPct, setMaxPct] = useState(String(s.max_wrongly_closed_pct ?? 2));
   const [psd2Partner, setPsd2Partner] = useState(s.psd2_partner || 'manual');
   const [autoTriage, setAutoTriage] = useState(s.auto_triage_new_alerts === true);
+  const isOps = isVitauriOps(currentUser?.app_role);
+  const [reg, setReg] = useState({ sessionId: s.regression_session_id || '', outreachId: s.regression_outreach_ref?.outreach_id || '', itemId: s.regression_outreach_ref?.item_id || '' });
   const savedModel = { model: s.ai_model || '', note: s.ai_model_change_note || '' };
   const [aiModel, setAiModel] = useState(savedModel.model);
   const [modelNote, setModelNote] = useState('');
@@ -56,6 +59,10 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
         max_wrongly_closed_pct: pct,
         psd2_partner: psd2Partner,
         auto_triage_new_alerts: autoTriage,
+        ...(isOps ? {
+          regression_session_id: reg.sessionId.trim() || undefined,
+          regression_outreach_ref: reg.outreachId.trim() && reg.itemId.trim() ? { outreach_id: reg.outreachId.trim(), item_id: reg.itemId.trim() } : undefined,
+        } : {}),
         ...(modelChanged ? { ai_model: aiModel, ai_model_changed_at: new Date().toISOString(), ai_model_change_note: modelNote.trim() } : {}),
         ...(clean[cur] ? { objective_threshold: clean[cur] } : {}), // read by the rule starters
       };
@@ -122,6 +129,7 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
         {isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tenantConfig') && (
           <Psd2PartnerSelect value={psd2Partner} onChange={setPsd2Partner} />
         )}
+        {isOps && <RegressionRefFields sessionId={reg.sessionId} outreachId={reg.outreachId} itemId={reg.itemId} onChange={(p) => setReg({ ...reg, ...p })} />}
         <Button onClick={save} disabled={saving || !valid} className="gap-2">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
         </Button>
