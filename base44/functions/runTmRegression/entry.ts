@@ -16,10 +16,12 @@ export default async function (req) {
 
     if (body.action === 'seed') {
       const existing = await E.TmTestFixture.count({ tenant_id: tenantId });
-      if (existing > 0) return Response.json({ seeded: 0, existing });
-      await E.TmTestFixture.bulkCreate(SEED_FIXTURES.map((f) => ({ ...f, tenant_id: tenantId, active: true })));
-      await audit(E, tenantId, actorName, 'tm_regression_fixtures_seeded', {}, { count: SEED_FIXTURES.length }, `${SEED_FIXTURES.length} regression fixtures seeded for ${tenant.name}.`);
-      return Response.json({ seeded: SEED_FIXTURES.length });
+      const have = new Set(asList(await E.TmTestFixture.filter({ tenant_id: tenantId }, { limit: 200 })).map((f) => f.name));
+      const missing = SEED_FIXTURES.filter((f) => !have.has(f.name));
+      if (missing.length === 0) return Response.json({ seeded: 0, existing });
+      await E.TmTestFixture.bulkCreate(missing.map((f) => ({ ...f, tenant_id: tenantId, active: true })));
+      await audit(E, tenantId, actorName, 'tm_regression_fixtures_seeded', {}, { count: missing.length }, `${missing.length} regression fixtures seeded for ${tenant.name}.`);
+      return Response.json({ seeded: missing.length });
     }
 
     if (body.action !== 'run') throw httpError(400, "action must be 'seed' or 'run'");

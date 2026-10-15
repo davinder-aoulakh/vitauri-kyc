@@ -86,7 +86,17 @@ export async function snapshot(E, tenantId, ctx) {
   const mon = asList(await E.MonitoringAlert.filter({ tenant_id: tenantId, client_id: ctx.client_id }));
   const tmAlerts = asList(await E.TmAlert.filter({ tenant_id: tenantId, client_id: ctx.client_id }));
   const item = (outreach?.items || []).find((i) => i.item_id === ctx.item_id);
+  const txnAudit = ctx.transaction_id
+    ? asList(await E.AuditEvent.filter({ tenant_id: tenantId, client_id: ctx.client_id, event_type: 'didit_transaction_webhook' }))
+    : [];
+  const ruleHits = mon.filter((a) => a.alert_type === 'Transaction_Rule_Hit');
+  const riskRows = asList(await E.CustomerRiskScore.filter({ tenant_id: tenantId, client_id: ctx.client_id }));
+  const riskAudit = riskRows.length ? [] : asList(await E.AuditEvent.filter({ tenant_id: tenantId, client_id: ctx.client_id, event_type: 'customer_risk_recomputed' }));
   return {
+    tm_alert_ids: tmAlerts.map((a) => a.id),
+    rule_hit_linked_to_tm_alert: ruleHits.length > 0 && ruleHits.every((a) => tmAlerts.some((t) => t.id === a.tm_alert_id)),
+    txn_webhook_audit_recorded: txnAudit.length >= 1,
+    risk_recompute_evidence: riskRows.length > 0 || riskAudit.length > 0,
     outreach_item_status: item?.status ?? null,
     outreach_idv_status: item?.idv_status ?? null,
     outreach_session_status: item?.didit_session_status ?? null,

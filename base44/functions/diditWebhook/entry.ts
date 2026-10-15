@@ -638,11 +638,15 @@ async function tmTransactionEvent(base44, tenant, body, txn, diditTransactionId,
   // c + d. Alert + legacy MonitoringAlert.
   if (TM_ALERT_STATUSES.includes(status)) {
     const tmAlert = await upsertTmAlert(base44, { tenant_id: tenantId, transaction: updatedTxn, rule_runs: ruleRuns });
-    if (tenantRec && txn.client_id) {
-      await safeRecompute(base44, {
-        tenantId, tenant: tenantRec, clientId: txn.client_id, trigger: 'tm_alert',
-        actor: { actorType: 'System', actorName: 'Didit Webhook' },
-      });
+    if (tenant && txn.client_id) {
+      try {
+        await safeRecompute(base44, {
+          tenantId, tenant, clientId: txn.client_id, trigger: 'tm_alert',
+          actor: { actorType: 'System', actorName: 'Didit Webhook' },
+        });
+      } catch (e) {
+        console.warn('diditWebhook: customer risk recompute failed', e?.message || e);
+      }
     }
 
     const existingMon = tmAlert?.id

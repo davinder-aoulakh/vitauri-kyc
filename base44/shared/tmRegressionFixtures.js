@@ -101,4 +101,20 @@ export const SEED_FIXTURES = [
     },
     notes: 'Status moves to APPROVED; no new alerts in either mode.',
   },
+  ...[1, 2].map((n) => ({
+    name: n === 1 ? 'transaction.status.updated IN_REVIEW — TM on' : 'transaction.status.updated IN_REVIEW — TM on (replay, no duplicates)',
+    kind: 'transaction', order: 12 + n, setup_group: 'txn-f01', webhook_type: 'transaction.status.updated',
+    payload: TXN('transaction.status.updated', 'IN_REVIEW'),
+    expected: {
+      off: { tm_alert_count: 0 },
+      on: {
+        transaction_status: 'IN_REVIEW', tm_alert_count: 1, monitoring_alert_count: 1, monitoring_alert_types: ['Transaction_Rule_Hit'],
+        rule_hit_linked_to_tm_alert: true, txn_webhook_audit_recorded: true, risk_recompute_evidence: true,
+      },
+      identical: false,
+    },
+    notes: n === 1
+      ? 'tm_core ON: one TmAlert, one Transaction_Rule_Hit linked by tm_alert_id, a didit_transaction_webhook audit event and customer risk recompute evidence.'
+      : 'Same payload delivered again: still exactly one TmAlert and one MonitoringAlert.',
+  })),
 ];
