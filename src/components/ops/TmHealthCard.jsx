@@ -4,7 +4,7 @@ import { base44 } from '@/api/base44Client';
 import InlineError from '@/components/shared/InlineError';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
-import { Activity, FlaskConical, Loader2 } from 'lucide-react';
+import { Activity, AlertTriangle, FlaskConical, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const ago = (iso) => (iso ? `${formatDistanceToNow(new Date(iso))} ago` : '—');
@@ -31,6 +31,15 @@ export default function TmHealthCard() {
           <FlaskConical className="w-3 h-3" /> Regression harness
         </Button>
       </div>
+      {rows?.some((r) => r.legacy_secrets_present) && (
+        <div className="m-4 flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <span>
+            Didit secrets are still stored on the Tenant record for: {rows.filter((r) => r.legacy_secrets_present).map((r) => r.name).join(', ')}.
+            Run the secret migration, then clear them.
+          </span>
+        </div>
+      )}
       {error && <div className="p-4"><InlineError message={error} onRetry={load} /></div>}
       {!rows && !error && <div className="p-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>}
       {rows && (

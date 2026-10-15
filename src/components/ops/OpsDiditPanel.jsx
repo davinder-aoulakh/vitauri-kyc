@@ -302,6 +302,31 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
             )}
           </div>
 
+          {/* Rotate credentials */}
+          <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rotate credentials</div>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="rounded-lg bg-muted/40 p-2">
+                <div className="text-muted-foreground">API key</div>
+                <div className="font-medium">{status.api_key_configured ? 'Configured' : 'Not set'}</div>
+              </div>
+              <div className="rounded-lg bg-muted/40 p-2">
+                <div className="text-muted-foreground">Last 4</div>
+                <div className="font-mono font-medium">{status.api_key_last4 || '—'}</div>
+              </div>
+              <div className="rounded-lg bg-muted/40 p-2">
+                <div className="text-muted-foreground">Last rotated</div>
+                <div className="font-medium">{status.last_rotated_at ? new Date(status.last_rotated_at).toLocaleDateString() : '—'}</div>
+              </div>
+            </div>
+            <ol className="text-xs text-muted-foreground list-decimal pl-4 space-y-1">
+              <li>Generate a new API key and webhook secret in the Didit console.</li>
+              <li>Paste the new API key above and click Save Configuration, and paste the new webhook secret below and click Save.</li>
+              <li>Click Test Webhook.</li>
+              <li>Revoke the old key in Didit.</li>
+            </ol>
+          </div>
+
           {/* Webhook Configuration */}
           <div className="bg-card border border-border rounded-xl p-4 space-y-3">
             <div className="flex items-center gap-2">

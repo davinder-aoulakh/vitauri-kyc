@@ -16,6 +16,7 @@ export async function withDiditCredentials(base44, tenant) {
   const out = { ...tenant };
   if (secret?.didit_api_key) out.didit_api_key = secret.didit_api_key;
   if (secret?.didit_webhook_secret) out.didit_webhook_secret = secret.didit_webhook_secret;
+  out.didit_rotated_at = secret?.rotated_at || null;
   return out;
 }
 
@@ -34,14 +35,13 @@ export async function upsertTenantSecret(base44, tenantId, { didit_api_key, didi
   return { created: !existing, fields };
 }
 
-/** Upserts TenantSecret, keeps mirroring to the Tenant fields (removed in F03), writes an AuditEvent without values. */
+/** Upserts TenantSecret only, blanks the deprecated Tenant fields, writes an AuditEvent without values. */
 export async function saveDiditCredentials(base44, tenantId, creds, actor) {
   const { fields } = await upsertTenantSecret(base44, tenantId, creds, actor?.actorUserId);
   if (!fields.length) return { saved: false, fields };
   const E = base44.asServiceRole.entities;
-  const mirror = {};
-  for (const f of fields) mirror[f] = creds[f];
-  await E.Tenant.update(tenantId, mirror);
+  // Secrets live only in TenantSecret; the deprecated Tenant fields must stay empty.
+  await E.Tenant.update(tenantId, { didit_api_key: '', didit_webhook_secret: '' });
   await E.AuditEvent.create({
     tenant_id: tenantId,
     actor_user_id: actor?.actorUserId,
@@ -61,5 +61,6 @@ export function credentialStatus(tenantWithCreds) {
     api_key_configured: !!key,
     api_key_last4: key ? key.slice(-4) : null,
     webhook_secret_configured: !!tenantWithCreds?.didit_webhook_secret,
+    last_rotated_at: tenantWithCreds?.didit_rotated_at || null,
   };
 }

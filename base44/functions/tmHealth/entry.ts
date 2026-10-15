@@ -28,6 +28,7 @@ export default async function (req) {
         last_webhook: asList(hook)[0]?.processed_at || null,
         failed_submissions_24h: failed,
         rules_in_drift: drift,
+        legacy_secrets_present: !!(t.didit_api_key || t.didit_webhook_secret),
       };
     });
     return Response.json({ tenants: rows.map((r, i) => (r.ok ? r.value : { tenant_id: tenants[i].id, name: tenants[i].name, error: String(r.error?.message || r.error) })) });

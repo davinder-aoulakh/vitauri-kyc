@@ -141,7 +141,7 @@
     },
     "didit_api_key": {
       "type": "string",
-      "description": "Didit x-api-key \u2014 entered by Tenant Admin, keep secret"
+      "description": "Deprecated \u2014 stored in TenantSecret. Must stay empty."
     },
     "didit_workflow_id": {
       "type": "string",
@@ -162,7 +162,7 @@
     },
     "didit_webhook_secret": {
       "type": "string",
-      "description": "Shared secret used to verify the X-Signature-V2 HMAC on incoming Didit webhooks \u2014 returned by Didit when a webhook destination is registered"
+      "description": "Deprecated \u2014 stored in TenantSecret. Must stay empty."
     },
     "pending_admin_email": {
       "type": "string",
