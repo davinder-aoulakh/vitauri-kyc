@@ -2,7 +2,7 @@
 // Auth: signed-in Compliance Officer (tmApproveFiuReport); tenant from the user. On failure the report stays approved and the error is stored for retry.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
-import { authenticate, errorResponse, httpError, loadTenant } from '../../shared/tmAuth.js';
+import { authenticate, errorResponse, httpError, loadTenantWithDiditCredentials } from '../../shared/tmAuth.js';
 import { CO_ROLES } from '../../shared/tmCaseCommon.js';
 import { loadReport } from '../../shared/tmFiuActions.js';
 import { generateReport } from '../../shared/tmFiuGenerate.js';
@@ -13,7 +13,7 @@ export default async function (req) {
     const body = await req.json();
     const auth = await authenticate(base44, req, body, { roles: CO_ROLES, allowApiKey: false });
     const tenantId = auth.tenantId;
-    const tenant = await loadTenant(base44, tenantId);
+    const tenant = await loadTenantWithDiditCredentials(base44, tenantId);
     if (!isTmEnabled(tenant, 'tm_core')) throw httpError(403, 'Feature tm_core is not enabled');
     if (!isTmEnabled(tenant, 'tm_fiu')) throw httpError(403, 'Feature tm_fiu is not enabled');
     const E = base44.asServiceRole.entities;

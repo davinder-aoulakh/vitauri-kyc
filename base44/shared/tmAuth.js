@@ -2,6 +2,7 @@
 // Tenant scope comes ONLY from a verified tenant API key or from the authenticated user's own tenant.
 // Keep role lists in sync with tmManageIngest / tmWorkCase in src/lib/permissions.js.
 import { sha256Hex } from './tmCanonical.js';
+import { withDiditCredentials } from './diditCredentials.js';
 
 export const INGEST_ROLES = ['Tenant Admin', 'Compliance Admin']; // tmManageIngest
 export const WORK_ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager']; // tmWorkCase
@@ -71,6 +72,11 @@ export async function loadTenant(base44, tenantId) {
   const tenant = list.find((t) => t.id === tenantId);
   if (!tenant) throw httpError(404, 'Tenant not found');
   return tenant;
+}
+
+// Use only where the tenant is passed to Didit helpers. Never return this object in a Response.
+export async function loadTenantWithDiditCredentials(base44, tenantId) {
+  return withDiditCredentials(base44, await loadTenant(base44, tenantId));
 }
 
 /** Run async fn over items with bounded concurrency. Returns array of settled-like results. */

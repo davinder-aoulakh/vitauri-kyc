@@ -36,7 +36,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function request(tenant, method, path, body) {
   const apiKey = tenant?.didit_api_key;
-  if (!apiKey) throw { status: 400, detail: 'Didit API key not configured for tenant' };
+  if (!apiKey) throw { status: 412, detail: 'Didit credentials not found — check TenantSecret' };
 
   let last;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -62,7 +62,7 @@ async function request(tenant, method, path, body) {
 /** Single attempt, never throws on an HTTP status. Returns { status } (0 = network error / timeout). Used by diditEndpointCheck only. */
 export async function probe(tenant, method, path, body) {
   const apiKey = tenant?.didit_api_key;
-  if (!apiKey) throw { status: 400, detail: 'Didit API key not configured for tenant' };
+  if (!apiKey) throw { status: 412, detail: 'Didit credentials not found — check TenantSecret' };
   try {
     const res = await fetch(BASE_URL + path, {
       method,
@@ -104,7 +104,7 @@ export const createDiditCase = (tenant, payload) => request(tenant, 'POST', tmPa
 /** Downloads a generated file. The API key is only sent to Didit hosts. Returns Uint8Array. */
 export async function downloadBinary(tenant, url) {
   const apiKey = tenant?.didit_api_key;
-  if (!apiKey) throw { status: 400, detail: 'Didit API key not configured for tenant' };
+  if (!apiKey) throw { status: 412, detail: 'Didit credentials not found — check TenantSecret' };
   const abs = /^https?:\/\//i.test(url) ? url : BASE_URL + url;
   const u = new URL(abs);
   if (u.protocol !== 'https:') throw { status: 400, detail: 'Refusing to download over a non-HTTPS link' };

@@ -3,7 +3,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { writeAudit } from '../../shared/tmAudit.js';
-import { authenticate, errorResponse, httpError, loadTenant, asList } from '../../shared/tmAuth.js';
+import { authenticate, errorResponse, httpError, loadTenantWithDiditCredentials, asList } from '../../shared/tmAuth.js';
 import { canDecideProfile } from '../../shared/tmProfileAuth.js';
 import { updateUserCustomProperties, isPathMissing } from '../../shared/diditTm.js';
 import { latestEndpointCheck, isMissingInCheck } from '../../shared/diditEndpointStatus.js';
@@ -33,7 +33,7 @@ export default async function (req) {
     if (!['approve', 'reject'].includes(decision)) throw httpError(400, "decision must be 'approve' or 'reject'");
     if (!rationale) throw httpError(400, 'A rationale is required');
 
-    const tenant = await loadTenant(base44, tenantId);
+    const tenant = await loadTenantWithDiditCredentials(base44, tenantId);
     if (!isTmEnabled(tenant, 'tm_core')) throw httpError(403, 'Feature tm_core is not enabled');
 
     const profile = asList(await E.ExpectedProfile.filter({ tenant_id: tenantId, id: profileId }))[0];

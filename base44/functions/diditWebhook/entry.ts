@@ -401,7 +401,7 @@ async function handleTransactionEvent(base44, tenantId, body) {
     return;
   }
 
-  const tenantRec = (await base44.asServiceRole.entities.Tenant.filter({ id: tenantId || txn.tenant_id }))?.[0];
+  const tenantRec = await withDiditCredentials(base44, (await base44.asServiceRole.entities.Tenant.filter({ id: tenantId || txn.tenant_id }))?.[0]);
   if (tenantRec && isTmEnabled(tenantRec, 'tm_core')) {
     await tmTransactionEvent(base44, tenantRec, body, txn, diditTransactionId, ourTransactionId);
     return;
