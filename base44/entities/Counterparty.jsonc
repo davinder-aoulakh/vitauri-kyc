@@ -111,6 +111,11 @@
           "user_condition": {
             "role": "admin"
           }
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
         }
       ]
     },
@@ -118,7 +123,16 @@
       "data.tenant_id": "{{user.data.tenant_id}}"
     },
     "delete": {
-      "data.tenant_id": "{{user.data.tenant_id}}"
+      "$and": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Tenant Admin"
+          }
+        }
+      ]
     }
   }
 }
