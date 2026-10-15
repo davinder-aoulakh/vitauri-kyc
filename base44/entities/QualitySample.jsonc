@@ -56,6 +56,18 @@
           },
           "note": {
             "type": "string"
+          },
+          "scenario_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "closed_by_user_id": {
+            "type": "string"
+          },
+          "reviewed_at": {
+            "type": "string"
           }
         }
       }
@@ -77,6 +89,27 @@
     "completed_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "metrics": {
+      "type": "object",
+      "description": "Computed summary (ai_shadow: missed, wrongly_closed, close_proposals, citations_ok_pct ...; others: reviewed, pending)"
+    },
+    "created_by_user_id": {
+      "type": "string"
+    },
+    "created_by_name": {
+      "type": "string"
+    },
+    "completed_by_user_id": {
+      "type": "string"
+    },
+    "completed_by_name": {
+      "type": "string"
+    },
+    "truncated": {
+      "type": "boolean",
+      "default": false,
+      "description": "Population was capped while sampling"
     }
   },
   "required": [

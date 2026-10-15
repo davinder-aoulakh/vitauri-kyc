@@ -71,6 +71,14 @@
     "ai_sample_review_released": {
       "type": "boolean",
       "default": false
+    },
+    "bulk_close_release_sample_id": {
+      "type": "string",
+      "description": "QualitySample that qualified the bulk-close release"
+    },
+    "ai_sample_review_release_sample_id": {
+      "type": "string",
+      "description": "QualitySample that qualified the AI sample-review release"
     }
   },
   "required": [

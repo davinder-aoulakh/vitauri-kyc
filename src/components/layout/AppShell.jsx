@@ -13,7 +13,7 @@ import {
   LayoutDashboard, FolderOpen, Users, Search, Shield,
   Settings, BarChart3, AlertTriangle, Calendar, Archive,
   ChevronLeft, ChevronRight, Menu, X,
-  Building2, UserCircle, ClipboardList, ScanSearch, Mail, Send, Activity, SlidersHorizontal
+  Building2, UserCircle, ClipboardList, ScanSearch, Mail, Send, Activity, SlidersHorizontal, ShieldCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -49,6 +49,7 @@ const navItems = [
       { label: 'Transaction Monitoring', icon: Activity, href: '/transaction-monitoring', permission: null, featureKey: 'transaction_monitoring' },
       { label: 'Alerts', icon: AlertTriangle, href: '/tm/alerts', permission: 'tmViewAlerts', featureKey: 'tm_core' },
       { label: 'Rules', icon: SlidersHorizontal, href: '/tm/rules', anyPermission: ['tmManageRules', 'tmApproveRules'], featureKey: 'tm_rules' },
+      { label: 'Quality', icon: ShieldCheck, href: '/tm/quality', permission: 'tmQuality', featureKey: 'tm_quality' },
       { label: 'Batch Screening', icon: ScanSearch, href: '/batch-screening', permission: 'createEditClient', featureKey: 'batch_screening' },
       { label: 'Review Planner', icon: Calendar, href: '/review-planner', permission: 'viewAllTenantCases', featureKey: 'review_planner' },
     ],

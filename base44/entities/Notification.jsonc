@@ -25,7 +25,8 @@
         "tm_escalation",
         "fiu_report_review",
         "tm_rule_approval",
-        "tm_rule_drift"
+        "tm_rule_drift",
+        "tm_quality_finding"
       ]
     },
     "title": {
