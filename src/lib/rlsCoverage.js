@@ -46,6 +46,7 @@ export const RLS_COVERAGE = [
   portal('Tenant'),
   yes('TenantApiKey'),
   yes('TenantSecret'),
+  yes('TippingOffLock'),
   yes('TmAlert'),
   yes('TmCase'),
   yes('TmRegressionRun'),

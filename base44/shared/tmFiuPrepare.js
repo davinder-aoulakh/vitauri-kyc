@@ -91,7 +91,7 @@ export async function prepareReport(ctx, { tmCaseId, alertId, profileCode, refre
     if (all[0] && all[0].id !== report.id) { await E.FiuReport.delete(report.id); return summary(all[0], tmCase, { existing: true }); } // concurrent duplicate
   }
 
-  const locked = isLockingStatus(status) ? await lockClient(base44, auth, { tenantId, client: d.client, reportRef: report.report_ref }) : false;
+  const locked = isLockingStatus(status) ? await lockClient(base44, { tenantId, clientId: d.client.id, reason: report.report_ref, fiuReportId: report.id, actor: auth }) : false;
   await writeAudit(base44, auth, {
     tenantId, clientId: d.client.id, eventType: existing ? 'fiu_report_refreshed' : 'fiu_report_prepared',
     before: existing ? { status: existing.status, missing_fields: existing.missing_fields, version: existing.version } : {},

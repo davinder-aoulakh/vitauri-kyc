@@ -76,7 +76,7 @@ export async function submitForApproval(ctx, report) {
   if (!String(report.narrative?.text || '').trim()) throw httpError(422, 'The reason for reporting is empty');
   const now = new Date().toISOString();
   await ctx.E.FiuReport.update(report.id, { status: 'in_review', missing_fields: [], submitted_for_approval_by: ctx.auth.actorUserId, submitted_for_approval_at: now });
-  await lockClient(ctx.base44, ctx.auth, { tenantId: ctx.tenantId, client, reportRef: report.report_ref });
+  await lockClient(ctx.base44, { tenantId: ctx.tenantId, clientId: client.id, reason: report.report_ref, fiuReportId: report.id, actor: ctx.auth });
   const cos = (await tenantUsers(ctx.E, ctx.tenantId)).filter((u) => CO_ROLES.includes(roleOf(u)) && u.id !== ctx.auth.actorUserId);
   await notify(ctx, report, cos.map((u) => u.id), `FIU report ${report.report_ref} needs approval`, `${ctx.auth.actorName} sent the report for approval.`, 'review');
   await audit(ctx, report, 'fiu_report_submitted_for_approval', { status: 'draft' }, { status: 'in_review', notified: cos.length }, `FIU report ${report.report_ref} sent for approval by ${ctx.auth.actorName}.`);

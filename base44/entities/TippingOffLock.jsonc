@@ -1,0 +1,68 @@
+{
+  "name": "TippingOffLock",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "locked": {
+      "type": "boolean",
+      "default": true
+    },
+    "reason": {
+      "type": "string"
+    },
+    "fiu_report_id": {
+      "type": "string"
+    },
+    "locked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "locked_by": {
+      "type": "string"
+    },
+    "unlocked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "unlocked_by_user_id": {
+      "type": "string"
+    },
+    "unlock_rationale": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "client_id"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false
+  }
+}

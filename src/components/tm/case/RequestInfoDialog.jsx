@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Copy } from 'lucide-react';
 import InlineError from '@/components/shared/InlineError';
+import { fetchLocked, LOCK_BANNER } from '@/lib/tippingOff';
 
 const DEFAULT_ITEMS = 'Source of funds documentation\nSupporting documents for the flagged transactions';
 
@@ -19,6 +20,7 @@ export default function RequestInfoDialog({ open, onOpenChange, run, client, ten
 
   const send = async () => {
     setBusy(true); setError('');
+    if (await fetchLocked(client?.tenant_id || tenant?.id, client?.id)) { setBusy(false); setError(LOCK_BANNER); return; }
     const res = await run('request_info', { items: items.split('\n').filter((s) => s.trim()), message }, { success: 'Request created', fail: 'Request blocked' });
     if (!res) { setBusy(false); setError('The request could not be created. See the message above.'); return; }
     const link = `${window.location.origin}/portal/${res.access_token}`;

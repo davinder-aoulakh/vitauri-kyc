@@ -5,6 +5,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { fetchAll } from '../../shared/tmCoverage.js';
+import { checkTippingOffMirror } from '../../shared/tippingOffMirror.js';
 import { OPEN_ALERT, OPEN_CASE, loadFiuProfile, alertClock, caseClock } from '../../shared/tmDeadline.js';
 
 const CALLER_ROLES = ['Vitauri Ops', 'Tenant Admin', 'Compliance Admin', 'Compliance Officer'];
@@ -75,7 +76,9 @@ async function processTenant(base44, tenant) {
     });
   }
   if (toCreate.length) await E.Notification.bulkCreate(toCreate);
-  return { tenant_id: tid, fiu_profile: !!fiu, alerts: alerts.length, cases: cases.length, clocks_updated: updated, notifications: toCreate.length };
+  let mirror;
+  try { mirror = await checkTippingOffMirror(base44, tid); } catch (e) { mirror = { error: String(e?.message || e).slice(0, 200) }; }
+  return { tenant_id: tid, fiu_profile: !!fiu, alerts: alerts.length, cases: cases.length, clocks_updated: updated, notifications: toCreate.length, tipping_off_mirror: mirror };
 }
 
 export default async function (req) {

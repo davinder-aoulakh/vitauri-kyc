@@ -70,7 +70,7 @@ export async function fiuUnderway(E, tenantId, tmCaseId) {
 export async function assertCustomerRequestAllowed(ctx, tmCase) {
   const client = asList(await ctx.E.Client.filter({ tenant_id: ctx.tenantId, id: tmCase.primary_client_id }))[0];
   if (!client) throw httpError(404, 'Client not found');
-  assertClientNotLocked(client);
+  await assertClientNotLocked(ctx.base44, ctx.tenantId, client.id);
   if (await fiuUnderway(ctx.E, ctx.tenantId, tmCase.id)) throw httpError(423, 'Customer requests are locked once an FIU report is being prepared.');
   return client;
 }
