@@ -682,9 +682,9 @@ async function buildPDF({ kycCase, client, currentUser, screeningHits, assessmen
 }
 
 // ── Annex merging helpers (pdf-lib) ─────────────────────────────────────────
-async function fetchDiditPdfBytes(sessionId) {
+async function fetchDiditPdfBytes(sessionId, tenantId) {
   try {
-    const res = await base44.functions.invoke('diditProxy', { action: 'session_pdf', session_id: sessionId });
+    const res = await base44.functions.invoke('diditProxy', { action: 'session_pdf', session_id: sessionId, tenant_id: tenantId });
     const d = res?.data ?? res;
     const base64 = d?.pdf_base64;
     if (!base64) return null;
@@ -729,7 +729,7 @@ async function mergeAnnexPdfs({ doc, auditTrailStartPage, documents, diditSessio
 
   // 2. Didit verification report(s) — first
   for (const sessionId of diditSessionIds || []) {
-    const bytes = await fetchDiditPdfBytes(sessionId);
+    const bytes = await fetchDiditPdfBytes(sessionId, kycCase.tenant_id);
     if (!bytes) continue;
     try {
       const diditDoc = await PDFDocument.load(bytes);
