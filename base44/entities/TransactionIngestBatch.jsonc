@@ -59,6 +59,21 @@
     },
     "api_key_id": {
       "type": "string"
+    },
+    "flagged": {
+      "type": "array",
+      "description": "Rows accepted but flagged, e.g. 'account closed'",
+      "items": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "number"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "required": [

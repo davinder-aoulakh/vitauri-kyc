@@ -22,6 +22,8 @@ async function processTenant(base44, tenant, todayStr, nowMs) {
   const floor = addDays(todayStr, -WINDOW_DAYS);
 
   const accounts = await fetchAll((cursor) => E.BankAccount.filter({ tenant_id: tid, status: 'active' }, { limit: 1000, cursor }));
+  // Closed accounts are re-planned only to switch days after closed_at to "not expected".
+  const closedAccounts = await fetchAll((cursor) => E.BankAccount.filter({ tenant_id: tid, status: 'closed' }, { limit: 1000, cursor }));
   const rows = await fetchAll((cursor) => E.CoverageDay.filter({ tenant_id: tid, date: { $gte: floor, $lte: yesterday } }, { sort: 'date', limit: 1000, cursor }), 20);
   const prior = asList(await E.CoverageDay.filter({ tenant_id: tid, date: { $lt: floor }, txn_count: { $gt: 0 } }, { sort: '-date', limit: 1000 }));
 
@@ -65,6 +67,14 @@ async function processTenant(base44, tenant, todayStr, nowMs) {
     toUpdate.push(...plan.update);
     lastReceiptByAccount.set(account.id, plan.lastReceipt);
     if (plan.missing > 0) accountsWithMissing.push({ account, missing: plan.missing });
+  }
+  for (const account of closedAccounts) {
+    if (!rowsByAccount.has(account.id)) continue;
+    const plan = planAccount({
+      account, rowsByDate: rowsByAccount.get(account.id), priorReceipt: priorByAccount.get(account.id),
+      floor, yesterday, today: todayStr, blockedDates: blockedByAccount.get(account.id) || new Set(),
+    });
+    toUpdate.push(...plan.update.filter((u) => u.patch.expected === false));
   }
   for (const group of chunk(toCreate, 200)) await E.CoverageDay.bulkCreate(group);
   await mapLimit(toUpdate, 6, (u) => E.CoverageDay.update(u.id, u.patch));

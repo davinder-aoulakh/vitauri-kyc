@@ -53,6 +53,9 @@
       "type": "string",
       "format": "date"
     },
+    "closed_reason": {
+      "type": "string"
+    },
     "expected_frequency": {
       "type": "string",
       "enum": [

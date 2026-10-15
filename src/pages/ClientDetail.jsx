@@ -47,7 +47,7 @@ export default function ClientDetail() {
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting]       = useState(false);
   const [pendingOcr, setPendingOcr]   = useState(null);
-  const [activeTab, setActiveTab]     = useState('profile');
+  const [activeTab, setActiveTab]     = useState(new URLSearchParams(window.location.search).get('tab') === 'monitoring' ? 'monitoring' : 'profile');
 
   const userRole = currentUser?.app_role;
   const canReassign = hasPermission(userRole, 'viewAllTenantCases');

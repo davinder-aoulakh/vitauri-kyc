@@ -1,9 +1,15 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
+import { useTenant } from '@/lib/tenantContext';
+import { isFeatureEnabled } from '@/lib/featureFlags';
+import { hasPermission } from '@/lib/permissions';
 import EmptyState from '@/components/shared/EmptyState';
 import CoverageStrip, { CoverageLegend } from '@/components/tm/coverage/CoverageStrip';
 import { Landmark } from 'lucide-react';
 
 export default function AccountsCoverageTable({ rows, start, end }) {
+  const { currentUser, tenant } = useTenant();
+  const canManage = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmWorkCase') && hasPermission(currentUser?.app_role, 'createRunCase');
   return (
     <section className="bg-card border border-border rounded-lg">
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-border">
@@ -33,6 +39,7 @@ export default function AccountsCoverageTable({ rows, start, end }) {
                   <td className="px-4 py-2.5 whitespace-nowrap">
                     <div className="font-mono text-xs">{r.account.iban_or_number}</div>
                     {r.account.institution && <div className="text-xs text-muted-foreground">{r.account.institution}</div>}
+                    {canManage && <Link to={`/client/${r.account.client_id}?tab=monitoring`} className="text-xs text-primary hover:underline">Manage accounts</Link>}
                   </td>
                   <td className="px-4 py-2.5"><CoverageStrip cells={r.cells} /></td>
                   <td className="px-4 py-2.5 text-right tabular-nums">{r.missing}</td>

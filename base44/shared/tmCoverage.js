@@ -48,30 +48,50 @@ export async function fetchAll(run, maxPages = 10) {
  * blockedDates: Set<date> of days that still hold transactions under review (open alert or Didit IN_REVIEW without a closed alert).
  * Weekly/monthly accounts are expected only on cycle due dates, counted from the last day data was received.
  */
+const periodStart = (d, freq) => (freq === 'weekly' ? addDays(d, -((parseIso(d).getUTCDay() + 6) % 7)) : `${d.slice(0, 7)}-01`);
+const periodEnd = (d, freq) => (freq === 'weekly' ? addDays(periodStart(d, freq), 6) : monthEnd(d));
+const hasData = (row) => !!row && ((row.txn_count || 0) > 0 || ['received', 'processed', 'reviewed'].includes(row.state));
+
+/**
+ * Daily accounts expect every day. Weekly accounts expect one day per ISO week (its Sunday), monthly accounts one per month
+ * (its last day); that day is satisfied when any day of the period received data. Days before opened_at and after closed_at
+ * are never expected. A period's expected day is only evaluated once it has passed (<= yesterday).
+ */
 export function planAccount({ account, rowsByDate, priorReceipt, floor, yesterday, today, blockedDates }) {
   const freq = account.expected_frequency || 'daily';
-  const start = account.opened_at && account.opened_at > floor ? account.opened_at : floor;
+  const opened = account.opened_at || null;
+  const closed = account.closed_at || null;
   const create = [];
   const update = [];
   let missing = 0;
   let lastReceipt = priorReceipt || null;
-  let nextDue = freq === 'daily' ? null : addCycle(priorReceipt || account.opened_at || start, freq);
+  const covered = new Set();
+  if (freq !== 'daily') {
+    if (priorReceipt) covered.add(periodStart(priorReceipt, freq));
+    for (const [d, row] of rowsByDate) if (hasData(row)) covered.add(periodStart(d, freq));
+  }
 
-  for (let d = start; d <= yesterday; d = addDays(d, 1)) {
+  for (let d = floor; d <= yesterday; d = addDays(d, 1)) {
     const row = rowsByDate.get(d);
-    const got = row && ((row.txn_count || 0) > 0 || ['received', 'processed', 'reviewed'].includes(row.state));
-    if (got) {
+    if (hasData(row)) {
       lastReceipt = d;
-      if (freq !== 'daily') nextDue = addCycle(d, freq);
       if (row.state === 'processed' || row.state === 'reviewed') {
         const want = blockedDates.has(d) ? 'processed' : 'reviewed';
         if (want !== row.state) update.push({ id: row.id, patch: { state: want } });
       }
       continue;
     }
-    let expected = freq === 'daily';
-    if (!expected && d >= nextDue) { expected = true; nextDue = addCycle(nextDue, freq); }
-    const state = expected && isAwaiting(account, d, today) ? 'awaiting' : 'missing';
+    if ((opened && d < opened) || (closed && d > closed)) {
+      if (row && row.expected !== false) update.push({ id: row.id, patch: { expected: false } });
+      continue;
+    }
+    let expected = true;
+    if (freq !== 'daily') {
+      const pe = periodEnd(d, freq);
+      expected = d === (closed && closed < pe ? closed : pe);
+    }
+    const satisfied = expected && freq !== 'daily' && covered.has(periodStart(d, freq));
+    const state = satisfied ? 'received' : (expected && isAwaiting(account, d, today) ? 'awaiting' : 'missing');
     if (expected && state === 'missing') missing++;
     if (!row) {
       create.push({

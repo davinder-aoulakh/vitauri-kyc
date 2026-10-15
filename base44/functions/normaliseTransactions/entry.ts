@@ -84,13 +84,16 @@ export default async function (req) {
 
     // ── Canonicalise (seq = index among same-day identical items in this batch) ──
     const rejected = [];
+    const flagged = [];
     const seqCounter = new Map();
     const canon = []; // { index, record, raw }
     for (let index = 0; index < items.length; index++) {
       const raw = items[index] || {};
       const clientId = raw.client_id;
       if (!clientId || !clients.has(clientId)) { rejected.push({ index, reason: 'client_id missing or not in this tenant' }); continue; }
+      // resolveAccount matches closed accounts too, so a closed IBAN is never re-created; the row is flagged instead.
       const acc = await resolveAccount(clientId, raw);
+      if (acc?.status === 'closed') flagged.push({ index, reason: 'account closed' });
       const day = raw.executed_at ? new Date(raw.executed_at).toISOString().slice(0, 10) : 'invalid';
       const sig = [clientId, acc?.id ?? '', day, Math.abs(Number(raw.amount)).toFixed(2), String(raw.currency || '').toUpperCase(), normaliseDescription(raw.description_raw ?? raw.description)].join('|');
       const seq = raw.external_id ? 0 : (seqCounter.get(sig) ?? 0);
@@ -144,7 +147,7 @@ export default async function (req) {
         if (match) { r.related_to = match.id; linked++; }
       }
       if (r.counterparty_account_id) {
-        const own = (accountsByClient.get(r.client_id) || []).some((a) => a.id !== r.bank_account_id && acctNorm(a.iban_or_number) === acctNorm(r.counterparty_account_id));
+        const own = (accountsByClient.get(r.client_id) || []).some((a) => a.is_customer_owned === true && a.id !== r.bank_account_id && acctNorm(a.iban_or_number) === acctNorm(r.counterparty_account_id));
         if (own) { r.own_transfer = true; r.category = 'own_transfer'; ownTransfers++; }
       }
       const cl = clients.get(r.client_id);
@@ -205,6 +208,7 @@ export default async function (req) {
       accepted_count: (batch.accepted_count || 0) + accepted,
       duplicate_count: (batch.duplicate_count || 0) + duplicates,
       rejected: [...(batch.rejected || []), ...rejected],
+      flagged: [...(batch.flagged || []), ...flagged],
       finished_at: new Date().toISOString(),
       status: accepted === 0 && duplicates === 0 && rejected.length > 0 ? 'failed' : 'completed',
       started_at: batch.started_at || new Date().toISOString(),
@@ -214,7 +218,7 @@ export default async function (req) {
     await writeAudit(base44, auth, {
       tenantId, clientId: oneClient, eventType: 'tm_ingest_batch_normalised',
       before: { received_count: batch.received_count || 0, accepted_count: batch.accepted_count || 0 },
-      after: { batch_id: batchRef, received: items.length, accepted, duplicates, rejected: rejected.length, linked_reversals: linked, own_transfers: ownTransfers, fx_missing: fxMissing },
+      after: { batch_id: batchRef, received: items.length, accepted, duplicates, rejected: rejected.length, flagged_account_closed: flagged.length, linked_reversals: linked, own_transfers: ownTransfers, fx_missing: fxMissing },
       notes: `Normalised ${items.length} item(s) via ${channel}: ${accepted} accepted, ${duplicates} duplicate, ${rejected.length} rejected.`,
     });
 
@@ -232,7 +236,7 @@ export default async function (req) {
     }
 
     return Response.json({
-      batch_id: batchRef, received: items.length, accepted, duplicates, rejected,
+      batch_id: batchRef, received: items.length, accepted, duplicates, rejected, flagged,
       linked_reversals: linked, own_transfers: ownTransfers, fx_missing: fxMissing,
       transaction_ids: createdIds, enrichment,
     });
