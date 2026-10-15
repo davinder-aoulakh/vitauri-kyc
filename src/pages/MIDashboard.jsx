@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { hasPermission } from '@/lib/permissions';
+import { isFeatureEnabled } from '@/lib/featureFlags';
+import MiTabSwitch from '@/components/mi/MiTabSwitch';
+import TmMiTab from '@/components/mi/TmMiTab';
 import AppShell from '@/components/layout/AppShell';
 import PageHeader from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -48,8 +51,9 @@ function SectionHeader({ title, onExport, exportLabel = 'CSV' }) {
 }
 
 export default function MIDashboard() {
-  const { currentUser } = useTenant();
+  const { currentUser, tenant } = useTenant();
   const userRole = currentUser?.app_role;
+  const tmTabEnabled = isFeatureEnabled(tenant, 'tm_core') && hasPermission(userRole, 'viewMIDashboard');
   const isManager = hasPermission(userRole, 'viewAllTenantCases');
 
   const [aiRuns, setAiRuns]         = useState([]);
@@ -292,6 +296,18 @@ export default function MIDashboard() {
       return { ...m, kycCase, client, daysOverdue };
     });
 
+  // Transaction monitoring tab (tm_core + MI permission)
+  if (activeTab === 'tm' && tmTabEnabled) {
+    return (
+      <AppShell>
+        <div className="p-6 max-w-screen-2xl mx-auto space-y-6">
+          <PageHeader title="MI Dashboard" subtitle="Transaction monitoring — month view" actions={<MiTabSwitch active="tm" onChange={setActiveTab} />} />
+          <TmMiTab tenantId={currentUser?.tenant_id} />
+        </div>
+      </AppShell>
+    );
+  }
+
   // Control Measures Tab View
   if (activeTab === 'control-measures') {
     return (
@@ -374,7 +390,8 @@ export default function MIDashboard() {
           title="MI Dashboard"
           subtitle="Management information — portfolio-level reporting"
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {tmTabEnabled && <MiTabSwitch active="overview" onChange={setActiveTab} />}
               <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="h-8 text-xs w-36" />
               <span className="text-xs text-muted-foreground">→</span>
               <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="h-8 text-xs w-36" />

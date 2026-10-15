@@ -46,12 +46,24 @@ const navItems = [
     group: 'MONITORING',
     items: [
       { label: 'Screening', icon: Shield, href: '/monitoring', permission: null, badge: 'alerts', featureKey: 'monitoring' },
-      { label: 'Transaction Monitoring', icon: Activity, href: '/transaction-monitoring', permission: null, featureKey: 'transaction_monitoring' },
-      { label: 'Alerts', icon: AlertTriangle, href: '/tm/alerts', permission: 'tmViewAlerts', featureKey: 'tm_core' },
-      { label: 'Rules', icon: SlidersHorizontal, href: '/tm/rules', anyPermission: ['tmManageRules', 'tmApproveRules'], featureKey: 'tm_rules' },
-      { label: 'Quality', icon: ShieldCheck, href: '/tm/quality', permission: 'tmQuality', featureKey: 'tm_quality' },
+      { label: 'Transaction Monitoring', icon: Activity, href: '/transaction-monitoring', permission: null, featureKey: 'transaction_monitoring', tmMoved: true },
+      { label: 'Alerts', icon: AlertTriangle, href: '/tm/alerts', permission: 'tmViewAlerts', featureKey: 'tm_core', tmMoved: true },
+      { label: 'Rules', icon: SlidersHorizontal, href: '/tm/rules', anyPermission: ['tmManageRules', 'tmApproveRules'], featureKey: 'tm_rules', tmMoved: true },
+      { label: 'Quality', icon: ShieldCheck, href: '/tm/quality', permission: 'tmQuality', featureKey: 'tm_quality', tmMoved: true },
       { label: 'Batch Screening', icon: ScanSearch, href: '/batch-screening', permission: 'createEditClient', featureKey: 'batch_screening' },
       { label: 'Review Planner', icon: Calendar, href: '/review-planner', permission: 'viewAllTenantCases', featureKey: 'review_planner' },
+    ],
+  },
+  {
+    // Shown only when tm_core is on; the same links then no longer appear under MONITORING.
+    group: 'TRANSACTION MONITORING',
+    featureKey: 'tm_core',
+    items: [
+      { label: 'Alerts', icon: AlertTriangle, href: '/tm/alerts', permission: 'tmViewAlerts', badge: 'tmAlerts' },
+      { label: 'Coverage', icon: Activity, href: '/tm/coverage', permission: 'tmViewAlerts' },
+      { label: 'Rules', icon: SlidersHorizontal, href: '/tm/rules', anyPermission: ['tmManageRules', 'tmApproveRules'], featureKey: 'tm_rules' },
+      { label: 'Quality', icon: ShieldCheck, href: '/tm/quality', permission: 'tmQuality', featureKey: 'tm_quality' },
+      { label: 'Transactions', icon: Activity, href: '/transaction-monitoring', permission: null, featureKey: 'transaction_monitoring' },
     ],
   },
   {
@@ -91,6 +103,15 @@ export default function AppShell({ children }) {
     staleTime: Infinity,
   });
 
+  // Open TM alert count for the red badge (only when the TM group is visible to this user)
+  const tmOn = isFeatureEnabled(tenant, 'tm_core') && hasPermission(userRole, 'tmViewAlerts');
+  const { data: tmAlertCount = 0 } = useQuery({
+    queryKey: ['tmAlertBadge', currentUser?.tenant_id],
+    enabled: tmOn && !!currentUser?.tenant_id,
+    queryFn: () => base44.entities.TmAlert.count({ tenant_id: currentUser.tenant_id, status: { $in: ['new', 'triaged', 'in_review'] } }),
+    staleTime: 60000,
+  });
+
   const isActive = (href) => {
     if (href === '/') return location.pathname === '/';
     return location.pathname.startsWith(href);
@@ -121,7 +142,9 @@ export default function AppShell({ children }) {
           // Hide entire group if its feature flag is disabled
           if (group.featureKey && !isFeatureEnabled(tenant, group.featureKey)) return null;
 
+          const tmCoreOn = isFeatureEnabled(tenant, 'tm_core');
           const visibleItems = group.items.filter(item =>
+            !(item.tmMoved && tmCoreOn) &&
             (!item.permission || hasPermission(userRole, item.permission)) &&
             (!item.anyPermission || item.anyPermission.some(p => hasPermission(userRole, p))) &&
             (!item.featureKey || isFeatureEnabled(tenant, item.featureKey))
@@ -159,6 +182,11 @@ export default function AppShell({ children }) {
                       <item.icon className={cn('flex-shrink-0', collapsed ? 'w-5 h-5' : 'w-4 h-4')} />
                       {!collapsed && <span className="truncate">{item.label}</span>}
                     </div>
+                    {item.badge === 'tmAlerts' && tmAlertCount > 0 && !collapsed && (
+                      <span className="ml-auto flex-shrink-0 px-2 py-0.5 bg-red-500 text-white text-xs font-semibold rounded-full">
+                        {tmAlertCount}
+                      </span>
+                    )}
                     {item.badge === 'outreach' && outreachCount > 0 && !collapsed && (
                       <span className="ml-auto flex-shrink-0 px-2 py-0.5 bg-destructive/20 text-destructive text-xs font-semibold rounded-full">
                         {outreachCount}

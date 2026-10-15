@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { X, Activity, RefreshCw, Loader2, CheckCircle, ShieldOff, ArrowUpRight } from 'lucide-react';
+import CanonicalData from '@/components/transactions/CanonicalData';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -14,7 +15,7 @@ const STATUS_STYLE = {
   PENDING:       'bg-slate-100 text-slate-600 border-slate-200',
 };
 
-export default function TransactionDetailPanel({ transaction, clientName, currentUser, onClose, onUpdated }) {
+export default function TransactionDetailPanel({ transaction, clientName, currentUser, onClose, onUpdated, showCanonical = false }) {
   const [refreshing, setRefreshing] = useState(false);
   const [notes, setNotes] = useState(transaction.review_notes || '');
   const [submitting, setSubmitting] = useState(false);
@@ -101,6 +102,8 @@ export default function TransactionDetailPanel({ transaction, clientName, curren
             <div className="flex justify-between text-xs"><span className="text-muted-foreground">Our Transaction ID</span><span className="font-medium max-w-[60%] truncate text-right">{transaction.our_transaction_id}</span></div>
             <div className="flex justify-between text-xs"><span className="text-muted-foreground">Didit Transaction ID</span><span className="font-medium max-w-[60%] truncate text-right">{transaction.didit_transaction_id || '—'}</span></div>
           </div>
+
+          {showCanonical && <CanonicalData transaction={transaction} />}
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">

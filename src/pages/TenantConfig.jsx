@@ -13,6 +13,7 @@ import { hasPermission } from '@/lib/permissions';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import ApiKeysTab from '@/components/tenantconfig/ApiKeysTab';
 import FiuProfilesTab from '@/components/tenantconfig/FiuProfilesTab';
+import TmSettingsTab from '@/components/tenantconfig/TmSettingsTab';
 
 // Tab components
 import BrandingTab          from '@/components/tenantconfig/BrandingTab';
@@ -71,7 +72,8 @@ export default function TenantConfig() {
   const hydrated = useRef(false);
   const showApiKeys = isFeatureEnabled(tenant, 'tm_ingest_api') && hasPermission(userRole, 'tmManageIngest');
   const showFiu = isFeatureEnabled(tenant, 'tm_fiu') && canConfig;
-  const visibleTabs = [...TABS, ...(showApiKeys ? [{ id: 'api_keys', label: 'API keys' }] : []), ...(showFiu ? [{ id: 'fiu_profiles', label: 'FIU profiles' }] : [])];
+  const showTmSettings = isFeatureEnabled(tenant, 'tm_core') && canConfig;
+  const visibleTabs = [...TABS, ...(showApiKeys ? [{ id: 'api_keys', label: 'API keys' }] : []), ...(showFiu ? [{ id: 'fiu_profiles', label: 'FIU profiles' }] : []), ...(showTmSettings ? [{ id: 'tm_settings', label: 'TM settings' }] : [])];
 
   useEffect(() => {
     if (tenant && !hydrated.current) {
@@ -247,6 +249,12 @@ export default function TenantConfig() {
           {showFiu && (
             <TabsContent value="fiu_profiles" className="mt-5">
               <FiuProfilesTab tenant={tenant} currentUser={currentUser} />
+            </TabsContent>
+          )}
+
+          {showTmSettings && (
+            <TabsContent value="tm_settings" className="mt-5">
+              <TmSettingsTab tenant={tenant} currentUser={currentUser} setTenant={setTenant} />
             </TabsContent>
           )}
 

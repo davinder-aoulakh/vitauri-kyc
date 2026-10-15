@@ -6,6 +6,7 @@ import PageHeader from '@/components/shared/PageHeader';
 import KpiCard from '@/components/shared/KpiCard';
 import TransactionForm from '@/components/transactions/TransactionForm';
 import TransactionList from '@/components/transactions/TransactionList';
+import TmTransactionList from '@/components/transactions/TmTransactionList';
 import TransactionDetailPanel from '@/components/transactions/TransactionDetailPanel';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -18,6 +19,8 @@ export default function TransactionMonitoring() {
   const { currentUser, tenant } = useTenant();
   const [showStatement, setShowStatement] = useState(false);
   const canUploadStatement = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmWorkCase');
+  const tmCore = isFeatureEnabled(tenant, 'tm_core');
+  const [version, setVersion] = useState(0);
   const [transactions, setTransactions] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +37,7 @@ export default function TransactionMonitoring() {
     ]);
     setTransactions(txData || []);
     setClients(clientData || []);
+    setVersion(v => v + 1);
     setLoading(false);
   }, [currentUser]);
 
@@ -77,14 +81,18 @@ export default function TransactionMonitoring() {
           <KpiCard label="Declined" value={loading ? '…' : declinedCount} icon={Activity} accent="bg-destructive" />
         </div>
 
-        <TransactionList
-          transactions={transactions}
-          clients={clients}
-          loading={loading}
-          filterStatus={filterStatus}
-          setFilterStatus={setFilterStatus}
-          onSelect={setSelected}
-        />
+        {tmCore ? (
+          <TmTransactionList tenantId={currentUser?.tenant_id} clients={clients} version={version} onSelect={setSelected} />
+        ) : (
+          <TransactionList
+            transactions={transactions}
+            clients={clients}
+            loading={loading}
+            filterStatus={filterStatus}
+            setFilterStatus={setFilterStatus}
+            onSelect={setSelected}
+          />
+        )}
       </div>
 
       {selected && (
@@ -92,6 +100,7 @@ export default function TransactionMonitoring() {
           transaction={selected}
           clientName={clientName(selected.client_id)}
           currentUser={currentUser}
+          showCanonical={tmCore}
           onClose={() => setSelected(null)}
           onUpdated={loadAll}
         />
