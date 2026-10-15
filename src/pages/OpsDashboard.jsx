@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import OpsDiditPanel from '@/components/ops/OpsDiditPanel';
 import NewTenantDialog from '@/components/ops/NewTenantDialog';
 import TenantFeaturesPanel from '@/components/ops/TenantFeaturesPanel';
+import TmHealthCard from '@/components/ops/TmHealthCard';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import AppLogo from '@/components/shared/AppLogo';
@@ -161,6 +162,8 @@ export default function OpsDashboard() {
             ))}
           </div>
         </HeroBand>
+
+        <TmHealthCard />
 
         {/* Tabs */}
         <div className="flex gap-1 bg-muted/40 rounded-xl p-1 border border-border mb-5 w-fit">

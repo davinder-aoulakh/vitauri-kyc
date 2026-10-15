@@ -47,6 +47,7 @@ import TmCaseWorkspace from './pages/TmCaseWorkspace';
 import FiuReportWorkspace from './pages/FiuReportWorkspace';
 import TmRules from './pages/TmRules';
 import TmQuality from './pages/TmQuality';
+import TmRegression from './pages/TmRegression';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -82,6 +83,7 @@ const AuthenticatedApp = () => {
 
       {/* Ops */}
       <Route path="/ops" element={<OpsDashboard />} />
+      <Route path="/ops/tm-regression" element={<TmRegression />} />
 
       {/* Cases */}
       <Route path="/my-cases" element={<CasesList myOnly={true} />} />
