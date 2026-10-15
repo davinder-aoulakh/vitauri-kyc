@@ -7,6 +7,7 @@ import { hasPermission } from '@/lib/permissions';
 import InlineError from '@/components/shared/InlineError';
 import FxMissingBadge from '@/components/shared/FxMissingBadge';
 import BankAccountsCard from '@/components/client/bankaccounts/BankAccountsCard';
+import CounterpartiesCard from '@/components/client/monitoring/CounterpartiesCard';
 import ExpectedProfileCard from '@/components/tm/ExpectedProfileCard';
 import RiskGauge from './monitoring/RiskGauge';
 import StatusPills from './monitoring/StatusPills';
@@ -51,6 +52,7 @@ export default function MonitoringTab({ client }) {
       {data.fx_missing > 0 && <FxMissingBadge count={data.fx_missing} />}
       <ProfileKvStrip data={data} />
       <BankAccountsCard client={client} />
+      <CounterpartiesCard client={client} />
       <InboundChart monthly={data.monthly} ceiling={data.profile?.inbound_max_month ?? null} currency={data.reporting_currency} />
       <div className="grid gap-4 lg:grid-cols-2">
         <ExpectedProfileCard client={client} onChanged={refresh} />

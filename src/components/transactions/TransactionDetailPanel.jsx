@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { X, Activity, RefreshCw, Loader2, CheckCircle, ShieldOff, ArrowUpRight } from 'lucide-react';
+import CounterpartyLink from '@/components/tm/counterparty/CounterpartyLink';
 import CanonicalData from '@/components/transactions/CanonicalData';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -96,7 +97,7 @@ export default function TransactionDetailPanel({ transaction, clientName, curren
 
           <div className="bg-muted/40 rounded-lg p-3 space-y-1">
             <div className="flex justify-between text-xs"><span className="text-muted-foreground">Category</span><span className="font-medium">{transaction.transaction_category?.replace(/_/g, ' ')}</span></div>
-            <div className="flex justify-between text-xs"><span className="text-muted-foreground">Counterparty</span><span className="font-medium">{transaction.counterparty_name || '—'}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-muted-foreground">Counterparty</span><span className="font-medium"><CounterpartyLink id={transaction.counterparty_id}>{transaction.counterparty_name || '—'}</CounterpartyLink></span></div>
             <div className="flex justify-between text-xs"><span className="text-muted-foreground">Method</span><span className="font-medium">{transaction.counterparty_method_type?.replace(/_/g, ' ')}</span></div>
             <div className="flex justify-between text-xs"><span className="text-muted-foreground">Account / Wallet</span><span className="font-medium max-w-[60%] truncate text-right">{transaction.counterparty_account_id}</span></div>
             <div className="flex justify-between text-xs"><span className="text-muted-foreground">Our Transaction ID</span><span className="font-medium max-w-[60%] truncate text-right">{transaction.our_transaction_id}</span></div>

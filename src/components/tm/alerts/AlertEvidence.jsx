@@ -1,5 +1,6 @@
 import React from 'react';
 import { PROPOSAL_LABEL } from '@/lib/tmAlerts';
+import CounterpartyLink from '@/components/tm/counterparty/CounterpartyLink';
 
 const Section = ({ title, children }) => (
   <section className="space-y-2">
@@ -37,7 +38,7 @@ export default function AlertEvidence({ alert, txns }) {
         <ul className="divide-y divide-border border border-border rounded-lg">
           {txns.map((t) => (
             <li key={t.id} className="px-3 py-2 text-xs flex justify-between gap-3">
-              <span className="truncate">{t.counterparty_name || 'Unknown counterparty'} · {String(t.executed_at || '').slice(0, 10)}</span>
+              <span className="truncate"><CounterpartyLink id={t.counterparty_id}>{t.counterparty_name || 'Unknown counterparty'}</CounterpartyLink> · {String(t.executed_at || '').slice(0, 10)}</span>
               <span className="font-medium tabular-nums">{fmtAmount(t)}</span>
             </li>
           ))}
