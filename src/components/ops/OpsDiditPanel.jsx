@@ -5,6 +5,7 @@ import { X, Plus, Trash2, Star, Save, Wifi,
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import CatchUpDiditCard from '@/components/ops/CatchUpDiditCard';
 
 const WEBHOOK_URL = 'https://vitauri-kyc.base44.app/functions/diditWebhook';
 
@@ -301,6 +302,8 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
               </div>
             )}
           </div>
+
+          <CatchUpDiditCard tenantId={tenant?.id} />
 
           {/* Rotate credentials */}
           <div className="bg-card border border-border rounded-xl p-4 space-y-3">

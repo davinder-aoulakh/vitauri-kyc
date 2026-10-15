@@ -187,7 +187,7 @@ async function handleDataUpdated(base44, body) {
   if (!outreachId || !tenantId) return;
 
   const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenantId });
-  const tenant  = tenants?.[0];
+  const tenant  = await withDiditCredentials(base44, tenants?.[0]);
   if (!tenant?.didit_api_key) { console.warn('diditWebhook: no Didit API key for tenant', tenantId); return; }
 
   const result = await fetchDiditDecision(sessionId, tenant.didit_api_key);
@@ -243,7 +243,7 @@ async function processTerminalDecisionImpl(base44, body) {
   }
 
   const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: resolvedTenantId });
-  const tenant  = tenants?.[0];
+  const tenant  = await withDiditCredentials(base44, tenants?.[0]);
   if (!tenant?.didit_api_key) { console.warn('diditWebhook: no Didit API key for tenant', resolvedTenantId); return; }
 
   const result = await fetchDiditDecision(sessionId, tenant.didit_api_key);
