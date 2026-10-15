@@ -31,5 +31,106 @@
     "tenant_id",
     "agent_key",
     "system_prompt"
-  ]
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    }
+  }
 }
