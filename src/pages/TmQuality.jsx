@@ -15,6 +15,7 @@ import SamplesPanel from '@/components/tm/quality/SamplesPanel';
 import Worklist from '@/components/tm/quality/Worklist';
 import ShadowTable from '@/components/tm/quality/ShadowTable';
 import StartSampleDialog from '@/components/tm/quality/StartSampleDialog';
+import AiModelInfo from '@/components/tm/quality/AiModelInfo';
 import ExportMenu from '@/components/tm/quality/ExportMenu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Lock } from 'lucide-react';
@@ -96,6 +97,7 @@ export default function TmQuality() {
               <Worklist sample={selected} userId={currentUser?.id} scenarios={scenarioList} busy={busy}
                 onReview={review} onComplete={() => call('completeQualitySample', { action: 'complete', sample_id: selected.id }, 'Sample completed', 'complete')} />
             )}
+            <AiModelInfo tenant={tenant} />
             <ShadowTable scenarios={scenarioList} latest={latest} canRelease={canRelease} maxPct={maxPct} busy={busy} onRun={runShadow} onRelease={release} />
           </>
         )}

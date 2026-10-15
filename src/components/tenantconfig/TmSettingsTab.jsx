@@ -7,6 +7,8 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { hasPermission } from '@/lib/permissions';
 import { isFeatureEnabled } from '@/lib/featureFlags';
+import AiModelCard from '@/components/tenantconfig/tm/AiModelCard';
+import { MODEL_CHANGE_ROLES, MIN_NOTE } from '@/lib/tmAiModels';
 import Psd2PartnerSelect from '@/components/tenantconfig/tm/Psd2PartnerSelect';
 import FxRatesCard from '@/components/tenantconfig/tm/FxRatesCard';
 import { errorMessage } from '@/lib/tmAlerts';
@@ -30,10 +32,16 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
   const [autoDraft, setAutoDraft] = useState(s.auto_draft_objective_reports === true);
   const [maxPct, setMaxPct] = useState(String(s.max_wrongly_closed_pct ?? 2));
   const [psd2Partner, setPsd2Partner] = useState(s.psd2_partner || 'manual');
+  const [autoTriage, setAutoTriage] = useState(s.auto_triage_new_alerts === true);
+  const savedModel = { model: s.ai_model || '', note: s.ai_model_change_note || '' };
+  const [aiModel, setAiModel] = useState(savedModel.model);
+  const [modelNote, setModelNote] = useState('');
+  const canChangeModel = MODEL_CHANGE_ROLES.includes(currentUser?.app_role);
+  const modelChanged = canChangeModel && aiModel !== savedModel.model;
 
   const sum = WEIGHTS.reduce((t, [k]) => t + (Number(weights[k]) || 0), 0);
   const pct = Number(maxPct);
-  const valid = /^[A-Za-z]{3}$/.test(currency) && tz.trim() && Math.abs(sum - 1) < 0.011 && Number.isFinite(pct) && pct >= 0 && pct <= 100;
+  const valid = /^[A-Za-z]{3}$/.test(currency) && tz.trim() && Math.abs(sum - 1) < 0.011 && Number.isFinite(pct) && pct >= 0 && pct <= 100 && (!modelChanged || modelNote.trim().length >= MIN_NOTE);
 
   async function save() {
     setSaving(true);
@@ -47,6 +55,8 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
         auto_draft_objective_reports: autoDraft,
         max_wrongly_closed_pct: pct,
         psd2_partner: psd2Partner,
+        auto_triage_new_alerts: autoTriage,
+        ...(modelChanged ? { ai_model: aiModel, ai_model_changed_at: new Date().toISOString(), ai_model_change_note: modelNote.trim() } : {}),
         ...(clean[cur] ? { objective_threshold: clean[cur] } : {}), // read by the rule starters
       };
       const before = { tm_reporting_currency: tenant.tm_reporting_currency, tm_timezone: tenant.tm_timezone, tm_settings: s };
@@ -56,6 +66,14 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
         event_type: 'tm_settings_updated', before_state: before, after_state: { tm_reporting_currency: cur, tm_timezone: tz.trim(), tm_settings },
         notes: 'Transaction monitoring settings were updated.',
       });
+      if (modelChanged) {
+        await base44.entities.AuditEvent.create({
+          tenant_id: tenant.id, actor_user_id: currentUser.id, actor_name: currentUser.full_name, actor_type: 'User', event_type: 'tm_ai_model_changed',
+          before_state: { ai_model: savedModel.model || 'automatic' }, after_state: { ai_model: aiModel || 'automatic', change_note: modelNote.trim() },
+          notes: `TM AI model changed from ${savedModel.model || 'automatic'} to ${aiModel || 'automatic'}. ${modelNote.trim()}`,
+        });
+        setModelNote('');
+      }
       setTenant(updated);
       toast({ title: 'TM settings saved' });
     } catch (e) {
@@ -92,6 +110,11 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
           <Switch checked={autoDraft} onCheckedChange={setAutoDraft} aria-label="Auto-draft objective reports" />
           <div><div className="text-sm font-medium">Auto-draft objective reports</div><div className="text-xs text-muted-foreground">Create a draft FIU report when an objective-indicator alert is raised.</div></div>
         </div>
+        <div className="flex items-center gap-3">
+          <Switch checked={autoTriage} onCheckedChange={setAutoTriage} aria-label="Auto-triage new alerts" />
+          <div><div className="text-sm font-medium">Auto-triage new alerts</div><div className="text-xs text-muted-foreground">AI adds a proposal to each newly created alert. It never closes or escalates; a person decides.</div></div>
+        </div>
+        <AiModelCard saved={savedModel} value={aiModel} onChange={setAiModel} note={modelNote} onNote={setModelNote} canChange={canChangeModel} changedAt={s.ai_model_changed_at} />
         <div className="max-w-xs">
           <Label className="text-xs mb-1.5 block">Max wrongly closed (%) for release</Label>
           <Input type="number" min="0" max="100" step="0.5" value={maxPct} onChange={(e) => setMaxPct(e.target.value)} className="h-9 text-sm" />

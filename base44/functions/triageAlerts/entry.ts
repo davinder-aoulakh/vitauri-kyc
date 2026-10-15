@@ -31,11 +31,17 @@ const SCHEMA = {
 const SYSTEM_PROMPT = `You are a transaction monitoring triage assistant. Propose what an analyst should do with ONE alert: escalate, close, request_info or insufficient_evidence.
 Rules: only state facts supported by the input; give short reasons and cite source_refs for each; never give percentages or confidence scores; never speculate about intent; do not recommend filing a report. You only PROPOSE: a human decides. If evidence is thin, use insufficient_evidence and list what is missing.`;
 
+const FRESH_MS = 15 * 60000;
+
 async function triageOne(base44, auth, tenantId, alertId) {
   const E = base44.asServiceRole.entities;
   const alert = asList(await E.TmAlert.filter({ tenant_id: tenantId, id: alertId }))[0];
   if (!alert) throw httpError(404, 'Alert not found');
   if (CLOSED.includes(alert.status)) throw httpError(409, `Alert is ${alert.status}`);
+  // Service-role (auto-triage) calls only touch alerts that were just created and are still untouched.
+  if (auth.mode === 'service' && (alert.status !== 'new' || alert.ai_proposal || Date.now() - new Date(alert.created_date).getTime() > FRESH_MS)) {
+    throw httpError(409, 'Auto-triage only applies to new, untriaged alerts');
+  }
 
   const since = new Date(Date.now() - 90 * DAY_MS).toISOString();
   const txnIds = (alert.transaction_ids || []).slice(0, TXN_CAP);
@@ -92,12 +98,23 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
-    const auth = await authenticate(base44, req, body, { roles: VIEW_ROLES, allowApiKey: false });
+    // Service-role call (auto-triage): no user and no API key, explicit tenant_id. Allowed only when the tenant opted in.
+    const hasKey = !!(req.headers.get('x-api-key') || body.api_key);
+    const user = hasKey ? null : await base44.auth.me().catch(() => null);
+    const serviceCall = !user && !hasKey && !!body.tenant_id;
+    const auth = serviceCall
+      ? { mode: 'service', tenantId: String(body.tenant_id), actorType: 'System', actorName: 'Auto-triage', actorUserId: undefined }
+      : await authenticate(base44, req, body, { roles: VIEW_ROLES, allowApiKey: false });
     const tenantId = auth.tenantId;
-    const ids = [...new Set(Array.isArray(body.alert_ids) ? body.alert_ids : [])].slice(0, MAX_ALERTS);
+    const ids = [...new Set(Array.isArray(body.alert_ids) ? body.alert_ids : [])].slice(0, serviceCall ? 1 : MAX_ALERTS);
     if (!ids.length) throw httpError(400, 'alert_ids is required');
     const tenant = await loadTenant(base44, tenantId);
     if (!isTmEnabled(tenant, 'tm_core')) throw httpError(403, 'Feature tm_core is not enabled');
+    if (serviceCall) {
+      let s = tenant.tm_settings;
+      if (typeof s === 'string') { try { s = JSON.parse(s); } catch { s = null; } }
+      if (s?.auto_triage_new_alerts !== true) throw httpError(403, 'Auto-triage is not enabled for this tenant');
+    }
 
     const res = await mapLimit(ids, 3, (id) => triageOne(base44, auth, tenantId, id));
     const results = res.map((r, i) => (r.ok ? r.value : { alert_id: ids[i], error: String(r.error?.message || r.error).slice(0, 200) }));

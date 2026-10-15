@@ -17,6 +17,7 @@ import { verifyDiditSignature, isTimestampFresh } from '../../shared/diditWebhoo
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { getTransaction as getDiditTmTransaction } from '../../shared/diditTm.js';
 import { computeDue } from '../../shared/tmClock.js';
+import { scheduleAutoTriage } from '../../shared/tmAutoTriage.js';
 import { safeRecompute } from '../../shared/tmRisk.js';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
 
@@ -780,5 +781,6 @@ async function upsertTmAlert(base44, { tenant_id, transaction, rule_runs }) {
     notes: `TM alert created from transaction ${transaction.id}: ${title}.`,
   }).catch(() => {});
 
+  await scheduleAutoTriage(base44, { tenantId: tenant_id, alertId: created.id, waitUntilFn: waitUntil });
   return created;
 }

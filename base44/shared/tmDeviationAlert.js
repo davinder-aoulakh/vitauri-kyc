@@ -1,5 +1,6 @@
 // Create or merge the open 'profile_deviation' TmAlert (scenario S-30) for a client.
 import { asList } from './tmAuth.js';
+import { scheduleAutoTriage } from './tmAutoTriage.js';
 
 const OPEN = ['new', 'triaged', 'in_review'];
 const SYSTEM = { actor_type: 'System', actor_name: 'Profile Deviation Job' };
@@ -43,5 +44,6 @@ export async function upsertDeviationAlert(base44, { tenantId, client, breaches,
       title: `Profile deviation: ${client.full_name}`, body: reasons.slice(0, 3).join(' · '),
     }).catch(() => {});
   }
+  await scheduleAutoTriage(base44, { tenantId, alertId: created.id });
   return { alert: created, created: true };
 }
