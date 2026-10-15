@@ -31,7 +31,7 @@ export const PERMISSIONS = {
   viewMIDashboard:      ['Manager', 'Director', 'Compliance Officer'],
   viewArchive:          ['Compliance Officer', 'Tenant Admin'],
   manageArchive:        ['Compliance Admin', 'Tenant Admin'],
-  tmViewAlerts:         ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin'],
+  tmViewAlerts:         ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'],
   tmWorkCase:           ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager'],
   tmFourEyes:           ['QC Reviewer', 'Compliance Officer', 'Manager', 'Director'],
   tmApproveFiuReport:   ['Compliance Officer'],
