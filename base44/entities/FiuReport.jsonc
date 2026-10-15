@@ -157,6 +157,10 @@
         },
         "pdf_url": {
           "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "description": "manual_upload when the XML was generated in the Didit console and uploaded"
         }
       }
     },
@@ -220,6 +224,11 @@
     "submitted_for_approval_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "generation_path_missing": {
+      "type": "boolean",
+      "default": false,
+      "description": "Last goAML generation failed because a Didit endpoint answered 404/405"
     }
   },
   "required": [

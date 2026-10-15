@@ -3,7 +3,8 @@ import { useParams } from 'react-router-dom';
 import { useTenant } from '@/lib/tenantContext';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { hasPermission } from '@/lib/permissions';
-import { useFiuReportData, useFiuAct } from '@/hooks/useFiuReport';
+import { useFiuReportData, useFiuAct, useFiuEndpointMissing } from '@/hooks/useFiuReport';
+import DiditConsoleFallback from '@/components/tm/report/DiditConsoleFallback';
 import { useCaseUsers } from '@/hooks/useTmCase';
 import AppShell from '@/components/layout/AppShell';
 import EmptyState from '@/components/shared/EmptyState';
@@ -33,6 +34,7 @@ export default function FiuReportWorkspace() {
   const { report, fiu, checks } = useFiuReportData(tenantId, id, allowed);
   const { data: users = [] } = useCaseUsers(tenantId, allowed);
   const { act, busy } = useFiuAct(tenantId, id);
+  const fiuMissing = useFiuEndpointMissing(tenantId, id, allowed && isCO && report.data?.status === 'approved');
 
   if (!allowed) return <AppShell><EmptyState icon={Lock} title="Not available" description="FIU reports need Transaction Monitoring and FIU reporting to be enabled, and the right permission." /></AppShell>;
   if (report.isLoading) return <AppShell><div className="flex justify-center py-20" role="status"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div></AppShell>;
@@ -62,6 +64,9 @@ export default function FiuReportWorkspace() {
             {['draft', 'in_review'].includes(r.status) && <ChecksPanel checks={checks} report={r} />}
           </div>
         </div>
+        {r.status === 'approved' && isCO && (r.generation_path_missing || fiuMissing.data) && (
+          <DiditConsoleFallback busy={busy} onUpload={(xml_text, filename) => act('fiuReportAction', { action: 'upload_generated', xml_text, filename }, 'goAML file uploaded')} />
+        )}
         <ReportFooter report={r} isCO={isCO} isPreparer={!!currentUser?.id && currentUser.id === r.prepared_by_user_id} editing={editing} setEditing={setEditing} pastDue={pastDue} act={act} busy={busy} />
       </div>
     </AppShell>

@@ -40,6 +40,14 @@ export function useFiuReportData(tenantId, id, enabled) {
   return { report, fiu, checks };
 }
 
+/** True when the latest Ops endpoint check marked the Didit FIU reports endpoint as missing (read through the backend). */
+export function useFiuEndpointMissing(tenantId, id, enabled) {
+  return useQuery({
+    queryKey: ['fiuReport', tenantId, id, 'didit_status'], enabled: !!tenantId && !!id && enabled,
+    queryFn: async () => !!(await base44.functions.invoke('fiuReportAction', { action: 'didit_status', report_id: id }))?.data?.fiu_reports_missing,
+  });
+}
+
 /** act(functionName, payload, successMessage) -> response data, or null after showing the error. */
 export function useFiuAct(tenantId, id) {
   const qc = useQueryClient();

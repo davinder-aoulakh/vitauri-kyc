@@ -1,7 +1,8 @@
 // Push / compare TmRules against Didit (Management API). Backend only: uses tenant.didit_api_key via diditTm.
 import { asList, httpError, mapLimit } from './tmAuth.js';
 import { writeAudit } from './tmAudit.js';
-import { upsertRule, getRule } from './diditTm.js';
+import { upsertRule, createRule, getRule } from './diditTm.js';
+import { latestEndpointCheck, isMissingInCheck } from './diditEndpointStatus.js';
 import { MODE_MAP, toDiditPayload, normalizeForCompare, diffParts, validateDefinition } from './tmRuleSchema.js';
 
 export const errText = (e) => {
@@ -11,6 +12,27 @@ export const errText = (e) => {
 };
 
 export const SYSTEM_AUTH = (name) => ({ actorType: 'System', actorName: name, actorUserId: undefined });
+
+const UPDATE_MSG = 'Rule updates require the Didit console for this plan';
+
+/** PATCH rule is unavailable: 405, or 404 while GET of the same rule works. */
+async function updateUnsupported(ctx, e, rule) {
+  if (e?.status === 405) return true;
+  if (e?.status !== 404) return false;
+  try { await getRule(ctx.tenant, rule.didit_rule_id); return true; } catch { return false; }
+}
+
+/** No PATCH: register a NEW Didit rule (unique title) and ask Didit to disable the old one through the create endpoint (mode DISABLED). */
+async function replaceRule(ctx, rule, payload) {
+  const history = rule.didit_rule_history || [];
+  const newTitle = `${payload.title} r${history.length + 2}`;
+  let res;
+  try { res = await createRule(ctx.tenant, { ...payload, title: newTitle }); } catch { throw { detail: UPDATE_MSG }; }
+  const oldTitle = history[history.length - 1]?.new_title || `${rule.name} (v${rule.version || 1})`;
+  let oldDisabled = false;
+  try { await createRule(ctx.tenant, { ...payload, title: oldTitle, mode: 'DISABLED' }); oldDisabled = true; } catch { oldDisabled = false; }
+  return { res, entry: { old_didit_rule_id: rule.didit_rule_id, old_title: oldTitle, new_title: newTitle, old_disabled: oldDisabled, at: new Date().toISOString() } };
+}
 
 /**
  * Pushes the rule to Didit with the given Vitauri mode (default: the rule's own).
@@ -23,6 +45,7 @@ export async function syncRule(ctx, rule, { mode, force = false } = {}) {
   const diditMode = MODE_MAP[target] || 'DISABLED';
   let patch;
   let ok = true;
+  let replaced = null;
   try {
     const def = validateDefinition(rule.definition);
     const payload = toDiditPayload({ ...rule, definition: def }, diditMode);
@@ -30,12 +53,21 @@ export async function syncRule(ctx, rule, { mode, force = false } = {}) {
     try {
       res = await upsertRule(ctx.tenant, payload, rule.didit_rule_id);
     } catch (e) {
-      if (e?.status === 404 && rule.didit_rule_id && force) res = await upsertRule(ctx.tenant, payload, undefined);
+      if (rule.didit_rule_id && await updateUnsupported(ctx, e, rule)) {
+        const r = await replaceRule(ctx, rule, payload);
+        res = r.res;
+        replaced = r.entry;
+      } else if (e?.status === 404 && rule.didit_rule_id && force) res = await upsertRule(ctx.tenant, payload, undefined);
       else throw e;
     }
-    const id = res?.uuid || res?.id || rule.didit_rule_id;
+    const id = res?.uuid || res?.id || (replaced ? undefined : rule.didit_rule_id);
     if (!id) throw { detail: 'Didit did not return a rule id' };
     patch = { didit_rule_id: id, sync_status: 'synced', last_synced_at: new Date().toISOString(), sync_error: '', drift_detected_at: '' };
+    if (replaced) {
+      replaced.new_didit_rule_id = id;
+      patch.didit_rule_history = [...(rule.didit_rule_history || []), replaced];
+      if (!replaced.old_disabled) patch.sync_error = `Previous Didit rule ${replaced.old_didit_rule_id} could not be disabled automatically. Disable it in the Didit console.`;
+    }
   } catch (e) {
     ok = false;
     patch = { sync_status: 'failed', sync_error: errText(e) };
@@ -44,7 +76,7 @@ export async function syncRule(ctx, rule, { mode, force = false } = {}) {
   await writeAudit(ctx.base44, ctx.auth, {
     tenantId: ctx.tenantId, eventType: ok ? 'tm_rule_synced' : 'tm_rule_sync_failed',
     before: { sync_status: rule.sync_status, didit_rule_id: rule.didit_rule_id || null },
-    after: { sync_status: patch.sync_status, didit_mode: diditMode, didit_rule_id: patch.didit_rule_id || rule.didit_rule_id || null, error: patch.sync_error || undefined },
+    after: { sync_status: patch.sync_status, didit_mode: diditMode, didit_rule_id: patch.didit_rule_id || rule.didit_rule_id || null, error: patch.sync_error || undefined, replaced_didit_rule_id: replaced?.old_didit_rule_id, old_rule_disabled: replaced ? replaced.old_disabled : undefined },
     notes: ok ? `Rule "${rule.name}" v${rule.version} pushed to Didit as ${diditMode}.` : `Pushing rule "${rule.name}" v${rule.version} to Didit failed: ${patch.sync_error}`,
   });
   return { rule: { ...rule, ...patch }, ok, error: ok ? '' : patch.sync_error };
@@ -68,6 +100,7 @@ async function checkRule(ctx, rule) {
   try {
     remote = await getRule(ctx.tenant, rule.didit_rule_id);
   } catch (e) {
+    if (e?.status === 405) return { state: 'skipped' }; // GET rule is not available on this plan: skip, never fail
     if (e?.status !== 404) return { state: 'error', error: errText(e) };
     remote = null;
   }
@@ -96,10 +129,15 @@ export async function driftCheckTenant(base44, tenant) {
   const ctx = { base44, E, tenant, tenantId: tenant.id, auth: SYSTEM_AUTH('Nightly Didit rule drift check') };
   const rules = asList(await E.TmRule.filter({ tenant_id: tenant.id, sync_status: { $in: ['synced', 'drift'] }, didit_rule_id: { $exists: true } }, undefined, 500))
     .filter((r) => r.didit_rule_id);
+  const check = await latestEndpointCheck(E, tenant.id).catch(() => null);
+  if (isMissingInCheck(check, 'rule')) {
+    return { tenant_id: tenant.id, checked: 0, skipped: rules.length, drift: 0, cleared: 0, notified: 0, errors: [], note: 'GET rule is not available on this plan; drift check skipped' };
+  }
   const out = await mapLimit(rules, 3, (r) => checkRule(ctx, r));
-  const res = { tenant_id: tenant.id, checked: rules.length, drift: 0, cleared: 0, notified: 0, errors: [] };
+  const res = { tenant_id: tenant.id, checked: rules.length, skipped: 0, drift: 0, cleared: 0, notified: 0, errors: [] };
   out.forEach((o, i) => {
     const v = o.ok ? o.value : { state: 'error', error: errText(o.error) };
+    if (v.state === 'skipped') res.skipped++;
     if (v.state === 'drift') res.drift++;
     if (v.state === 'cleared') res.cleared++;
     res.notified += v.notified || 0;

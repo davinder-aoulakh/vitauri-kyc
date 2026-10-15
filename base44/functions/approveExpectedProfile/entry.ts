@@ -5,7 +5,8 @@ import { isTmEnabled } from '../../shared/tmGuards.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import { authenticate, errorResponse, httpError, loadTenant, asList } from '../../shared/tmAuth.js';
 import { canDecideProfile } from '../../shared/tmProfileAuth.js';
-import { updateUserCustomProperties } from '../../shared/diditTm.js';
+import { updateUserCustomProperties, isPathMissing } from '../../shared/diditTm.js';
+import { latestEndpointCheck, isMissingInCheck } from '../../shared/diditEndpointStatus.js';
 import { safeRecompute } from '../../shared/tmRisk.js';
 
 const ALL_ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'];
@@ -98,9 +99,13 @@ export default async function (req) {
     });
 
     // Push to Didit — failure is recorded, never undoes the approval.
+    // If the endpoint is missing on this plan the push is skipped silently (submitToDidit sends the profile per transaction).
     let syncError = null;
+    let unsupported = false;
     try {
-      await updateUserCustomProperties(tenant, client.id, {
+      const check = await latestEndpointCheck(E, tenantId).catch(() => null);
+      if (isMissingInCheck(check, 'userCustomProperties')) unsupported = true;
+      else await updateUserCustomProperties(tenant, client.id, {
         profile_version: profile.version,
         profile_currency: profile.currency,
         inbound_max_month: profile.inbound_max_month ?? null,
@@ -112,11 +117,14 @@ export default async function (req) {
         valid_until: validUntil,
       });
     } catch (e) {
-      syncError = typeof e?.detail === 'string' ? e.detail : JSON.stringify(e?.detail || e?.message || e).slice(0, 500);
+      if (isPathMissing(e)) unsupported = true;
+      else syncError = typeof e?.detail === 'string' ? e.detail : JSON.stringify(e?.detail || e?.message || e).slice(0, 500);
     }
-    await E.ExpectedProfile.update(profile.id, syncError
-      ? { didit_sync_error: syncError }
-      : { didit_synced_at: new Date().toISOString(), didit_sync_error: '' });
+    await E.ExpectedProfile.update(profile.id, unsupported
+      ? { didit_sync_error: 'not supported on this plan' }
+      : syncError
+        ? { didit_sync_error: syncError }
+        : { didit_synced_at: new Date().toISOString(), didit_sync_error: '' });
 
     await safeRecompute(base44, { tenantId, tenant, clientId: client.id, trigger: 'profile_approved', actor: auth });
 

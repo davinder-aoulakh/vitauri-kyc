@@ -1,12 +1,15 @@
 // fiuReportAction — lifecycle actions on an FIU report (before generation).
 // Auth: signed-in user (tmWorkCase roles); tenant from the user. approve / reject need the Compliance Officer role (tmApproveFiuReport).
-// Actions: update_field, toggle_attachment, submit_for_approval, approve, reject, checks (read only), signed_url (private file link).
+// Actions: update_field, toggle_attachment, submit_for_approval, approve, reject, checks (read only), signed_url (private file link),
+// upload_generated (CO only, approved report: manual goAML XML upload), didit_status (read only: is the Didit FIU endpoint missing?).
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { authenticate, errorResponse, httpError, loadTenant, WORK_ROLES } from '../../shared/tmAuth.js';
 import { CO_ROLES, roleOf } from '../../shared/tmCaseCommon.js';
 import { loadReport, updateField, toggleAttachment, submitForApproval, approve, reject } from '../../shared/tmFiuActions.js';
 import { runChecks } from '../../shared/tmFiuChecks.js';
+import { uploadGenerated } from '../../shared/tmFiuUpload.js';
+import { latestEndpointCheck, isMissingInCheck } from '../../shared/diditEndpointStatus.js';
 
 const FILE_KEYS = {
   xml: (r) => r.generated?.file_url, pdf: (r) => r.generated?.pdf_url,
@@ -44,6 +47,12 @@ export default async function (req) {
       if (!uri) throw httpError(404, 'File not available');
       const res = await base44.asServiceRole.integrations.Core.CreateFileSignedUrl({ file_uri: uri, expires_in: 300 });
       result = { signed_url: res.signed_url };
+    } else if (action === 'upload_generated') {
+      if (!isCO) throw httpError(403, 'Only a Compliance Officer can upload the goAML file');
+      result = await uploadGenerated(ctx, report, body);
+    } else if (action === 'didit_status') {
+      const check = await latestEndpointCheck(E, tenantId);
+      result = { fiu_reports_missing: isMissingInCheck(check, 'fiuReports'), checked_at: check?.checked_at || null };
     } else throw httpError(400, 'Unknown action');
     return Response.json({ ok: true, ...result });
   } catch (error) {

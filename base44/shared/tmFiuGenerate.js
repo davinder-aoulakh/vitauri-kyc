@@ -69,14 +69,14 @@ export async function generateReport(ctx, report) {
     const g = await runGeneration(ctx, report, fiu, client, tmCase);
     const at = new Date().toISOString();
     await ctx.E.FiuReport.update(report.id, {
-      status: 'generated', didit_report_id: g.diditId || undefined, generation_error: '',
+      status: 'generated', didit_report_id: g.diditId || undefined, generation_error: '', generation_path_missing: false,
       generated: { at, file_url: g.fileUrl, file_hash: g.hash, ...(g.pdfUrl ? { pdf_url: g.pdfUrl } : {}) },
     });
     await audit('fiu_report_generated', { status: 'approved' }, { status: 'generated', file_hash: g.hash, pdf: !!g.pdfUrl }, `goAML file generated for ${report.report_ref} by ${ctx.auth.actorName}.`);
     return { report_id: report.id, status: 'generated', file_hash: g.hash, has_pdf: !!g.pdfUrl };
   } catch (e) {
     const msg = errText(e);
-    await ctx.E.FiuReport.update(report.id, { generation_error: msg, generation_error_at: new Date().toISOString() });
+    await ctx.E.FiuReport.update(report.id, { generation_error: msg, generation_error_at: new Date().toISOString(), generation_path_missing: e?.status === 404 || e?.status === 405 });
     await audit('fiu_report_generation_failed', { status: 'approved' }, { status: 'approved', error: msg }, `goAML generation failed for ${report.report_ref}: ${msg}`);
     throw httpError(502, `goAML generation failed: ${msg}`);
   }

@@ -1,0 +1,69 @@
+{
+  "name": "DiditEndpointCheck",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "description": "Demo tenant the probe ran against"
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number"
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "reachable",
+              "missing",
+              "auth",
+              "error",
+              "skipped"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "tenant_id"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false
+  }
+}

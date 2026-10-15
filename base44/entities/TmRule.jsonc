@@ -117,6 +117,13 @@
     "seed_key": {
       "type": "string",
       "description": "Makes starter-rule seeding idempotent, e.g. starter:S-07a"
+    },
+    "didit_rule_history": {
+      "type": "array",
+      "description": "Didit rules replaced when rule updates are unavailable: { old_didit_rule_id, new_didit_rule_id, old_title, new_title, old_disabled, at }",
+      "items": {
+        "type": "object"
+      }
     }
   },
   "required": [

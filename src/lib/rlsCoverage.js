@@ -22,6 +22,7 @@ export const RLS_COVERAGE = [
   yes('DiditWebhookEvent'),
   portal('Document'),
   no('EmailTemplate', 'Not covered yet'),
+  yes('DiditEndpointCheck'),
   yes('ExpectedProfile'),
   yes('FiuProfile'),
   yes('FiuReport'),
