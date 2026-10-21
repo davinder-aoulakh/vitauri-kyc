@@ -1,6 +1,7 @@
 import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AddressFields from '@/components/client/forms/AddressFields';
 import ContactEntriesTable from '@/components/client/forms/ContactEntriesTable';
@@ -66,6 +67,11 @@ export function OrganizationStep2A({ form, set }) {
         <Field label="Contact Name" value={form.primary_contact_name} onChange={v => set('primary_contact_name', v)} required />
       </div>
       <SelectField label="Sector / Industry" value={form.sector} onChange={v => set('sector', v)} options={SECTORS} required />
+      <div>
+        <Label className="text-xs font-medium mb-1.5 block">Business activity</Label>
+        <Textarea value={form.business_activity || ''} onChange={e => set('business_activity', e.target.value)} placeholder="Optional — describe the business" className="text-sm min-h-[70px]" />
+      </div>
+      <Field label="Nature of business code" value={form.nature_of_business_code} onChange={v => set('nature_of_business_code', v)} placeholder="Optional — NACE / ISIC" />
       <SelectField label="Source Channel" value={form.source_channel} onChange={v => set('source_channel', v)} options={SOURCE_CHANNELS} />
     </div>
   );

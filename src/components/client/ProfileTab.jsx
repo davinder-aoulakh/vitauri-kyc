@@ -5,6 +5,7 @@ import { hasPermission } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertTriangle, Save, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -165,6 +166,11 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
               <F label="Registration No. / KvK" {...fProps('registration_number')} />
               <F label="LEI Code" {...fProps('lei_code')} placeholder="Optional" />
               <SF label="Sector / Industry" {...fProps('sector')} options={SECTORS} />
+              <div className="md:col-span-2">
+                <Label className="text-xs font-medium mb-1 block text-muted-foreground">Business activity</Label>
+                <Textarea value={form.business_activity || ''} disabled className="text-sm min-h-[60px]" />
+              </div>
+              <F label="Nature of business code" value={form.nature_of_business_code} readOnly />
               <F label="Contact Name" {...fProps('primary_contact_name')} />
               <div>
                 <Label className="text-xs font-medium mb-1 block text-muted-foreground">Registered Country</Label>
@@ -195,6 +201,8 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
               <SF label="Country of Residence" {...fProps('country_of_residence')} options={COUNTRIES} />
               <SF label="ID Type" {...fProps('id_type')} options={ID_TYPES} />
               <F label="ID Number" {...fProps('id_number')} />
+              <F label="Occupation" value={form.occupation} readOnly />
+              <F label="Employer" value={form.employer_name} readOnly />
             </>
           )}
         </div>

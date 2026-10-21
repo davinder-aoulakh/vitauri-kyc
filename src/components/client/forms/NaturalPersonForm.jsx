@@ -70,6 +70,10 @@ export function NaturalPersonStep2A({ form, set }) {
         <Field label="Place of Birth" value={form.place_of_birth} onChange={v => set('place_of_birth', v)} placeholder="City of birth" />
       </div>
       <SelectField label="Country of Residence" value={form.country_of_residence} onChange={v => set('country_of_residence', v)} options={COUNTRIES} />
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Occupation" value={form.occupation} onChange={v => set('occupation', v)} placeholder="Optional" />
+        <Field label="Employer" value={form.employer_name} onChange={v => set('employer_name', v)} placeholder="Optional" />
+      </div>
       <SelectField label="Source Channel" value={form.source_channel} onChange={v => set('source_channel', v)} options={SOURCE_CHANNELS} />
     </div>
   );
