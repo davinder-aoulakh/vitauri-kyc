@@ -38,7 +38,7 @@ export default async function (req) {
 
     const ctx = { base44, E, auth, tenantId, tenant };
     const result = await prepareReport(ctx, {
-      tmCaseId: body.tm_case_id, alertId: body.alert_id, profileCode: body.fiu_profile_code, refresh: !auto,
+      tmCaseId: body.tm_case_id, alertId: body.alert_id, kycCaseId: body.kyc_case_id, profileCode: body.fiu_profile_code, refresh: !auto,
     });
     return Response.json({ ok: true, ...result });
   } catch (error) {

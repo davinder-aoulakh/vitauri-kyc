@@ -6,6 +6,30 @@ import { OPEN_CASE, WORKABLE_CASE, tlEntry, commit, assertCustomerRequestAllowed
 const isoDate = (d) => d.toISOString().slice(0, 10);
 const plusDays = (n) => new Date(Date.now() + n * 86400000);
 
+// Snapshot of the TM situation stored on the EDR KycCase (tm_alert_ids + tm_context).
+async function tmContextSnapshot(ctx, tmCase) {
+  const { E, tenantId } = ctx;
+  const ids = (tmCase.alert_ids || []).slice(0, 100);
+  const [client, alerts, profile, deviation] = await Promise.all([
+    E.Client.filter({ tenant_id: tenantId, id: tmCase.primary_client_id }, undefined, 1).then((r) => asList(r)[0]),
+    ids.length ? E.TmAlert.filter({ tenant_id: tenantId, id: { $in: ids } }, undefined, 100).then(asList) : [],
+    E.ExpectedProfile.filter({ tenant_id: tenantId, client_id: tmCase.primary_client_id, status: 'approved' }, '-version', 1).then((r) => asList(r)[0]),
+    E.TmAlert.filter({ tenant_id: tenantId, client_id: tmCase.primary_client_id, source: 'profile_deviation' }, '-created_date', 1).then((r) => asList(r)[0]),
+  ]);
+  return {
+    tm_alert_ids: ids,
+    tm_context: {
+      score: client?.customer_risk_score ?? null,
+      band: client?.customer_risk_band ?? null,
+      alerts: alerts.map((a) => ({ id: a.id, title: a.title, score: a.score ?? null })),
+      profile_version: profile?.version ?? null,
+      breach_summary: deviation ? [deviation.title, ...(deviation.ai_reasons || []).slice(0, 2)].filter(Boolean).join(' · ') : null,
+      tm_case_ref: tmCase.case_ref,
+      opened_at: new Date().toISOString(),
+    },
+  };
+}
+
 export async function openEdr(ctx, tmCase) {
   const { E, auth, tenantId, tenant, base44 } = ctx;
   if (!OPEN_CASE.includes(tmCase.status)) throw httpError(409, `Case is ${tmCase.status}`);
@@ -14,7 +38,9 @@ export async function openEdr(ctx, tmCase) {
   const dueDate = isoDate(plusDays(tenant.edr_due_days || 30));
   const reason = `Transaction monitoring case ${tmCase.case_ref}: ${tmCase.title || 'investigation'}`;
   const analyst = prev?.assigned_analyst_id || tmCase.assigned_to_user_id || auth.actorUserId;
+  const snap = await tmContextSnapshot(ctx, tmCase).catch(() => ({}));
   const kyc = await E.KycCase.create({
+    ...snap,
     tenant_id: tenantId, client_id: tmCase.primary_client_id, case_type: 'Event_Driven_Review', status: 'Draft', assigned_analyst_id: analyst,
     trigger_reason: reason, due_date: dueDate, created_by_user_id: auth.actorUserId, previous_case_id: prev?.id || null, is_re_onboarding: false,
     risk_classification: prev?.risk_classification || null, tm_case_id: tmCase.id,

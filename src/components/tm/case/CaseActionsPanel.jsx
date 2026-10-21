@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Banknote, ScanFace, Network, ClipboardCheck, Loader2 } from 'lucide-react';
 import RequestInfoDialog from '@/components/tm/case/RequestInfoDialog';
 import ReverifyDialog from '@/components/tm/case/ReverifyDialog';
+import EdrStatusPill from '@/components/tm/case/EdrStatusPill';
 
 const OPEN = ['open', 'investigating', 'pending_co'];
 
@@ -37,7 +38,12 @@ export default function CaseActionsPanel({ tmCase, client, tenant, tenantId, can
         </Button>
       </div>
       {lockReason && <p className="text-xs text-amber-700 mt-2">{lockReason}</p>}
-      {tmCase.kyc_edr_case_id && <button className="text-xs text-primary hover:underline mt-2" onClick={() => navigate(`/case/${tmCase.kyc_edr_case_id}`)}>Open the event-driven review</button>}
+      {tmCase.kyc_edr_case_id && (
+        <div className="flex items-center gap-2 mt-2">
+          <button className="text-xs text-primary hover:underline" onClick={() => navigate(`/case/${tmCase.kyc_edr_case_id}`)}>Open the event-driven review</button>
+          <EdrStatusPill kycCaseId={tmCase.kyc_edr_case_id} />
+        </div>
+      )}
       <RequestInfoDialog open={dialog === 'request'} onOpenChange={(v) => !v && setDialog('')} run={run} client={client} tenant={tenant} />
       <ReverifyDialog open={dialog === 'idv'} onOpenChange={(v) => !v && setDialog('')} run={run} client={client} tenantId={tenantId} />
     </section>

@@ -22,6 +22,7 @@ import OsintPanel           from '@/components/case/OsintPanel';
 import ClientProfileStep    from '@/components/case/ClientProfileStep';
 import ProfileVerificationStep from '@/components/case/ProfileVerificationStep';
 import CaseTypeBanner       from '@/components/case/views/CaseTypeBanner';
+import TmContextCard        from '@/components/case/TmContextCard';
 import CaseAssignmentPicker from '@/components/case/CaseAssignmentPicker';
 import CaseNoteThread       from '@/components/case/CaseNoteThread';
 import DeleteCaseConfirmDialog from '@/components/case/DeleteCaseConfirmDialog';
@@ -632,6 +633,7 @@ export default function CaseWorkspace() {
 
                 {/* Case type context banner */}
                 <CaseTypeBanner kycCase={kycCase} client={client} />
+                <TmContextCard kycCase={kycCase} client={client} />
 
                 {/* Step content */}
                 {isStepNotRequired(kycCase, activeStep) ? (

@@ -25,6 +25,35 @@ async function resolveCase(ctx, { tmCaseId, alertId }, users) {
   return loadCase(E, tenantId, created.tm_case_id);
 }
 
+// KYC case entry: use KycCase.tm_case_id, else a TmCase with kyc_edr_case_id, else create one from the client's open alerts.
+async function resolveKycCase(ctx, kycCaseId) {
+  const { E, tenantId, auth } = ctx;
+  const kyc = asList(await E.KycCase.filter({ tenant_id: tenantId, id: kycCaseId }, undefined, 1))[0];
+  if (!kyc) throw httpError(404, 'KYC case not found');
+  let tmCase = null;
+  if (kyc.tm_case_id) tmCase = asList(await E.TmCase.filter({ tenant_id: tenantId, id: kyc.tm_case_id }, undefined, 1))[0] || null;
+  if (!tmCase) tmCase = asList(await E.TmCase.filter({ tenant_id: tenantId, kyc_edr_case_id: kycCaseId }, '-created_date', 1))[0] || null;
+  if (!tmCase) {
+    let ids = (kyc.tm_alert_ids || []).slice(0, 50);
+    if (!ids.length) {
+      const open = asList(await E.TmAlert.filter({ tenant_id: tenantId, client_id: kyc.client_id, status: { $in: ['new', 'triaged', 'in_review'] } }, '-created_date', 50));
+      ids = open.filter((a) => !a.tm_case_id).map((a) => a.id);
+    }
+    if (!ids.length) throw httpError(409, 'No transaction monitoring alerts are available to open a case from this KYC case');
+    const created = await createCase(ctx, null, { alert_ids: ids, title: `From KYC case ${String(kycCaseId).slice(-6)}` });
+    await E.TmCase.update(created.tm_case_id, { kyc_edr_case_id: kycCaseId });
+    tmCase = await loadCase(E, tenantId, created.tm_case_id);
+  }
+  if (kyc.tm_case_id !== tmCase.id) {
+    await E.KycCase.update(kycCaseId, { tm_case_id: tmCase.id });
+    await writeAudit(ctx.base44, auth, {
+      tenantId, clientId: kyc.client_id, eventType: 'kyc_case_linked_to_tm_case',
+      before: { tm_case_id: kyc.tm_case_id || null }, after: { kyc_case_id: kycCaseId, tm_case_id: tmCase.id }, notes: `KYC case linked to TM case ${tmCase.case_ref} for FIU report preparation.`,
+    });
+  }
+  return tmCase;
+}
+
 async function nextReportRef(E, tenantId, code) {
   const prefix = `UTR-${code}-`;
   const last = asList(await E.FiuReport.filter({ tenant_id: tenantId, report_ref: { $regex: `^${prefix}` } }, '-report_ref', 1))[0];
@@ -38,13 +67,16 @@ const summary = (report, tmCase, extra = {}) => ({
 });
 
 /** refresh: regenerate an existing DRAFT (user action). Non-draft reports are never changed. */
-export async function prepareReport(ctx, { tmCaseId, alertId, profileCode, refresh }) {
+export async function prepareReport(ctx, { tmCaseId, alertId, kycCaseId, profileCode, refresh }) {
   const { E, base44, tenantId, tenant, auth } = ctx;
   const users = await tenantUsers(E, tenantId);
-  const tmCase = await resolveCase(ctx, { tmCaseId, alertId }, users);
+  const tmCase = kycCaseId ? await resolveKycCase(ctx, kycCaseId) : await resolveCase(ctx, { tmCaseId, alertId }, users);
   const open = async () => asList(await E.FiuReport.filter({ tenant_id: tenantId, tm_case_id: tmCase.id }, 'created_date', 20)).filter((r) => r.status !== 'rejected');
   const existing = (await open())[0];
-  if (existing && (!refresh || existing.status !== 'draft')) return summary(existing, tmCase, { existing: true });
+  if (existing && (!refresh || existing.status !== 'draft')) {
+    if (kycCaseId && !existing.kyc_case_id) await E.FiuReport.update(existing.id, { kyc_case_id: kycCaseId }).catch(() => {});
+    return summary(existing, tmCase, { existing: true });
+  }
 
   const d = await gatherReportData(ctx, tmCase);
   const code = profileCode || existing?.fiu_profile_code || resolveProfileCode(d.client);
@@ -79,6 +111,7 @@ export async function prepareReport(ctx, { tmCaseId, alertId, profileCode, refre
     fiu_profile_code: code, tm_case_id: tmCase.id, client_id: d.client.id, alert_ids: d.alerts.map((a) => a.id), type: reportType,
     indicators: indicatorCodes, status, fields, missing_fields: missing, narrative: { text: narrative.text, citations: narrative.citations }, clock,
     prepared_by_user_id: auth.actorUserId, snapshot,
+    ...(kycCaseId ? { kyc_case_id: kycCaseId } : {}),
   };
 
   let report;
@@ -88,7 +121,7 @@ export async function prepareReport(ctx, { tmCaseId, alertId, profileCode, refre
   } else {
     report = await E.FiuReport.create({ ...body, tenant_id: tenantId, report_ref: await nextReportRef(E, tenantId, code), version: 1 });
     const all = await open();
-    if (all[0] && all[0].id !== report.id) { await E.FiuReport.delete(report.id); return summary(all[0], tmCase, { existing: true }); } // concurrent duplicate
+    if (all[0] && all[0].id !== report.id) { await E.FiuReport.delete(report.id); if (kycCaseId && !all[0].kyc_case_id) await E.FiuReport.update(all[0].id, { kyc_case_id: kycCaseId }).catch(() => {}); return summary(all[0], tmCase, { existing: true }); } // concurrent duplicate
   }
 
   const locked = isLockingStatus(status) ? await lockClient(base44, { tenantId, clientId: d.client.id, reason: report.report_ref, fiuReportId: report.id, actor: auth }) : false;

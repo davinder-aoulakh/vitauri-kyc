@@ -2,6 +2,9 @@ import React from 'react';
 import { AlertTriangle, RefreshCw, Zap, UserX, Info } from 'lucide-react';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { Link } from 'react-router-dom';
+import { useTenant } from '@/lib/tenantContext';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 
 const CONFIG = {
   Onboarding: {
@@ -48,6 +51,8 @@ const CONFIG = {
 };
 
 export default function CaseTypeBanner({ kycCase, client }) {
+  const { tenant } = useTenant();
+  const showTmLink = kycCase?.case_type === 'Event_Driven_Review' && !!kycCase.tm_case_id && isFeatureEnabled(tenant, 'tm_core');
   const cfg = CONFIG[kycCase?.case_type];
   if (!cfg) return null;
 
@@ -67,6 +72,9 @@ export default function CaseTypeBanner({ kycCase, client }) {
           <ul className="mt-1 space-y-0.5 text-xs opacity-80">
             {details.map((d, i) => <li key={i}>{d}</li>)}
           </ul>
+        )}
+        {showTmLink && (
+          <Link to={`/tm/case/${kycCase.tm_case_id}`} className="inline-block mt-1 text-xs font-medium underline underline-offset-2">Opened from TM case</Link>
         )}
       </div>
       {dueIn !== null && (
