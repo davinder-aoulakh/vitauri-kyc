@@ -229,6 +229,21 @@
       "type": "boolean",
       "default": false,
       "description": "Last goAML generation failed because a Didit endpoint answered 404/405"
+    },
+    "kyc_case_id": {
+      "type": "string"
+    },
+    "didit_template_code": {
+      "type": "string"
+    },
+    "filed_document_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "transactions_mapped": {
+      "type": "number"
     }
   },
   "required": [

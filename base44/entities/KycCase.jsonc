@@ -242,6 +242,20 @@
     },
     "tm_case_id": {
       "type": "string"
+    },
+    "tm_alert_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tm_context": {
+      "type": "object",
+      "description": "Snapshot when an event-driven review is opened from TM"
+    },
+    "tm_outcome_synced_at": {
+      "type": "string",
+      "format": "date-time"
     }
   },
   "required": [

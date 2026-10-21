@@ -24,6 +24,8 @@ export const RLS_COVERAGE = [
   yes('EmailTemplate'),
   yes('DiditEndpointCheck'),
   yes('ExpectedProfile'),
+  yes('EdrTrigger'),
+  yes('FiuArtefact'),
   yes('FiuProfile'),
   yes('FiuReport'),
   yes('FxRate'),

@@ -331,6 +331,22 @@
     "tm_enabled": {
       "type": "boolean",
       "default": false
+    },
+    "occupation": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "employer_name": {
+      "type": "string",
+      "description": "NP only"
+    },
+    "business_activity": {
+      "type": "string",
+      "description": "ORG only \u2014 description of the business"
+    },
+    "nature_of_business_code": {
+      "type": "string",
+      "description": "ORG only \u2014 optional NACE/ISIC code"
     }
   },
   "required": [

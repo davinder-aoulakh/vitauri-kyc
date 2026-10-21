@@ -27,7 +27,8 @@
         "tm_rule_approval",
         "tm_rule_drift",
         "tm_quality_finding",
-        "tm_retention_digest"
+        "tm_retention_digest",
+        "edr_trigger"
       ]
     },
     "title": {
@@ -61,6 +62,9 @@
     "link_fiu_report_id": {
       "type": "string",
       "description": "FiuReport this notification is about"
+    },
+    "link_kyc_case_id": {
+      "type": "string"
     }
   },
   "required": [

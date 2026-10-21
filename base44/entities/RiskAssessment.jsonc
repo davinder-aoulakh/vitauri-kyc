@@ -58,6 +58,12 @@
       "items": {
         "type": "string"
       }
+    },
+    "tm_signal_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [

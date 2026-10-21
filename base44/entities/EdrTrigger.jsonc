@@ -1,0 +1,93 @@
+{
+  "name": "EdrTrigger",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "trigger_type": {
+      "type": "string",
+      "enum": [
+        "ubo_change",
+        "director_change",
+        "business_activity_change",
+        "country_change",
+        "screening_hit",
+        "risk_band_rise",
+        "profile_breach",
+        "tm_case"
+      ]
+    },
+    "source_ref": {
+      "type": "string"
+    },
+    "before": {
+      "type": "object"
+    },
+    "after": {
+      "type": "object"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "proposed",
+        "accepted",
+        "dismissed"
+      ],
+      "default": "proposed"
+    },
+    "kyc_case_id": {
+      "type": "string"
+    },
+    "decided_by_user_id": {
+      "type": "string"
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "dismiss_reason": {
+      "type": "string"
+    },
+    "dedupe_key": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "client_id",
+    "trigger_type"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    }
+  }
+}
