@@ -1,12 +1,17 @@
 /**
  * Recovers Didit IDV decisions that were dropped (webhook failed before the credentials fix).
- * Vitauri Ops or Tenant Admin. Input { tenant_id, since, dry_run }.
+ * Vitauri Ops or Tenant Admin. Input { tenant_id, lookback_days (default 60, max 180), since (optional), dry_run }.
  * Calls the existing getDiditSessionResult for each pending item; max 50 per run, 300 ms apart.
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.49';
 
 const MAX_ITEMS = 50;
 const PAUSE_MS = 300;
+const DEFAULT_LOOKBACK_DAYS = 60;
+const MAX_LOOKBACK_DAYS = 180;
+const PAGE_SIZE = 200;
+const MAX_SCAN = 2000;
+const MAX_LIST = 500;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const shortMsg = (e) => String(e?.message || e || 'error').slice(0, 120);
 
@@ -21,33 +26,50 @@ export default async function (req) {
     const isTenantAdmin = role === 'Tenant Admin';
     if (!isOps && !isTenantAdmin) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
-    const { tenant_id, since, dry_run } = await req.json();
+    const { tenant_id, since, dry_run, lookback_days } = await req.json();
     if (!tenant_id) return Response.json({ error: 'tenant_id is required' }, { status: 400 });
-    const sinceMs = Date.parse(since);
-    if (!since || Number.isNaN(sinceMs)) return Response.json({ error: 'since must be an ISO date-time' }, { status: 400 });
+    const lb = Number(lookback_days);
+    const lookback = Math.min(Number.isFinite(lb) && lb > 0 ? lb : DEFAULT_LOOKBACK_DAYS, MAX_LOOKBACK_DAYS);
+    let sinceMs = Date.now() - lookback * 86400000;
+    if (since) {
+      const legacy = Date.parse(since);
+      if (Number.isNaN(legacy)) return Response.json({ error: 'since must be an ISO date-time' }, { status: 400 });
+      sinceMs = Math.min(sinceMs, legacy);
+    }
     const tenantId = isOps ? tenant_id : (user.tenant_id || user.data?.tenant_id);
     if (!isOps && tenant_id !== tenantId) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
     const E = base44.asServiceRole.entities;
-    const requests = await E.OutreachRequest.filter({ tenant_id: tenantId, updated_date: { $gte: new Date(sinceMs).toISOString() } }, '-updated_date', 500);
+    const query = { tenant_id: tenantId, created_date: { $gte: new Date(sinceMs).toISOString() } };
 
     const all = [];
-    for (const r of requests?.items || requests || []) {
-      for (const it of r.items || []) {
-        if (it.didit_session_id && (!it.idv_status || it.idv_status === 'Pending')) {
-          all.push({
-            outreach_id: r.id, item_id: it.item_id, client_id: r.client_id || null,
-            session_id: it.didit_session_id, last_updated: r.updated_date,
-          });
+    const seen = new Set();
+    let scanned = 0; let scanTruncated = false;
+    while (scanned < MAX_SCAN) {
+      const page = await E.OutreachRequest.filter(query, '-created_date', PAGE_SIZE, scanned);
+      const rows = page?.items || page || [];
+      for (const r of rows) {
+        for (const it of r.items || []) {
+          if (it.didit_session_id && (!it.idv_status || it.idv_status === 'Pending') && !seen.has(it.didit_session_id)) {
+            seen.add(it.didit_session_id);
+            all.push({
+              outreach_id: r.id, item_id: it.item_id, client_id: r.client_id || null,
+              session_id: it.didit_session_id, created_date: r.created_date, last_updated: r.updated_date,
+            });
+          }
         }
       }
+      scanned += rows.length;
+      if (rows.length < PAGE_SIZE) break;
+      if (scanned >= MAX_SCAN) scanTruncated = true;
     }
     const candidates = all.slice(0, MAX_ITEMS);
 
     if (dry_run) {
       return Response.json({
-        dry_run: true, candidates: all.length, capped_at: MAX_ITEMS,
-        updated: 0, still_pending: 0, errors: [], items: candidates,
+        dry_run: true, scanned, scan_truncated: scanTruncated, candidates: all.length, processed: 0,
+        remaining: all.length, capped_at: MAX_ITEMS, lookback_days: lookback,
+        updated: 0, still_pending: 0, errors: [], items: all.slice(0, MAX_LIST),
       });
     }
 
@@ -69,7 +91,7 @@ export default async function (req) {
       }
     }
 
-    const counts = { candidates: all.length, processed: candidates.length, updated, still_pending: stillPending, errors: errors.length };
+    const counts = { scanned, scan_truncated: scanTruncated, lookback_days: lookback, candidates: all.length, processed: candidates.length, remaining: all.length - candidates.length, updated, still_pending: stillPending, errors: errors.length };
     await E.AuditEvent.create({
       tenant_id: tenantId, actor_user_id: user.id, actor_name: user.full_name, actor_type: 'User',
       event_type: 'didit_decisions_catch_up',
