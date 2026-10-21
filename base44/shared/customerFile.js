@@ -245,6 +245,7 @@ function buildFileTimeline({ cases, profiles, alerts, tmCases, reports, decision
 
 /** Full customer file. sections: optional array limiting what is computed. */
 export async function buildCustomerFile(base44, { tenantId, client, role, sections }) {
+  // `sections` is read below for the opt-in counterparty_hits section.
   const E = base44.asServiceRole.entities;
   const cid = client.id;
   const wanted = Array.isArray(sections) && sections.length ? sections : FILE_SECTIONS;
@@ -282,7 +283,19 @@ export async function buildCustomerFile(base44, { tenantId, client, role, sectio
     });
   }
   if (want('tm_cases')) run('tm_cases', async () => (await tmCases()).map((t) => ({ id: t.id, case_ref: t.case_ref, status: t.status, alert_ids_count: (t.alert_ids || []).length, assigned_to_user_id: t.assigned_to_user_id || null, due_at: t.due_at || null, kyc_edr_case_id: t.kyc_edr_case_id || null })));
-  if (want('alerts')) run('alerts', async () => (await alerts()).slice(0, 50).map((a) => ({ id: a.id, title: a.title, score: a.score ?? null, status: a.status, due_at: a.due_at || null, ai_proposal: a.ai_proposal || null })));
+  if (want('alerts')) run('alerts', async () => (await alerts()).slice(0, 50).map((a) => ({ id: a.id, title: a.title, score: a.score ?? null, status: a.status, due_at: a.due_at || null, ai_proposal: a.ai_proposal || null, source: a.source || null, created_date: a.created_date || null })));
+  // Opt-in only (not part of the default full file): counterparties on this client's transactions with a screening match.
+  if (Array.isArray(sections) && sections.includes('counterparty_hits')) {
+    run('counterparty_hits', async () => {
+      const txns = await E.Transaction.filter({ tenant_id: tenantId, client_id: cid }, { limit: 1000, fields: ['counterparty_id'] }).then(asList);
+      const ids = uniq(txns.map((t) => t.counterparty_id));
+      const found = [];
+      for (const part of chunk(ids, 100).slice(0, 5)) {
+        found.push(...await E.Counterparty.filter({ tenant_id: tenantId, id: { $in: part }, screening_status: { $in: ['potential_match', 'confirmed_match'] } }, undefined, 100).then(asList));
+      }
+      return found.slice(0, 50).map((c) => ({ id: c.id, display_name: c.display_name, screening_status: c.screening_status }));
+    });
+  }
   if (want('fiu_reports')) {
     run('fiu_reports', async () => (await reports()).map((r) => ({
       id: r.id, report_ref: r.report_ref, fiu_profile_code: r.fiu_profile_code, type: r.type || null, status: r.status,

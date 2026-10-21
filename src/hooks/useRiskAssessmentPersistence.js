@@ -23,7 +23,11 @@ function entityKeyToId(key, clientId) {
   return { entity_id: rpId, entity_type: 'Related_Party' };
 }
 
-export function useRiskAssessmentPersistence({ kycCase, client }) {
+export function useRiskAssessmentPersistence({ kycCase, client, tmSignalRefs = null }) {
+  // null/undefined = TM signals not in use → tm_signal_refs is not written at all
+  const tmRefsRef = useRef(tmSignalRefs);
+  tmRefsRef.current = tmSignalRefs;
+  const [savedTmSignalRefs, setSavedTmSignalRefs] = useState([]);
   const caseId    = kycCase?.id;
   const tenantId  = kycCase?.tenant_id;
   const clientId  = client?.id;
@@ -66,6 +70,8 @@ export function useRiskAssessmentPersistence({ kycCase, client }) {
       const records = await base44.entities.RiskAssessment.filter({ case_id: caseId });
       const scores  = {};
       const ids     = {};
+
+      setSavedTmSignalRefs([...new Set((records || []).flatMap(r => r.tm_signal_refs || []))]);
 
       (records || []).forEach(r => {
         // map entity_id + entity_type back to entityKey
@@ -193,6 +199,7 @@ export function useRiskAssessmentPersistence({ kycCase, client }) {
       analyst_narrative:     patch.notes || '',
       ai_narrative:          patch.ai_narrative || '',
       evidence_document_ids: patch.evidence_document_ids || [],
+      ...(Array.isArray(tmRefsRef.current) ? { tm_signal_refs: tmRefsRef.current } : {}),
     };
 
     if (existingId) {
@@ -237,6 +244,7 @@ export function useRiskAssessmentPersistence({ kycCase, client }) {
 
   return {
     loading,
+    savedTmSignalRefs,
     // State
     selections, selectionConfirmed,
     allScores,

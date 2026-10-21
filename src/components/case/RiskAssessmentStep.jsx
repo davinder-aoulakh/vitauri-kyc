@@ -12,6 +12,7 @@ import IndicatorPicker, { ALL_INDICATORS } from '@/components/risk/IndicatorPick
 import IndicatorAssessment from '@/components/risk/IndicatorAssessment';
 import ConsolidatedRiskView from '@/components/risk/ConsolidatedRiskView';
 import InlineError from '@/components/shared/InlineError';
+import TmSignalsBox from '@/components/risk/TmSignalsBox';
 import { useRiskAssessmentPersistence } from '@/hooks/useRiskAssessmentPersistence';
 
 export default function RiskAssessmentStep({ kycCase, client, currentUser, onCaseUpdate }) {
@@ -20,8 +21,13 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
   const [rpError, setRpError] = useState(null);
   const [activeTab, setActiveTab] = useState('picker');
 
+  // { refs, lines } reported by TmSignalsBox; null while the box is not shown (flag off / no TM data)
+  const [tmSignals, setTmSignals] = useState(null);
+  const handleTmSignals = React.useCallback((refs, lines) => setTmSignals({ refs, lines }), []);
+
   const {
     loading,
+    savedTmSignalRefs,
     selections, selectionConfirmed,
     allScores,
     narrativeAccepted, overallNarratives, entityOverrides, consolidatedOverride,
@@ -30,7 +36,7 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
     updateNarrativeAccepted, updateOverallNarratives,
     updateEntityOverrides, updateConsolidatedOverride,
     cleanupOrphanedRecords,
-  } = useRiskAssessmentPersistence({ kycCase, client });
+  } = useRiskAssessmentPersistence({ kycCase, client, tmSignalRefs: tmSignals?.refs ?? null });
 
   useEffect(() => { loadRelatedParties(); }, [kycCase?.client_id]);
 
@@ -135,6 +141,11 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
 
         {/* S-090 — Indicator Picker */}
         <TabsContent value="picker" className="mt-4">
+          <TmSignalsBox
+            client={client}
+            onChange={handleTmSignals}
+            initialRefs={tmSignals ? tmSignals.refs : savedTmSignalRefs}
+          />
           <IndicatorPicker
             client={client}
             relatedParties={relatedParties}
@@ -182,6 +193,7 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
                     selectedIndicatorIds={selectedIds}
                     kycCase={kycCase}
                     currentUser={currentUser}
+                    tmSignalLines={tmSignals?.lines}
                     scores={getEntityScores(e.key)}
                     onScoresChange={scores => handleScoresChange(e.key, scores)}
                     persistedData={{

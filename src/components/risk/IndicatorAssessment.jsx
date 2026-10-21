@@ -29,7 +29,10 @@ export default function IndicatorAssessment({
   selectedIndicatorIds, kycCase, currentUser,
   scores, onScoresChange,
   persistedData, onPersistedDataChange,
+  tmSignalLines,
 }) {
+  // Unchanged prompt when no TM signals are selected
+  const tmPromptSuffix = tmSignalLines?.length ? `\n\nTM signals considered:\n${tmSignalLines.map(l => `- ${l}`).join('\n')}` : '';
   const [expanded, setExpanded] = useState(null);
   // Initialise from persisted data on mount
   const [narratives, setNarratives] = useState(persistedData?.narratives || {});
@@ -76,7 +79,7 @@ Structure (strictly follow):
 2. 2–3 sentences of supporting evidence or observations
 3. One sentence on mitigating factors, if any (or state "No mitigating factors identified.")
 
-Tone: factual, neutral, third-person, regulatory-grade. Total: 3–5 sentences.`,
+Tone: factual, neutral, third-person, regulatory-grade. Total: 3–5 sentences.${tmPromptSuffix}`,
       model: 'claude_sonnet_4_6',
     });
     const text = typeof result === 'string' ? result : result?.narrative || result?.text || JSON.stringify(result);
@@ -117,7 +120,7 @@ Write a consolidated narrative (4–6 paragraphs) that:
 4. Notes evidence gaps or areas requiring monitoring
 5. Concludes with a risk appetite statement and recommended treatment
 
-Tone: professional, regulatory-grade, suitable for a compliance file.`,
+Tone: professional, regulatory-grade, suitable for a compliance file.${tmPromptSuffix}`,
       model: 'claude_sonnet_4_6',
     });
     const text = typeof result === 'string' ? result : result?.narrative || JSON.stringify(result);
