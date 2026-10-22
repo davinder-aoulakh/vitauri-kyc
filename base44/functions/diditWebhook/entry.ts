@@ -20,6 +20,8 @@ import { computeDue } from '../../shared/tmClock.js';
 import { scheduleAutoTriage } from '../../shared/tmAutoTriage.js';
 import { safeRecompute } from '../../shared/tmRisk.js';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
+import { handleKybEvent } from '../../shared/diditKyb.js';
+import { applyRelatedPartyIdv, handleRelatedPartyMonitoring } from '../../shared/kybRelatedParty.js';
 
 const NON_TERMINAL_STATUSES = ['Not Started', 'In Progress', 'Awaiting User'];
 const TERMINAL_SESSION_STATUSES = ['Approved', 'Declined', 'In Review', 'Abandoned', 'Expired'];
@@ -61,6 +63,14 @@ export default async function(req) {
         tenantId = client.tenant_id;
         const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenantId });
         tenant = tenants?.[0] || null;
+      } else {
+        // Didit KYB: a related party's own (UBO/director) verification uses the related party id as vendor_data.
+        const parties = await base44.asServiceRole.entities.RelatedParty.filter({ id: vendorDataCandidate });
+        if (parties?.[0]?.tenant_id) {
+          tenantId = parties[0].tenant_id;
+          const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenantId });
+          tenant = tenants?.[0] || null;
+        }
       }
     }
 
@@ -116,6 +126,14 @@ async function processWebhookEvent(base44, body) {
     const status       = body.status;
     const webhookType  = body.webhook_type;
 
+    // Didit KYB — business sessions and business.* events never enter the person (KYC) path.
+    if (body.session_kind === 'business' || String(webhookType || '').startsWith('business.')) {
+      const kybTenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenantId });
+      const kybTenant = await withDiditCredentials(base44, kybTenants?.[0]);
+      if (kybTenant) await handleKybEvent(base44, kybTenant, body);
+      return;
+    }
+
     // Transaction monitoring (AML/KYT) — separate flow from KYC sessions.
     if (webhookType === 'transaction.created' || webhookType === 'transaction.status.updated') {
       await handleTransactionEvent(base44, tenantId, body);
@@ -124,6 +142,11 @@ async function processWebhookEvent(base44, body) {
 
     // Ongoing monitoring — user-level (not session-level) events.
     if (webhookType === 'user.status.updated' || webhookType === 'user.data.updated') {
+      // Didit KYB: vendor_data may be a related party (UBO/director) rather than a client.
+      const party = body.vendor_data
+        ? (await base44.asServiceRole.entities.RelatedParty.filter({ tenant_id: tenantId, id: body.vendor_data }))?.[0]
+        : null;
+      if (party) { await handleRelatedPartyMonitoring(base44, tenantId, party, body); return; }
       await handleOngoingMonitoring(base44, tenantId, body);
       return;
     }
@@ -261,6 +284,21 @@ async function processTerminalDecisionImpl(base44, body) {
   });
   await base44.asServiceRole.entities.OutreachRequest.update(resolvedOutreachId, { items: updatedItems });
 
+  // Didit KYB: a related party's own verification updates the RelatedParty only. No company write-back,
+  // no case-step auto-completion (the organisation's Entity Verification step is decided by KYB).
+  if (freshOutreach.related_party_id && freshOutreach.tenant_id === resolvedTenantId) {
+    const rpRoot = decision?.decision || decision || {};
+    await applyRelatedPartyIdv(base44, { tenantId: resolvedTenantId, outreach: freshOutreach, sessionId, idvFields, amlScreenings: rpRoot.aml_screenings, actorName: 'Didit Webhook' });
+    if (freshOutreach.client_id) {
+      await createIdvDocuments(base44, resolvedTenantId, freshOutreach.client_id, sessionId, rpRoot.id_verifications?.[0] || {}, idvFields.idv_status, { related_party_id: freshOutreach.related_party_id });
+    }
+    await base44.asServiceRole.entities.AuditEvent.create({
+      tenant_id: resolvedTenantId, case_id: freshOutreach.case_id || null, client_id: freshOutreach.client_id, actor_type: 'System', actor_name: 'Didit Webhook',
+      event_type: 'didit_webhook_processed', notes: `Didit webhook (related party): ${body.status}. Session ${sessionId}. Event ${body.event_id || 'n/a'}. IDV status: ${idvFields.idv_status}.`,
+    }).catch(() => {});
+    return;
+  }
+
   // Create Document records for the ID/selfie images (dedup-guarded on session_id).
   if (freshOutreach.client_id) {
     const root = decision?.decision || decision || {};
@@ -302,7 +340,7 @@ async function processTerminalDecisionImpl(base44, body) {
   console.log('diditWebhook: processed', { sessionId, idv_status: idvFields.idv_status });
 }
 
-async function createIdvDocuments(base44, tenantId, clientId, sessionId, idv, idvStatus) {
+async function createIdvDocuments(base44, tenantId, clientId, sessionId, idv, idvStatus, extra = {}) {
   try {
     const existingDocs  = await base44.asServiceRole.entities.Document.filter({ didit_session_id: sessionId, is_deleted: false });
     const existingTypes = new Set((existingDocs || []).map((d) => d.doc_type));
@@ -314,7 +352,7 @@ async function createIdvDocuments(base44, tenantId, clientId, sessionId, idv, id
         tenant_id: tenantId, client_id: clientId, doc_type: docType,
         file_name: `Didit_${docType}_Front_${sessionId.substring(0, 8)}.jpg`,
         file_url: idv.front_image, version: 1, is_ai_generated: false,
-        review_status: reviewStatus, source: 'didit', didit_session_id: sessionId,
+        review_status: reviewStatus, source: 'didit', didit_session_id: sessionId, ...extra,
       }).catch(() => {});
     }
     if (idv.portrait_image && !existingTypes.has('Selfie')) {
@@ -322,7 +360,7 @@ async function createIdvDocuments(base44, tenantId, clientId, sessionId, idv, id
         tenant_id: tenantId, client_id: clientId, doc_type: 'Selfie',
         file_name: `Didit_Selfie_${sessionId.substring(0, 8)}.jpg`,
         file_url: idv.portrait_image, version: 1, is_ai_generated: false,
-        review_status: 'Approved', source: 'didit', didit_session_id: sessionId,
+        review_status: 'Approved', source: 'didit', didit_session_id: sessionId, ...extra,
       }).catch(() => {});
     }
   } catch (e) {
