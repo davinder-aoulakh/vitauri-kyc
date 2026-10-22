@@ -16,12 +16,15 @@ export const FIELD_TYPES = [
   { value: 'id_verification', label: 'Identity Verification', icon: '🪪', description: 'Client uploads ID document + takes selfie. Faces are compared automatically.' },
 ];
 
-export default function FieldTypePicker({ value, onChange }) {
+// Business verification (Didit KYB). Offered only when the tenant has the didit_kyb feature on.
+export const KYB_FIELD_TYPE = { value: 'kyb_verification', label: 'Business Verification', icon: '🏢', description: 'Company completes Didit business verification: registry, company documents and company AML.' };
+
+export default function FieldTypePicker({ value, onChange, extraTypes = [] }) {
   return (
     <div>
       <label className="text-xs font-medium block mb-1.5">Field Type</label>
       <div className="grid grid-cols-4 gap-1.5">
-        {FIELD_TYPES.map(ft => (
+        {[...FIELD_TYPES, ...extraTypes].map(ft => (
           <button
             key={ft.value}
             type="button"
