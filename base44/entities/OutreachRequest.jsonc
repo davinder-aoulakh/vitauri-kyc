@@ -300,9 +300,25 @@
           },
           "idv_liveness_raw": {
             "type": "object"
+          },
+          "kyb_verification_id": {
+            "type": "string",
+            "description": "KybVerification record for a kyb_verification item"
+          },
+          "kyb_status": {
+            "type": "string",
+            "description": "Didit KYB session status for a kyb_verification item"
           }
         }
       }
+    },
+    "related_party_id": {
+      "type": "string",
+      "description": "Set when this outreach asks a related party (UBO/director) of an organisation client to verify their identity"
+    },
+    "recipient_email": {
+      "type": "string",
+      "description": "Recipient override (e.g. the related party's email) instead of the client's primary contact"
     }
   },
   "required": [

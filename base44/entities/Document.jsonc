@@ -25,6 +25,7 @@
         "Financial_Statement",
         "Tax_Return",
         "Salary_Slip",
+        "Registry_Extract",
         "Other"
       ]
     },

@@ -18,7 +18,8 @@
         "screening_hit",
         "risk_band_rise",
         "profile_breach",
-        "tm_case"
+        "tm_case",
+        "transaction_verification"
       ]
     },
     "source_ref": {
