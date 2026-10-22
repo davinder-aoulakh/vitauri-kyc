@@ -338,8 +338,13 @@ Deno.serve(async (req) => {
   const ocrResults: Array<{ doc_id: string; file_name: string; extracted: any; field_confidence: any }> = [];
   for (const doc of ocrableDocs.slice(0, 6)) { // cap at 6 to avoid runaway
     try {
+      // Private files (Didit images, KYB documents) hold a file_uri: OCR reads them through a short-lived signed URL.
+      const ocrUrl = /^(https?:|data:)/i.test(doc.file_url)
+        ? doc.file_url
+        : (await base44.asServiceRole.integrations.Core.CreateFileSignedUrl({ file_uri: doc.file_url, expires_in: 600 }))?.signed_url;
+      if (!ocrUrl) continue;
       const ocrRes = await base44.asServiceRole.functions.invoke('ocrDocumentParse', {
-        file_url: doc.file_url,
+        file_url: ocrUrl,
         doc_type: doc.doc_type,
         client_type,
       });
