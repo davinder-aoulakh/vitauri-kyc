@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
@@ -45,7 +45,9 @@ export default function TmCases() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const allowed = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmViewAlerts');
-  const [filter, setFilter] = useState('all');
+  const [searchParams] = useSearchParams();
+  const initialFilter = searchParams.get('filter');
+  const [filter, setFilter] = useState(FILTERS.some((f) => f.key === initialFilter) ? initialFilter : 'all');
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t); }, []);
 
