@@ -698,6 +698,8 @@ async function fetchDiditPdfBytes(sessionId, tenantId) {
   }
 }
 
+import { getSignedUrl } from '@/lib/securityUtils';
+
 async function fetchFileBytes(url) {
   try {
     // Private files hold a file_uri (e.g. Didit images, KYB documents): fetch them through a signed URL.
