@@ -6,6 +6,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { getSignedUrl } from '@/lib/securityUtils';
 import { Button } from '@/components/ui/button';
 import { FileText, Download, Loader2, Share2, CheckCircle, XCircle, Eye, RefreshCw, Shield } from 'lucide-react';
 import DocumentViewer from '@/components/shared/DocumentViewer';
@@ -697,8 +698,6 @@ async function fetchDiditPdfBytes(sessionId, tenantId) {
     return null;
   }
 }
-
-import { getSignedUrl } from '@/lib/securityUtils';
 
 async function fetchFileBytes(url) {
   try {
