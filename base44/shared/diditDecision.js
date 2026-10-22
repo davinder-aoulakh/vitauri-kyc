@@ -58,20 +58,50 @@ export const ISO3_MAP = {
 };
 
 /**
+ * A decision can hold several checks of one kind (retries, extra documents).
+ * Primary = the latest Approved entry, otherwise the last entry.
+ */
+export function primaryCheck(arr) {
+  const list = Array.isArray(arr) ? arr.filter(Boolean) : [];
+  if (list.length === 0) return {};
+  for (let i = list.length - 1; i >= 0; i--) if (list[i].status === 'Approved') return list[i];
+  return list[list.length - 1];
+}
+
+const AML_STATUS_RANK = { Declined: 3, 'In Review': 2, Approved: 1 };
+
+/** Worst AML status across all screenings (Declined > In Review > Approved). */
+function worstAmlStatus(list) {
+  let worst = null;
+  for (const s of list) {
+    if (!s?.status) continue;
+    if (!worst || (AML_STATUS_RANK[s.status] || 0) > (AML_STATUS_RANK[worst] || 0)) worst = s.status;
+  }
+  return worst;
+}
+
+/**
  * Given a raw Didit decision response, extract structured idvFields.
+ * All entries of each check array are considered (see primaryCheck and the aggregates below).
  */
 export function extractIdvFields(decision, sessionId) {
   const root = decision?.decision || decision || {};
-  const idv  = root.id_verifications?.[0]  || {};
-  const face = root.face_matches?.[0]       || {};
-  const live = root.liveness_checks?.[0]    || {};
-  const aml  = root.aml_screenings?.[0]     || {};
+  const idvs  = Array.isArray(root.id_verifications) ? root.id_verifications.filter(Boolean) : [];
+  const faces = Array.isArray(root.face_matches)     ? root.face_matches.filter(Boolean)     : [];
+  const lives = Array.isArray(root.liveness_checks)  ? root.liveness_checks.filter(Boolean)  : [];
+  const amls  = Array.isArray(root.aml_screenings)   ? root.aml_screenings.filter(Boolean)   : [];
+  const idv  = primaryCheck(idvs);
+  const face = primaryCheck(faces);
+  const live = primaryCheck(lives);
+  const aml  = primaryCheck(amls);
 
   const warnings = [
-    ...(idv.warnings  || []),
-    ...(face.warnings || []),
-    ...(live.warnings || []),
+    ...idvs.flatMap((c) => c.warnings || []),
+    ...faces.flatMap((c) => c.warnings || []),
+    ...lives.flatMap((c) => c.warnings || []),
   ];
+  const faceScores = faces.map((c) => c.score).filter((s) => s != null);
+  const amlHits = amls.reduce((n, s) => n + (Number(s.total_hits) || 0), 0);
   const failureReason = warnings.length > 0
     ? warnings.map(w => w.risk || w.short_description).filter(Boolean).join('; ')
     : null;
@@ -80,8 +110,8 @@ export function extractIdvFields(decision, sessionId) {
     didit_session_id:           sessionId,
     didit_session_status:       decision.status,
     idv_status:                 STATUS_MAP[decision.status] || 'Inconclusive',
-    idv_similarity_score:       face.score    != null ? Math.round(face.score) : null,
-    idv_liveness_passed:        live.status === 'Approved',
+    idv_similarity_score:       faceScores.length ? Math.round(Math.min(...faceScores)) : null,
+    idv_liveness_passed:        lives.length > 0 && lives.every((c) => c.status === 'Approved'),
     idv_liveness_score:         live.score    != null ? Math.round(live.score) : null,
     idv_document_type:          idv.document_type     || null,
     idv_document_number:        idv.document_number   || null,
@@ -94,11 +124,11 @@ export function extractIdvFields(decision, sessionId) {
     idv_extracted_address:      idv.address           || null,
     idv_issuing_country:        idv.issuing_state     || null,
     idv_failure_reason:         failureReason,
-    idv_aml_hits:               aml.total_hits        != null ? aml.total_hits : 0,
-    idv_aml_status:             aml.status            || null,
+    idv_aml_hits:               amlHits,
+    idv_aml_status:             worstAmlStatus(amls),
     idv_aml_screenings:         root.aml_screenings   || null,
     // AML warnings / risk codes (PEP_MATCH, SANCTIONED_ENTITY, ADVERSE_MEDIA_HIT, etc.)
-    idv_aml_warnings:           aml.warnings          || [],
+    idv_aml_warnings:           amls.flatMap((s) => s.warnings || []),
     // Scoring thresholds & weights from the workflow config embedded in the screening result
     idv_aml_match_threshold:    aml.aml_match_score_threshold    ?? null,
     idv_aml_approve_threshold:  aml.aml_score_approve_threshold  ?? null,
