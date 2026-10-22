@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
+import { reportEdrChange, pickEdrClientFields } from '@/lib/edrChange';
 import { hasPermission } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -81,7 +82,7 @@ function SF({ label, value, onChange, options, disabled }) {
 }
 
 export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrApplied }) {
-  const { currentUser } = useTenant();
+  const { currentUser, tenant } = useTenant();
   // Backfill first_names/last_name from full_name on first load for existing NP clients
   const initialForm = { ...client };
   if (client.client_type === 'NP' && !initialForm.first_names && !initialForm.last_name && initialForm.full_name) {
@@ -134,6 +135,8 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
       after_state: rest,
       notes: 'Profile updated via Client Detail screen',
     });
+    // TM: check for event-driven review triggers (tm_core only; never blocks the save).
+    reportEdrChange(tenant, client.id, { type: 'client_profile', source_ref: `client:${client.id}`, before: pickEdrClientFields(client), after: pickEdrClientFields({ ...client, ...rest }) });
     setSaving(false);
     setSaved(true);
     onClientUpdated?.({ ...client, ...rest });
