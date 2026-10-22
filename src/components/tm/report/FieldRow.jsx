@@ -9,6 +9,7 @@ export default function FieldRow({ field, missing, editable, editing, busy, onSa
   const [value, setValue] = useState(field?.value || '');
   const showInput = editable && (missing || editing);
   const label = field?.label || field.path;
+  const tone = field?.source === 'Didit' ? 'green' : sourceTone(field);
   return (
     <tr className={cn('border-b border-border last:border-0 align-top', missing && 'bg-amber-50')}>
       <td className="px-3 py-2 text-muted-foreground w-[38%]">
@@ -24,7 +25,7 @@ export default function FieldRow({ field, missing, editable, editing, busy, onSa
         ) : <span className="break-words">{field.value}</span>}
       </td>
       <td className="px-3 py-2 w-28">
-        {!missing && <span className={cn('text-[11px] px-2 py-0.5 rounded-full border', TONE_CLASS[sourceTone(field)])}>{field.source || '—'}</span>}
+        {!missing && <span className={cn('text-[11px] px-2 py-0.5 rounded-full border', TONE_CLASS[tone])}>{field.source || '—'}</span>}
       </td>
     </tr>
   );
