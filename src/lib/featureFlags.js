@@ -59,6 +59,12 @@ export const FEATURE_DEFINITIONS = [
       { key: 'tm_quality', label: 'TM quality control', description: 'Coverage matrix, below-the-line samples, AI shadow metrics', defaultOff: true },
     ],
   },
+  {
+    group: 'Business Verification (new)',
+    features: [
+      { key: 'didit_kyb', label: 'Didit KYB', description: 'Business verification (registry, company documents, company AML) and key-person ID verification for organisation clients', defaultOff: true },
+    ],
+  },
 ];
 
 export function getFeatureDefinition(key) {
