@@ -28,7 +28,7 @@ function Item({ to, icon: Icon, tone, title, children }) {
   );
 }
 
-/** Open TM cases, alerts due within 24 h, FIU reports not yet received and proposed EDR triggers (read-only). */
+/** Open TM cases, alerts due within 24 h, FIU reports not yet received and proposed EDR triggers (Accept / Dismiss for tmWorkCase). */
 export default function OpenItemsStrip({ file, clientId, showFiu }) {
   const qc = useQueryClient();
   const now = Date.now();
