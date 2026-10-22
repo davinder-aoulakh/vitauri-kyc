@@ -1,7 +1,6 @@
 // mintDiditMonitoringToken — short-lived Didit event-monitoring token for one of the tenant's clients.
 // Auth: tenant API key with scope tm:token. Body: { client_id | external_id, ttl_seconds?, max_uses?, allowed_event_categories? }.
-// Returns only { monitoring_token, expires_at } (403 event_monitoring_disabled from Didit → 409).
-// Returns only { monitoring_token, expires_at }. vendor_data is the Vitauri client id, resolved server-side.
+// Returns only { monitoring_token, expires_at } (Didit 403 event_monitoring_disabled → 409). vendor_data is the Vitauri client id, resolved server-side.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { errorResponse, httpError } from '../../shared/tmAuth.js';
 import { writeAudit } from '../../shared/tmAudit.js';
