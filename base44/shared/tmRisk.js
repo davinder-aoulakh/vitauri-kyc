@@ -106,6 +106,22 @@ export async function recomputeCustomerRisk(base44, { tenantId, tenant, clientId
   if (rose && BANDS.indexOf(band) >= 2) {
     const cases = asList(await E.KycCase.filter({ tenant_id: tenantId, client_id: clientId, case_type: 'Event_Driven_Review' }, undefined, 100));
     if (!cases.some((c) => !OPEN_EDR_EXCLUDED.includes(c.status))) {
+      // EdrTrigger proposal (in addition to the notification below). One open proposal per client and band.
+      const dedupeKey = `${clientId}:risk_band_rise:${band}`;
+      const openTrigger = asList(await E.EdrTrigger.filter({ tenant_id: tenantId, dedupe_key: dedupeKey, status: 'proposed' }, undefined, 1))[0];
+      if (!openTrigger) {
+        const trigger = await E.EdrTrigger.create({
+          tenant_id: tenantId, client_id: clientId, trigger_type: 'risk_band_rise', source_ref: record.id, status: 'proposed', dedupe_key: dedupeKey,
+          before: { score: prev?.score ?? null, band: prev?.band || client.customer_risk_band || null },
+          after: { score, band, summary: `Dynamic risk rose to ${band} (${score}). ${reasons.slice(0, 3).join(' ')}` },
+        });
+        await E.AuditEvent.create({
+          tenant_id: tenantId, client_id: clientId, actor_user_id: actor?.actorUserId, actor_name: actor?.actorName || 'System',
+          actor_type: actor?.actorType || 'System', event_type: 'edr_trigger_proposed',
+          before_state: {}, after_state: { edr_trigger_id: trigger.id, trigger_type: 'risk_band_rise', dedupe_key: dedupeKey },
+          notes: `EDR trigger proposed (risk band rise): ${band} (${score}).`,
+        });
+      }
       const users = asList(await E.User.filter({ tenant_id: tenantId }, undefined, 1000));
       const recipients = new Set(users.filter((u) => ['Compliance Officer', 'Tenant Admin'].includes(u.app_role || u.data?.app_role)).map((u) => u.id));
       if (client.assigned_analyst_id) recipients.add(client.assigned_analyst_id);
