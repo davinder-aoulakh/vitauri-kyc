@@ -19,7 +19,7 @@ export default function ClientTmHeader({ client }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <RiskGauge size="sm" risk={data.risk} />
-      {data.pills && <StatusPills pills={data.pills} />}
+      {data.pills && <StatusPills pills={data.pills} clientType={client.client_type} />}
     </div>
   );
 }
