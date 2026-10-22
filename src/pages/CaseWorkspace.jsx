@@ -23,6 +23,8 @@ import ClientProfileStep    from '@/components/case/ClientProfileStep';
 import ProfileVerificationStep from '@/components/case/ProfileVerificationStep';
 import CaseTypeBanner       from '@/components/case/views/CaseTypeBanner';
 import TmContextCard        from '@/components/case/TmContextCard';
+import KybStep              from '@/components/case/kyb/KybStep';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 import CaseAssignmentPicker from '@/components/case/CaseAssignmentPicker';
 import CaseNoteThread       from '@/components/case/CaseNoteThread';
 import DeleteCaseConfirmDialog from '@/components/case/DeleteCaseConfirmDialog';
@@ -658,7 +660,16 @@ export default function CaseWorkspace() {
                 ) : (
                   <>
                     {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} onNavigateToStep={setActiveStep} />}
-                    {activeStep === 2 && (
+                    {activeStep === 2 && client?.client_type === 'ORG' && isFeatureEnabled(tenant, 'didit_kyb') && (
+                      <KybStep
+                        kycCase={kycCase}
+                        client={client}
+                        currentUser={currentUser}
+                        tenant={tenant}
+                        onStepComplete={() => updateStepStatus('step_2_status', 'complete')}
+                      />
+                    )}
+                    {activeStep === 2 && !(client?.client_type === 'ORG' && isFeatureEnabled(tenant, 'didit_kyb')) && (
                       <IdentityVerificationStep
                         kycCase={kycCase}
                         client={client}
