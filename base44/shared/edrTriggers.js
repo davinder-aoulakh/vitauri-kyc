@@ -5,7 +5,7 @@ import { asList } from './tmAuth.js';
 export const TRIGGER_LABEL = {
   ubo_change: 'UBO change', director_change: 'Director change', business_activity_change: 'Business activity change',
   country_change: 'Country change', screening_hit: 'Confirmed screening hit', risk_band_rise: 'Risk band rise',
-  profile_breach: 'Profile breach', tm_case: 'TM case',
+  profile_breach: 'Profile breach', tm_case: 'TM case', transaction_verification: 'Transaction re-verification',
 };
 
 const OWNERSHIP_PP = 10;
