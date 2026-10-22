@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
+import { authorizeOutreachCaller } from '../../shared/diditSessionAuth.js';
 
 Deno.serve(async (req) => {
   try {
@@ -7,7 +8,7 @@ Deno.serve(async (req) => {
     const params = await req.json();
 
     const {
-      outreach_id, item_id, client_id, tenant_id,
+      outreach_id, item_id, tenant_id: bodyTenantId, access_token,
       portal_url, language = 'en',
       client_email, first_name, last_name,
       idv_workflow_id,
@@ -16,6 +17,10 @@ Deno.serve(async (req) => {
 
     // ── TEST MODE: just validate credentials ────────────────────────────────
     if (_test_only) {
+      const tester = await base44.auth.me().catch(() => null);
+      if ((tester?.app_role || tester?.data?.app_role) !== 'Vitauri Ops') {
+        return Response.json({ error: 'Forbidden' }, { status: 403 });
+      }
       if (!testApiKey || !testWorkflowId) {
         return Response.json({ error: 'API key and workflow ID required' });
       }
@@ -30,6 +35,16 @@ Deno.serve(async (req) => {
     }
 
     // ── PRODUCTION MODE ──────────────────────────────────────────────────────
+
+    // 0. Caller check: portal access_token or a signed-in user of the outreach's tenant.
+    //    Tenant and client always come from the stored outreach, never from the request body.
+    const auth = await authorizeOutreachCaller(base44, { outreach_id, access_token, tenant_id: bodyTenantId });
+    if (auth.error) return auth.error;
+    const tenant_id = auth.outreach.tenant_id;
+    const client_id = auth.outreach.client_id;
+    if (!item_id || !(auth.outreach.items || []).some((i) => i.item_id === item_id)) {
+      return Response.json({ error: 'Item not found on this request' }, { status: 400 });
+    }
 
     // 1. Load tenant credentials (service role — portal user is unauthenticated)
     const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
