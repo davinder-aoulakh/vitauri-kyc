@@ -104,7 +104,7 @@ export default function TmContextCard({ kycCase, client }) {
           )}
           <div className="flex flex-wrap gap-2">
             {tm && <Button asChild variant="outline" size="sm"><Link to={`/tm/case/${tm.id}`}>Open TM case</Link></Button>}
-            <Button asChild variant="outline" size="sm"><Link to={`/client/${clientId}?tab=monitoring`}>View customer file</Link></Button>
+            <Button asChild variant="outline" size="sm"><Link to={`/client/${clientId}?tab=overview`}>View customer file</Link></Button>
             {report && <Button asChild size="sm"><Link to={`/tm/report/${report.id}`}>Open FIU report {report.report_ref} · {report.status}</Link></Button>}
             {!report && canPrepare && (
               <Button size="sm" disabled={busy} onClick={prepare}>

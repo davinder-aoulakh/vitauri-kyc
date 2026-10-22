@@ -77,7 +77,7 @@ export function citationLink(ref, report) {
   const [kind] = String(ref).split(':');
   if (kind === 'alert') return '/tm/alerts';
   if (kind === 'evidence') return `/tm/case/${report.tm_case_id}`;
-  return `/client/${report.client_id}?tab=monitoring`;
+  return `/client/${report.client_id}?tab=overview`;
 }
 
 export function citationLabel(ref, report) {

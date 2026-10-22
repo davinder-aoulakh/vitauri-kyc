@@ -39,7 +39,7 @@ export default function AccountsCoverageTable({ rows, start, end }) {
                   <td className="px-4 py-2.5 whitespace-nowrap">
                     <div className="font-mono text-xs">{r.account.iban_or_number}</div>
                     {r.account.institution && <div className="text-xs text-muted-foreground">{r.account.institution}</div>}
-                    {canManage && <Link to={`/client/${r.account.client_id}?tab=monitoring`} className="text-xs text-primary hover:underline">Manage accounts</Link>}
+                    {canManage && <Link to={`/client/${r.account.client_id}?tab=overview`} className="text-xs text-primary hover:underline">Manage accounts</Link>}
                   </td>
                   <td className="px-4 py-2.5"><CoverageStrip cells={r.cells} /></td>
                   <td className="px-4 py-2.5 text-right tabular-nums">{r.missing}</td>

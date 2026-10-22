@@ -39,7 +39,7 @@ export default function AlertsTable({ alerts, clientsById, now, selected, onTogg
                 )}
                 <td className="px-3 py-3 font-mono text-xs">{shortId(a.id)}</td>
                 <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                  <Link to={`/client/${a.client_id}?tab=monitoring`} className="text-primary hover:underline">{client?.full_name || 'Customer'}</Link>
+                  <Link to={`/client/${a.client_id}?tab=overview`} className="text-primary hover:underline">{client?.full_name || 'Customer'}</Link>
                 </td>
                 <td className="px-3 py-3 max-w-[260px] truncate" title={a.title}>{a.title || '—'}</td>
                 <td className="px-3 py-3">

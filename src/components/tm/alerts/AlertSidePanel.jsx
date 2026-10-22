@@ -48,7 +48,7 @@ export default function AlertSidePanel({ alert, client, tenantId, userId, canWor
               <SheetDescription>{shortId(alert.id)} · {alert.status.replace(/_/g, ' ')}</SheetDescription>
             </SheetHeader>
             <div className="flex flex-wrap items-center gap-3 text-sm">
-              <Link to={`/client/${alert.client_id}?tab=monitoring`} className="text-primary hover:underline font-medium">{client?.full_name || 'Customer'}</Link>
+              <Link to={`/client/${alert.client_id}?tab=overview`} className="text-primary hover:underline font-medium">{client?.full_name || 'Customer'}</Link>
               {client?.risk_classification && <RiskBadge risk={client.risk_classification} />}
               <DeadlineCell alert={alert} now={now} />
             </div>
