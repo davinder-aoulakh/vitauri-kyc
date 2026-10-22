@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.43';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
+import { authorizeTenantUser } from '../../shared/diditSessionAuth.js';
 
 /**
  * Updates the review_status of a specific AML hit in Didit.
@@ -10,11 +11,13 @@ import { withDiditCredentials } from '../../shared/diditCredentials.js';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-
     const body = await req.json();
-    const { session_id, hit_id, review_status, tenant_id, didit_api_key: directApiKey, outreach_id, item_id } = body;
+    const { session_id, hit_id, review_status, outreach_id, item_id } = body;
+
+    // Signed-in user of the requested tenant (Vitauri Ops: any tenant); the tenant's own Didit key only.
+    const auth = await authorizeTenantUser(base44, body.tenant_id);
+    if (auth.error) return auth.error;
+    const tenant_id = auth.tenantId;
 
     if (!session_id || !hit_id || !review_status) {
       return Response.json({ error: 'session_id, hit_id, and review_status are required' }, { status: 400 });
@@ -25,12 +28,9 @@ Deno.serve(async (req) => {
       return Response.json({ error: `Invalid review_status. Must be one of: ${validStatuses.join(', ')}` }, { status: 400 });
     }
 
-    // Resolve API key
-    let apiKey = directApiKey?.trim();
-    if (!apiKey && tenant_id) {
-      const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
-      apiKey = (await withDiditCredentials(base44, tenants?.[0]))?.didit_api_key?.trim();
-    }
+    // Resolve the tenant's API key (server-side only)
+    const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
+    const apiKey = (await withDiditCredentials(base44, tenants?.[0]))?.didit_api_key?.trim();
     if (!apiKey) return Response.json({ error: 'Didit API key not configured' }, { status: 400 });
 
     // PATCH hit status — correct Didit V3 endpoint
@@ -70,8 +70,8 @@ Deno.serve(async (req) => {
           // the session belongs to) — this avoids an unsupported nested-array filter query.
           let outreachReq = null;
           if (outreach_id) {
-            const list = await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id });
-            outreachReq = list?.[0] || null;
+            const list = await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id, tenant_id });
+            outreachReq = list?.[0]?.tenant_id === tenant_id ? list[0] : null;
           }
           if (outreachReq) {
             const updatedItems = (outreachReq.items || []).map((it: any) => {
