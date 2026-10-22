@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { useTenantClients } from '@/hooks/useTenantData';
 import { useTmAlerts } from '@/hooks/useTmAlerts';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { hasPermission } from '@/lib/permissions';
-import { errorMessage } from '@/lib/tmAlerts';
+import { errorMessage, FILTERS } from '@/lib/tmAlerts';
 import { useToast } from '@/components/ui/use-toast';
 import AppShell from '@/components/layout/AppShell';
 import PageHeader from '@/components/shared/PageHeader';
@@ -39,8 +40,11 @@ export default function TmAlerts() {
   const allowed = isFeatureEnabled(tenant, 'tm_core') && hasPermission(role, 'tmViewAlerts');
   const canWork = hasPermission(role, 'tmWorkCase');
 
-  const [filter, setFilter] = useState('all');
-  const [openId, setOpenId] = useState(null);
+  // ?alert=<id> opens that alert's side panel on load; ?filter=<key> preselects a filter pill.
+  const [searchParams] = useSearchParams();
+  const initialFilter = searchParams.get('filter');
+  const [filter, setFilter] = useState(FILTERS.some((f) => f.key === initialFilter) ? initialFilter : 'all');
+  const [openId, setOpenId] = useState(searchParams.get('alert') || null);
   const [selected, setSelected] = useState(new Set());
   const [closeIds, setCloseIds] = useState(null);
   const [caseIds, setCaseIds] = useState(null);
@@ -53,7 +57,17 @@ export default function TmAlerts() {
   const { data: clients } = useTenantClients(tenantId, { enabled: allowed });
   const clientsById = useMemo(() => new Map((clients || []).map((c) => [c.id, c])), [clients]);
   const alerts = list.data || [];
-  const openAlert = alerts.find((a) => a.id === openId) || null;
+  const listed = alerts.find((a) => a.id === openId) || null;
+  // Deep-linked alert that is not in the current list (e.g. closed or outside the filter).
+  const deep = useQuery({
+    queryKey: ['tmAlertDeepLink', tenantId, openId],
+    enabled: allowed && !!tenantId && !!openId && !list.isLoading && !listed,
+    queryFn: async () => {
+      const res = await base44.entities.TmAlert.filter({ tenant_id: tenantId, id: openId }, { limit: 1 });
+      return (Array.isArray(res) ? res : res?.items || [])[0] || null;
+    },
+  });
+  const openAlert = listed || (deep.data?.id === openId ? deep.data : null);
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['tmAlerts', tenantId] });
