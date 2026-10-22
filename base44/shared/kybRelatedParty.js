@@ -14,6 +14,35 @@ function guessSource(text) {
 }
 
 /**
+ * Ongoing AML monitoring (user.status.updated / user.data.updated) where vendor_data is a related party:
+ * raise the MonitoringAlert on each linked organisation client, tagged with related_party_id.
+ */
+export async function handleRelatedPartyMonitoring(base44, tenantId, rp, body) {
+  const E = base44.asServiceRole.entities;
+  const aml = (body.decision?.aml_screenings || [])[0] || {};
+  const hits = aml.hits || [];
+  const has = (k) => hits.some((h) => (h?.[k] || []).length);
+  let alertType = null;
+  if (has('sanction_matches')) alertType = 'Didit_Ongoing_Sanctions';
+  else if (has('pep_matches')) alertType = 'Didit_Ongoing_PEP';
+  else if (has('adverse_media_matches')) alertType = 'Didit_Ongoing_Adverse_Media';
+  else if ((aml.total_hits ?? 0) > 0) alertType = 'Didit_Ongoing_High_Risk';
+  if (!alertType) return;
+  const links = asList(await E.ClientRelatedPartyLink.filter({ tenant_id: tenantId, related_party_id: rp.id }, undefined, 5));
+  for (const l of links) {
+    await E.MonitoringAlert.create({
+      tenant_id: tenantId, client_id: l.client_id, related_party_id: rp.id, entity_name: rp.full_name || rp.id, entity_type: 'Related_Party',
+      alert_type: alertType, source: 'Didit Ongoing Monitoring',
+      details: { didit_session_id: body.session_id, hit_id: hits[0]?.id || null, aml_total_hits: aml.total_hits ?? hits.length },
+    }).catch(() => {});
+  }
+  await E.AuditEvent.create({
+    tenant_id: tenantId, client_id: links[0]?.client_id, actor_type: 'System', actor_name: 'Didit Ongoing Monitoring',
+    event_type: 'didit_ongoing_monitoring_alert', notes: `Ongoing AML monitoring flagged ${alertType} for related party ${rp.full_name}.`,
+  }).catch(() => {});
+}
+
+/**
  * idvFields: output of diditDecision.extractIdvFields. amlScreenings: decision.aml_screenings (V3 plural array).
  * Returns { related_party_id, verification_status } or null when the party is not found in the tenant.
  */
