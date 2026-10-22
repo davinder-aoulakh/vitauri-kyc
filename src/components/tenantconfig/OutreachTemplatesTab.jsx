@@ -10,7 +10,8 @@ import { useToast } from '@/components/ui/use-toast';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { cn } from '@/lib/utils';
-import FieldTypePicker, { FIELD_TYPES } from './outreach/FieldTypePicker';
+import FieldTypePicker, { FIELD_TYPES, KYB_FIELD_TYPE } from './outreach/FieldTypePicker';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 import FieldTypeConfig from './outreach/FieldTypeConfig';
 import PortalPreviewModal from './outreach/PortalPreviewModal';
 import AiGenerateModal from './outreach/AiGenerateModal';
@@ -97,18 +98,24 @@ function PlaceholderPicker({ onInsert }) {
   );
 }
 
+const ALL_FIELD_TYPES = [...FIELD_TYPES, KYB_FIELD_TYPE];
 function getFieldTypeLabel(ft) {
-  return FIELD_TYPES.find(f => f.value === ft)?.label || ft || 'Unknown';
+  return ALL_FIELD_TYPES.find(f => f.value === ft)?.label || ft || 'Unknown';
 }
 function getFieldTypeIcon(ft) {
-  return FIELD_TYPES.find(f => f.value === ft)?.icon || '📄';
+  return ALL_FIELD_TYPES.find(f => f.value === ft)?.icon || '📄';
 }
+// Didit workflow type: entries without a type are KYC (person). KYB workflows are business verification.
+const wfType = (w) => (w?.type === 'kyb' ? 'kyb' : 'kyc');
 
 export default function OutreachTemplatesTab({ tenant }) {
   const [templates, setTemplates]       = useState([]);
   const [loading, setLoading]           = useState(true);
   const [modal, setModal]               = useState(null);
   const [diditWorkflows, setDiditWorkflows] = useState([]);
+  const kybOn = isFeatureEnabled(tenant, 'didit_kyb');
+  const kycWorkflows = diditWorkflows.filter(w => wfType(w) === 'kyc');
+  const kybWorkflows = diditWorkflows.filter(w => wfType(w) === 'kyb');
   const [saving, setSaving]       = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewTemplates, setPreviewTemplates] = useState(null); // null = all, otherwise [tmpl]
@@ -292,6 +299,13 @@ export default function OutreachTemplatesTab({ tenant }) {
                                     <div className="text-xs text-muted-foreground">Workflow: tenant default</div>
                                   )}
                                 </div>
+                              ) : tmpl.field_type === 'kyb_verification' ? (
+                                <div>
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                                    🏢 Business Verification
+                                  </span>
+                                  <div className="text-xs text-muted-foreground mt-0.5">Workflow: {tmpl.idv_workflow_name || 'tenant default KYB'}</div>
+                                </div>
                               ) : (
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                                   {getFieldTypeLabel(tmpl.field_type || (tmpl.item_type === 'document' ? 'file_upload' : 'textarea'))}
@@ -374,11 +388,40 @@ export default function OutreachTemplatesTab({ tenant }) {
               {/* Field type picker */}
               <FieldTypePicker
                 value={modal.data.field_type || 'file_upload'}
+                extraTypes={kybOn || modal.data.field_type === 'kyb_verification' ? [KYB_FIELD_TYPE] : []}
                 onChange={v => {
-                  const extra = v === 'id_verification' ? IDV_DEFAULTS : {};
+                  const extra = v === 'id_verification' ? IDV_DEFAULTS
+                    : v === 'kyb_verification' ? { idv_workflow_id: '', idv_workflow_name: '', client_types: ['ORG'] } : {};
                   setModal(m => ({ ...m, data: { ...m.data, field_type: v, item_type: v === 'file_upload' ? 'document' : 'data_point', ...extra } }));
                 }}
               />
+
+              {/* KYB-specific config (Didit business verification) */}
+              {modal.data.field_type === 'kyb_verification' && (
+                <div className="space-y-2 border border-blue-100 bg-blue-50/50 rounded-xl p-4">
+                  <div className="text-xs font-semibold text-blue-700">🏢 Business Verification Settings</div>
+                  {kybWorkflows.length > 0 ? (
+                    <>
+                      <label className="text-xs font-medium block">Didit KYB workflow</label>
+                      <select
+                        value={modal.data.idv_workflow_id || ''}
+                        onChange={e => setModal(m => ({ ...m, data: { ...m.data, idv_workflow_id: e.target.value, idv_workflow_name: kybWorkflows.find(w => w.workflow_id === e.target.value)?.name || '' } }))}
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        <option value="">Use tenant default KYB workflow</option>
+                        {kybWorkflows.map(wf => (
+                          <option key={wf.id} value={wf.workflow_id}>{wf.name}{wf.is_default_kyb ? ' (default)' : ''}{wf.description ? ` — ${wf.description}` : ''}</option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-muted-foreground">The company representative completes Didit business verification (registry, company documents, company AML) in the client portal. UBOs and directors are verified separately from the case.</p>
+                    </>
+                  ) : (
+                    <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                      ⚠ No Didit KYB workflow configured. Ask your Vitauri Ops administrator to add a KYB workflow in the platform console.
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* IDV-specific config */}
               {modal.data.field_type === 'id_verification' && (
@@ -386,7 +429,7 @@ export default function OutreachTemplatesTab({ tenant }) {
                   <div className="text-xs font-semibold text-indigo-700 flex items-center gap-1.5">🪪 Identity Verification Settings</div>
 
                   {/* Didit Workflow selector */}
-                  {diditWorkflows.length > 0 && (
+                  {kycWorkflows.length > 0 && (
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium block">Didit Workflow</label>
                       <select
@@ -396,13 +439,13 @@ export default function OutreachTemplatesTab({ tenant }) {
                           data: {
                             ...m.data,
                             idv_workflow_id:   e.target.value,
-                            idv_workflow_name: diditWorkflows.find(w => w.workflow_id === e.target.value)?.name || '',
+                            idv_workflow_name: kycWorkflows.find(w => w.workflow_id === e.target.value)?.name || '',
                           }
                         }))}
                         className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
                       >
                         <option value="">Use tenant default workflow</option>
-                        {diditWorkflows.map(wf => (
+                        {kycWorkflows.map(wf => (
                           <option key={wf.id} value={wf.workflow_id}>
                             {wf.name}{wf.is_default ? ' (default)' : ''}{wf.description ? ` — ${wf.description}` : ''}
                           </option>
@@ -424,7 +467,7 @@ export default function OutreachTemplatesTab({ tenant }) {
                       <p className="text-xs text-muted-foreground">Select the Didit workflow for this verification field. Leave blank to use the tenant default.</p>
                     </div>
                   )}
-                  {diditWorkflows.length === 0 && (
+                  {kycWorkflows.length === 0 && (
                     <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
                       ⚠ No Didit workflows configured. Ask your Vitauri Ops administrator to configure workflows in the platform console.
                     </div>
@@ -496,7 +539,7 @@ export default function OutreachTemplatesTab({ tenant }) {
               )}
 
               {/* Type-specific config (hidden for id_verification) */}
-              {modal.data.field_type !== 'id_verification' && (
+              {modal.data.field_type !== 'id_verification' && modal.data.field_type !== 'kyb_verification' && (
                 <FieldTypeConfig
                   fieldType={modal.data.field_type || 'file_upload'}
                   data={modal.data}
