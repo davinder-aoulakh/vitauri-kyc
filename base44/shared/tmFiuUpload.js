@@ -2,6 +2,7 @@
 import { XMLValidator } from 'npm:fast-xml-parser@4.4.1';
 import { httpError } from './tmAuth.js';
 import { writeAudit } from './tmAudit.js';
+import { safeFileArtefacts } from './tmFiuArtefacts.js';
 
 const MAX_CHARS = 5_000_000;
 
@@ -35,5 +36,6 @@ export async function uploadGenerated(ctx, report, { xml_text, filename }) {
     before: { status: 'approved' }, after: { status: 'generated', file_hash: hash, source: 'manual_upload', original_name: String(filename || '').slice(0, 120) },
     notes: `goAML XML for ${report.report_ref} uploaded manually by ${ctx.auth.actorName} (generated in the Didit console).`,
   });
+  await safeFileArtefacts(ctx, report, [{ kind: 'goaml_xml', file_url: up.file_uri, file_name: `${report.report_ref}.xml`, file_hash: hash }]);
   return { report_id: report.id, status: 'generated', file_hash: hash };
 }
