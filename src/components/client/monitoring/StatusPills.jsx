@@ -17,7 +17,7 @@ function Pill({ label, value, tone }) {
   );
 }
 
-export default function StatusPills({ pills }) {
+export default function StatusPills({ pills, clientType }) {
   const screening = {
     clear: ['Clear', 'ok'],
     potential: ['Potential match', 'warn'],
@@ -25,7 +25,7 @@ export default function StatusPills({ pills }) {
   }[pills.screening] || ['Clear', 'ok'];
   return (
     <div className="flex flex-wrap gap-2">
-      <Pill label="KYC" value={String(pills.kyc_status || '—').replace(/_/g, ' ')} tone="neutral" />
+      <Pill label={clientType === 'ORG' ? 'KYB' : 'KYC'} value={String(pills.kyc_status || '—').replace(/_/g, ' ')} tone="neutral" />
       <Pill label="ID verified" value={pills.idv_verified ? 'Yes (Didit)' : 'No'} tone={pills.idv_verified ? 'ok' : 'warn'} />
       <Pill label="PEP / sanctions" value={screening[0]} tone={screening[1]} />
       <Pill label="Ongoing screening" value={pills.ongoing_screening ? 'On' : 'Off'} tone={pills.ongoing_screening ? 'ok' : 'neutral'} />
