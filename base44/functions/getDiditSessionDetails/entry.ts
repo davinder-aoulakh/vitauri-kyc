@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
 import { authorizeTenantUser } from '../../shared/diditSessionAuth.js';
+import { primaryCheck } from '../../shared/diditDecision.js';
 
 Deno.serve(async (req) => {
   try {
@@ -105,10 +106,11 @@ Deno.serve(async (req) => {
     // Didit V3 returns arrays as top-level flat fields — no nested "decision" wrapper.
     // Support both shapes defensively in case the response format ever changes.
     const root = decision?.decision || decision || {};
-    const idv  = root.id_verifications?.[0]  || {};
-    const face = root.face_matches?.[0]       || {};
-    const live = root.liveness_checks?.[0]    || {};
-    const aml  = root.aml_screenings?.[0]     || {};
+    const idv  = primaryCheck(root.id_verifications);
+    const face = primaryCheck(root.face_matches);
+    const live = primaryCheck(root.liveness_checks);
+    const aml  = primaryCheck(root.aml_screenings);
+    const allAml = Array.isArray(root.aml_screenings) ? root.aml_screenings.filter(Boolean) : [];
 
     return Response.json({
       ok:          true,
@@ -162,9 +164,9 @@ Deno.serve(async (req) => {
       // Key sub-fields per hit: adverse_media_matches, adverse_media_details, pep_matches,
       // sanction_matches, warning_matches, linked_entities, additional_information, features
       aml_screening_id: aml.id        || null,
-      aml_total_hits: aml.total_hits ?? 0,
+      aml_total_hits: allAml.length > 1 ? allAml.reduce((n, s) => n + (Number(s.total_hits) || 0), 0) : (aml.total_hits ?? 0),
       aml_status:     aml.status     || null,
-      aml_hits:       aml.hits || [], // full hit objects, unchanged
+      aml_hits:       allAml.length > 1 ? allAml.flatMap((s) => s.hits || []) : (aml.hits || []), // full hit objects, unchanged
       aml_raw:        aml,
 
       // All warnings combined
