@@ -16,9 +16,15 @@ import InboundChart from './monitoring/InboundChart';
 import AiSummaryBox from './monitoring/AiSummaryBox';
 import MonitoringTimeline from './monitoring/MonitoringTimeline';
 import MonitoringActions from './monitoring/MonitoringActions';
+import OpenItemsStrip from './overview/OpenItemsStrip';
+import ReportsCard from './overview/ReportsCard';
+import { useCustomerFile } from './overview/useCustomerFile';
 import { Loader2 } from 'lucide-react';
 
-/** Client "Monitoring" tab: dynamic risk, profile vs actual, chart, AI summary and timeline. Needs tm_core + createRunCase. */
+// Roles that may read FiuArtefact (entity RLS read list).
+const FIU_ARTEFACT_READERS = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'];
+
+/** Client "Overview" tab (formerly Monitoring): open items, reports, dynamic risk, profile vs actual, chart, AI summary and timeline. Needs tm_core + createRunCase. */
 export default function MonitoringTab({ client }) {
   const { currentUser, tenant } = useTenant();
   const qc = useQueryClient();
@@ -34,6 +40,10 @@ export default function MonitoringTab({ client }) {
     },
   });
 
+  const { data: file } = useCustomerFile(client.id, enabled);
+  const showFiu = isFeatureEnabled(tenant, 'tm_fiu');
+  const canReadArtefacts = showFiu && FIU_ARTEFACT_READERS.includes(currentUser?.app_role);
+
   if (!enabled) return null;
   if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
   if (error || !data) return <InlineError message={error?.response?.data?.error || 'Could not load monitoring data.'} onRetry={refetch} />;
@@ -42,6 +52,8 @@ export default function MonitoringTab({ client }) {
 
   return (
     <div className="space-y-4">
+      {file && <OpenItemsStrip file={file} clientId={client.id} showFiu={showFiu} />}
+      {file && canReadArtefacts && <ReportsCard reports={file.fiu_reports || []} artefacts={file.fiu_artefacts || []} />}
       <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 lg:flex-row lg:items-center lg:justify-between">
         <RiskGauge risk={data.risk} />
         <div className="space-y-3 lg:max-w-[55%]">
@@ -58,7 +70,7 @@ export default function MonitoringTab({ client }) {
         <ExpectedProfileCard client={client} onChanged={refresh} />
         <AiSummaryBox clientId={client.id} />
       </div>
-      <MonitoringTimeline items={data.timeline} />
+      <MonitoringTimeline items={file?.timeline || []} />
     </div>
   );
 }
