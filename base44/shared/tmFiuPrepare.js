@@ -6,7 +6,7 @@ import { createCase } from './tmCaseCore.js';
 import { computeDue } from './tmClock.js';
 import { gatherReportData } from './tmFiuGather.js';
 import { writeNarrative } from './tmFiuNarrative.js';
-import { resolveProfileCode, buildFields, missingFields, buildAttachments, buildSnapshot, distinct } from './tmFiuMap.js';
+import { resolveProfileCode, buildFields, missingFields, buildAttachments, buildSnapshot, distinct, mappedTxnCount } from './tmFiuMap.js';
 import { lockClient, isLockingStatus } from './tippingOff.js';
 
 const earliest = (arr) => arr.filter(Boolean).sort()[0];
@@ -99,7 +99,7 @@ export async function prepareReport(ctx, { tmCaseId, alertId, kycCaseId, profile
 
   const officer = users.find((u) => u.id === auth.actorUserId && CO_ROLES.includes(roleOf(u))) || users.find((u) => CO_ROLES.includes(roleOf(u)));
   const narrative = await writeNarrative(ctx, { tmCase, alerts: d.alerts, txns: d.txns, approved: d.approved, client: d.client, cur });
-  const fields = buildFields({ tenant, officer, reportType, indicatorCodes, client: d.client, accounts: d.accounts, txns: d.txns, counterparties: d.counterparties, parties: d.parties, cur, reason: narrative.text });
+  const fields = buildFields({ tenant, officer, reportType, indicatorCodes, client: d.client, accounts: d.accounts, txns: d.txns, counterparties: d.counterparties, parties: d.parties, cur, reason: narrative.text, idv: d.idv });
   const missing = missingFields(fiu.mandatory_fields, fields, d.client);
   const status = missing.length ? 'draft' : 'in_review';
   const snapshot = buildSnapshot({
@@ -109,7 +109,7 @@ export async function prepareReport(ctx, { tmCaseId, alertId, kycCaseId, profile
   });
   const body = {
     fiu_profile_code: code, tm_case_id: tmCase.id, client_id: d.client.id, alert_ids: d.alerts.map((a) => a.id), type: reportType,
-    indicators: indicatorCodes, status, fields, missing_fields: missing, narrative: { text: narrative.text, citations: narrative.citations }, clock,
+    indicators: indicatorCodes, status, fields, missing_fields: missing, transactions_mapped: mappedTxnCount(d.txns), narrative: { text: narrative.text, citations: narrative.citations }, clock,
     prepared_by_user_id: auth.actorUserId, snapshot,
     ...(kycCaseId ? { kyc_case_id: kycCaseId } : {}),
   };
