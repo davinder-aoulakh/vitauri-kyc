@@ -45,6 +45,8 @@ import TmCoverage from './pages/TmCoverage';
 import TmAlerts from './pages/TmAlerts';
 import TmCaseWorkspace from './pages/TmCaseWorkspace';
 import FiuReportWorkspace from './pages/FiuReportWorkspace';
+import TmCases from './pages/TmCases';
+import FiuReports from './pages/FiuReports';
 import TmRules from './pages/TmRules';
 import TmQuality from './pages/TmQuality';
 import TmRegression from './pages/TmRegression';
@@ -105,7 +107,9 @@ const AuthenticatedApp = () => {
       <Route path="/transaction-monitoring" element={<TransactionMonitoring />} />
       <Route path="/tm/coverage" element={<TmCoverage />} />
       <Route path="/tm/alerts" element={<TmAlerts />} />
+      <Route path="/tm/cases" element={<TmCases />} />
       <Route path="/tm/case/:id" element={<TmCaseWorkspace />} />
+      <Route path="/tm/reports" element={<FiuReports />} />
       <Route path="/tm/report/:id" element={<FiuReportWorkspace />} />
       <Route path="/tm/rules" element={<TmRules />} />
       <Route path="/tm/quality" element={<TmQuality />} />
