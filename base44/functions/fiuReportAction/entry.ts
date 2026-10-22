@@ -10,9 +10,8 @@ import { CO_ROLES, roleOf, loadCase, tenantUsers } from '../../shared/tmCaseComm
 import { writeAudit } from '../../shared/tmAudit.js';
 import { gatherReportData } from '../../shared/tmFiuGather.js';
 import { buildFields, missingFields, mappedTxnCount } from '../../shared/tmFiuMap.js';
-import { loadRefs } from '../../shared/tmFiuChecks.js';
 import { loadReport, updateField, toggleAttachment, submitForApproval, approve, reject } from '../../shared/tmFiuActions.js';
-import { runChecks } from '../../shared/tmFiuChecks.js';
+import { runChecks, loadRefs } from '../../shared/tmFiuChecks.js';
 import { uploadGenerated } from '../../shared/tmFiuUpload.js';
 import { latestEndpointCheck, isMissingInCheck } from '../../shared/diditEndpointStatus.js';
 
