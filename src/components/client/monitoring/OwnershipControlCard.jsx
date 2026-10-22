@@ -37,6 +37,18 @@ export default function OwnershipControlCard({ client, relatedParties = [] }) {
   const { tenant } = useTenant();
   const show = isFeatureEnabled(tenant, 'tm_core') && client?.client_type === 'ORG';
 
+  const kybOn = isFeatureEnabled(tenant, 'didit_kyb');
+  const { data: kyb } = useQuery({
+    queryKey: ['client-kyb', client?.id],
+    enabled: show && kybOn,
+    retry: false,
+    staleTime: 60000,
+    queryFn: async () => {
+      const rows = await base44.entities.KybVerification.filter({ tenant_id: client.tenant_id, client_id: client.id }, '-created_date', 1);
+      return (Array.isArray(rows) ? rows : rows?.items || [])[0] || null;
+    },
+  });
+
   const { data: related } = useQuery({
     queryKey: ['related-companies', client?.id],
     enabled: show,
@@ -59,7 +71,14 @@ export default function OwnershipControlCard({ client, relatedParties = [] }) {
   return (
     <div className="space-y-4 rounded-xl border border-border bg-card p-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Ownership &amp; control</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold">Ownership &amp; control</h3>
+          {kybOn && kyb && (
+            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${kyb.status === 'Approved' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : kyb.status === 'Declined' ? 'border-red-200 bg-red-50 text-red-700' : 'border-border bg-muted text-muted-foreground'}`}>
+              KYB {String(kyb.status || '').toLowerCase()}{kyb.decided_at ? ` ${new Date(kyb.decided_at).toLocaleDateString()}` : ''} (Didit)
+            </span>
+          )}
+        </div>
         <Link to={`/entity-map/${client.id}`} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
           <GitFork className="h-3.5 w-3.5" /> Open entity map
         </Link>
