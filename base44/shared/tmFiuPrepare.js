@@ -88,6 +88,8 @@ export async function prepareReport(ctx, { tmCaseId, alertId, kycCaseId, profile
   const objective = d.alerts.length > 0 && d.alerts.every((a) => typeOf(a) === 'objective');
   const reportType = objective ? 'unusual_objective' : 'unusual_subjective';
   const indicatorCodes = distinct(d.scenarios.flatMap((s) => s.fiu_indicator_codes?.[code] || []));
+  // Didit template for this report type (same lookup as tmFiuGenerate); 'UTR' when the profile has none configured.
+  const templateCode = String(fiu.didit_template_ids?.[reportType] || fiu.didit_template_ids?.[objective ? 'objective' : 'subjective'] || '').trim() || 'UTR';
   const clock = {
     executed_at: earliest(d.txns.map((t) => t.executed_at)) || earliest(d.alerts.map((a) => a.executed_at)),
     received_at: earliest(d.alerts.map((a) => a.received_at || a.created_date)),
@@ -109,7 +111,7 @@ export async function prepareReport(ctx, { tmCaseId, alertId, kycCaseId, profile
   });
   const body = {
     fiu_profile_code: code, tm_case_id: tmCase.id, client_id: d.client.id, alert_ids: d.alerts.map((a) => a.id), type: reportType,
-    indicators: indicatorCodes, status, fields, missing_fields: missing, transactions_mapped: mappedTxnCount(d.txns), narrative: { text: narrative.text, citations: narrative.citations }, clock,
+    indicators: indicatorCodes, status, fields, missing_fields: missing, transactions_mapped: mappedTxnCount(d.txns), didit_template_code: templateCode, narrative: { text: narrative.text, citations: narrative.citations }, clock,
     prepared_by_user_id: auth.actorUserId, snapshot,
     ...(kycCaseId ? { kyc_case_id: kycCaseId } : {}),
   };
