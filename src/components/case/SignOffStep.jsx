@@ -11,6 +11,8 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useTenant } from '@/lib/tenantContext';
 import { isFeatureEnabled } from '@/lib/featureFlags';
+import { toast } from '@/components/ui/use-toast';
+import SignOffTmOutcome from '@/components/case/SignOffTmOutcome';
 
 const SIGN_OFF_MATRIX = {
   Low:          'Analyst (self-sign-off)',
@@ -30,6 +32,7 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
   const [submitting, setSubmitting]           = useState(false);
   const [action, setAction]                   = useState(null); // 'reject' | 'advisory'
   const [users, setUsers]                     = useState([]);
+  const [amlAssessment, setAmlAssessment]     = useState(null); // TM: optional AML assessment for EDR cases
 
   // Auto-save advisory note for Compliance Officers
   const { autoSaving: advisoryAutoSaving, lastSaved: advisoryLastSaved } = useAutoSave(
@@ -88,6 +91,25 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
     setSubmitting(false);
   }
 
+  // TM: record the sign-off as a Decision and sync EDR outcome to the TM case. Never blocks or undoes sign-off.
+  async function recordTmDecision(outcome) {
+    if (!isFeatureEnabled(tenant, 'tm_core')) return;
+    try {
+      const showAml = kycCase.case_type === 'Event_Driven_Review' && kycCase.tm_case_id && amlAssessment?.outcome;
+      const res = await base44.functions.invoke('recordKycDecision', {
+        kyc_case_id: kycCase.id, outcome, ...(showAml ? { aml_assessment: amlAssessment } : {}),
+      });
+      if (res?.data?.error) throw new Error(res.data.error);
+      if (kycCase.tm_case_id) {
+        const sync = await base44.functions.invoke('syncEdrOutcome', { kyc_case_id: kycCase.id });
+        if (sync?.data?.error) throw new Error(sync.data.error);
+      }
+    } catch (e) {
+      console.warn('recordKycDecision/syncEdrOutcome failed (sign-off unaffected):', e?.message);
+      toast({ title: 'Decision log could not be written — sign-off saved' });
+    }
+  }
+
   async function approve() {
     setSubmitting(true);
     await base44.entities.KycCase.update(kycCase.id, {
@@ -123,6 +145,7 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
     } catch (e) {
       console.warn('proposeExpectedProfile failed (sign-off unaffected):', e?.message);
     }
+    await recordTmDecision('approved');
     setAction(null);
     setSubmitting(false);
   }
@@ -151,6 +174,7 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
       });
     }
     onCaseUpdate?.(prev => ({ ...prev, status: 'In_Progress' }));
+    await recordTmDecision('rejected');
     setAction(null);
     setSubmitting(false);
   }
@@ -318,6 +342,7 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
             placeholder="Optional approval comment…"
             className="text-sm min-h-16 resize-none"
           />
+          <SignOffTmOutcome kycCase={kycCase} value={amlAssessment} onChange={setAmlAssessment} />
           <div className="flex gap-3">
             <Button className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={approve} disabled={submitting}>
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
