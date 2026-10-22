@@ -17,6 +17,9 @@ export const DIDIT_TM_PATHS = {
   fiuReports: '/v3/fiu-reports/',
   fiuReport: (id) => `/v3/fiu-reports/${enc(id)}/`,
   cases: '/v3/cases/',
+  transactionSdkToken: '/v3/transactions/sdk-token/',
+  eventsBatch: '/v3/events/batch/',
+  eventsSdkToken: '/v3/events/sdk-token/',
 };
 
 /** Resolves a path for a tenant: tenant.tm_settings.didit_paths[key] wins, else the default. */
@@ -78,6 +81,82 @@ export async function probe(tenant, method, path, body) {
 }
 
 export const postTransaction = (tenant, body) => request(tenant, 'POST', tmPath(tenant, 'transactions'), body);
+
+// ── Wire helpers (docs.didit.me/openapi-25.json, POST /v3/transactions/) ─────────────────────────
+// Didit statuses: APPROVED | IN_REVIEW | DECLINED | AWAITING_USER. PENDING is Vitauri's own "not yet evaluated".
+export const TXN_STATUSES = ['PENDING', 'APPROVED', 'IN_REVIEW', 'DECLINED', 'AWAITING_USER'];
+export function normaliseTxnStatus(s, fallback = 'PENDING') {
+  const v = String(s ?? '').toUpperCase().replace(/[\s-]+/g, '_');
+  return TXN_STATUSES.includes(v) ? v : fallback;
+}
+
+/** Didit subject.entity_type is `individual` or `company` (legacy rows may hold 'person'). */
+export function subjectEntityType(t, client) {
+  const v = String(t?.subject_entity_type || '').toLowerCase();
+  if (v === 'company') return 'company';
+  if (v === 'person' || v === 'individual') return client?.client_type === 'ORG' && !t?.subject_entity_type ? 'company' : 'individual';
+  return client?.client_type === 'ORG' ? 'company' : 'individual';
+}
+
+/** Didit's stable id for follow-up calls is `uuid` (our id comes back as `txn_id`). */
+export const diditTxnUuid = (res) => res?.uuid || res?.transaction?.uuid || res?.id || null;
+
+/** Request body for one Vitauri Transaction. Our transaction_id is the idempotency key and must be stable across retries. */
+export function buildTransactionBody(t, client, ourId, tenantId, profile) {
+  const subjectCountry = client?.client_type === 'ORG' ? client?.registered_country : client?.country_of_residence;
+  const body = {
+    transaction_id: ourId,
+    transaction_category: t.transaction_category || 'finance',
+    ...(t.executed_at ? { transaction_at: t.executed_at } : {}),
+    transaction_details: {
+      direction: t.direction, amount: t.amount, currency: t.currency, currency_kind: t.currency_kind || 'fiat',
+      ...(t.fx?.amount_reporting != null && t.fx?.reporting_currency ? { amount_in_default_currency: t.fx.amount_reporting, default_currency: t.fx.reporting_currency } : {}),
+    },
+    subject: {
+      entity_type: subjectEntityType(t, client),
+      vendor_data: t.client_id,
+      full_name: t.subject_full_name || client?.full_name,
+      ...(subjectCountry && /^[A-Za-z]{2,3}$/.test(subjectCountry) ? { address: { country: String(subjectCountry).toUpperCase() } } : {}),
+    },
+    counterparty: {
+      ...(t.counterparty_name ? { full_name: t.counterparty_name } : {}),
+      payment_method: { method_type: t.counterparty_method_type || 'bank_account', ...(t.counterparty_account_id ? { account_id: t.counterparty_account_id } : {}) },
+      ...(t.counterparty_country ? { address: { country: String(t.counterparty_country).toUpperCase() } } : {}),
+    },
+    metadata: { tenant_id: tenantId, client_id: t.client_id, our_transaction_id: ourId },
+  };
+  if (profile) {
+    body.custom_properties = {
+      profile_version: profile.version, inbound_max_month: profile.inbound_max_month,
+      outbound_foreign_max_month: profile.outbound_foreign_max_month, allowed_countries: profile.allowed_countries,
+      cash_max_month: profile.cash_max_month,
+    };
+  }
+  return body;
+}
+
+/** Page through GET /v3/transactions/ (limit/offset only) looking for our txn_id. Returns the record or null. */
+export async function findTransactionByTxnId(tenant, txnId, { pages = 5, limit = 100 } = {}) {
+  for (let p = 0; p < pages; p++) {
+    const res = await request(tenant, 'GET', `${tmPath(tenant, 'transactions')}?limit=${limit}&offset=${p * limit}`);
+    const rows = Array.isArray(res) ? res : (res?.results || res?.items || []);
+    const hit = rows.find((r) => r?.txn_id === txnId);
+    if (hit) return hit;
+    if (rows.length < limit || (!Array.isArray(res) && !res?.next && res?.results)) return null;
+  }
+  return null;
+}
+
+/** Scoped device credentials. Only the token and expiry are returned to callers. */
+export const mintTransactionToken = (tenant, { vendor_data, ttl_seconds, max_uses }) =>
+  request(tenant, 'POST', tmPath(tenant, 'transactionSdkToken'), { vendor_data, ...(ttl_seconds ? { ttl_seconds } : {}), ...(max_uses ? { max_uses } : {}) });
+export const mintMonitoringToken = (tenant, { vendor_data, ttl_seconds, max_uses, allowed_event_categories }) =>
+  request(tenant, 'POST', tmPath(tenant, 'eventsSdkToken'), {
+    vendor_data, ...(ttl_seconds ? { ttl_seconds } : {}), ...(max_uses ? { max_uses } : {}),
+    ...(allowed_event_categories?.length ? { allowed_event_categories } : {}),
+  });
+/** Server lane: up to 500 events; 201 all accepted, 207 partial (per-index results). */
+export const postEventsBatch = (tenant, events) => request(tenant, 'POST', tmPath(tenant, 'eventsBatch'), { events });
 export const getTransaction = (tenant, id) => request(tenant, 'GET', tmPath(tenant, 'transaction', id));
 
 /** Update a Didit user's custom properties by vendor_data. */
