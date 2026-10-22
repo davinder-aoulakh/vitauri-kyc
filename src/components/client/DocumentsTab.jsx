@@ -18,6 +18,13 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import OcrResultPanel from '@/components/client/OcrResultPanel';
 import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
+import { getSignedUrl } from '@/lib/securityUtils';
+
+// Private files (e.g. Didit images and KYB documents) hold a file_uri; open them through a short-lived signed URL.
+async function resolveFileUrl(fileUrl) {
+  if (!fileUrl || /^(https?:|data:|blob:)/i.test(fileUrl)) return fileUrl;
+  return getSignedUrl(fileUrl);
+}
 
 // Doc types that support OCR extraction
 const OCR_SUPPORTED = ['Passport', 'ID_Card', 'Articles_of_Association', 'UBO_Register', 'KYC_Report'];
@@ -368,15 +375,22 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
                         <div className="flex items-center gap-1 flex-shrink-0 ml-2">
                           <Button
                             variant="ghost" size="sm" className="h-7 text-xs gap-1"
-                            onClick={() => setViewerDoc({ url: doc.file_url, name: doc.file_name })}
+                            onClick={async () => {
+                              const url = await resolveFileUrl(doc.file_url).catch(() => null);
+                              if (url) setViewerDoc({ url, name: doc.file_name });
+                            }}
                           >
                             <Eye className="w-3 h-3" />
                           </Button>
-                          <a href={doc.file_url} download target="_blank" rel="noopener noreferrer">
-                            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
-                              <Download className="w-3 h-3" />
-                            </Button>
-                          </a>
+                          <Button
+                            variant="ghost" size="sm" className="h-7 text-xs gap-1"
+                            onClick={async () => {
+                              const url = await resolveFileUrl(doc.file_url).catch(() => null);
+                              if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                            }}
+                          >
+                            <Download className="w-3 h-3" />
+                          </Button>
                           {idx === 0 && (
                             <Button
                               variant="outline" size="sm" className="h-7 text-xs"
