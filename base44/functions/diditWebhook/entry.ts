@@ -12,7 +12,8 @@
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { waitUntil } from 'base44:runtime';
-import { fetchDiditDecision } from '../../shared/diditDecision.js';
+import { fetchDiditDecision, primaryCheck } from '../../shared/diditDecision.js';
+import { rehostDiditImage } from '../../shared/diditMedia.js';
 import { verifyDiditSignature, isTimestampFresh } from '../../shared/diditWebhookVerify.js';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { getTransaction as getDiditTmTransaction, normaliseTxnStatus } from '../../shared/diditTm.js';
@@ -26,6 +27,12 @@ import { applyRelatedPartyIdv, handleRelatedPartyMonitoring } from '../../shared
 
 const NON_TERMINAL_STATUSES = ['Not Started', 'In Progress', 'Awaiting User'];
 const TERMINAL_SESSION_STATUSES = ['Approved', 'Declined', 'In Review', 'Abandoned', 'Expired'];
+// A 'received' event older than this is treated as a crashed run and may be processed again.
+const STALE_RECEIVED_MS = 10 * 60 * 1000;
+
+const rows = (res) => (Array.isArray(res) ? res : (res?.items || []));
+const earliest = (list) => [...list].sort((a, b) =>
+  String(a.created_date || '').localeCompare(String(b.created_date || '')) || String(a.id).localeCompare(String(b.id)))[0];
 
 export default async function(req) {
   try {
@@ -94,30 +101,59 @@ export default async function(req) {
     // was derived from vendor_data rather than carried in the original metadata.
     parsed.metadata = { ...(parsed.metadata || {}), tenant_id: tenantId };
 
-    // 4. Idempotency — dedupe on event_id.
+    // 4. Idempotency — dedupe on event_id. The record is written (awaited) before we reply and is marked
+    //    processed only after processing succeeds, so a failed event can be delivered again and run.
     const eventId = parsed.event_id;
+    let eventRowId = null;
     if (eventId && tenantId) {
-      const existing = await base44.asServiceRole.entities.DiditWebhookEvent.filter({ tenant_id: tenantId, event_id: eventId });
-      if (existing?.length > 0) {
-        return Response.json({ ok: true, duplicate: true });
+      const EV = base44.asServiceRole.entities.DiditWebhookEvent;
+      const nowIso = new Date().toISOString();
+      const prior = earliest(rows(await EV.filter({ tenant_id: tenantId, event_id: eventId })));
+      if (prior) {
+        const state = prior.processing_state;
+        const lastAt = Date.parse(prior.processed_at || prior.created_date || '') || 0;
+        const retry = state === 'failed' || (state === 'received' && Date.now() - lastAt > STALE_RECEIVED_MS);
+        if (!retry) return Response.json({ ok: true, duplicate: true });
+        await EV.update(prior.id, { processing_state: 'received', attempts: (Number(prior.attempts) || 1) + 1, processed_at: nowIso, error: '' });
+        eventRowId = prior.id;
+      } else {
+        const row = await EV.create({
+          tenant_id:        tenantId,
+          event_id:         eventId,
+          session_id:       parsed.session_id,
+          webhook_type:     parsed.webhook_type,
+          status:           parsed.status,
+          processed_at:     nowIso,
+          processing_state: 'received',
+          attempts:         1,
+        });
+        // Two deliveries racing: the earliest record wins, the other one is a duplicate.
+        const first = earliest(rows(await EV.filter({ tenant_id: tenantId, event_id: eventId })));
+        if (first && first.id !== row.id) {
+          await EV.delete(row.id).catch(() => {});
+          return Response.json({ ok: true, duplicate: true });
+        }
+        eventRowId = row.id;
       }
-      waitUntil(base44.asServiceRole.entities.DiditWebhookEvent.create({
-        tenant_id:    tenantId,
-        event_id:     eventId,
-        session_id:   parsed.session_id,
-        webhook_type: parsed.webhook_type,
-        status:       parsed.status,
-        processed_at: new Date().toISOString(),
-      }).catch(() => {}));
     }
 
-    // 5. Respond immediately; process the event in the background.
-    waitUntil(processWebhookEvent(base44, parsed));
+    // 5. Respond immediately; process the event in the background and record the outcome.
+    waitUntil(processAndRecord(base44, parsed, eventRowId));
 
     return Response.json({ ok: true, received: true });
   } catch (error) {
     console.error('diditWebhook error:', error);
     return Response.json({ error: error.message }, { status: 500 });
+  }
+}
+
+async function processAndRecord(base44, body, eventRowId) {
+  const EV = base44.asServiceRole.entities.DiditWebhookEvent;
+  try {
+    await processWebhookEvent(base44, body);
+    if (eventRowId) await EV.update(eventRowId, { processing_state: 'processed', processed_at: new Date().toISOString(), error: '' }).catch(() => {});
+  } catch (err) {
+    if (eventRowId) await EV.update(eventRowId, { processing_state: 'failed', error: String(err?.message || err).slice(0, 300) }).catch(() => {});
   }
 }
 
@@ -181,6 +217,7 @@ async function processWebhookEvent(base44, body) {
     console.log('diditWebhook: unhandled status', status);
   } catch (err) {
     console.error('diditWebhook processWebhookEvent error:', err);
+    throw err;
   }
 }
 
@@ -261,7 +298,9 @@ async function processTerminalDecisionImpl(base44, body) {
   const existingItem = (outreach.items || []).find(i =>
     resolvedItemId ? i.item_id === resolvedItemId : i.didit_session_id === sessionId
   );
-  if (existingItem?.idv_status && existingItem.idv_status !== 'Pending' && existingItem.didit_session_id === sessionId) {
+  // Already decided: skip only when the status has not changed (In Review → Approved/Declined must still apply).
+  const alreadyDecided = !!(existingItem?.idv_status && existingItem.idv_status !== 'Pending' && existingItem.didit_session_id === sessionId);
+  if (alreadyDecided && existingItem.didit_session_status === body.status) {
     console.log('diditWebhook: already processed, skipping', { sessionId });
     return;
   }
@@ -275,8 +314,25 @@ async function processTerminalDecisionImpl(base44, body) {
 
   const { decision, idvFields } = result;
 
+  // The stored status always comes from the live decision, so an out-of-order event cannot downgrade it.
+  if (alreadyDecided && existingItem.didit_session_status === decision.status) {
+    console.log('diditWebhook: live decision unchanged, skipping', { sessionId });
+    return;
+  }
+
   const freshOutreach = (await base44.asServiceRole.entities.OutreachRequest.filter({ id: resolvedOutreachId }))?.[0];
   if (!freshOutreach) return;
+
+  if (alreadyDecided && existingItem.idv_status !== idvFields.idv_status) {
+    // A Didit reviewer changed a decided session. Case steps are not reopened automatically.
+    await base44.asServiceRole.entities.AuditEvent.create({
+      tenant_id: resolvedTenantId, case_id: freshOutreach.case_id || null, client_id: freshOutreach.client_id,
+      actor_type: 'System', actor_name: 'Didit Webhook', event_type: 'didit_decision_changed',
+      before_state: { didit_session_status: existingItem.didit_session_status, idv_status: existingItem.idv_status },
+      after_state: { didit_session_status: decision.status, idv_status: idvFields.idv_status },
+      notes: `Didit decision for session ${sessionId} changed from ${existingItem.didit_session_status} to ${decision.status}. Review the case steps.`,
+    }).catch(() => {});
+  }
 
   const updatedItems = (freshOutreach.items || []).map(it => {
     const isMatch = resolvedItemId ? it.item_id === resolvedItemId : it.didit_session_id === sessionId;
@@ -291,7 +347,7 @@ async function processTerminalDecisionImpl(base44, body) {
     const rpRoot = decision?.decision || decision || {};
     await applyRelatedPartyIdv(base44, { tenantId: resolvedTenantId, outreach: freshOutreach, sessionId, idvFields, amlScreenings: rpRoot.aml_screenings, actorName: 'Didit Webhook' });
     if (freshOutreach.client_id) {
-      await createIdvDocuments(base44, resolvedTenantId, freshOutreach.client_id, sessionId, rpRoot.id_verifications?.[0] || {}, idvFields.idv_status, { related_party_id: freshOutreach.related_party_id });
+      await createIdvDocuments(base44, resolvedTenantId, freshOutreach.client_id, sessionId, primaryCheck(rpRoot.id_verifications), idvFields.idv_status, { related_party_id: freshOutreach.related_party_id });
     }
     await base44.asServiceRole.entities.AuditEvent.create({
       tenant_id: resolvedTenantId, case_id: freshOutreach.case_id || null, client_id: freshOutreach.client_id, actor_type: 'System', actor_name: 'Didit Webhook',
@@ -303,7 +359,7 @@ async function processTerminalDecisionImpl(base44, body) {
   // Create Document records for the ID/selfie images (dedup-guarded on session_id).
   if (freshOutreach.client_id) {
     const root = decision?.decision || decision || {};
-    const idv  = root.id_verifications?.[0] || {};
+    const idv  = primaryCheck(root.id_verifications);
     await createIdvDocuments(base44, resolvedTenantId, freshOutreach.client_id, sessionId, idv, idvFields.idv_status);
   }
 
@@ -348,19 +404,24 @@ async function createIdvDocuments(base44, tenantId, clientId, sessionId, idv, id
     const docType       = (idv.document_type || '').toLowerCase().includes('passport') ? 'Passport' : 'ID_Card';
     const reviewStatus  = idvStatus === 'Pass' ? 'Approved' : 'Pending_Review';
 
+    // Didit image URLs expire: store a private copy; if that fails, skip (a later sync gets fresh URLs).
     if (idv.front_image && !existingTypes.has(docType)) {
-      await base44.asServiceRole.entities.Document.create({
+      const fileName = `Didit_${docType}_Front_${sessionId.substring(0, 8)}.jpg`;
+      const fileUri = await rehostDiditImage(base44, idv.front_image, fileName);
+      if (fileUri) await base44.asServiceRole.entities.Document.create({
         tenant_id: tenantId, client_id: clientId, doc_type: docType,
-        file_name: `Didit_${docType}_Front_${sessionId.substring(0, 8)}.jpg`,
-        file_url: idv.front_image, version: 1, is_ai_generated: false,
+        file_name: fileName,
+        file_url: fileUri, version: 1, is_ai_generated: false,
         review_status: reviewStatus, source: 'didit', didit_session_id: sessionId, ...extra,
       }).catch(() => {});
     }
     if (idv.portrait_image && !existingTypes.has('Selfie')) {
-      await base44.asServiceRole.entities.Document.create({
+      const fileName = `Didit_Selfie_${sessionId.substring(0, 8)}.jpg`;
+      const fileUri = await rehostDiditImage(base44, idv.portrait_image, fileName);
+      if (fileUri) await base44.asServiceRole.entities.Document.create({
         tenant_id: tenantId, client_id: clientId, doc_type: 'Selfie',
-        file_name: `Didit_Selfie_${sessionId.substring(0, 8)}.jpg`,
-        file_url: idv.portrait_image, version: 1, is_ai_generated: false,
+        file_name: fileName,
+        file_url: fileUri, version: 1, is_ai_generated: false,
         review_status: 'Approved', source: 'didit', didit_session_id: sessionId, ...extra,
       }).catch(() => {});
     }
