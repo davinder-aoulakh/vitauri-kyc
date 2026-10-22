@@ -19,6 +19,8 @@ import {
 } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { isFeatureEnabled } from '@/lib/featureFlags';
+import EdrProposalsList from '@/components/reviewplanner/EdrProposalsList';
 
 const RISK_COLORS = {
   Low: 'bg-emerald-100 text-emerald-800 border-emerald-200',
@@ -29,7 +31,8 @@ const RISK_COLORS = {
 const RISK_DOT = { Low: '#22c55e', Medium: '#f59e0b', High: '#ef4444', Unacceptable: '#881337' };
 
 export default function ReviewPlanner() {
-  const { currentUser } = useTenant();
+  const { currentUser, tenant } = useTenant();
+  const tmOn = isFeatureEnabled(tenant, 'tm_core');
   const navigate = useNavigate();
 
   const [clients, setClients]   = useState([]);
@@ -415,7 +418,7 @@ export default function ReviewPlanner() {
         {/* ── Filters row ── */}
         <div className="flex flex-wrap gap-3 items-center">
           <div className="flex gap-1 bg-muted/40 rounded-lg p-1 border border-border">
-            {[['upcoming','Due in 90d'],['overdue','Overdue'],['all','All']].map(([v,l]) => (
+            {[['upcoming','Due in 90d'],['overdue','Overdue'],['all','All'], ...(tmOn ? [['edr','EDR proposals']] : [])].map(([v,l]) => (
               <button key={v} onClick={() => setFilterStatus(v)}
                 className={cn('text-xs font-medium px-3 py-1.5 rounded-md transition-colors',
                   filterStatus===v ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}>
@@ -472,8 +475,11 @@ export default function ReviewPlanner() {
           </Button>
         </div>
 
+        {/* ── EDR proposals (tm_core only) ── */}
+        {tmOn && filterStatus === 'edr' && <EdrProposalsList />}
+
         {/* ── Calendar View ── */}
-        {viewMode === 'calendar' && (
+        {viewMode === 'calendar' && filterStatus !== 'edr' && (
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <button onClick={() => setCalMonth(m => subMonths(m, 1))} className="p-1 hover:bg-muted rounded-md transition-colors">
@@ -528,7 +534,7 @@ export default function ReviewPlanner() {
         )}
 
         {/* ── List View ── */}
-        {viewMode === 'list' && (
+        {viewMode === 'list' && filterStatus !== 'edr' && (
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             {loading ? (
               <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
