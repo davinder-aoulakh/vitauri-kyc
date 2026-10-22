@@ -8,6 +8,7 @@ import { FileText, Upload, CheckCircle, Clock, Send, Loader2, MessageCircle, Ale
 import { portalSecureUpload } from '@/lib/securityUtils';
 import SubmissionConfirmation from '@/components/portal/SubmissionConfirmation';
 import IdVerificationField from '@/components/portal/IdVerificationField';
+import KybVerificationField from '@/components/portal/KybVerificationField';
 import DiditCallbackScreen from '@/components/portal/DiditCallbackScreen';
 import SignaturePad from '@/components/portal/SignaturePad';
 import { format, isPast, parseISO } from 'date-fns';
@@ -236,6 +237,11 @@ export default function ClientPortal() {
     ]);
 
     let visibleReqs = (allReqs || []).filter(r => r.status !== 'Draft');
+    // Didit KYB: a related party's (UBO/director) ID-verification request is only shown on its own link,
+    // and never on the company's link. No effect when no request carries related_party_id.
+    visibleReqs = primary.related_party_id
+      ? visibleReqs.filter(r => r.related_party_id === primary.related_party_id)
+      : visibleReqs.filter(r => !r.related_party_id);
 
     // Safety fallback: merge field_type/field_options from templates for items missing field_type
     try {
@@ -1042,6 +1048,12 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                     )
                   )}
 
+                  {ft === 'kyb_verification' && s.done && (
+                    <div style={{ marginTop: 4, padding: '10px 12px', borderRadius: 10, background: '#F0FDF4', border: '1px solid #10B981', fontSize: 13 }}>
+                      ✅ Business verification submitted{item.kyb_status ? ` — ${item.kyb_status}` : ''}
+                    </div>
+                  )}
+
                   {/* Input area — only if not already done */}
                   {!s.done && (
                     <div style={{ marginTop: 4 }}>
@@ -1073,6 +1085,21 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                           />
                         );
                       })()}
+
+                      {/* kyb_verification (Didit business verification) */}
+                      {ft === 'kyb_verification' && (
+                        <KybVerificationField
+                          item={item} accessToken={outreach.access_token} outreachId={outreach.id}
+                          portalUrl={`${window.location.origin}/portal/${outreach.access_token}`}
+                          language={lang} primaryColor={branding.primary} buttonRadius={branding.radius}
+                          onComplete={() => {
+                            setItemStateMap(prev => ({
+                              ...prev,
+                              [outreach.id]: { ...prev[outreach.id], [item.item_id]: { ...prev[outreach.id]?.[item.item_id], done: true } },
+                            }));
+                          }}
+                        />
+                      )}
 
                       {/* file_upload */}
                       {ft === 'file_upload' && (
