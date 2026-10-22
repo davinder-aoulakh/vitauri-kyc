@@ -1,0 +1,160 @@
+{
+  "name": "KybVerification",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "Organisation client (Didit vendor_data for the business)"
+    },
+    "outreach_id": {
+      "type": "string"
+    },
+    "item_id": {
+      "type": "string"
+    },
+    "kyc_case_id": {
+      "type": "string"
+    },
+    "workflow_id": {
+      "type": "string"
+    },
+    "didit_session_id": {
+      "type": "string"
+    },
+    "didit_session_url": {
+      "type": "string"
+    },
+    "business_session_id": {
+      "type": "string"
+    },
+    "vendor_business_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Not Started",
+        "In Progress",
+        "Awaiting User",
+        "In Review",
+        "Approved",
+        "Declined",
+        "Resubmitted",
+        "Abandoned",
+        "Expired",
+        "Kyc Expired"
+      ],
+      "default": "Not Started",
+      "description": "Exact Didit session status literal"
+    },
+    "registry": {
+      "type": "object",
+      "description": "Latest registry_checks[].company (no media URLs)"
+    },
+    "registry_status": {
+      "type": "string"
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "document_verifications items: {didit_uuid, document_group, document_subtype, status, original_filename, document_id, is_tampered}"
+    },
+    "aml": {
+      "type": "object",
+      "description": "Company AML summary {status, total_hits, screening_hit_ids}"
+    },
+    "key_people_found": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Officers and beneficial owners reported by the registry / key_people_checks"
+    },
+    "resubmit_info": {
+      "type": "object"
+    },
+    "feature_statuses": {
+      "type": "object",
+      "description": "Per-feature status by node_id"
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_event_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "client_id"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    }
+  }
+}
