@@ -1,6 +1,8 @@
-// submitToDidit — push canonical transactions to Didit TM (same body shape as createDiditTransaction, plus timestamp + profile).
+// submitToDidit — push canonical transactions to Didit TM (body built by diditTm.buildTransactionBody: subject individual/company,
+// transaction_at, counterparty country, expected-profile custom_properties). Our transaction_id is stable across retries.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
-import { postTransaction } from '../../shared/diditTm.js';
+import { postTransaction, buildTransactionBody, diditTxnUuid, normaliseTxnStatus } from '../../shared/diditTm.js';
+import { afterTransactionUpdate } from '../../shared/diditTxnActions.js';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
 import { sha256Hex } from '../../shared/tmCanonical.js';
 import { isTmEnabled } from '../../shared/tmGuards.js';
@@ -10,7 +12,6 @@ import {
 } from '../../shared/tmAuth.js';
 
 const MAX_IDS = 50;
-const STATUSES = ['PENDING', 'APPROVED', 'IN_REVIEW', 'DECLINED', 'AWAITING_USER'];
 
 export default async function (req) {
   try {
@@ -61,41 +62,20 @@ export default async function (req) {
         const short = (await sha256Hex(`${t.id}|${t.dedupe_key || ''}`)).slice(0, 10);
         ourId = `vt_${t.client_id}_${ymd}_${short}`.slice(0, 128);
       }
-      const diditBody = {
-        transaction_id: ourId,
-        transaction_category: 'finance',
-        timestamp: t.executed_at,
-        transaction_details: { direction: t.direction, amount: t.amount, currency: t.currency, currency_kind: t.currency_kind || 'fiat' },
-        subject: {
-          entity_type: t.subject_entity_type || (client?.client_type === 'ORG' ? 'company' : 'person'),
-          vendor_data: t.client_id,
-          full_name: t.subject_full_name || client?.full_name,
-        },
-        counterparty: {
-          full_name: t.counterparty_name,
-          payment_method: { method_type: 'bank_account', account_id: t.counterparty_account_id },
-        },
-        metadata: { tenant_id: tenantId, client_id: t.client_id, our_transaction_id: ourId },
-      };
-      const prof = profiles.get(t.client_id);
-      if (prof) {
-        diditBody.custom_properties = {
-          profile_version: prof.version,
-          inbound_max_month: prof.inbound_max_month,
-          outbound_foreign_max_month: prof.outbound_foreign_max_month,
-          allowed_countries: prof.allowed_countries,
-          cash_max_month: prof.cash_max_month,
-        };
-      }
+      const diditBody = buildTransactionBody(t, client, ourId, tenantId, profiles.get(t.client_id));
       try {
         const res = await postTransaction(tenant, diditBody);
-        const st = String(res?.status || 'PENDING').toUpperCase().replace(/[\s-]+/g, '_');
+        const status = normaliseTxnStatus(res?.status);
+        if (res?.action_required) {
+          await afterTransactionUpdate(base44, tenant, { ...t, our_transaction_id: ourId }, t.status, status, res)
+            .catch((e) => console.warn('submitToDidit: action_required follow-up failed', e?.message));
+        }
         return {
           id: t.id, our_transaction_id: ourId,
-          didit_transaction_id: res?.transaction_id || res?.id,
-          status: STATUSES.includes(st) ? st : 'PENDING',
-          risk_score: res?.risk_score ?? undefined,
-          risk_level: res?.risk_level ?? undefined,
+          didit_transaction_id: diditTxnUuid(res) || undefined,
+          status,
+          risk_score: res?.score ?? res?.risk_score ?? undefined,
+          risk_level: res?.severity ?? res?.risk_level ?? undefined,
           decision_raw: res,
           didit_submission_status: 'submitted',
           didit_submission_error: '',
