@@ -23,8 +23,8 @@ export default function ApiKeysTab({ tenant }) {
     queryFn: async () => (await base44.functions.invoke('manageTenantApiKey', { action: 'list' })).data.keys,
   });
 
-  async function create(label) {
-    const res = await base44.functions.invoke('manageTenantApiKey', { action: 'create', label });
+  async function create(label, scopes) {
+    const res = await base44.functions.invoke('manageTenantApiKey', { action: 'create', label, ...(scopes ? { scopes } : {}) });
     setPlaintext(res.data.plaintext_key);
     setCreateOpen(false);
     qc.invalidateQueries({ queryKey });
