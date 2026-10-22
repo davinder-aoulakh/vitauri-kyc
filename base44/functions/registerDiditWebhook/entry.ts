@@ -61,7 +61,9 @@ export default async function(req) {
       label:              `${tenant.name || tenant.slug} — Vitauri KYC`,
       url:                WEBHOOK_URL,
       webhook_version:    'v3',
-      subscribed_events:  ['status.updated', 'data.updated', 'user.status.updated', 'user.data.updated'],
+      // business.* = Didit KYB (business verification / ongoing business AML); transaction.* = transaction monitoring.
+      subscribed_events:  ['status.updated', 'data.updated', 'user.status.updated', 'user.data.updated',
+                           'business.status.updated', 'business.data.updated', 'transaction.created', 'transaction.status.updated'],
     };
 
     let resp = await fetch('https://verification.didit.me/v3/webhook/destinations/', {
