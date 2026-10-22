@@ -16,6 +16,7 @@ import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import { Button } from '@/components/ui/button';
 import WorkflowOptimisationWidget from '@/components/dashboard/WorkflowOptimisationWidget';
+import TmDashboardKpis from '@/components/dashboard/TmDashboardKpis';
 import {
   FolderOpen, UserCircle, AlertTriangle, Shield, Calendar,
   Plus, ChevronRight, RefreshCw, XCircle, ClipboardCheck
@@ -153,6 +154,9 @@ export default function Dashboard() {
             </Button>
           )}
         </div>
+
+        {/* TM KPI row (renders only with tm_core + tmViewAlerts) */}
+        <TmDashboardKpis />
 
         {/* Error banner */}
       {error && (
