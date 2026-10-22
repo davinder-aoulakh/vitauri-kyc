@@ -19,6 +19,7 @@ import MonitoringActions from './monitoring/MonitoringActions';
 import OpenItemsStrip from './overview/OpenItemsStrip';
 import ReportsCard from './overview/ReportsCard';
 import { useCustomerFile } from './overview/useCustomerFile';
+import OwnershipControlCard from './monitoring/OwnershipControlCard';
 import { Loader2 } from 'lucide-react';
 
 // Roles that may read FiuArtefact (entity RLS read list).
@@ -54,10 +55,11 @@ export default function MonitoringTab({ client }) {
     <div className="space-y-4">
       {file && <OpenItemsStrip file={file} clientId={client.id} showFiu={showFiu} />}
       {file && canReadArtefacts && <ReportsCard reports={file.fiu_reports || []} artefacts={file.fiu_artefacts || []} />}
+      {file && client.client_type === 'ORG' && <OwnershipControlCard client={client} relatedParties={file.related_parties || []} />}
       <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 lg:flex-row lg:items-center lg:justify-between">
         <RiskGauge risk={data.risk} />
         <div className="space-y-3 lg:max-w-[55%]">
-          <StatusPills pills={data.pills} />
+          <StatusPills pills={data.pills} clientType={client.client_type} />
           <MonitoringActions client={client} currentUser={currentUser} data={data} onChanged={refresh} />
         </div>
       </div>
