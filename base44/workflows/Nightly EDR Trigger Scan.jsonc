@@ -1,0 +1,43 @@
+{
+  "name": "Nightly EDR Trigger Scan",
+  "description": "Runs daily at 03:20 UTC: compares each approved client's KYC file with the snapshot in its latest KYC approval decision and proposes event-driven reviews (EdrTrigger) for UBO/director, ownership, business activity and country changes, confirmed screening hits and consecutive profile breaches.",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "20 3 * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "nightly_edr_trigger_scan",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "evaluateEdrTriggers",
+            "args": {
+              "mode": "scan"
+            }
+          },
+          "then": "end"
+        }
+      }
+    ]
+  }
+}
