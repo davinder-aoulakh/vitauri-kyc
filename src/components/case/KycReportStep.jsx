@@ -700,6 +700,8 @@ async function fetchDiditPdfBytes(sessionId, tenantId) {
 
 async function fetchFileBytes(url) {
   try {
+    // Private files hold a file_uri (e.g. Didit images, KYB documents): fetch them through a signed URL.
+    if (url && !/^(https?:|data:|blob:)/i.test(url)) url = await getSignedUrl(url);
     const res = await fetch(url);
     if (!res.ok) return null;
     return new Uint8Array(await res.arrayBuffer());
