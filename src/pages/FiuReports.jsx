@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { base44 } from '@/api/base44Client';
@@ -43,7 +43,9 @@ export default function FiuReports() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const allowed = isFeatureEnabled(tenant, 'tm_core') && isFeatureEnabled(tenant, 'tm_fiu') && FIU_READERS.includes(currentUser?.app_role);
-  const [status, setStatus] = useState('all');
+  const [searchParams] = useSearchParams();
+  const initialStatus = searchParams.get('status');
+  const [status, setStatus] = useState(STATUSES.includes(initialStatus) ? initialStatus : 'all');
   const [fiuCode, setFiuCode] = useState('all');
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t); }, []);
