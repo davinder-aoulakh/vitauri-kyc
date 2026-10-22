@@ -27,6 +27,11 @@ export default function TransactionForm({ clients, onCreated, onCancel }) {
         next.currency = value === 'crypto' ? 'bitcoin:BTC' : 'USD';
         next.counterparty_method_type = value === 'crypto' ? 'crypto_wallet' : 'bank_account';
       }
+      if (field === 'client_id') {
+        // Didit subject type follows the client: ORG → company, otherwise person.
+        const c = clients.find(x => x.id === value);
+        if (c) next.subject_entity_type = c.client_type === 'ORG' ? 'company' : 'person';
+      }
       return next;
     });
   }
