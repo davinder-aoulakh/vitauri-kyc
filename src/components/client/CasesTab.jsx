@@ -14,6 +14,8 @@ import { Plus, Loader2 } from 'lucide-react';
 import { getDefaultStepConfig } from '@/lib/caseUtils';
 import { format, addDays } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { isFeatureEnabled } from '@/lib/featureFlags';
+import TmCasesSection, { TmCaseBadge } from '@/components/client/overview/TmCasesSection';
 
 const NEW_CASE_TYPES = [
   { value: 'Periodic_Review',     label: 'Periodic Review',     disabled: false },
@@ -23,7 +25,8 @@ const NEW_CASE_TYPES = [
 
 export default function CasesTab({ client, cases, users, onRefresh }) {
   const navigate = useNavigate();
-  const { currentUser } = useTenant();
+  const { currentUser, tenant } = useTenant();
+  const tmOn = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'createRunCase');
   const [newCaseOpen, setNewCaseOpen] = useState(false);
   const [caseType, setCaseType]       = useState('Periodic_Review');
   const [triggerReason, setTriggerReason] = useState('');
@@ -95,7 +98,7 @@ export default function CasesTab({ client, cases, users, onRefresh }) {
                 const isOverdue = c.due_date && new Date() > new Date(c.due_date) && !['Approved','Closed','Rejected'].includes(c.status);
                 return (
                   <tr key={c.id} className="hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => navigate(`/case/${c.id}`)}>
-                    <td className="px-4 py-3 font-medium text-foreground">{c.case_type?.replace(/_/g,' ')}</td>
+                    <td className="px-4 py-3 font-medium text-foreground">{c.case_type?.replace(/_/g,' ')}{tmOn && <TmCaseBadge tmCaseId={c.tm_case_id} />}</td>
                     <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
                     <td className="px-4 py-3"><RiskBadge risk={c.risk_classification} /></td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{analyst?.full_name || '—'}</td>
@@ -114,6 +117,8 @@ export default function CasesTab({ client, cases, users, onRefresh }) {
           </table>
         </div>
       )}
+
+      {tmOn && <TmCasesSection client={client} users={users} />}
 
       {/* New case dialog */}
       <Dialog open={newCaseOpen} onOpenChange={setNewCaseOpen}>
