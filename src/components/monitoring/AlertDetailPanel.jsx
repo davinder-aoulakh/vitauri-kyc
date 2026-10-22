@@ -3,7 +3,10 @@
  * with AI impact summary, Dismiss / Acknowledge / Escalate to EDR actions
  */
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
+import { useTenant } from '@/lib/tenantContext';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -36,6 +39,8 @@ const STATUS_STYLE = {
 };
 
 export default function AlertDetailPanel({ alert, currentUser, onClose, onUpdated, onNavigateCase }) {
+  const { tenant } = useTenant();
+  const tmCoreOn = isFeatureEnabled(tenant, 'tm_core');
   const [aiSummary, setAiSummary]         = useState(alert?.ai_impact_summary || '');
   const [generatingAi, setGeneratingAi]   = useState(false);
   const [justification, setJustification] = useState('');
@@ -203,6 +208,9 @@ Tone: professional, regulatory-grade.`,
 
   if (!alert) return null;
   const isResolved = ['Dismissed', 'Escalated_to_EDR'].includes(alert.status);
+  // TM mirror alerts are worked in Transaction Monitoring, not in this queue.
+  const tmMirror = tmCoreOn && alert.alert_type === 'Transaction_Rule_Hit';
+  const tmHref = alert.tm_alert_id ? `/tm/alerts?alert=${alert.tm_alert_id}` : '/tm/alerts';
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -230,6 +238,7 @@ Tone: professional, regulatory-grade.`,
               <span className={cn('text-xs font-medium px-2.5 py-1 rounded-full border', ALERT_TYPE_STYLE[alert.alert_type])}>
                 {alert.alert_type?.replace(/_/g,' ')}
               </span>
+              {tmMirror && <span className="text-xs font-semibold px-2 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary">TM</span>}
               <span className={cn('text-xs font-medium px-2.5 py-1 rounded-full', STATUS_STYLE[alert.status])}>
                 {alert.status?.replace(/_/g,' ')}
               </span>
@@ -337,18 +346,30 @@ Tone: professional, regulatory-grade.`,
             {!action && (
               <div className="flex flex-col gap-2">
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Analyst Decision</div>
+                {tmMirror && (
+                  <>
+                    <Button asChild size="sm" className="w-full gap-2 text-xs justify-start">
+                      <Link to={tmHref}><ArrowUpRight className="w-3.5 h-3.5" /> Open in TM alerts</Link>
+                    </Button>
+                    <div className="text-xs text-muted-foreground">Handled in Transaction Monitoring</div>
+                  </>
+                )}
+                {!tmMirror && (
                 <Button size="sm" variant="outline" className="w-full gap-2 text-xs justify-start border-slate-300 hover:bg-slate-50"
                   onClick={() => setAction('dismiss')}>
                   <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Dismiss — No material impact
                 </Button>
+                )}
                 <Button size="sm" variant="outline" className="w-full gap-2 text-xs justify-start border-primary/30 hover:bg-primary/5 text-primary"
                   onClick={() => setAction('acknowledge')}>
                   <Eye className="w-3.5 h-3.5" /> Acknowledge — Continue monitoring
                 </Button>
+                {!tmMirror && (
                 <Button size="sm" className="w-full gap-2 text-xs justify-start bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                   onClick={() => setAction('escalate')}>
                   <AlertTriangle className="w-3.5 h-3.5" /> Escalate to Event-Driven Review
                 </Button>
+                )}
               </div>
             )}
 
