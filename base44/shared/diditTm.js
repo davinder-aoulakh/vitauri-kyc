@@ -94,7 +94,7 @@ export function normaliseTxnStatus(s, fallback = 'PENDING') {
 export function subjectEntityType(t, client) {
   const v = String(t?.subject_entity_type || '').toLowerCase();
   if (v === 'company') return 'company';
-  if (v === 'person' || v === 'individual') return client?.client_type === 'ORG' && !t?.subject_entity_type ? 'company' : 'individual';
+  if (v === 'person' || v === 'individual') return 'individual';
   return client?.client_type === 'ORG' ? 'company' : 'individual';
 }
 
