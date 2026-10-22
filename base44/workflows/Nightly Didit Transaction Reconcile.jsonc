@@ -1,0 +1,41 @@
+{
+  "name": "Nightly Didit Transaction Reconcile",
+  "description": "Runs daily at 03:40 UTC: finds Didit TM submissions that failed or were never confirmed, links them if Didit already has them, otherwise resubmits with the same transaction id, and flags the rest for Ops.",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "40 3 * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "nightly_didit_transaction_reconcile",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "reconcileDiditTransactions",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  }
+}
