@@ -24,13 +24,15 @@ export default async function (req) {
     if (action === 'create') {
       const label = String(body.label ?? '').trim();
       if (!label || label.length > 80) throw httpError(400, 'label is required (max 80 characters)');
+      // Optional extra scope 'tm:token' (Didit device tokens + event ingest); default stays ingest:write only.
+      const scopes = Array.isArray(body.scopes) && body.scopes.includes('tm:token') ? ['ingest:write', 'tm:token'] : ['ingest:write'];
       const { key, key_prefix, key_hash } = await generateApiKey();
       const rec = await E.TenantApiKey.create({
-        tenant_id: tenantId, label, key_prefix, key_hash, scopes: ['ingest:write'], created_by_user_id: auth.actorUserId,
+        tenant_id: tenantId, label, key_prefix, key_hash, scopes, created_by_user_id: auth.actorUserId,
       });
       await writeAudit(base44, auth, {
         tenantId, eventType: 'tm_api_key_created', before: {},
-        after: { id: rec.id, label, key_prefix, scopes: ['ingest:write'] },
+        after: { id: rec.id, label, key_prefix, scopes },
         notes: `API key "${label}" (${key_prefix}…) created.`,
       });
       return Response.json({ key: publicKey(rec), plaintext_key: key });
