@@ -14,6 +14,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { format, addDays } from 'npm:date-fns@3.6.0';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
+import { amlEntityType, toAlpha2 } from '../../shared/diditAml.js';
 
 const DIDIT_AML_URL = 'https://verification.didit.me/v3/aml/';
 
@@ -45,7 +46,7 @@ Deno.serve(async (req) => {
         const r = await fetch(DIDIT_AML_URL, {
           method: 'POST',
           headers: { 'x-api-key': testApiKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ full_name: 'Connection Test', entity_type: 'Person' }),
+          body: JSON.stringify({ full_name: 'Connection Test', entity_type: 'person' }),
         });
         if (r.status === 401 || r.status === 403) {
           return Response.json({ error: `Invalid credentials (${r.status})` });
@@ -60,6 +61,13 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'tenant_id and full_name are required' });
     }
 
+    // A signed-in user may only screen with their own tenant's Didit account (Vitauri Ops: any tenant).
+    const callerRole = user.app_role || user.data?.app_role;
+    const callerTenant = user.tenant_id || user.data?.tenant_id;
+    if (callerRole !== 'Vitauri Ops' && callerTenant && callerTenant !== tenant_id) {
+      return Response.json({ error: 'Not authorised for this tenant' }, { status: 403 });
+    }
+
     // 1. Load tenant API key
     const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
     const tenant  = await withDiditCredentials(base44, tenants?.[0]);
@@ -70,10 +78,12 @@ Deno.serve(async (req) => {
     // 2. Build request body
     const body: Record<string, unknown> = {
       full_name,
-      entity_type: legal_type === 'ORG' ? 'Organization' : 'Person',
+      entity_type: amlEntityType(legal_type),
     };
+    // Didit needs ISO alpha-2 nationality; for a company the resolved country feeds the country weight.
+    const nationalityCode = toAlpha2(nationality) || (legal_type === 'ORG' ? toAlpha2(resolvedCountry) : null);
     if (date_of_birth)    body.date_of_birth    = date_of_birth;
-    if (nationality)      body.nationality       = nationality;
+    if (nationalityCode)  body.nationality       = nationalityCode;
     if (resolvedCountry)  body.country           = resolvedCountry;
     if (document_number)  body.document_number   = document_number;
     else if (legal_type === 'ORG' && registration_number) body.document_number = registration_number;
