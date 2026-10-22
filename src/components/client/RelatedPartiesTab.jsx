@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
+import { reportEdrChange, edrParty } from '@/lib/edrChange';
 import RiskBadge from '@/components/shared/RiskBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -170,6 +171,7 @@ export default function RelatedPartiesTab({ client, relatedParties, links, onRef
 
 /* ── Edit Dialog ── */
 function EditRelatedPartyDialog({ rp, client, currentUser, onClose, onSaved }) {
+  const { tenant } = useTenant();
   const isOrg = rp.party_type === 'ORG';
   const [form, setForm] = useState({ ...rp });
   const [saving, setSaving] = useState(false);
@@ -189,6 +191,8 @@ function EditRelatedPartyDialog({ rp, client, currentUser, onClose, onSaved }) {
       after_state: form,
       notes: `Related party ${rp.full_name} updated`,
     });
+    // TM: check for event-driven review triggers (tm_core only; never blocks the save).
+    reportEdrChange(tenant, client.id, { type: 'related_party', source_ref: `related_party:${rp.id}`, before: edrParty(rp), after: edrParty({ ...rp, ...form }) });
     setSaving(false);
     onSaved?.();
     onClose();
@@ -423,6 +427,8 @@ function AddRelatedPartyDialog({ open, onClose, client, currentUser, onAdded }) 
       event_type: 'related_party_linked',
       notes: `${selectedRP.full_name} linked as ${role || selectedRP.role_in_relationship || 'Related Party'}`,
     });
+    reportEdrChange(tenant, client.id, { type: 'related_party', source_ref: `related_party:${selectedRP.id}`, before: null,
+      after: edrParty(selectedRP, { role: role || selectedRP.role_in_relationship, ownership_percentage: ownership ? parseFloat(ownership) : undefined }) });
     setSaving(false); onAdded?.(); onClose();
   }
 
@@ -446,6 +452,7 @@ function AddRelatedPartyDialog({ open, onClose, client, currentUser, onAdded }) 
       event_type: 'related_party_created_and_linked',
       notes: `${newRP.full_name} created and linked as ${newRP.role_in_relationship || 'Related Party'}`,
     });
+    reportEdrChange(tenant, client.id, { type: 'related_party', source_ref: `related_party:${rp.id}`, before: null, after: edrParty(rp, { role: newRP.role_in_relationship }) });
     setSaving(false); onAdded?.(); onClose();
   }
 
