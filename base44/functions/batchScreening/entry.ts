@@ -65,8 +65,10 @@ Deno.serve(async (req) => {
 async function screenOne(apiKey, entity, index) {
   const body = {
     full_name:   entity.name,
-    entity_type: (entity.type || 'NP').toUpperCase() === 'ORG' ? 'Organization' : 'Person',
+    entity_type: amlEntityType(entity.type),
   };
+  const nationalityCode = toAlpha2(entity.nationality) || (amlEntityType(entity.type) === 'company' ? toAlpha2(entity.country) : null);
+  if (nationalityCode)             body.nationality = nationalityCode;
   if (entity.dob)                  body.date_of_birth = entity.dob;
   if (entity.country)              body.country = entity.country;
   if (entity.registration_number)  body.document_number = entity.registration_number;
