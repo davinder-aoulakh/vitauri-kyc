@@ -1,42 +1,57 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
-import { fetchDiditDecision, normaliseDateString, ISO3_MAP } from '../../shared/diditDecision.js';
+import { fetchDiditDecision, normaliseDateString, ISO3_MAP, primaryCheck } from '../../shared/diditDecision.js';
+import { rehostDiditImage } from '../../shared/diditMedia.js';
+import { authorizeOutreachCaller } from '../../shared/diditSessionAuth.js';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
 import { applyRelatedPartyIdv } from '../../shared/kybRelatedParty.js';
 
 export default async function(req) {
   try {
     const base44 = createClientFromRequest(req);
-    let { session_id, outreach_id, item_id, tenant_id } = await req.json();
+    const params = await req.json();
+    const { outreach_id, access_token } = params;
+    let { session_id, item_id } = params;
 
-    if (!outreach_id || !tenant_id) {
+    if (!outreach_id) {
       return Response.json({ error: 'Missing required parameters' });
     }
+
+    // 0. Caller check: portal access_token or a signed-in user of the outreach's tenant (Vitauri Ops: any).
+    //    The tenant always comes from the stored outreach.
+    const auth = await authorizeOutreachCaller(base44, { outreach_id, access_token, tenant_id: params.tenant_id });
+    if (auth.error) return auth.error;
+    const tenant_id = auth.outreach.tenant_id;
 
     // 1. Load tenant API key
     const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
     const tenant  = await withDiditCredentials(base44, tenants?.[0]);
     if (!tenant?.didit_api_key) return Response.json({ error: 'Didit not configured' });
 
-    // 2. Resolve session_id if not provided — try item, then fallback parse response_text JSON
-    if (!session_id) {
-      const outreachList0 = await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id });
-      const req0 = outreachList0?.[0];
-      const items0 = req0?.items || [];
+    // 2. Resolve the session from the stored item (try item, then fallback parse response_text JSON).
+    //    A session_id in the request must match the stored one; it is never trusted on its own.
+    {
+      const items0 = auth.outreach.items || [];
       const targetItem = item_id
         ? items0.find(i => i.item_id === item_id)
-        : items0.find(i => i.field_type === 'id_verification' || i.didit_session_id ||
+        : (session_id && items0.find(i => i.didit_session_id === session_id)) ||
+          items0.find(i => i.field_type === 'id_verification' || i.didit_session_id ||
             (i.item_type === 'data_point' && (i.label || '').toLowerCase().includes('id')));
 
+      let storedSessionId = null;
       if (targetItem?.didit_session_id) {
-        session_id = targetItem.didit_session_id;
+        storedSessionId = targetItem.didit_session_id;
       } else if (targetItem?.response_text) {
         // Fallback: parse raw JSON dumped by old portal submit bug
         try {
           const parsed = JSON.parse(targetItem.response_text);
-          session_id = parsed?.didit_session_id || parsed?.session_id;
-          if (!item_id) item_id = targetItem.item_id;
+          storedSessionId = parsed?.didit_session_id || parsed?.session_id || null;
+          if (storedSessionId && !item_id) item_id = targetItem.item_id;
         } catch {}
       }
+      if (session_id && storedSessionId && session_id !== storedSessionId) {
+        return Response.json({ error: 'Session does not belong to this request' }, { status: 403 });
+      }
+      session_id = storedSessionId;
     }
 
     if (!session_id) {
@@ -57,10 +72,9 @@ export default async function(req) {
 
     const { decision, idvFields } = fetchResult;
     const root = decision?.decision || decision || {};
-    const idv  = root.id_verifications?.[0] || {};
-    const face = root.face_matches?.[0]      || {};
-    const live = root.liveness_checks?.[0]   || {};
-    const aml  = root.aml_screenings?.[0]    || {};
+    const idv  = primaryCheck(root.id_verifications);
+    const face = primaryCheck(root.face_matches);
+    const live = primaryCheck(root.liveness_checks);
 
     // 4. Update item with fresh AML/IDV fields — always runs, even if already processed
     //    (document creation below has its own separate dedup guard)
@@ -99,25 +113,34 @@ export default async function(req) {
         await applyRelatedPartyIdv(base44, { tenantId: tenant_id, outreach: req6, sessionId: session_id, idvFields, amlScreenings: root.aml_screenings });
       } else if (clientId) {
         const client = (await base44.asServiceRole.entities.Client.filter({ id: clientId }))?.[0];
+        // An organisation client never receives a person's identity data (name, DOB, ID document).
+        const isOrgClient = client?.client_type === 'ORG';
+        if (client && isOrgClient) {
+          base44.asServiceRole.entities.AuditEvent.create({
+            tenant_id, client_id: client.id, case_id: req6?.case_id || null, actor_type: 'System', actor_name: 'Didit IDV',
+            event_type: 'idv_person_data_not_applied',
+            notes: `Didit ID check ${session_id} completed on an organisation request; person identity data was not written to the organisation profile.`,
+          }).catch(() => {});
+        }
         if (client) {
           const updates = {};
           const diditFullName = [idvFields.idv_extracted_first_name, idvFields.idv_extracted_last_name].filter(Boolean).join(' ');
-          if (diditFullName && !client.full_name) updates.full_name = diditFullName;
-          if (idvFields.idv_extracted_dob && !client.date_of_birth) updates.date_of_birth = idvFields.idv_extracted_dob;
-          if (idvFields.idv_extracted_nationality && !client.nationality) {
+          if (!isOrgClient && diditFullName && !client.full_name) updates.full_name = diditFullName;
+          if (!isOrgClient && idvFields.idv_extracted_dob && !client.date_of_birth) updates.date_of_birth = idvFields.idv_extracted_dob;
+          if (!isOrgClient && idvFields.idv_extracted_nationality && !client.nationality) {
             updates.nationality = ISO3_MAP[idvFields.idv_extracted_nationality] || idvFields.idv_extracted_nationality;
           }
-          if (idvFields.idv_issuing_country && !client.country_of_residence) {
+          if (!isOrgClient && idvFields.idv_issuing_country && !client.country_of_residence) {
             updates.country_of_residence = ISO3_MAP[idvFields.idv_issuing_country] || idvFields.idv_issuing_country;
           }
-          if (idvFields.idv_document_number && !client.id_number) updates.id_number = idvFields.idv_document_number;
-          if (idvFields.idv_document_expiry && !client.id_expiry_date) updates.id_expiry_date = idvFields.idv_document_expiry;
-          if (idvFields.idv_document_type && !client.id_type) {
+          if (!isOrgClient && idvFields.idv_document_number && !client.id_number) updates.id_number = idvFields.idv_document_number;
+          if (!isOrgClient && idvFields.idv_document_expiry && !client.id_expiry_date) updates.id_expiry_date = idvFields.idv_document_expiry;
+          if (!isOrgClient && idvFields.idv_document_type && !client.id_type) {
             const ID_TYPE_MAP = { 'Passport':'Passport','Identity Card':'National ID Card','National ID':'National ID Card',"Driver's License":'Driving Licence','Driving Licence':'Driving Licence','Residence Permit':'Residence Permit' };
             updates.id_type = ID_TYPE_MAP[idvFields.idv_document_type] || 'Other';
           }
           if (idvFields.idv_status === 'Pass' && client.status === 'Prospect') updates.status = 'Active';
-          if (client.date_of_birth) {
+          if (!isOrgClient && client.date_of_birth) {
             const normalisedDob = normaliseDateString(client.date_of_birth);
             if (normalisedDob && normalisedDob !== client.date_of_birth) updates.date_of_birth = normalisedDob;
           }
@@ -153,25 +176,37 @@ export default async function(req) {
           const existingDocTypes = new Set((existingDiditDocs || []).map((d: any) => d.doc_type));
 
           const docType = (idvFields.idv_document_type || '').toLowerCase().includes('passport') ? 'Passport' : 'ID_Card';
+          const existingNames = new Set((existingDiditDocs || []).map((d: any) => d.file_name));
+
+          // Didit image URLs expire: store a private copy. If any image could not be stored, the claim flag is
+          // not set, so the next sync (with fresh URLs) tries again.
+          let allStored = true;
+          const storeImage = async (url: string, docTypeValue: string, fileName: string, reviewStatus: string) => {
+            const fileUri = await rehostDiditImage(base44, url, fileName);
+            if (!fileUri) { allStored = false; return; }
+            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: docTypeValue, file_name: fileName, file_url: fileUri, version: 1, is_ai_generated: false, review_status: reviewStatus, source: 'didit', didit_session_id: session_id, ...rpDoc }).catch(() => {});
+          };
+          const idReview = idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review';
 
           if (idv.front_image && !existingDocTypes.has(docType)) {
-            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: docType, file_name: `Didit_${docType}_Front_${session_id.substring(0,8)}.jpg`, file_url: idv.front_image, version: 1, is_ai_generated: false, review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review', source: 'didit', didit_session_id: session_id, ...rpDoc }).catch(() => {});
-            existingDocTypes.add(docType); // prevent back_image creating duplicate if same type
+            await storeImage(idv.front_image, docType, `Didit_${docType}_Front_${session_id.substring(0,8)}.jpg`, idReview);
           }
-          if (idv.back_image && !existingDocTypes.has(`${docType}_Back`)) {
-            // Use a distinct pseudo-type key for back image to allow both front and back
-            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: docType, file_name: `Didit_${docType}_Back_${session_id.substring(0,8)}.jpg`, file_url: idv.back_image, version: 1, is_ai_generated: false, review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review', source: 'didit', didit_session_id: session_id, ...rpDoc }).catch(() => {});
+          const backName = `Didit_${docType}_Back_${session_id.substring(0,8)}.jpg`;
+          if (idv.back_image && !existingNames.has(backName)) {
+            await storeImage(idv.back_image, docType, backName, idReview);
           }
           if (idv.portrait_image && !existingDocTypes.has('Selfie')) {
-            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: 'Selfie', file_name: `Didit_Selfie_${session_id.substring(0,8)}.jpg`, file_url: idv.portrait_image, version: 1, is_ai_generated: false, review_status: 'Approved', source: 'didit', didit_session_id: session_id, ...rpDoc }).catch(() => {});
+            await storeImage(idv.portrait_image, 'Selfie', `Didit_Selfie_${session_id.substring(0,8)}.jpg`, 'Approved');
           }
 
           // Set claim flag so future fast-path skips this block entirely
+          if (allStored) {
           const claimedItems = (req7.items || []).map((i: any) =>
             (item_id ? i.item_id === item_id : i.didit_session_id === session_id)
               ? { ...i, idv_docs_created_for_session: session_id } : i
           );
           await base44.asServiceRole.entities.OutreachRequest.update(outreach_id, { items: claimedItems });
+          }
         }
       }
     } catch (docErr) {
