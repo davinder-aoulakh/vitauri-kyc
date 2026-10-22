@@ -55,7 +55,8 @@ export default function FiuReportWorkspace() {
         <ReportStepper report={r} />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-5">
-            <FieldsTable report={r} editable={draft && canWork} editing={editing} busy={!!busy} onSave={save} />
+            <FieldsTable report={r} editable={draft && canWork} editing={editing} busy={!!busy} onSave={save}
+              canRefresh={canWork && ['draft', 'in_review'].includes(r.status)} onRefresh={() => act('fiuReportAction', { action: 'refresh_fields' }, 'Fields refreshed')} />
             <AttachmentsList report={r} editable={draft && canWork} onToggle={toggle} />
             <DeadlineClockTable report={r} />
           </div>
