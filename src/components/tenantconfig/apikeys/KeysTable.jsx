@@ -20,7 +20,10 @@ export default function KeysTable({ keys, onRevoke }) {
         <tbody>
           {keys.map((k) => (
             <tr key={k.id} className="border-b border-border last:border-0">
-              <td className="px-3 py-2.5 font-medium">{k.label}</td>
+              <td className="px-3 py-2.5 font-medium">
+                {k.label}
+                {k.scopes?.includes('tm:token') && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">tm:token</span>}
+              </td>
               <td className="px-3 py-2.5 font-mono text-xs">{k.key_prefix}…</td>
               <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmt(k.created_date)}</td>
               <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmt(k.last_used_at)}</td>
