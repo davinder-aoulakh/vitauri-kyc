@@ -20,7 +20,7 @@ function sectionOf(path) {
   if (p.startsWith('report.') || p === 'narrative') return 'report';
   if (p.startsWith('director_id') || p.startsWith('related_party')) return 'ownership';
   if (p.startsWith('t_person.') || p.startsWith('t_entity.')) return 'subject';
-  if (p.startsWith('transaction') ) return 'transactions';
+  if (p.startsWith('transaction')) return 'transactions';
   if (p.startsWith('counterparty')) return 'counterparties';
   if (/account/.test(p) || p.startsWith('t_from_my_client.') || p.startsWith('t_to_my_client.')) return 'accounts';
   return 'other';
