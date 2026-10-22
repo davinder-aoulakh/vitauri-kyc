@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { fetchDiditDecision, normaliseDateString, ISO3_MAP } from '../../shared/diditDecision.js';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
+import { applyRelatedPartyIdv } from '../../shared/kybRelatedParty.js';
 
 export default async function(req) {
   try {
@@ -93,7 +94,10 @@ export default async function(req) {
     try {
       const req6 = (await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id }))?.[0];
       const clientId = req6?.client_id;
-      if (clientId) {
+      // Didit KYB: a related party's own verification updates the RelatedParty, never the company Client.
+      if (req6?.related_party_id && req6.tenant_id === tenant_id) {
+        await applyRelatedPartyIdv(base44, { tenantId: tenant_id, outreach: req6, sessionId: session_id, idvFields, amlScreenings: root.aml_screenings });
+      } else if (clientId) {
         const client = (await base44.asServiceRole.entities.Client.filter({ id: clientId }))?.[0];
         if (client) {
           const updates = {};
@@ -139,6 +143,7 @@ export default async function(req) {
     try {
       const req7      = (await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id }))?.[0];
       const clientId7 = req7?.client_id;
+      const rpDoc = req7?.related_party_id ? { related_party_id: req7.related_party_id } : {};
       if (clientId7) {
         // Fast-path: if flag already set, skip entirely
         const guardItem = (req7?.items || []).find(i => item_id ? i.item_id === item_id : i.didit_session_id === session_id);
@@ -150,15 +155,15 @@ export default async function(req) {
           const docType = (idvFields.idv_document_type || '').toLowerCase().includes('passport') ? 'Passport' : 'ID_Card';
 
           if (idv.front_image && !existingDocTypes.has(docType)) {
-            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: docType, file_name: `Didit_${docType}_Front_${session_id.substring(0,8)}.jpg`, file_url: idv.front_image, version: 1, is_ai_generated: false, review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review', source: 'didit', didit_session_id: session_id }).catch(() => {});
+            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: docType, file_name: `Didit_${docType}_Front_${session_id.substring(0,8)}.jpg`, file_url: idv.front_image, version: 1, is_ai_generated: false, review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review', source: 'didit', didit_session_id: session_id, ...rpDoc }).catch(() => {});
             existingDocTypes.add(docType); // prevent back_image creating duplicate if same type
           }
           if (idv.back_image && !existingDocTypes.has(`${docType}_Back`)) {
             // Use a distinct pseudo-type key for back image to allow both front and back
-            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: docType, file_name: `Didit_${docType}_Back_${session_id.substring(0,8)}.jpg`, file_url: idv.back_image, version: 1, is_ai_generated: false, review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review', source: 'didit', didit_session_id: session_id }).catch(() => {});
+            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: docType, file_name: `Didit_${docType}_Back_${session_id.substring(0,8)}.jpg`, file_url: idv.back_image, version: 1, is_ai_generated: false, review_status: idvFields.idv_status === 'Pass' ? 'Approved' : 'Pending_Review', source: 'didit', didit_session_id: session_id, ...rpDoc }).catch(() => {});
           }
           if (idv.portrait_image && !existingDocTypes.has('Selfie')) {
-            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: 'Selfie', file_name: `Didit_Selfie_${session_id.substring(0,8)}.jpg`, file_url: idv.portrait_image, version: 1, is_ai_generated: false, review_status: 'Approved', source: 'didit', didit_session_id: session_id }).catch(() => {});
+            await base44.asServiceRole.entities.Document.create({ tenant_id, client_id: clientId7, doc_type: 'Selfie', file_name: `Didit_Selfie_${session_id.substring(0,8)}.jpg`, file_url: idv.portrait_image, version: 1, is_ai_generated: false, review_status: 'Approved', source: 'didit', didit_session_id: session_id, ...rpDoc }).catch(() => {});
           }
 
           // Set claim flag so future fast-path skips this block entirely
