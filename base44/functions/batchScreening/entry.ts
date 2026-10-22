@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
+import { amlEntityType, toAlpha2 } from '../../shared/diditAml.js';
 
 /**
  * Batch Screening Function
@@ -14,7 +15,6 @@ import { withDiditCredentials } from '../../shared/diditCredentials.js';
  * has been replaced with real screening calls; see screenEntityAml for notes
  * on the AML response shape and why it's parsed defensively.
  */
-import { amlEntityType, toAlpha2 } from '../../shared/diditAml.js';
 
 const DIDIT_AML_URL = 'https://verification.didit.me/v3/aml/';
 const CONCURRENCY = 5;
