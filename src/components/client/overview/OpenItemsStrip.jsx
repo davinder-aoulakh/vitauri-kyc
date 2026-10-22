@@ -1,5 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import EdrTriggerActions from './EdrTriggerActions';
 import { format } from 'date-fns';
 import { Briefcase, AlertTriangle, FileText, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -28,6 +30,7 @@ function Item({ to, icon: Icon, tone, title, children }) {
 
 /** Open TM cases, alerts due within 24 h, FIU reports not yet received and proposed EDR triggers (read-only). */
 export default function OpenItemsStrip({ file, clientId, showFiu }) {
+  const qc = useQueryClient();
   const now = Date.now();
   const cases = (file.tm_cases || []).filter((c) => OPEN_CASE.includes(c.status));
   const alerts = (file.alerts || []).filter((a) => OPEN_ALERT.includes(a.status) && a.due_at && new Date(a.due_at).getTime() - now < DAY);
@@ -60,9 +63,16 @@ export default function OpenItemsStrip({ file, clientId, showFiu }) {
             </Item>
           ))}
           {triggers.map((t) => (
-            <Item key={`t-${t.id}`} to={`/client/${clientId}?tab=cases`} icon={Zap} tone="text-amber-600" title={`EDR trigger: ${label(t.trigger_type)}`}>
-              Proposed {fmt(t.created_date)}
-            </Item>
+            <div key={`t-${t.id}`} className="flex min-w-[220px] flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50/40 px-3 py-2 text-xs">
+              <Link to={`/client/${clientId}?tab=cases`} className="flex items-start gap-2 hover:underline">
+                <Zap className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-600" />
+                <div className="min-w-0">
+                  <div className="truncate font-medium text-foreground">EDR proposal: {label(t.trigger_type)}</div>
+                  <div className="text-muted-foreground">Proposed {fmt(t.created_date)}</div>
+                </div>
+              </Link>
+              <EdrTriggerActions trigger={t} onDone={() => qc.invalidateQueries({ queryKey: ['customer-file-overview', clientId] })} />
+            </div>
           ))}
         </div>
       )}
