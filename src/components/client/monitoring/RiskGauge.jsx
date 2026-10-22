@@ -10,8 +10,9 @@ const BAND_TEXT = {
 const R = 44;
 const C = 2 * Math.PI * R;
 
-/** Circular dynamic-risk gauge with score, band and 30-day change. */
-export default function RiskGauge({ risk }) {
+/** Circular dynamic-risk gauge with score, band and 30-day change. size='sm' renders a compact inline variant. */
+export default function RiskGauge({ risk, size }) {
+  if (size === 'sm') return <SmallGauge risk={risk} />;
   if (!risk) {
     return (
       <div className="flex items-center gap-4">
@@ -44,5 +45,23 @@ export default function RiskGauge({ risk }) {
         )}
       </div>
     </div>
+  );
+}
+
+function SmallGauge({ risk }) {
+  if (!risk) return <span className="rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground">No risk score</span>;
+  const pct = Math.max(0, Math.min(100, risk.score)) / 100;
+  const delta = risk.delta_30d;
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs" title="Dynamic customer risk">
+      <svg viewBox="0 0 100 100" className="h-6 w-6 -rotate-90">
+        <circle cx="50" cy="50" r={R} fill="none" strokeWidth="12" className="stroke-muted" />
+        <circle cx="50" cy="50" r={R} fill="none" strokeWidth="12" className={`${BAND_TEXT[risk.band] || 'text-primary'} stroke-current`}
+          strokeDasharray={C} strokeDashoffset={C * (1 - pct)} />
+      </svg>
+      <span className="font-bold text-foreground">{risk.score}</span>
+      <span className={`font-semibold ${BAND_TEXT[risk.band] || ''}`}>{risk.band}</span>
+      {delta != null && <span className={delta > 0 ? 'text-destructive' : 'text-muted-foreground'}>({delta > 0 ? '+' : ''}{delta} / 30d)</span>}
+    </span>
   );
 }
