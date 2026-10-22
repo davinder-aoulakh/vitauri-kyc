@@ -388,6 +388,7 @@ function RPDetailPanel({ rp, currentUser, client, onVerify }) {
 
 /* ── Add RP Dialog (unchanged logic, cleaned up) ── */
 function AddRelatedPartyDialog({ open, onClose, client, currentUser, onAdded }) {
+  const { tenant } = useTenant();
   const [mode, setMode]           = useState('search');
   const [query, setQuery]         = useState('');
   const [searchResults, setSearchResults] = useState([]);
