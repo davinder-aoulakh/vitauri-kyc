@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { hasPermission } from '@/lib/permissions';
@@ -25,6 +25,8 @@ import { cn } from '@/lib/utils';
 import { CLIENT_STATUS_COLORS } from '@/lib/riskColors';
 import { deleteCase } from '@/lib/caseDelete';
 import TippingOffBanner from '@/components/shared/TippingOffBanner';
+import ClientTmHeader from '@/components/client/overview/ClientTmHeader';
+import { useCustomerFile } from '@/components/client/overview/useCustomerFile';
 
 export default function ClientDetail() {
   const { id } = useParams();
@@ -53,6 +55,18 @@ export default function ClientDetail() {
   const canReassign = hasPermission(userRole, 'viewAllTenantCases');
   const canDelete = hasPermission(userRole, 'deleteClient');
   const showMonitoring = isFeatureEnabled(tenant, 'tm_core') && hasPermission(userRole, 'createRunCase');
+
+  // TM on: 'overview' is the first and default tab; ?tab= wins and ?tab=monitoring is an alias for 'overview'.
+  const location = useLocation();
+  const tabTouched = useRef(false);
+  useEffect(() => {
+    if (!showMonitoring) return;
+    const param = new URLSearchParams(location.search).get('tab');
+    if (param) setActiveTab(param === 'monitoring' ? 'overview' : param);
+    else if (!tabTouched.current) setActiveTab('overview');
+  }, [showMonitoring, location.search]);
+  const { data: customerFile } = useCustomerFile(id, showMonitoring);
+  const tmCaseCount = showMonitoring ? (customerFile?.tm_cases?.length || 0) : 0;
 
   const { data: users = [] } = useTenantUsers(currentUser?.tenant_id);
 
@@ -203,6 +217,7 @@ export default function ClientDetail() {
                     {client.status}
                   </span>
                   <RiskBadge risk={client.risk_classification} />
+                  {showMonitoring && <ClientTmHeader client={client} />}
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
                   {client.registered_country || client.nationality || '—'}
@@ -268,15 +283,15 @@ export default function ClientDetail() {
         </div>
 
         {/* ── Tabs ── */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={v => { tabTouched.current = true; setActiveTab(v); }}>
           <TabsList className="bg-card border border-border h-auto p-1 gap-1 flex-wrap">
             {[
+              ...(showMonitoring ? [{ value: 'overview', label: 'Overview' }] : []),
               { value: 'profile',          label: 'Profile' },
               { value: 'related-parties',  label: `Related Parties (${relatedParties.length})` },
-              { value: 'cases',            label: `Cases (${cases.length})` },
+              { value: 'cases',            label: `Cases (${cases.length + tmCaseCount})` },
               { value: 'documents',        label: `Documents (${documents.length})` },
               { value: 'audit-trail',      label: 'Audit Trail' },
-              ...(showMonitoring ? [{ value: 'monitoring', label: 'Monitoring' }] : []),
             ].map(t => (
               <TabsTrigger key={t.value} value={t.value}
                 className="text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-primary data-[state=active]:text-white">
@@ -329,7 +344,7 @@ export default function ClientDetail() {
           </TabsContent>
 
           {showMonitoring && (
-            <TabsContent value="monitoring">
+            <TabsContent value="overview">
               <MonitoringTab client={client} />
             </TabsContent>
           )}
