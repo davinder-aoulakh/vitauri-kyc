@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import AppShell from '@/components/layout/AppShell';
@@ -50,7 +51,9 @@ const adverseMediaMatch  = (a) => a.source === 'Adverse_Media' || a.alert_type =
 const otherMatch         = (a) => ['Internal_Flag', 'Register_Change'].includes(a.source) || ['Didit_Ongoing_High_Risk', 'Didit_Abandoned'].includes(a.alert_type);
 
 export default function MonitoringAlerts() {
-  const { currentUser } = useTenant();
+  const { currentUser, tenant } = useTenant();
+  // TM mirror alerts (Transaction_Rule_Hit) are handled in Transaction Monitoring when tm_core is on.
+  const isTmMirror = (a) => isFeatureEnabled(tenant, 'tm_core') && a.alert_type === 'Transaction_Rule_Hit';
   const navigate = useNavigate();
   const [alerts, setAlerts]       = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -290,6 +293,9 @@ export default function MonitoringAlerts() {
                         {isDiditSource(alert) && (
                           <span className={DIDIT_BADGE_CLASS}>Didit</span>
                         )}
+                        {isTmMirror(alert) && (
+                          <span className="text-[10px] font-semibold px-1.5 py-px rounded border border-primary/30 bg-primary/10 text-primary">TM</span>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground">{alert.entity_type?.replace(/_/g,' ')}</div>
                     </td>
@@ -308,7 +314,13 @@ export default function MonitoringAlerts() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <ChevronRight className="w-4 h-4 text-muted-foreground inline" />
+                      {isTmMirror(alert) ? (
+                        <Button asChild size="sm" className="h-7 text-xs" title="Handled in Transaction Monitoring" onClick={(e) => e.stopPropagation()}>
+                          <Link to={alert.tm_alert_id ? `/tm/alerts?alert=${alert.tm_alert_id}` : '/tm/alerts'}>Open in TM alerts</Link>
+                        </Button>
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-muted-foreground inline" />
+                      )}
                     </td>
                   </tr>
                 ))}
