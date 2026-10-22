@@ -237,13 +237,15 @@ export default function IdentityVerificationStep({ kycCase, client, currentUser,
       if (best?.idv_status === 'Pass' && !promptShownRef.current) {
         promptShownRef.current = true;
         const currentClient = (await base44.entities.Client.filter({ id: kycCase.client_id }))?.[0];
+        // An organisation profile never takes a person's ID data; key people are verified separately.
+        const isOrgClient = currentClient?.client_type === 'ORG';
         const extractedName = [best.idv_extracted_first_name, best.idv_extracted_last_name].filter(Boolean).join(' ');
         const updates = {};
         if (extractedName && !currentClient?.full_name)     updates.full_name     = extractedName;
         if (best.idv_extracted_dob && !currentClient?.date_of_birth) updates.date_of_birth = best.idv_extracted_dob;
         if (best.idv_extracted_nationality && !currentClient?.nationality) updates.nationality = best.idv_extracted_nationality;
         if (best.idv_document_number && !currentClient?.id_number) updates.id_number = best.idv_document_number;
-        if (Object.keys(updates).length > 0) {
+        if (!isOrgClient && Object.keys(updates).length > 0) {
           setExtractedData(updates);
           setShowExtractedPrompt(true);
         }
