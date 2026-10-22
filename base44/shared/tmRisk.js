@@ -108,6 +108,7 @@ export async function recomputeCustomerRisk(base44, { tenantId, tenant, clientId
     if (!cases.some((c) => !OPEN_EDR_EXCLUDED.includes(c.status))) {
       // EdrTrigger proposal (in addition to the notification below). One open proposal per client and band.
       const dedupeKey = `${clientId}:risk_band_rise:${band}`;
+      try {
       const openTrigger = asList(await E.EdrTrigger.filter({ tenant_id: tenantId, dedupe_key: dedupeKey, status: 'proposed' }, undefined, 1))[0];
       if (!openTrigger) {
         const trigger = await E.EdrTrigger.create({
@@ -121,6 +122,9 @@ export async function recomputeCustomerRisk(base44, { tenantId, tenant, clientId
           before_state: {}, after_state: { edr_trigger_id: trigger.id, trigger_type: 'risk_band_rise', dedupe_key: dedupeKey },
           notes: `EDR trigger proposed (risk band rise): ${band} (${score}).`,
         });
+      }
+      } catch (e) {
+        console.warn('risk_band_rise EdrTrigger failed:', e?.message);
       }
       const users = asList(await E.User.filter({ tenant_id: tenantId }, undefined, 1000));
       const recipients = new Set(users.filter((u) => ['Compliance Officer', 'Tenant Admin'].includes(u.app_role || u.data?.app_role)).map((u) => u.id));
