@@ -118,7 +118,7 @@ export default function OwnershipControlCard({ client, relatedParties = [] }) {
                 <span className="text-muted-foreground"> · {cp.reasons.map((r) => (r.type === 'related_party'
                   ? `matches related company ${r.name}`
                   : `shares ${label(r.identifier_type)} with ${r.client_name || 'another client'}`)).join('; ')}</span>
-                {r_link(cp)}
+                {otherClientLink(cp)}
               </li>
             ))}
           </ul>
@@ -129,7 +129,7 @@ export default function OwnershipControlCard({ client, relatedParties = [] }) {
 }
 
 // Link to the other client when the match came from a shared identifier.
-function r_link(cp) {
+function otherClientLink(cp) {
   const other = cp.reasons.find((r) => r.type === 'identifier' && r.client_id);
   if (!other) return null;
   return <Link to={`/client/${other.client_id}`} className="ml-1 text-primary hover:underline">Open client</Link>;
