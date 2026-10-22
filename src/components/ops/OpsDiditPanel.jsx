@@ -9,6 +9,11 @@ import CatchUpDiditCard from '@/components/ops/CatchUpDiditCard';
 
 const WEBHOOK_URL = 'https://vitauri-kyc.base44.app/functions/diditWebhook';
 
+// Workflow type: 'kyc' (person) or 'kyb' (business). Entries without a type are KYC.
+// KYC keeps `is_default` (used by createDiditSession); KYB has its own `is_default_kyb`.
+const wfType = (w) => (w?.type === 'kyb' ? 'kyb' : 'kyc');
+const defaultKey = (type) => (type === 'kyb' ? 'is_default_kyb' : 'is_default');
+
 export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
   const [apiKey,     setApiKey]     = useState('');
   const [status,     setStatus]     = useState({ api_key_configured: false, api_key_last4: null, webhook_secret_configured: false });
@@ -27,7 +32,7 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
   const [saving,     setSaving]     = useState(false);
   const [testing,    setTesting]    = useState(false);
   const [testResult, setTestResult] = useState(null); // null|'ok'|'fail'
-  const [newWf,      setNewWf]      = useState({ name: '', workflow_id: '', description: '' });
+  const [newWf,      setNewWf]      = useState({ name: '', workflow_id: '', description: '', type: 'kyc' });
   const [addingWf,   setAddingWf]   = useState(false);
 
   const [webhookSecret, setWebhookSecret] = useState('');
@@ -106,8 +111,8 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
       tenant_id: tenant.id,
       ...(apiKey ? { didit_api_key: apiKey } : {}),
       didit_workflows:  JSON.stringify(workflows),
-      didit_workflow_id: workflows.find(w => w.is_default)?.workflow_id
-                       || workflows[0]?.workflow_id
+      didit_workflow_id: workflows.find(w => wfType(w) === 'kyc' && w.is_default)?.workflow_id
+                       || workflows.find(w => wfType(w) === 'kyc')?.workflow_id
                        || '',
     });
     setApiKey('');
@@ -118,30 +123,42 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
 
   function addWorkflow() {
     if (!newWf.name.trim() || !newWf.workflow_id.trim()) return;
+    const type = newWf.type === 'kyb' ? 'kyb' : 'kyc';
+    const firstOfType = !workflows.some(w => wfType(w) === type);
     const wf = {
       id:          Date.now().toString(36),
       name:        newWf.name.trim(),
       workflow_id: newWf.workflow_id.trim(),
       description: newWf.description.trim(),
-      is_default:  workflows.length === 0,
+      type,
+      is_default:  type === 'kyc' && firstOfType,
+      ...(type === 'kyb' ? { is_default_kyb: firstOfType } : {}),
     };
     setWorkflows(prev => [...prev, wf]);
-    setNewWf({ name: '', workflow_id: '', description: '' });
+    setNewWf({ name: '', workflow_id: '', description: '', type: 'kyc' });
     setAddingWf(false);
   }
 
   function removeWorkflow(id) {
     setWorkflows(prev => {
+      const removed = prev.find(w => w.id === id);
       const next = prev.filter(w => w.id !== id);
-      if (prev.find(w => w.id === id)?.is_default && next.length > 0) {
-        next[0] = { ...next[0], is_default: true };
+      const type = wfType(removed);
+      const key = defaultKey(type);
+      if (removed?.[key]) {
+        const idx = next.findIndex(w => wfType(w) === type);
+        if (idx >= 0) next[idx] = { ...next[idx], [key]: true };
       }
       return next;
     });
   }
 
   function setDefault(id) {
-    setWorkflows(prev => prev.map(w => ({ ...w, is_default: w.id === id })));
+    setWorkflows(prev => {
+      const type = wfType(prev.find(w => w.id === id));
+      const key = defaultKey(type);
+      return prev.map(w => (wfType(w) === type ? { ...w, [key]: w.id === id } : w));
+    });
   }
 
   return (
@@ -219,7 +236,7 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
               </Button>
             </div>
             <div className="text-xs text-muted-foreground">
-              Configure in business.didit.me → Workflows. Mark one as <strong>default</strong> — it is used when no specific workflow is set on an outreach template field.
+              Configure in business.didit.me → Workflows. Mark one <strong>KYC</strong> and one <strong>KYB</strong> workflow as <strong>default</strong> — used when no specific workflow is set on an outreach template field. KYB workflows (KYB_REGISTRY, KYB_DOCUMENTS, AML) are used only for organisation business verification.
             </div>
 
             {workflows.length === 0 && !addingWf && (
@@ -232,12 +249,16 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
               {workflows.map(wf => (
                 <div key={wf.id} className={cn(
                   'flex items-start gap-3 p-3 rounded-lg border',
-                  wf.is_default ? 'border-primary/30 bg-primary/5' : 'border-border bg-muted/20'
+                  wf[defaultKey(wfType(wf))] ? 'border-primary/30 bg-primary/5' : 'border-border bg-muted/20'
                 )}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-foreground">{wf.name}</span>
-                      {wf.is_default && (
+                      <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-semibold border',
+                        wfType(wf) === 'kyb' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-violet-50 text-violet-700 border-violet-200')}>
+                        {wfType(wf).toUpperCase()}
+                      </span>
+                      {wf[defaultKey(wfType(wf))] && (
                         <span className="text-xs bg-primary text-white px-1.5 py-0.5 rounded-full font-medium">
                           Default
                         </span>
@@ -249,7 +270,7 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
                     )}
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    {!wf.is_default && (
+                    {!wf[defaultKey(wfType(wf))] && (
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground"
                         title="Set as default" onClick={() => setDefault(wf.id)}>
                         <Star className="w-3.5 h-3.5" />
@@ -269,6 +290,14 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
               <div className="border border-primary/20 bg-primary/5 rounded-lg p-4 space-y-3">
                 <div className="text-xs font-semibold">New Workflow</div>
                 <div className="space-y-2">
+                  <div className="flex gap-1 rounded-md border border-border p-1 w-fit">
+                    {[['kyc', 'KYC (person)'], ['kyb', 'KYB (business)']].map(([v, l]) => (
+                      <button key={v} type="button" onClick={() => setNewWf(p => ({ ...p, type: v }))}
+                        className={cn('px-2.5 py-1 rounded text-xs font-medium', newWf.type === v ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-muted')}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
                   <Input
                     placeholder="Workflow name (e.g. Standard KYC)"
                     value={newWf.name}
@@ -295,7 +324,7 @@ export default function OpsDiditPanel({ tenant, onClose, onSaved }) {
                     Add
                   </Button>
                   <Button size="sm" variant="ghost" className="h-7 text-xs"
-                    onClick={() => { setAddingWf(false); setNewWf({ name: '', workflow_id: '', description: '' }); }}>
+                    onClick={() => { setAddingWf(false); setNewWf({ name: '', workflow_id: '', description: '', type: 'kyc' }); }}>
                     Cancel
                   </Button>
                 </div>
