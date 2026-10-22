@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 
 export default function IdVerificationField({
-  item, outreachId, portalUrl,
+  item, outreachId, portalUrl, accessToken = '',
   clientId = '', tenantId = '',
   clientEmail = '', firstName = '', lastName = '',
   language = 'en',
@@ -114,6 +114,7 @@ export default function IdVerificationField({
         item_id:         item?.item_id,
         client_id:       clientId,
         tenant_id:       tenantId,
+        access_token:    accessToken,
         portal_url:      portalUrl,
         language,
         client_email:    clientEmail,
@@ -174,6 +175,7 @@ export default function IdVerificationField({
             outreach_id: outreachId,
             item_id:     item?.item_id,
             tenant_id:   tenantId,
+            access_token: accessToken,
           });
           const data = res?.data || res;
 
@@ -298,6 +300,7 @@ export default function IdVerificationField({
                       outreach_id: outreachId,
                       item_id:     item?.item_id,
                       tenant_id:   tenantId,
+                      access_token: accessToken,
                     });
                     const data = res?.data || res;
                     const terminal = ['Pass', 'Fail', 'Inconclusive', 'Expired'];
@@ -399,7 +402,7 @@ export default function IdVerificationField({
               try {
                 const res = await base44.functions.invoke('getDiditSessionResult', {
                   session_id: sessionIdRef.current, outreach_id: outreachId,
-                  item_id: item?.item_id, tenant_id: tenantId,
+                  item_id: item?.item_id, tenant_id: tenantId, access_token: accessToken,
                 });
                 const data = res?.data || res;
                 const terminal = ['Pass','Fail','Inconclusive','Expired'];

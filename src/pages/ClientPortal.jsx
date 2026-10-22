@@ -167,7 +167,7 @@ export default function ClientPortal() {
 
     if (!isMobile) {
       base44.functions.invoke('getDiditSessionResult', {
-        session_id: sessionId, outreach_id: outreachId, item_id: itemId, tenant_id: tenant.id,
+        session_id: sessionId, outreach_id: outreachId, item_id: itemId, tenant_id: tenant.id, access_token: token,
       }).then(res => {
         const data = res?.data || res;
         if (data?.ok || data?.idv_status) loadByToken();
@@ -184,7 +184,7 @@ export default function ClientPortal() {
       attempts++;
       try {
         const res = await base44.functions.invoke('getDiditSessionResult', {
-          session_id: sessionId, outreach_id: outreachId, item_id: itemId, tenant_id: tenant.id,
+          session_id: sessionId, outreach_id: outreachId, item_id: itemId, tenant_id: tenant.id, access_token: token,
         });
         const data = res?.data || res;
         if (data?.idv_status && TERMINAL.includes(data.idv_status)) {
@@ -1064,6 +1064,7 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                             item={item} primaryColor={branding.primary} buttonRadius={branding.radius}
                             portalUrl={`${window.location.origin}/portal/${outreach.access_token}`}
                             outreachId={outreach.id} clientId={client?.id || ''} tenantId={tenant?.id || ''}
+                            accessToken={outreach.access_token}
                             clientEmail={client?.primary_contact_email || ''}
                             firstName={client?.full_name?.split(' ')[0] || ''}
                             lastName={client?.full_name?.split(' ').slice(1).join(' ') || ''}
