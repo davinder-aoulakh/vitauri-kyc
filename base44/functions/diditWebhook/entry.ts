@@ -15,7 +15,8 @@ import { waitUntil } from 'base44:runtime';
 import { fetchDiditDecision } from '../../shared/diditDecision.js';
 import { verifyDiditSignature, isTimestampFresh } from '../../shared/diditWebhookVerify.js';
 import { isTmEnabled } from '../../shared/tmGuards.js';
-import { getTransaction as getDiditTmTransaction } from '../../shared/diditTm.js';
+import { getTransaction as getDiditTmTransaction, normaliseTxnStatus } from '../../shared/diditTm.js';
+import { afterTransactionUpdate } from '../../shared/diditTxnActions.js';
 import { computeDue } from '../../shared/tmClock.js';
 import { scheduleAutoTriage } from '../../shared/tmAutoTriage.js';
 import { safeRecompute } from '../../shared/tmRisk.js';
@@ -419,8 +420,8 @@ async function autoCompleteSteps(base44, caseId, tenantId, clientId, idvFields) 
 
 // ── Transaction monitoring (AML/KYT) status updates ──────────────────────────
 async function handleTransactionEvent(base44, tenantId, body) {
-  const diditTransactionId = body.transaction_id || body.id;
-  const ourTransactionId   = body.metadata?.our_transaction_id;
+  const diditTransactionId = body.transaction_id || body.id || body.uuid;
+  const ourTransactionId   = body.metadata?.our_transaction_id || body.txn_id;
   if (!diditTransactionId && !ourTransactionId) {
     console.warn('diditWebhook: transaction event with no identifiable transaction id');
     return;
@@ -666,16 +667,25 @@ async function tmTransactionEvent(base44, tenant, body, txn, diditTransactionId,
     console.warn('diditWebhook: no Didit transaction id for GET, using webhook body');
   }
   const rec = full && typeof full === 'object' ? full : body;
-  const status = String(rec.status ?? body.status ?? txn.status ?? '').toUpperCase();
-  const riskScore = rec.risk_score ?? rec.decision?.risk_score ?? body.risk_score ?? body.decision?.risk_score ?? txn.risk_score;
-  const riskLevel = rec.risk_level ?? rec.decision?.risk_level ?? body.risk_level ?? body.decision?.risk_level ?? txn.risk_level;
+  const prevStatus = txn.status;
+  const status = normaliseTxnStatus(rec.status ?? body.status ?? txn.status ?? '');
+  const riskScore = rec.risk_score ?? rec.decision?.risk_score ?? body.risk_score ?? body.decision?.risk_score ?? rec.score ?? body.score ?? txn.risk_score;
+  const riskLevel = rec.risk_level ?? rec.decision?.risk_level ?? body.risk_level ?? body.decision?.risk_level ?? rec.severity ?? body.severity ?? txn.risk_level;
   let ruleRuns = extractRuleRuns(rec);
   if (ruleRuns.length === 0 && rec !== body) ruleRuns = extractRuleRuns(body);
 
   const updatedTxn = { ...txn, status, risk_score: riskScore, risk_level: riskLevel, didit_rule_runs: ruleRuns, executed_at: txn.executed_at };
   await E.Transaction.update(txn.id, {
     status, risk_score: riskScore, risk_level: riskLevel, decision_raw: rec, didit_rule_runs: ruleRuns,
+    ...(!txn.didit_transaction_id && (rec.uuid || diditTransactionId) ? { didit_transaction_id: rec.uuid || diditTransactionId } : {}),
   });
+
+  // Status follow-ups and action_required (never blocks the webhook).
+  try {
+    await afterTransactionUpdate(base44, tenant, updatedTxn, prevStatus, status, rec);
+  } catch (e) {
+    console.warn('diditWebhook: afterTransactionUpdate failed', e?.message || e);
+  }
 
   // c + d. Alert + legacy MonitoringAlert.
   if (TM_ALERT_STATUSES.includes(status)) {
