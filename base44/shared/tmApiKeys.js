@@ -24,7 +24,7 @@ export function extractBearer(req) {
 export function publicKey(k) {
   return {
     id: k.id, label: k.label, key_prefix: k.key_prefix, created_date: k.created_date,
-    last_used_at: k.last_used_at || null, revoked_at: k.revoked_at || null,
+    last_used_at: k.last_used_at || null, revoked_at: k.revoked_at || null, scopes: k.scopes || ['ingest:write'],
     status: k.revoked_at ? 'revoked' : 'active',
   };
 }
