@@ -14,6 +14,7 @@ import { withDiditCredentials } from '../../shared/diditCredentials.js';
  * has been replaced with real screening calls; see screenEntityAml for notes
  * on the AML response shape and why it's parsed defensively.
  */
+import { amlEntityType, toAlpha2 } from '../../shared/diditAml.js';
 
 const DIDIT_AML_URL = 'https://verification.didit.me/v3/aml/';
 const CONCURRENCY = 5;
@@ -37,6 +38,12 @@ Deno.serve(async (req) => {
   }
   if (!tenant_id) {
     return Response.json({ error: 'tenant_id is required' }, { status: 400 });
+  }
+  // Only the caller's own tenant's Didit account (Vitauri Ops: any tenant).
+  const callerRole = user.app_role || user.data?.app_role;
+  const callerTenant = user.tenant_id || user.data?.tenant_id;
+  if (callerRole !== 'Vitauri Ops' && callerTenant && callerTenant !== tenant_id) {
+    return Response.json({ error: 'Not authorised for this tenant' }, { status: 403 });
   }
 
   const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
