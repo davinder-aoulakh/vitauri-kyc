@@ -1,38 +1,26 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
+import { authorizeTenantUser } from '../../shared/diditSessionAuth.js';
 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-
     const body = await req.json();
-    const { session_id, tenant_id, didit_api_key: directApiKey, action = 'details' } = body;
+    const { session_id, action = 'details' } = body;
 
-    console.log('=== getDiditSessionDetails called ===');
-    console.log('action:', action);
-    console.log('session_id:', session_id);
-    console.log('tenant_id:', tenant_id);
-    console.log('direct_api_key provided:', !!directApiKey, 'length:', directApiKey?.length ?? 0);
+    // Signed-in user of the requested tenant (Vitauri Ops: any tenant). The Didit key is always the
+    // tenant's own (server-side), so only that tenant's sessions can be read.
+    const auth = await authorizeTenantUser(base44, body.tenant_id);
+    if (auth.error) return auth.error;
+    const tenant_id = auth.tenantId;
 
     if (!session_id) {
-      console.log('ERROR: session_id missing');
       return Response.json({ error: 'session_id is required' });
     }
 
-    // Use directly-passed API key, or fall back to tenant lookup
-    let apiKey = directApiKey?.trim();
+    const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
+    const apiKey = (await withDiditCredentials(base44, tenants?.[0]))?.didit_api_key?.trim();
     if (!apiKey) {
-      if (!tenant_id) return Response.json({ error: 'Either didit_api_key or tenant_id is required' });
-      const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
-      apiKey = (await withDiditCredentials(base44, tenants?.[0]))?.didit_api_key?.trim();
-      console.log('API key from tenant lookup:', !!apiKey, 'length:', apiKey?.length ?? 0);
-    } else {
-      console.log('API key from direct param: length', apiKey.length, 'prefix:', apiKey.substring(0, 8));
-    }
-    if (!apiKey) {
-      console.log('ERROR: no API key found');
       return Response.json({ error: 'Didit not configured for this tenant' });
     }
 
@@ -41,17 +29,6 @@ Deno.serve(async (req) => {
     // Session must be Approved, Declined, or In Review — otherwise 403
     if (action === 'generate_pdf') {
       try {
-        // Log all inputs for debugging
-        console.log('PDF request inputs:', {
-          session_id,
-          session_id_length: session_id?.length,
-          api_key_length: apiKey?.length,
-          api_key_prefix: apiKey?.substring(0, 12),
-          api_key_suffix: apiKey?.slice(-4),
-          tenant_id,
-          direct_key_provided: !!directApiKey,
-        });
-
         // Try multiple known Didit PDF endpoint variants
         const urlsToTry = [
           `https://verification.didit.me/v3/session/${session_id}/generate-pdf/`,
@@ -133,20 +110,6 @@ Deno.serve(async (req) => {
     const live = root.liveness_checks?.[0]    || {};
     const aml  = root.aml_screenings?.[0]     || {};
 
-    // Log all top-level keys to help debug
-    console.log('Didit decision keys:', Object.keys(decision || {}));
-    if (decision?.decision) {
-      console.log('Didit decision.decision keys:', Object.keys(decision.decision));
-    }
-    // Log image fields available
-    console.log('IDV images:', {
-      front: !!idv.front_image,
-      back: !!idv.back_image,
-      portrait: !!idv.portrait_image
-    });
-    console.log('Liveness fields:', Object.keys(live));
-    console.log('Face match fields:', Object.keys(face));
-
     return Response.json({
       ok:          true,
       session_id,
@@ -201,18 +164,7 @@ Deno.serve(async (req) => {
       aml_screening_id: aml.id        || null,
       aml_total_hits: aml.total_hits ?? 0,
       aml_status:     aml.status     || null,
-      aml_hits:       (aml.hits || []).map((hit: any) => {
-        // Log first hit structure to help debug field names
-        if (aml.hits?.indexOf(hit) === 0) {
-          console.log('First AML hit keys:', Object.keys(hit));
-          console.log('First AML hit datasets:', hit.datasets);
-          console.log('First AML hit has adverse_media_matches:', !!hit.adverse_media_matches?.length);
-          console.log('First AML hit has adverse_media_details:', !!hit.adverse_media_details);
-          console.log('First AML hit has pep_matches:', !!hit.pep_matches?.length);
-          console.log('First AML hit properties keys:', hit.properties ? Object.keys(hit.properties) : 'none');
-        }
-        return hit; // pass through full hit object unchanged
-      }),
+      aml_hits:       aml.hits || [], // full hit objects, unchanged
       aml_raw:        aml,
 
       // All warnings combined
