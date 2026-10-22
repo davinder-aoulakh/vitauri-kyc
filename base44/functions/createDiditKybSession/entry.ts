@@ -86,13 +86,13 @@ export default async function (req) {
     const items = (outreach.items || []).map((i) => (i.item_id === item.item_id ? { ...i, kyb_verification_id: kyb.id, kyb_status: fields.status } : i));
     await E.OutreachRequest.update(outreach.id, { items });
     await E.AuditEvent.create({
-      tenant_id: tenant.id, client_id: client.id, case_id: outreach.case_id || undefined, actor_type: 'Client', actor_name: 'Client portal',
+      tenant_id: tenant.id, client_id: client.id, case_id: outreach.case_id || undefined, actor_type: 'System', actor_name: 'Client portal',
       event_type: 'kyb_session_created', before_state: {}, after_state: { kyb_verification_id: kyb.id, didit_session_id: session.session_id, workflow_id: workflowId },
       notes: `Didit business verification session started for ${client.full_name}.`,
     });
     return Response.json({ ok: true, session_url: session.url, kyb_verification_id: kyb.id, status: fields.status });
   } catch (error) {
-    console.error('createDiditKybSession error:', error?.message || error?.detail);
-    return errorResponse(error?.status ? error : { status: 500, message: error?.detail || error?.message });
+    console.error('createDiditKybSession error:', error?.message);
+    return errorResponse(error);
   }
 }
