@@ -46,7 +46,8 @@ Deno.serve(async (req) => {
     // Priority 2: tenant default workflow from didit_workflows array
     if (!resolvedWorkflowId && tenant?.didit_workflows) {
       try {
-        const workflows = JSON.parse(tenant.didit_workflows);
+        // KYB (business) workflows are never used for a person session.
+        const workflows = JSON.parse(tenant.didit_workflows).filter(w => w?.type !== 'kyb');
         const defaultWf = workflows.find(w => w.is_default) || workflows[0];
         if (defaultWf?.workflow_id) resolvedWorkflowId = defaultWf.workflow_id;
       } catch { /* invalid JSON — skip */ }
@@ -64,10 +65,28 @@ Deno.serve(async (req) => {
     // 2. Build callback URL
     const callbackUrl = `${portal_url}?didit_done=1&outreach_id=${outreach_id}&item_id=${item_id}`;
 
+    // Didit KYB: a related party's (UBO/director) own ID verification. vendor_data is the related party, never the company.
+    let vendorData = client_id;
+    let expectedFirst = first_name;
+    let expectedLast = last_name;
+    if (outreach_id) {
+      const outreachRows = await base44.asServiceRole.entities.OutreachRequest.filter({ id: outreach_id });
+      const rpId = outreachRows?.[0]?.tenant_id === tenant_id ? outreachRows?.[0]?.related_party_id : null;
+      if (rpId) {
+        const rp = (await base44.asServiceRole.entities.RelatedParty.filter({ tenant_id, id: rpId }))?.[0];
+        if (rp) {
+          vendorData = rp.id;
+          const parts = String(rp.full_name || '').trim().split(/\s+/);
+          expectedFirst = parts.length > 1 ? parts.slice(0, -1).join(' ') : '';
+          expectedLast = parts.length > 1 ? parts[parts.length - 1] : '';
+        }
+      }
+    }
+
     // 3. Build request body
     const body = {
       workflow_id:     resolvedWorkflowId,
-      vendor_data:     client_id,
+      vendor_data:     vendorData,
       callback:        callbackUrl,
       callback_method: 'both',
       language:        language || 'en',
@@ -84,10 +103,10 @@ Deno.serve(async (req) => {
       body.contact_details = { email: client_email, send_notification_emails: false };
     }
 
-    if (first_name || last_name) {
+    if (expectedFirst || expectedLast) {
       body.expected_details = {
-        ...(first_name ? { first_name } : {}),
-        ...(last_name  ? { last_name  } : {}),
+        ...(expectedFirst ? { first_name: expectedFirst } : {}),
+        ...(expectedLast  ? { last_name: expectedLast } : {}),
         expected_document_types: ['P', 'ID', 'DL'],
       };
     }
