@@ -3,6 +3,7 @@ import { asList, httpError } from './tmAuth.js';
 import { writeAudit } from './tmAudit.js';
 import { createDiditCase, createFiuReport, getFiuReport, downloadBinary } from './diditTm.js';
 import { loadRefs } from './tmFiuChecks.js';
+import { safeFileArtefacts } from './tmFiuArtefacts.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pick = (r, keys) => {
@@ -73,6 +74,10 @@ export async function generateReport(ctx, report) {
       generated: { at, file_url: g.fileUrl, file_hash: g.hash, ...(g.pdfUrl ? { pdf_url: g.pdfUrl } : {}) },
     });
     await audit('fiu_report_generated', { status: 'approved' }, { status: 'generated', file_hash: g.hash, pdf: !!g.pdfUrl }, `goAML file generated for ${report.report_ref} by ${ctx.auth.actorName}.`);
+    await safeFileArtefacts(ctx, report, [
+      { kind: 'goaml_xml', file_url: g.fileUrl, file_name: `${report.report_ref}.xml`, file_hash: g.hash },
+      ...(g.pdfUrl ? [{ kind: 'report_pdf', file_url: g.pdfUrl, file_name: `${report.report_ref}.pdf` }] : []),
+    ]);
     return { report_id: report.id, status: 'generated', file_hash: g.hash, has_pdf: !!g.pdfUrl };
   } catch (e) {
     const msg = errText(e);
