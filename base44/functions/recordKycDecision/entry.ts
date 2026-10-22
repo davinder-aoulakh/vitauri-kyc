@@ -10,12 +10,15 @@ const OUTCOMES = ['approved', 'rejected'];
 const AML_OUTCOMES = ['no_concerns', 'concerns_handled_in_tm', 'report_to_fiu'];
 
 async function buildSnapshot(E, tenantId, tenant, kycCase, client) {
-  const [assessments, hits, outreach, profiles, links] = await Promise.all([
+  const [assessments, hits, outreach, profiles, links, kybs] = await Promise.all([
     E.RiskAssessment.filter({ tenant_id: tenantId, case_id: kycCase.id }, undefined, 500).then(asList),
     E.ScreeningHit.filter({ tenant_id: tenantId, case_id: kycCase.id }, undefined, 500).then(asList),
     E.OutreachRequest.filter({ tenant_id: tenantId, case_id: kycCase.id }, undefined, 100).then(asList),
     E.ExpectedProfile.filter({ tenant_id: tenantId, client_id: kycCase.client_id, status: 'approved' }, '-version', 1).then(asList),
     E.ClientRelatedPartyLink.filter({ tenant_id: tenantId, client_id: kycCase.client_id }, undefined, 200).then(asList),
+    client?.client_type === 'ORG'
+      ? E.KybVerification.filter({ tenant_id: tenantId, client_id: kycCase.client_id }, '-created_date', 1).then(asList).catch(() => [])
+      : Promise.resolve([]),
   ]);
 
   const partyIds = [...new Set(links.map((l) => l.related_party_id).filter(Boolean))];
@@ -61,8 +64,10 @@ async function buildSnapshot(E, tenantId, tenant, kycCase, client) {
         id: l.related_party_id, full_name: p?.full_name || null,
         role: l.role || p?.role_in_relationship || null,
         ownership_percentage: l.ownership_percentage ?? p?.ownership_percentage ?? null,
+        verification_status: p?.verification_status || null,
       };
     }),
+    ...(kybs[0] ? { kyb: { session_id: kybs[0].didit_session_id || null, status: kybs[0].status || null, registration_number: kybs[0].registry?.registration_number || null, decided_at: kybs[0].decided_at || null } } : {}),
     ai_model: tenant.tm_settings?.ai_model || 'automatic',
   };
 }
