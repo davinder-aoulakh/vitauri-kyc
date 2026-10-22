@@ -13,7 +13,7 @@ import {
   LayoutDashboard, FolderOpen, Users, Search, Shield,
   Settings, BarChart3, AlertTriangle, Calendar, Archive,
   ChevronLeft, ChevronRight, Menu, X,
-  Building2, UserCircle, ClipboardList, ScanSearch, Mail, Send, Activity, SlidersHorizontal, ShieldCheck
+  Building2, UserCircle, ClipboardList, ScanSearch, Mail, Send, Activity, SlidersHorizontal, ShieldCheck, Briefcase, FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -79,6 +79,36 @@ const navItems = [
   },
 ];
 
+const groupOf = (name) => navItems.find((g) => g.group === name);
+
+// Sidebar when tm_core is on. Items keep their existing permission and feature checks.
+const tmNavItems = [
+  groupOf('OVERVIEW'),
+  { group: 'CUSTOMERS', items: groupOf('CLIENTS').items },
+  {
+    group: 'MONITORING',
+    items: [
+      { label: 'Screening', icon: Shield, href: '/monitoring', permission: null, badge: 'alerts', featureKey: 'monitoring' },
+      { label: 'TM Alerts', icon: AlertTriangle, href: '/tm/alerts', permission: 'tmViewAlerts', badge: 'tmAlerts', featureKey: 'tm_core' },
+      { label: 'TM Cases', icon: Briefcase, href: '/tm/cases', permission: 'tmViewAlerts', featureKey: 'tm_core' },
+      { label: 'FIU Reports', icon: FileText, href: '/tm/reports', permission: 'createRunCase', featureKey: 'tm_fiu' }, // FiuArtefact readers
+      { label: 'Transactions', icon: Activity, href: '/transaction-monitoring', permission: null, featureKey: 'transaction_monitoring' },
+      { label: 'Batch Screening', icon: ScanSearch, href: '/batch-screening', permission: 'createEditClient', featureKey: 'batch_screening' },
+      { label: 'Review Planner', icon: Calendar, href: '/review-planner', permission: 'viewAllTenantCases', featureKey: 'review_planner' },
+    ],
+  },
+  {
+    group: 'CONTROL',
+    items: [
+      { label: 'Data Coverage', icon: Activity, href: '/tm/coverage', permission: 'tmViewAlerts', featureKey: 'tm_core' },
+      { label: 'Rules', icon: SlidersHorizontal, href: '/tm/rules', anyPermission: ['tmManageRules', 'tmApproveRules'], featureKey: 'tm_rules' },
+      { label: 'Quality', icon: ShieldCheck, href: '/tm/quality', permission: 'tmQuality', featureKey: 'tm_quality' },
+    ],
+  },
+  groupOf('OUTREACH'),
+  groupOf('REPORTS & ADMIN'),
+];
+
 export default function AppShell({ children }) {
   const { currentUser, tenant } = useTenant();
   const location = useLocation();
@@ -136,7 +166,7 @@ export default function AppShell({ children }) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-5">
-        {navItems.map((group) => {
+        {(isFeatureEnabled(tenant, 'tm_core') ? tmNavItems : navItems).map((group) => {
           // Hide Outreach section for roles that are not allowed
           if (group.outreachOnly && !OUTREACH_ROLES.includes(userRole)) return null;
           // Hide entire group if its feature flag is disabled
