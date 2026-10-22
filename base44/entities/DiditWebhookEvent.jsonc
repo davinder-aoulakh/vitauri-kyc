@@ -1,32 +1,48 @@
 {
   "name": "DiditWebhookEvent",
-  "type": "object",
   "properties": {
-    "tenant_id": {
+    "attempts": {
+      "type": "number"
+    },
+    "error": {
+      "description": "Short error of the last failed attempt (no secrets)",
       "type": "string"
     },
     "event_id": {
-      "type": "string",
-      "description": "Didit event_id \u2014 unique per webhook delivery attempt, used for idempotency"
-    },
-    "session_id": {
+      "description": "Didit event_id \u2014 unique per webhook delivery attempt, used for idempotency",
       "type": "string"
     },
-    "webhook_type": {
+    "processed_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "processing_state": {
+      "description": "received = in progress; failed events may be delivered again and are reprocessed. Missing on legacy rows (treated as processed).",
+      "enum": [
+        "received",
+        "processed",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "session_id": {
       "type": "string"
     },
     "status": {
       "type": "string"
     },
-    "processed_at": {
-      "type": "string",
-      "format": "date-time"
+    "tenant_id": {
+      "type": "string"
+    },
+    "webhook_type": {
+      "type": "string"
     }
   },
   "required": [
     "tenant_id",
     "event_id"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "user_condition": {
