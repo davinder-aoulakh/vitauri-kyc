@@ -109,20 +109,20 @@ export async function recomputeCustomerRisk(base44, { tenantId, tenant, clientId
       // EdrTrigger proposal (in addition to the notification below). One open proposal per client and band.
       const dedupeKey = `${clientId}:risk_band_rise:${band}`;
       try {
-      const openTrigger = asList(await E.EdrTrigger.filter({ tenant_id: tenantId, dedupe_key: dedupeKey, status: 'proposed' }, undefined, 1))[0];
-      if (!openTrigger) {
-        const trigger = await E.EdrTrigger.create({
-          tenant_id: tenantId, client_id: clientId, trigger_type: 'risk_band_rise', source_ref: record.id, status: 'proposed', dedupe_key: dedupeKey,
-          before: { score: prev?.score ?? null, band: prev?.band || client.customer_risk_band || null },
-          after: { score, band, summary: `Dynamic risk rose to ${band} (${score}). ${reasons.slice(0, 3).join(' ')}` },
-        });
-        await E.AuditEvent.create({
-          tenant_id: tenantId, client_id: clientId, actor_user_id: actor?.actorUserId, actor_name: actor?.actorName || 'System',
-          actor_type: actor?.actorType || 'System', event_type: 'edr_trigger_proposed',
-          before_state: {}, after_state: { edr_trigger_id: trigger.id, trigger_type: 'risk_band_rise', dedupe_key: dedupeKey },
-          notes: `EDR trigger proposed (risk band rise): ${band} (${score}).`,
-        });
-      }
+        const openTrigger = asList(await E.EdrTrigger.filter({ tenant_id: tenantId, dedupe_key: dedupeKey, status: 'proposed' }, undefined, 1))[0];
+        if (!openTrigger) {
+          const trigger = await E.EdrTrigger.create({
+            tenant_id: tenantId, client_id: clientId, trigger_type: 'risk_band_rise', source_ref: record.id, status: 'proposed', dedupe_key: dedupeKey,
+            before: { score: prev?.score ?? null, band: prev?.band || client.customer_risk_band || null },
+            after: { score, band, summary: `Dynamic risk rose to ${band} (${score}). ${reasons.slice(0, 3).join(' ')}` },
+          });
+          await E.AuditEvent.create({
+            tenant_id: tenantId, client_id: clientId, actor_user_id: actor?.actorUserId, actor_name: actor?.actorName || 'System',
+            actor_type: actor?.actorType || 'System', event_type: 'edr_trigger_proposed',
+            before_state: {}, after_state: { edr_trigger_id: trigger.id, trigger_type: 'risk_band_rise', dedupe_key: dedupeKey },
+            notes: `EDR trigger proposed (risk band rise): ${band} (${score}).`,
+          });
+        }
       } catch (e) {
         console.warn('risk_band_rise EdrTrigger failed:', e?.message);
       }
