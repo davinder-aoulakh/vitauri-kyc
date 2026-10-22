@@ -7,6 +7,7 @@ import { authenticate, errorResponse, httpError, loadTenant, asList } from '../.
 import { CO_ROLES } from '../../shared/tmCaseCommon.js';
 import { loadReport } from '../../shared/tmFiuActions.js';
 import { writeAudit } from '../../shared/tmAudit.js';
+import { safeFileArtefacts } from '../../shared/tmFiuArtefacts.js';
 
 const METHODS = ['portal_upload', 'xml_upload', 'm2m'];
 const FROM = { submitted: ['generated'], received: ['submitted'], accepted: ['received'], rejected: ['submitted', 'received'] };
@@ -55,6 +56,14 @@ export default async function (req) {
       before: { status: report.status }, after: { status: patch.status, method: patch.submitted?.method, fiu_reference: patch.received?.fiu_reference, reason: patch.rejection_reason, evidence: !!evidence },
       notes: `FIU report ${report.report_ref} marked ${action} by ${auth.actorName}.`,
     });
+
+    // File submission evidence / FIU receipt to the customer file (FiuArtefact only, never Document).
+    const fctx = { base44, E, auth, tenantId };
+    if (action === 'submitted') {
+      await safeFileArtefacts(fctx, report, [{ kind: 'submission_evidence', file_url: evidence, file_name: `Submission evidence ${report.report_ref}` }]);
+    } else if (action === 'received') {
+      await safeFileArtefacts(fctx, report, [{ kind: 'fiu_receipt', file_url: evidence || undefined, file_name: `FIU reference ${patch.received.fiu_reference}` }]);
+    }
 
     let caseClosed = false;
     if (['received', 'accepted'].includes(patch.status) && report.tm_case_id) {
