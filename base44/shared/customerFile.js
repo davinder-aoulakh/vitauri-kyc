@@ -332,6 +332,64 @@ export async function buildCustomerFile(base44, { tenantId, client, role, sectio
 // ---------------------------------------------------------------- Case TM context
 
 const EVIDENCE_ORDER = { risk: 0, gap: 1, unclear: 2, ok: 3 };
+const CLOSED_ALERT = ['closed_false_positive', 'closed_no_action', 'reported'];
+
+/**
+ * "Monitoring since last review": what happened in TM for this client since the last approved KYC decision
+ * (else the last 12 months). Read-only; FIU counts only for roles allowed to read FIU reports.
+ */
+export async function buildReviewPeriod(base44, { tenantId, tenant, client, kycCase, fiuAllowed }) {
+  const E = base44.asServiceRole.entities;
+  const cid = client.id;
+  const cur = tenant.tm_reporting_currency || 'USD';
+  const lastApproval = asList(await E.Decision.filter({ tenant_id: tenantId, client_id: cid, decision_type: 'kyc_approval' }, '-decided_at', 5))
+    .find((d) => d.subject_id !== kycCase.id && (d.decided_at || d.created_date));
+  const fromIso = lastApproval?.decided_at || lastApproval?.created_date || new Date(Date.now() - 365 * DAY_MS).toISOString();
+  const from = fromIso.slice(0, 10);
+  const months = Math.max(1, (Date.now() - new Date(fromIso).getTime()) / (30.4 * DAY_MS));
+
+  const [txns, priorTxns, alerts, tmCases, profile, scores, coverage, reports] = await Promise.all([
+    fetchAll((cursor) => E.Transaction.filter({ tenant_id: tenantId, client_id: cid, executed_at: { $gte: fromIso } }, { limit: 1000, cursor }), 10),
+    E.Transaction.filter({ tenant_id: tenantId, client_id: cid, executed_at: { $lt: fromIso } }, '-executed_at', 500).then(asList),
+    E.TmAlert.filter({ tenant_id: tenantId, client_id: cid, created_date: { $gte: fromIso } }, '-created_date', 200).then(asList),
+    E.TmCase.filter({ tenant_id: tenantId, primary_client_id: cid, created_date: { $gte: fromIso } }, '-created_date', 50).then(asList),
+    E.ExpectedProfile.filter({ tenant_id: tenantId, client_id: cid, status: 'approved' }, '-version', 1).then((r) => asList(r)[0] || null),
+    E.CustomerRiskScore.filter({ tenant_id: tenantId, client_id: cid }, '-computed_at', 200).then(asList),
+    E.CoverageDay.filter({ tenant_id: tenantId, client_id: cid, date: { $gte: from }, state: 'missing' }, undefined, 1000).then(asList),
+    fiuAllowed ? E.FiuReport.filter({ tenant_id: tenantId, client_id: cid, created_date: { $gte: fromIso } }, '-created_date', 50).then(asList) : Promise.resolve([]),
+  ]);
+
+  const sum = summariseTxns(txns, { client, reportingCurrency: cur });
+  const perMonth = { inbound: sum.inbound / months, inboundCount: sum.inboundCount / months, outbound: sum.outbound / months, foreignOut: sum.foreignOut / months, cash: sum.cash / months, countries: sum.countries };
+  const limits = profile ? await profileLimits(base44, tenantId, profile, cur) : null;
+  const vs = limits ? compareToProfile(perMonth, limits, profile.allowed_countries, cur) : null;
+
+  const priorCountries = new Set(countableTxns(priorTxns).map((t) => String(t.counterparty_country || '').toUpperCase()).filter(Boolean));
+  const priorCps = new Set(priorTxns.map((t) => t.counterparty_id || t.counterparty_name).filter(Boolean));
+  const newCountries = sum.countries.filter((c) => !priorCountries.has(c));
+  const newCounterparties = uniq(countableTxns(txns).map((t) => t.counterparty_id || t.counterparty_name).filter((k) => !priorCps.has(k)));
+
+  const startScore = [...scores].reverse().find((s) => (s.computed_at || '') <= fromIso) || scores[scores.length - 1] || null;
+  const nowScore = scores[0] || null;
+  const round = (v) => (v == null ? null : Math.round(v));
+
+  return {
+    from: fromIso, basis: lastApproval ? 'last_kyc_approval' : 'last_12_months', currency: cur,
+    transactions: sum.txnCount, unconverted: sum.unconverted,
+    per_month: { inbound: round(perMonth.inbound), inbound_count: Math.round(perMonth.inboundCount * 10) / 10, outbound: round(perMonth.outbound), foreign_out: round(perMonth.foreignOut), cash: round(perMonth.cash) },
+    profile: profile ? {
+      id: profile.id, version: profile.version,
+      limits: limits ? { inbound: round(limits.inbound), inbound_count: limits.inboundCount, outbound: round(limits.outbound), foreign_out: round(limits.foreignOut), cash: round(limits.cash) } : null,
+      breaches: (vs?.breaches || []).map((b) => b.reason), outside_countries: vs?.newCountries || [],
+    } : null,
+    alerts: { total: alerts.length, open: alerts.filter((a) => !CLOSED_ALERT.includes(a.status)).length, reported: alerts.filter((a) => a.status === 'reported').length },
+    tm_cases: tmCases.map((c) => ({ id: c.id, case_ref: c.case_ref, status: c.status })),
+    fiu_reports: fiuAllowed ? reports.length : null,
+    risk: { from: startScore ? { score: round(startScore.score), band: startScore.band } : null, now: nowScore ? { score: round(nowScore.score), band: nowScore.band } : null },
+    coverage_missing_days: coverage.length,
+    new_countries: newCountries, new_counterparties: newCounterparties.length,
+  };
+}
 
 export async function buildCaseTmContext(base44, { tenantId, tenant, kycCase, role }) {
   const E = base44.asServiceRole.entities;
@@ -343,7 +401,19 @@ export async function buildCaseTmContext(base44, { tenantId, tenant, kycCase, ro
   if (!tmCase) tmCase = asList(await E.TmCase.filter({ tenant_id: tenantId, kyc_edr_case_id: kycCase.id }, '-created_date', 1))[0] || null;
 
   const fieldIds = uniq(kycCase.tm_alert_ids || []).slice(0, 100);
-  if (!tmCase && !fieldIds.length) return { has_context: false };
+  // Every case gets the review-period view when TM data exists for the client; the TM-case parts stay optional.
+  const periodClient = asList(await E.Client.filter({ tenant_id: tenantId, id: cid }, undefined, 1))[0] || null;
+  const period = periodClient ? await buildReviewPeriod(base44, { tenantId, tenant, client: periodClient, kycCase, fiuAllowed }).catch((e) => { console.warn('buildReviewPeriod failed', e?.message); return null; }) : null;
+  const periodHasData = !!period && (period.transactions > 0 || period.alerts.total > 0 || !!period.profile || period.tm_cases.length > 0);
+  if (!tmCase && !fieldIds.length) {
+    if (!periodHasData) return { has_context: false };
+    return {
+      has_context: true, tm_case: null, alerts: [], alerts_from_case_field: [],
+      risk: { at_open: kycCase.tm_context?.score ?? null, now: periodClient?.customer_risk_score ?? null, band: periodClient?.customer_risk_band || null },
+      profile: null, fiu_reports: [], tipping_off_locked: false, period,
+      trigger: kycCase.tm_context?.trigger || null,
+    };
+  }
 
   const caseIds = uniq(tmCase?.alert_ids || []).slice(0, 100);
   const loadAlerts = (ids) => (ids.length ? E.TmAlert.filter({ tenant_id: tenantId, id: { $in: ids } }, undefined, 100).then(asList) : Promise.resolve([]));
@@ -388,5 +458,7 @@ export async function buildCaseTmContext(base44, { tenantId, tenant, kycCase, ro
     } : null,
     fiu_reports: reports.map((r) => ({ id: r.id, report_ref: r.report_ref, status: r.status })),
     tipping_off_locked: locks.some((l) => l.locked && !l.unlocked_at),
+    period: periodHasData ? period : null,
+    trigger: kycCase.tm_context?.trigger || null,
   };
 }
