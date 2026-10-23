@@ -18,6 +18,7 @@ import { verifyDiditSignature, isTimestampFresh } from '../../shared/diditWebhoo
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { getTransaction as getDiditTmTransaction, normaliseTxnStatus } from '../../shared/diditTm.js';
 import { afterTransactionUpdate } from '../../shared/diditTxnActions.js';
+import { safeAlertRef } from '../../shared/tmRefs.js';
 import { computeDue } from '../../shared/tmClock.js';
 import { scheduleAutoTriage } from '../../shared/tmAutoTriage.js';
 import { safeRecompute } from '../../shared/tmRisk.js';
@@ -851,6 +852,7 @@ async function upsertTmAlert(base44, { tenant_id, transaction, rule_runs }) {
   const { due_at } = computeDue(profile, { indicator_type: indicatorType, executed_at: executedAt, discovered_at: nowIso });
 
   const created = await E.TmAlert.create({
+    ref: await safeAlertRef(E, tenant_id),
     tenant_id,
     client_id: transaction.client_id,
     transaction_ids: [transaction.id],
@@ -862,6 +864,7 @@ async function upsertTmAlert(base44, { tenant_id, transaction, rule_runs }) {
     priority: calcPriority(score, due_at),
     status: 'new',
     indicator_type: indicatorType,
+    ...(transaction.intended_at ? { intended_at: transaction.intended_at } : {}),
     executed_at: executedAt,
     received_at: nowIso,
     discovered_at: nowIso,
