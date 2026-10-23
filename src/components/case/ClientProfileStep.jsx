@@ -22,6 +22,7 @@ import { getNestedValue } from '@/lib/clientNameUtils';
 import { NP_FIELD_LABELS, ORG_FIELD_LABELS } from '@/hooks/useProfileSuggestions';
 import InlineError from '@/components/shared/InlineError';
 import { useAiOrchestrator } from '@/hooks/useAiOrchestrator';
+import ExpectedProfileEditor from '@/components/case/tm/ExpectedProfileEditor';
 
 const DRAFT_TIMEOUT_MS = 60000;
 const OUTREACH_FETCH_TIMEOUT_MS = 3000;
@@ -303,6 +304,9 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
           </div>
         )}
       </div>
+
+      {/* ─── SECTION 1C — Expected profile for monitoring (renders only when tm_core is on) ─── */}
+      <ExpectedProfileEditor kycCase={kycCase} client={client} readOnly={['Approved', 'Rejected', 'Closed'].includes(kycCase?.status)} />
 
       {/* ─── SECTION 2 — Verified Profile Summary (read-only) ─── */}
       <div className="border-t border-border pt-5 space-y-3">
