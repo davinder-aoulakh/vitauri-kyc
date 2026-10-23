@@ -1,0 +1,99 @@
+{
+  "name": "CounterpartyEdge",
+  "properties": {
+    "amount_reporting": {
+      "description": "Sum in the tenant reporting currency (converted transactions only)",
+      "type": "number"
+    },
+    "built_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "client_id": {
+      "description": "Customer at one end of the flow",
+      "type": "string"
+    },
+    "counterparty_client_id": {
+      "description": "Set when the counterparty is linked to another customer of the tenant (customer -> customer flow)",
+      "type": "string"
+    },
+    "counterparty_id": {
+      "description": "Resolved Counterparty at the other end",
+      "type": "string"
+    },
+    "direction": {
+      "enum": [
+        "in",
+        "out"
+      ],
+      "type": "string"
+    },
+    "edge_key": {
+      "description": "client_id|counterparty_id|direction, unique per tenant",
+      "type": "string"
+    },
+    "first_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "last_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "txn_count": {
+      "type": "number"
+    },
+    "window_days": {
+      "default": 90,
+      "type": "number"
+    },
+    "window_from": {
+      "format": "date",
+      "type": "string"
+    },
+    "window_to": {
+      "format": "date",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "client_id",
+    "counterparty_id",
+    "direction",
+    "edge_key"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    }
+  },
+  "type": "object"
+}
