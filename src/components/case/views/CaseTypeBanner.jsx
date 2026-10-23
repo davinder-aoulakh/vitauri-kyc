@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 import { useTenant } from '@/lib/tenantContext';
 import { isFeatureEnabled } from '@/lib/featureFlags';
+import { toTmCase } from '@/lib/routes';
+import WhatChanged from '@/components/case/views/WhatChanged';
 
 const CONFIG = {
   Onboarding: {
@@ -52,7 +54,10 @@ const CONFIG = {
 
 export default function CaseTypeBanner({ kycCase, client }) {
   const { tenant } = useTenant();
-  const showTmLink = kycCase?.case_type === 'Event_Driven_Review' && !!kycCase.tm_case_id && isFeatureEnabled(tenant, 'tm_core');
+  const tmOn = isFeatureEnabled(tenant, 'tm_core');
+  const showTmLink = kycCase?.case_type === 'Event_Driven_Review' && !!kycCase.tm_case_id && tmOn;
+  // Reviews opened from an EDR proposal carry the trigger's before/after (decideEdrTrigger).
+  const trigger = tmOn ? kycCase?.tm_context?.trigger : null;
   const cfg = CONFIG[kycCase?.case_type];
   if (!cfg) return null;
 
@@ -74,8 +79,9 @@ export default function CaseTypeBanner({ kycCase, client }) {
           </ul>
         )}
         {showTmLink && (
-          <Link to={`/tm/case/${kycCase.tm_case_id}`} className="inline-block mt-1 text-xs font-medium underline underline-offset-2">Opened from TM case</Link>
+          <Link to={toTmCase(kycCase.tm_case_id)} className="inline-block mt-1 text-xs font-medium underline underline-offset-2">Opened from TM case</Link>
         )}
+        {trigger && <WhatChanged trigger={trigger} />}
       </div>
       {dueIn !== null && (
         <div className={cn(
