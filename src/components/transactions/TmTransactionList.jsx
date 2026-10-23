@@ -28,12 +28,13 @@ function Filter({ value, onChange, all, items, render = label, width = 'w-40' })
   );
 }
 
-/** TM version of the transaction table: canonical columns and server-side filters. Used only when tm_core is on. */
-export default function TmTransactionList({ tenantId, clients, version, onSelect }) {
+/** TM version of the transaction table: canonical columns and server-side filters. Used only when tm_core is on.
+ *  fixedClientId: show one customer's transactions only (customer file); the client filter and column are hidden. */
+export default function TmTransactionList({ tenantId, clients, version, onSelect, fixedClientId }) {
   const [status, setStatus] = useState('all');
   const [source, setSource] = useState('all');
   const [lifecycle, setLifecycle] = useState('all');
-  const [client, setClient] = useState('all');
+  const [client, setClient] = useState(fixedClientId || 'all');
   const [limit, setLimit] = useState(PAGE);
   const query = { tenant_id: tenantId };
   if (status !== 'all') query.status = status;
@@ -63,7 +64,7 @@ export default function TmTransactionList({ tenantId, clients, version, onSelect
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap justify-end gap-2">
-        <Filter value={client} onChange={reset(setClient)} all="All clients" items={clients.map((c) => ({ id: c.id, name: c.full_name }))} width="w-48" />
+        {!fixedClientId && <Filter value={client} onChange={reset(setClient)} all="All clients" items={clients.map((c) => ({ id: c.id, name: c.full_name }))} width="w-48" />}
         <Filter value={source} onChange={reset(setSource)} all="All sources" items={SOURCES} />
         <Filter value={lifecycle} onChange={reset(setLifecycle)} all="All lifecycles" items={LIFECYCLES} />
         <Filter value={status} onChange={reset(setStatus)} all="All statuses" items={['PENDING', 'APPROVED', 'IN_REVIEW', 'AWAITING_USER', 'DECLINED']} />
@@ -78,7 +79,7 @@ export default function TmTransactionList({ tenantId, clients, version, onSelect
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-muted/40 border-b border-border text-xs text-muted-foreground uppercase tracking-wide">
-                {['Client', 'Executed', 'Amount', 'Lifecycle', 'Source', 'Category', 'Counterparty', 'Alert'].map((h) => <th key={h} className="text-left px-4 py-3 whitespace-nowrap">{h}</th>)}
+                {[...(fixedClientId ? [] : ['Client']), 'Executed', 'Amount', 'Lifecycle', 'Source', 'Category', 'Counterparty', 'Alert'].map((h) => <th key={h} className="text-left px-4 py-3 whitespace-nowrap">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -86,7 +87,7 @@ export default function TmTransactionList({ tenantId, clients, version, onSelect
                 const alert = data.byTxn[tx.id];
                 return (
                   <tr key={tx.id} className="hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => onSelect(tx)}>
-                    <td className="px-4 py-3 font-medium text-xs">{clientName(tx.client_id)}</td>
+                    {!fixedClientId && <td className="px-4 py-3 font-medium text-xs">{clientName(tx.client_id)}</td>}
                     <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{date(tx.executed_at)}</td>
                     <td className="px-4 py-3 text-xs whitespace-nowrap">{tx.direction === 'outbound' ? '−' : '+'}{tx.amount} {tx.currency}</td>
                     <td className="px-4 py-3 text-xs capitalize">{tx.lifecycle || '—'}</td>
