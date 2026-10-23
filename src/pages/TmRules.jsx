@@ -13,6 +13,7 @@ import RulesList from '@/components/tm/rules/RulesList';
 import RuleEditor from '@/components/tm/rules/RuleEditor';
 import DraftPanel from '@/components/tm/rules/DraftPanel';
 import LibraryDialog from '@/components/tm/rules/LibraryDialog';
+import ScenarioImportDialog from '@/components/tm/rules/ScenarioImportDialog';
 import { Button } from '@/components/ui/button';
 import { Loader2, Lock, ListChecks, Plus } from 'lucide-react';
 
@@ -30,6 +31,7 @@ export default function TmRules() {
   const [selectedId, setSelectedId] = useState(null);
   const [library, setLibrary] = useState(null);
   const [fromScenario, setFromScenario] = useState(null);
+  const [importing, setImporting] = useState(false);
   const seeded = useRef(false);
 
   const list = rules.data || [];
@@ -68,6 +70,7 @@ export default function TmRules() {
             <>
               <Button size="sm" variant="outline" className="text-xs" onClick={() => setLibrary('CW')}>Library: Curaçao objective indicators</Button>
               <Button size="sm" variant="outline" className="text-xs" onClick={() => setLibrary('NL')}>Library: Wwft indicators</Button>
+              <Button size="sm" variant="outline" className="text-xs" onClick={() => setImporting(true)}>Import indicators</Button>
               <Button size="sm" className="gap-1.5 text-xs" onClick={() => { setSelectedId(null); setFromScenario(null); }}><Plus className="w-3.5 h-3.5" /> New rule</Button>
             </>
           )}
