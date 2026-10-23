@@ -5,6 +5,8 @@ import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import RiskBadge from '@/components/shared/RiskBadge';
+import { useRelatedCustomers } from '@/components/client/monitoring/useRelatedCustomers';
+import { toClientView } from '@/lib/routes';
 import { AlertTriangle, GitFork } from 'lucide-react';
 
 const isUbo = (role) => /ubo|beneficial/i.test(role || '');
@@ -57,6 +59,8 @@ export default function OwnershipControlCard({ client, relatedParties = [] }) {
     queryFn: async () => (await base44.functions.invoke('getRelatedCompanies', { client_id: client.id })).data?.related_companies || [],
   });
 
+  const { data: asCustomer = {} } = useRelatedCustomers({ tenantId: client?.tenant_id, parties: relatedParties, excludeClientId: client?.id, enabled: show });
+
   if (!show) return null;
 
   const ubos = relatedParties.filter((p) => isUbo(p.role)).sort((a, b) => (b.ownership_percentage ?? -1) - (a.ownership_percentage ?? -1));
@@ -103,12 +107,12 @@ export default function OwnershipControlCard({ client, relatedParties = [] }) {
             <tr className="border-b border-border bg-muted/40 text-left uppercase tracking-wide text-muted-foreground">
               <th className="px-3 py-2">Name</th><th className="px-3 py-2">Role</th><th className="px-3 py-2">Ownership</th>
               <th className="px-3 py-2">Nationality</th><th className="px-3 py-2">Country</th><th className="px-3 py-2">Verification</th>
-              <th className="px-3 py-2">Risk</th><th className="px-3 py-2">Screening</th>
+              <th className="px-3 py-2">Risk</th><th className="px-3 py-2">Screening</th><th className="px-3 py-2">As customer</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {rows.length === 0 ? (
-              <tr><td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">No UBOs or directors recorded</td></tr>
+              <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">No UBOs or directors recorded</td></tr>
             ) : rows.map((p) => (
               <tr key={`${p.id}-${p.role}`}>
                 <td className="px-3 py-2 font-medium">{p.full_name || '—'}</td>
@@ -119,6 +123,12 @@ export default function OwnershipControlCard({ client, relatedParties = [] }) {
                 <td className="px-3 py-2">{label(p.verification_status)}</td>
                 <td className="px-3 py-2"><RiskBadge risk={p.risk_classification} /></td>
                 <td className={`px-3 py-2 ${SCREENING_CLS[p.screening_status] || ''}`}>{SCREENING[p.screening_status] || label(p.screening_status)}</td>
+                <td className="px-3 py-2">{asCustomer[p.id] ? (
+                  <Link to={toClientView(asCustomer[p.id].client_id, 'work')} className="text-primary hover:underline">
+                    {asCustomer[p.id].band ? `${asCustomer[p.id].band}${asCustomer[p.id].score != null ? ` (${asCustomer[p.id].score})` : ''}` : 'Customer'}
+                    {asCustomer[p.id].open_alerts > 0 && <span className="ml-1 font-medium text-amber-700">· {asCustomer[p.id].open_alerts} open alert{asCustomer[p.id].open_alerts === 1 ? '' : 's'}</span>}
+                  </Link>
+                ) : <span className="text-muted-foreground">—</span>}</td>
               </tr>
             ))}
           </tbody>
