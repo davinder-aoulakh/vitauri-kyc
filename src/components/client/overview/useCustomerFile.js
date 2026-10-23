@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 
 // Sections used by the customer-file Overview, the Cases tab and the header. One shared query per client.
-const SECTIONS = ['related_parties', 'tm_cases', 'alerts', 'fiu_reports', 'fiu_artefacts', 'edr_triggers', 'timeline'];
+const SECTIONS = ['related_parties', 'kyc_cases', 'tm_cases', 'alerts', 'fiu_reports', 'fiu_artefacts', 'edr_triggers', 'decisions', 'timeline'];
 
 export function useCustomerFile(clientId, enabled) {
   return useQuery({

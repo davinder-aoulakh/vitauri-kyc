@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { toAlert, toClient, toKycCase, toReport, toTmCase, toReviewPlanner } from '@/lib/routes';
+import { toAlert, toClient, toClientView, toKycCase, toReport, toTmCase, toReviewPlanner } from '@/lib/routes';
 
 /** The signed-in user's work queue (getMyWork). Shared by the My work page and the sidebar badge. */
 export function useMyWork(tenantId, enabled = true) {
@@ -30,7 +30,7 @@ export function workItemRoute(item) {
     case 'tm_case': return toTmCase(item.id);
     case 'kyc_case': return toKycCase(item.id);
     case 'edr': return item.client_id ? toClient(item.client_id) : toReviewPlanner('edr');
-    case 'profile': return item.client_id ? toClient(item.client_id, 'profile') : null;
+    case 'profile': return item.client_id ? toClientView(item.client_id, 'profile') : null;
     case 'fiu_report': return toReport(item.id);
     case 'outreach': return item.kyc_case_id ? toKycCase(item.kyc_case_id, 1) : null;
     default: return null;

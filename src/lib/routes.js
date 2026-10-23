@@ -5,6 +5,8 @@ const q = (params) => {
 };
 
 export const toClient = (id, tab) => `/client/${id}${q({ tab })}`;
+/** Customer 360 sub-view: summary | transactions | profile | work | network | timeline. */
+export const toClientView = (id, view) => `/client/${id}${q({ tab: 'overview', view })}`;
 export const toKycCase = (id, step) => `/case/${id}${q({ step })}`;
 export const toAlert = (id) => `/tm/alerts${q({ alert: id })}`;
 export const toAlerts = (filter) => `/tm/alerts${q({ filter })}`;

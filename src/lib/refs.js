@@ -1,7 +1,7 @@
 // Source references used by AI and evidence ("txn:<id>", "alert:<id>", ...) → readable labels and routes.
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { toAlert, toClient, toCoverage, toKycCase, toRule } from '@/lib/routes';
+import { toAlert, toClient, toClientView, toCoverage, toKycCase, toRule } from '@/lib/routes';
 
 export function parseRef(ref) {
   const s = String(ref || '');
@@ -26,7 +26,7 @@ const KINDS = {
       r.amount != null ? `${Number(r.amount).toLocaleString()} ${r.currency || ''}`.trim() : null,
       r.counterparty_name || null,
     ].filter(Boolean).join(' · '),
-    route: (r) => (r.client_id ? toClient(r.client_id, 'transactions') : null),
+    route: (r) => (r.client_id ? toClientView(r.client_id, 'transactions') : null),
   },
   client: { entity: 'Client', label: (r) => r.full_name || 'Customer', route: (r) => toClient(r.id) },
   kyc: {
@@ -37,7 +37,7 @@ const KINDS = {
   profile: {
     entity: 'ExpectedProfile',
     label: (r) => `Expected profile v${r.version ?? '?'}${r.status && r.status !== 'approved' ? ` (${r.status})` : ''}`,
-    route: (r) => (r.client_id ? toClient(r.client_id, 'profile') : null),
+    route: (r) => (r.client_id ? toClientView(r.client_id, 'profile') : null),
   },
   screening: {
     entity: 'ScreeningHit',
