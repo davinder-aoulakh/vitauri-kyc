@@ -57,7 +57,10 @@ export default async function (req) {
       const status = mode === 'draft' ? 'draft' : 'proposed';
       let row;
       if (caseDraft) {
-        row = await E.ExpectedProfile.update(caseDraft.id, { ...overrides, status, proposed_by_user_id: auth.actorUserId, proposed_by_name: auth.actorName });
+        // The analyst who drafted the profile stays the proposer, so the sign-off approver is the second pair of eyes.
+        const proposer = mode === 'draft' || !caseDraft.proposed_by_user_id
+          ? { proposed_by_user_id: auth.actorUserId, proposed_by_name: auth.actorName } : {};
+        row = await E.ExpectedProfile.update(caseDraft.id, { ...overrides, status, ...proposer });
         row = { ...caseDraft, ...overrides, ...(row || {}), status };
       } else {
         const latest = asList(await E.ExpectedProfile.filter({ tenant_id: tenantId, client_id: client.id }, '-version', 1))[0];
