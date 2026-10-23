@@ -1,52 +1,196 @@
 {
   "name": "FiuReport",
-  "type": "object",
   "properties": {
-    "tenant_id": {
+    "alert_ids": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "approval": {
+      "description": "Checks and decision recorded at approval",
+      "type": "object"
+    },
+    "approved_at": {
+      "format": "date-time",
       "type": "string"
     },
-    "report_ref": {
-      "type": "string",
-      "description": "e.g. UTR-CW-0931"
-    },
-    "fiu_profile_code": {
-      "type": "string",
-      "enum": [
-        "CW",
-        "NL"
-      ]
-    },
-    "tm_case_id": {
+    "approved_by_user_id": {
       "type": "string"
     },
     "client_id": {
       "type": "string"
     },
-    "alert_ids": {
-      "type": "array",
+    "clock": {
+      "properties": {
+        "decided_at": {
+          "type": "string"
+        },
+        "discovered_at": {
+          "type": "string"
+        },
+        "due_at": {
+          "type": "string"
+        },
+        "escalated_at": {
+          "type": "string"
+        },
+        "executed_at": {
+          "type": "string"
+        },
+        "intended_at": {
+          "type": "string"
+        },
+        "received_at": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "decision_id": {
+      "type": "string"
+    },
+    "didit_report_id": {
+      "type": "string"
+    },
+    "didit_template_code": {
+      "type": "string"
+    },
+    "fields": {
+      "items": {
+        "properties": {
+          "by": {
+            "enum": [
+              "agent",
+              "user",
+              "system"
+            ],
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "filed_document_ids": {
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
     },
-    "type": {
-      "type": "string",
+    "fiu_profile_code": {
       "enum": [
-        "unusual_objective",
-        "unusual_subjective"
-      ]
+        "CW",
+        "NL"
+      ],
+      "type": "string"
+    },
+    "generated": {
+      "properties": {
+        "at": {
+          "type": "string"
+        },
+        "file_hash": {
+          "type": "string"
+        },
+        "file_url": {
+          "type": "string"
+        },
+        "pdf_url": {
+          "type": "string"
+        },
+        "source": {
+          "description": "manual_upload when the XML was generated in the Didit console and uploaded",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "generation_error": {
+      "type": "string"
+    },
+    "generation_error_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "generation_path_missing": {
+      "default": false,
+      "description": "Last goAML generation failed because a Didit endpoint answered 404/405",
+      "type": "boolean"
     },
     "indicators": {
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
     },
-    "version": {
-      "type": "number",
-      "default": 1
+    "kyc_case_id": {
+      "type": "string"
+    },
+    "lateness_reason": {
+      "type": "string"
+    },
+    "missing_fields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "narrative": {
+      "properties": {
+        "citations": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "prepared_by_user_id": {
+      "type": "string"
+    },
+    "received": {
+      "properties": {
+        "at": {
+          "type": "string"
+        },
+        "evidence_url": {
+          "type": "string"
+        },
+        "fiu_reference": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "rejection_reason": {
+      "type": "string"
+    },
+    "report_ref": {
+      "description": "e.g. UTR-CW-0931",
+      "type": "string"
+    },
+    "snapshot": {
+      "type": "object"
     },
     "status": {
-      "type": "string",
+      "default": "draft",
       "enum": [
         "draft",
         "in_review",
@@ -57,123 +201,11 @@
         "accepted",
         "rejected"
       ],
-      "default": "draft"
-    },
-    "fields": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "value": {
-            "type": "string"
-          },
-          "source": {
-            "type": "string"
-          },
-          "by": {
-            "type": "string",
-            "enum": [
-              "agent",
-              "user",
-              "system"
-            ]
-          }
-        }
-      }
-    },
-    "missing_fields": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "narrative": {
-      "type": "object",
-      "properties": {
-        "text": {
-          "type": "string"
-        },
-        "citations": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "clock": {
-      "type": "object",
-      "properties": {
-        "intended_at": {
-          "type": "string"
-        },
-        "executed_at": {
-          "type": "string"
-        },
-        "received_at": {
-          "type": "string"
-        },
-        "discovered_at": {
-          "type": "string"
-        },
-        "escalated_at": {
-          "type": "string"
-        },
-        "decided_at": {
-          "type": "string"
-        },
-        "due_at": {
-          "type": "string"
-        }
-      }
-    },
-    "prepared_by_user_id": {
       "type": "string"
-    },
-    "approved_by_user_id": {
-      "type": "string"
-    },
-    "approved_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "didit_report_id": {
-      "type": "string"
-    },
-    "generated": {
-      "type": "object",
-      "properties": {
-        "at": {
-          "type": "string"
-        },
-        "file_url": {
-          "type": "string"
-        },
-        "file_hash": {
-          "type": "string"
-        },
-        "pdf_url": {
-          "type": "string"
-        },
-        "source": {
-          "type": "string",
-          "description": "manual_upload when the XML was generated in the Didit console and uploaded"
-        }
-      }
     },
     "submitted": {
-      "type": "object",
       "properties": {
         "at": {
-          "type": "string"
-        },
-        "method": {
           "type": "string"
         },
         "by_user_id": {
@@ -181,71 +213,38 @@
         },
         "evidence_url": {
           "type": "string"
-        }
-      }
-    },
-    "received": {
-      "type": "object",
-      "properties": {
-        "fiu_reference": {
-          "type": "string"
         },
-        "at": {
-          "type": "string"
-        },
-        "evidence_url": {
+        "method": {
           "type": "string"
         }
-      }
-    },
-    "rejection_reason": {
-      "type": "string"
-    },
-    "snapshot": {
+      },
       "type": "object"
     },
-    "lateness_reason": {
-      "type": "string"
-    },
-    "generation_error": {
-      "type": "string"
-    },
-    "generation_error_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "approval": {
-      "type": "object",
-      "description": "Checks and decision recorded at approval"
-    },
-    "decision_id": {
+    "submitted_for_approval_at": {
+      "format": "date-time",
       "type": "string"
     },
     "submitted_for_approval_by": {
       "type": "string"
     },
-    "submitted_for_approval_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "generation_path_missing": {
-      "type": "boolean",
-      "default": false,
-      "description": "Last goAML generation failed because a Didit endpoint answered 404/405"
-    },
-    "kyc_case_id": {
+    "tenant_id": {
       "type": "string"
     },
-    "didit_template_code": {
+    "tm_case_id": {
       "type": "string"
-    },
-    "filed_document_ids": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
     },
     "transactions_mapped": {
+      "type": "number"
+    },
+    "type": {
+      "enum": [
+        "unusual_objective",
+        "unusual_subjective"
+      ],
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
       "type": "number"
     }
   },
@@ -254,6 +253,7 @@
     "report_ref",
     "fiu_profile_code"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "data.tenant_id": "{{user.data.tenant_id}}"
