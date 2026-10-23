@@ -1,62 +1,16 @@
 {
   "name": "Client",
-  "type": "object",
   "properties": {
-    "tenant_id": {
+    "assigned_analyst_id": {
+      "description": "FK to User",
       "type": "string"
     },
-    "client_type": {
-      "type": "string",
-      "enum": [
-        "NP",
-        "ORG"
-      ]
-    },
-    "status": {
-      "type": "string",
-      "enum": [
-        "Prospect",
-        "Active",
-        "Inactive",
-        "Former",
-        "Rejected",
-        "Unacceptable"
-      ],
-      "default": "Prospect"
-    },
-    "full_name": {
-      "type": "string",
-      "description": "Full name (NP) or Legal name (ORG). For NP, auto-computed from first_names + last_name."
-    },
-    "first_names": {
-      "type": "string",
-      "description": "NP only"
-    },
-    "last_name": {
-      "type": "string",
-      "description": "NP only"
-    },
-    "initials": {
-      "type": "string",
-      "description": "NP only"
-    },
-    "preferred_name": {
-      "type": "string",
-      "description": "NP only"
-    },
-    "gender": {
-      "type": "string",
-      "enum": [
-        "Unknown",
-        "Male",
-        "Female",
-        "Other"
-      ],
-      "default": "Unknown",
-      "description": "NP only"
+    "business_activity": {
+      "description": "ORG only \u2014 description of the business",
+      "type": "string"
     },
     "category": {
-      "type": "string",
+      "default": "Klant",
       "enum": [
         "Klant",
         "Prospect",
@@ -64,40 +18,157 @@
         "Supplier",
         "Other"
       ],
-      "default": "Klant"
+      "type": "string"
     },
-    "external_id": {
-      "type": "string",
-      "description": "External CRM/system reference ID"
+    "client_segment": {
+      "description": "Peer group for behavioural comparison (e.g. NP_salaried, ORG_retail_SME). Set by compliance; used by future peer-group detection.",
+      "type": "string"
     },
-    "date_of_birth": {
-      "type": "string",
-      "format": "date",
-      "description": "NP only"
+    "client_type": {
+      "enum": [
+        "NP",
+        "ORG"
+      ],
+      "type": "string"
     },
-    "decease_date": {
-      "type": "string",
-      "format": "date",
-      "description": "NP only"
-    },
-    "nationality": {
-      "type": "string",
-      "description": "NP only"
+    "contact_entries": {
+      "description": "Multi-entry communication table \u2014 email/phone entries with a preferred flag per type",
+      "items": {
+        "properties": {
+          "is_preferred": {
+            "default": false,
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "email",
+              "phone",
+              "mobile"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "array"
     },
     "country_of_birth": {
-      "type": "string",
-      "description": "NP only"
-    },
-    "place_of_birth": {
-      "type": "string",
-      "description": "NP only"
+      "description": "NP only",
+      "type": "string"
     },
     "country_of_residence": {
-      "type": "string",
-      "description": "NP only"
+      "description": "NP only",
+      "type": "string"
+    },
+    "current_profile_id": {
+      "description": "ExpectedProfile id",
+      "type": "string"
+    },
+    "customer_risk_band": {
+      "enum": [
+        "Low",
+        "Medium",
+        "High",
+        "Unacceptable"
+      ],
+      "type": "string"
+    },
+    "customer_risk_score": {
+      "type": "number"
+    },
+    "date_of_birth": {
+      "description": "NP only",
+      "format": "date",
+      "type": "string"
+    },
+    "decease_date": {
+      "description": "NP only",
+      "format": "date",
+      "type": "string"
+    },
+    "deleted_at": {
+      "description": "Timestamp of deletion",
+      "format": "date-time",
+      "type": "string"
+    },
+    "deleted_by_user_id": {
+      "description": "FK to User who deleted",
+      "type": "string"
+    },
+    "deletion_reason": {
+      "description": "Reason provided at time of deletion",
+      "type": "string"
+    },
+    "didit_monitoring_job_id": {
+      "description": "Didit async job ID for the most recent enable/disable monitoring request \u2014 used to confirm the outcome via webhook or poll",
+      "type": "string"
+    },
+    "didit_ongoing_monitoring": {
+      "default": "NotEnrolled",
+      "description": "Status of Didit ongoing AML monitoring enrollment for this client",
+      "enum": [
+        "NotEnrolled",
+        "Pending",
+        "Active"
+      ],
+      "type": "string"
+    },
+    "employer_name": {
+      "description": "NP only",
+      "type": "string"
+    },
+    "entity_classification": {
+      "description": "FATCA/CRS \u2014 FFI/NFFE/Active/Passive",
+      "type": "string"
+    },
+    "external_id": {
+      "description": "External CRM/system reference ID",
+      "type": "string"
+    },
+    "fatca_reporting_status": {
+      "type": "string"
+    },
+    "first_names": {
+      "description": "NP only",
+      "type": "string"
+    },
+    "full_name": {
+      "description": "Full name (NP) or Legal name (ORG). For NP, auto-computed from first_names + last_name.",
+      "type": "string"
+    },
+    "gender": {
+      "default": "Unknown",
+      "description": "NP only",
+      "enum": [
+        "Unknown",
+        "Male",
+        "Female",
+        "Other"
+      ],
+      "type": "string"
+    },
+    "id_number": {
+      "description": "NP only",
+      "type": "string"
+    },
+    "id_type": {
+      "description": "NP only \u2014 Passport, ID Card etc",
+      "type": "string"
+    },
+    "initials": {
+      "description": "NP only",
+      "type": "string"
+    },
+    "is_deleted": {
+      "default": false,
+      "description": "Soft-delete flag",
+      "type": "boolean"
     },
     "language": {
-      "type": "string",
+      "default": "en",
       "enum": [
         "en",
         "nl",
@@ -106,252 +177,185 @@
         "es",
         "other"
       ],
-      "default": "en"
+      "type": "string"
     },
-    "id_type": {
-      "type": "string",
-      "description": "NP only \u2014 Passport, ID Card etc"
+    "last_name": {
+      "description": "NP only",
+      "type": "string"
     },
-    "id_number": {
-      "type": "string",
-      "description": "NP only"
-    },
-    "residential_address": {
-      "type": "object",
-      "description": "Structured residential address",
-      "properties": {
-        "country": {
-          "type": "string"
-        },
-        "street": {
-          "type": "string"
-        },
-        "number": {
-          "type": "string"
-        },
-        "zipcode": {
-          "type": "string"
-        },
-        "city": {
-          "type": "string"
-        },
-        "area": {
-          "type": "string"
-        }
-      }
-    },
-    "postal_address": {
-      "type": "object",
-      "description": "Structured postal address (optional, if different from residential)",
-      "properties": {
-        "country": {
-          "type": "string"
-        },
-        "street": {
-          "type": "string"
-        },
-        "number": {
-          "type": "string"
-        },
-        "zipcode": {
-          "type": "string"
-        },
-        "city": {
-          "type": "string"
-        },
-        "area": {
-          "type": "string"
-        }
-      }
-    },
-    "contact_entries": {
-      "type": "array",
-      "description": "Multi-entry communication table \u2014 email/phone entries with a preferred flag per type",
-      "items": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "email",
-              "phone",
-              "mobile"
-            ]
-          },
-          "value": {
-            "type": "string"
-          },
-          "is_preferred": {
-            "type": "boolean",
-            "default": false
-          }
-        }
-      }
-    },
-    "registration_number": {
-      "type": "string",
-      "description": "ORG only \u2014 KvK/Chamber of Commerce"
-    },
-    "lei_code": {
-      "type": "string",
-      "description": "ORG only"
-    },
-    "registered_country": {
-      "type": "string",
-      "description": "ORG only"
-    },
-    "registered_address": {
-      "type": "string",
-      "description": "ORG only"
-    },
-    "sector": {
-      "type": "string",
-      "description": "ORG only"
+    "last_review_date": {
+      "format": "date",
+      "type": "string"
     },
     "legal_form": {
-      "type": "string",
-      "description": "ORG only \u2014 BV, NV, Ltd etc"
+      "description": "ORG only \u2014 BV, NV, Ltd etc",
+      "type": "string"
+    },
+    "lei_code": {
+      "description": "ORG only",
+      "type": "string"
+    },
+    "nationality": {
+      "description": "NP only",
+      "type": "string"
+    },
+    "nature_of_business_code": {
+      "description": "ORG only \u2014 optional NACE/ISIC code",
+      "type": "string"
+    },
+    "next_review_date": {
+      "format": "date",
+      "type": "string"
+    },
+    "occupation": {
+      "description": "NP only",
+      "type": "string"
+    },
+    "place_of_birth": {
+      "description": "NP only",
+      "type": "string"
+    },
+    "postal_address": {
+      "description": "Structured postal address (optional, if different from residential)",
+      "properties": {
+        "area": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "country": {
+          "type": "string"
+        },
+        "number": {
+          "type": "string"
+        },
+        "street": {
+          "type": "string"
+        },
+        "zipcode": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "preferred_name": {
+      "description": "NP only",
+      "type": "string"
+    },
+    "primary_contact_email": {
+      "description": "Mirrors the preferred 'email' entry in contact_entries",
+      "type": "string"
     },
     "primary_contact_name": {
       "type": "string"
     },
-    "primary_contact_email": {
-      "type": "string",
-      "description": "Mirrors the preferred 'email' entry in contact_entries"
-    },
     "primary_contact_phone": {
-      "type": "string",
-      "description": "Mirrors the preferred 'phone'/'mobile' entry in contact_entries"
+      "description": "Mirrors the preferred 'phone'/'mobile' entry in contact_entries",
+      "type": "string"
+    },
+    "registered_address": {
+      "description": "ORG only",
+      "type": "string"
+    },
+    "registered_country": {
+      "description": "ORG only",
+      "type": "string"
+    },
+    "registration_number": {
+      "description": "ORG only \u2014 KvK/Chamber of Commerce",
+      "type": "string"
+    },
+    "residential_address": {
+      "description": "Structured residential address",
+      "properties": {
+        "area": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "country": {
+          "type": "string"
+        },
+        "number": {
+          "type": "string"
+        },
+        "street": {
+          "type": "string"
+        },
+        "zipcode": {
+          "type": "string"
+        }
+      },
+      "type": "object"
     },
     "risk_classification": {
-      "type": "string",
+      "description": "Current risk classification",
       "enum": [
         "Low",
         "Medium",
         "High",
         "Unacceptable"
       ],
-      "description": "Current risk classification"
+      "type": "string"
     },
-    "assigned_analyst_id": {
-      "type": "string",
-      "description": "FK to User"
+    "sector": {
+      "description": "ORG only",
+      "type": "string"
     },
     "source_channel": {
-      "type": "string",
+      "default": "Manual",
       "enum": [
         "Manual",
         "Batch",
         "API_CRM"
       ],
-      "default": "Manual"
-    },
-    "next_review_date": {
-      "type": "string",
-      "format": "date"
-    },
-    "last_review_date": {
-      "type": "string",
-      "format": "date"
-    },
-    "tax_residency": {
-      "type": "string",
-      "description": "FATCA/CRS \u2014 TBD schema"
-    },
-    "tin": {
-      "type": "string",
-      "description": "FATCA/CRS TIN"
-    },
-    "entity_classification": {
-      "type": "string",
-      "description": "FATCA/CRS \u2014 FFI/NFFE/Active/Passive"
-    },
-    "fatca_reporting_status": {
       "type": "string"
     },
-    "is_deleted": {
-      "type": "boolean",
-      "default": false,
-      "description": "Soft-delete flag"
-    },
-    "deleted_at": {
-      "type": "string",
-      "format": "date-time",
-      "description": "Timestamp of deletion"
-    },
-    "deleted_by_user_id": {
-      "type": "string",
-      "description": "FK to User who deleted"
-    },
-    "deletion_reason": {
-      "type": "string",
-      "description": "Reason provided at time of deletion"
-    },
-    "didit_ongoing_monitoring": {
-      "type": "string",
+    "status": {
+      "default": "Prospect",
       "enum": [
-        "NotEnrolled",
-        "Pending",
-        "Active"
-      ],
-      "default": "NotEnrolled",
-      "description": "Status of Didit ongoing AML monitoring enrollment for this client"
-    },
-    "didit_monitoring_job_id": {
-      "type": "string",
-      "description": "Didit async job ID for the most recent enable/disable monitoring request \u2014 used to confirm the outcome via webhook or poll"
-    },
-    "customer_risk_score": {
-      "type": "number"
-    },
-    "customer_risk_band": {
-      "type": "string",
-      "enum": [
-        "Low",
-        "Medium",
-        "High",
+        "Prospect",
+        "Active",
+        "Inactive",
+        "Former",
+        "Rejected",
         "Unacceptable"
-      ]
+      ],
+      "type": "string"
     },
-    "current_profile_id": {
-      "type": "string",
-      "description": "ExpectedProfile id"
+    "tax_residency": {
+      "description": "FATCA/CRS \u2014 TBD schema",
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "tin": {
+      "description": "FATCA/CRS TIN",
+      "type": "string"
     },
     "tipping_off_lock": {
-      "type": "boolean",
-      "default": false
+      "default": false,
+      "type": "boolean"
+    },
+    "tipping_off_locked_at": {
+      "format": "date-time",
+      "type": "string"
     },
     "tipping_off_reason": {
       "type": "string"
     },
-    "tipping_off_locked_at": {
-      "type": "string",
-      "format": "date-time"
-    },
     "tm_enabled": {
-      "type": "boolean",
-      "default": false
-    },
-    "occupation": {
-      "type": "string",
-      "description": "NP only"
-    },
-    "employer_name": {
-      "type": "string",
-      "description": "NP only"
-    },
-    "business_activity": {
-      "type": "string",
-      "description": "ORG only \u2014 description of the business"
-    },
-    "nature_of_business_code": {
-      "type": "string",
-      "description": "ORG only \u2014 optional NACE/ISIC code"
+      "default": false,
+      "type": "boolean"
     }
   },
   "required": [
     "tenant_id",
     "client_type",
     "full_name"
-  ]
+  ],
+  "type": "object"
 }
