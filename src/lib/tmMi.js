@@ -24,15 +24,22 @@ export async function fetchAllRows(entity, query, sort = '-created_date', cap = 
 export async function loadMonth(tenantId, ym) {
   const { from, to } = monthRange(ym);
   const range = { $gte: from.toISOString(), $lte: to.toISOString() };
-  const [alerts, reports, coverage, scenarios, fxMissing] = await Promise.all([
+  const [alerts, reports, coverage, scenarios, fxMissing, cases, openAlerts] = await Promise.all([
     fetchAllRows(base44.entities.TmAlert, { tenant_id: tenantId, created_date: range }),
     fetchAllRows(base44.entities.FiuReport, { tenant_id: tenantId, created_date: range }),
     fetchAllRows(base44.entities.CoverageDay, { tenant_id: tenantId, date: { $gte: format(from, 'yyyy-MM-dd'), $lte: format(to, 'yyyy-MM-dd') }, expected: true }, 'date'),
     fetchAllRows(base44.entities.TmScenario, { tenant_id: tenantId }, 'code', 500),
     // Fiat transactions in the month without fx (excluded from reporting-currency totals).
     base44.entities.Transaction.count({ tenant_id: tenantId, currency_kind: 'fiat', executed_at: range, $or: [{ fx: { $exists: false } }, { fx: null }] }),
+    fetchAllRows(base44.entities.TmCase, { tenant_id: tenantId, created_date: range }),
+    // Backlog is "now", independent of the selected month.
+    fetchAllRows(base44.entities.TmAlert, { tenant_id: tenantId, status: { $in: OPEN_ALERT } }, 'created_date'),
   ]);
-  return { fxMissing: Number(fxMissing) || 0, alerts: alerts.rows, reports: reports.rows, coverage: coverage.rows, scenarios: scenarios.rows, truncated: alerts.truncated || reports.truncated || coverage.truncated };
+  return {
+    fxMissing: Number(fxMissing) || 0, alerts: alerts.rows, reports: reports.rows, coverage: coverage.rows, scenarios: scenarios.rows,
+    cases: cases.rows, openAlerts: openAlerts.rows,
+    truncated: alerts.truncated || reports.truncated || coverage.truncated || cases.truncated || openAlerts.truncated,
+  };
 }
 
 const doneAt = (a) => a.updated_date;
@@ -75,6 +82,69 @@ export function coverageByWeek(days) {
     rows.set(w, r);
   });
   return [...rows.values()].sort((a, b) => a._t - b._t).map((r) => ({ week: r.week, coverage: Math.round((r.ok / r.total) * 100) }));
+}
+
+const median = (xs) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const days1 = (ms) => Math.round((ms / 86400000) * 10) / 10;
+
+/** TM cases opened in the month: how many reached a CO decision and how long it took (days, median and p90). */
+export function caseDecisionStats(cases) {
+  const decided = cases.filter((c) => c.co_decided_at);
+  const durations = decided.map((c) => Math.max(0, new Date(c.co_decided_at) - new Date(c.created_date)));
+  const sorted = [...durations].sort((a, b) => a - b);
+  const p90 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.9) - 1)] : null;
+  return {
+    opened: cases.length, decided: decided.length,
+    reported: decided.filter((c) => c.co_decision === 'report').length,
+    medianDays: durations.length ? days1(median(durations)) : null,
+    p90Days: p90 == null ? null : days1(p90),
+  };
+}
+
+/** Alerts whose deadline passed before they were handled (or are still open past it), grouped by the week the deadline fell in. */
+export function slaBreachesByWeek(alerts) {
+  const now = Date.now();
+  const rows = new Map();
+  alerts.forEach((a) => {
+    if (!a.due_at) return;
+    const due = new Date(a.due_at);
+    const open = OPEN_ALERT.includes(a.status);
+    const breached = open ? due < now : new Date(doneAt(a)) > due;
+    const w = weekKey(a.due_at);
+    const r = rows.get(w) || { week: w, _t: due, due: 0, breached: 0 };
+    r.due += 1; if (breached) r.breached += 1;
+    rows.set(w, r);
+  });
+  return [...rows.values()].sort((a, b) => a._t - b._t).map(({ week, due, breached }) => ({ week, due, breached, pct: due ? Math.round((breached / due) * 100) : 0 }));
+}
+
+export const BACKLOG_BUCKETS = [['0–2 days', 2], ['3–7 days', 7], ['8–30 days', 30], ['Over 30 days', Infinity]];
+/** Open alerts today by age since discovery (or creation). */
+export function backlogAge(openAlerts) {
+  const now = Date.now();
+  const counts = BACKLOG_BUCKETS.map(([label]) => ({ label, count: 0 }));
+  openAlerts.forEach((a) => {
+    const age = (now - new Date(a.discovered_at || a.created_date)) / 86400000;
+    const i = BACKLOG_BUCKETS.findIndex(([, max]) => age <= max);
+    counts[i].count += 1;
+  });
+  const oldest = openAlerts.reduce((m, a) => Math.max(m, now - new Date(a.discovered_at || a.created_date)), 0);
+  return { total: openAlerts.length, buckets: counts, oldestDays: openAlerts.length ? Math.floor(oldest / 86400000) : null };
+}
+
+/** False positives per scenario among alerts closed in the month, worst first. */
+export function fpByScenario(alerts, scenarios) {
+  const byId = new Map(scenarios.map((s) => [s.id, s]));
+  const rows = new Map();
+  alerts.forEach((a) => {
+    if (!FINISHED_ALERT.includes(a.status)) return;
+    const s = byId.get(a.scenario_id);
+    const key = s?.code || 'Other';
+    const r = rows.get(key) || { code: key, name: s?.name || 'No scenario', handled: 0, fp: 0 };
+    r.handled += 1; if (a.status === 'closed_false_positive') r.fp += 1;
+    rows.set(key, r);
+  });
+  return [...rows.values()].map((r) => ({ ...r, pct: r.handled ? Math.round((r.fp / r.handled) * 100) : 0 })).sort((a, b) => b.pct - a.pct || b.handled - a.handled);
 }
 
 /** Status pill for an FIU report: { label, tone }. */
