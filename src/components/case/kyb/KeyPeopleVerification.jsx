@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Copy, Loader2, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { sendCustomerEmail } from '@/lib/tippingOff';
 
 export const keyRoleKind = (role) => (/ubo|beneficial/i.test(role || '') ? 'UBO' : /director|board/i.test(role || '') ? 'Director' : null);
 const STATUS_CLS = {
@@ -29,8 +30,10 @@ export default function KeyPeopleVerification({ client, kycCase, tenant, people,
       const link = `${window.location.origin}/portal/${data.access_token}`;
       setLinks((l) => ({ ...l, [p.id]: link }));
       if (email) {
-        await base44.integrations.Core.SendEmail({
-          from_name: tenant?.email_from_name || tenant?.name || 'Compliance Team',
+        await sendCustomerEmail({
+          tenant,
+          clientId: client.id,
+          caseId: kycCase?.id,
           to: email,
           subject: `Identity verification for ${client.full_name}`,
           body: `<p>Dear ${p.full_name},</p><p>As ${p.role || 'a key person'} of ${client.full_name}, ${tenant?.name || 'we'} need you to verify your identity. It takes a few minutes with your ID document and phone camera.</p><p><a href="${link}">Open your secure verification link</a></p>`,
