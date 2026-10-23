@@ -49,7 +49,7 @@ export default async function (req) {
     const triggerReason = `EDR trigger: ${label}${summary ? ` — ${summary}` : ''}`;
     // Carry the trigger's evidence into the review: what changed (before/after), linked TM alert or case, risk at open.
     const ref = String(trigger.source_ref || '');
-    const alertIds = [trigger.after?.tm_alert_id, ref.startsWith('alert:') ? ref.slice(6) : null].filter(Boolean);
+    const alertIds = [trigger.after?.tm_alert_id, ...(Array.isArray(trigger.after?.tm_alert_ids) ? trigger.after.tm_alert_ids : []), ref.startsWith('alert:') ? ref.slice(6) : null].filter(Boolean);
     const tmCaseId = trigger.after?.tm_case_id || (ref.startsWith('tm_case:') ? ref.slice(8) : null);
     const tmContext = {
       opened_by: 'edr_trigger', at: nowIso,
