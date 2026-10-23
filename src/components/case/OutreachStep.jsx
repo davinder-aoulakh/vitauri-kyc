@@ -29,6 +29,8 @@ import { format, addDays, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import TippingOffBanner from '@/components/shared/TippingOffBanner';
 import { isLocked, fetchLocked, sendCustomerEmail, isLockError } from '@/lib/tippingOff';
+import { buildRequestItem, isVerificationItem } from '@/lib/outreachItems';
+import IdvWorkflowPicker from '@/components/outreach/IdvWorkflowPicker';
 
 
 
@@ -111,6 +113,7 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
 
   // Builder state
   const [selectedItems, setSelectedItems] = useState([]);
+  const [workflowChoice, setWorkflowChoice] = useState({}); // { [libraryItemId]: { idv_workflow_id, idv_workflow_name } }
   const [message, setMessage]     = useState('');
   const [emailSubject, setEmailSubject] = useState('');
   const [channel, setChannel]     = useState('Email');
@@ -222,6 +225,10 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
 
     setSelectedItems(itemIds);
     setSelectedFormTemplate(formTmpl);
+    // A form template may set its own Didit workflow on a verification field.
+    setWorkflowChoice(Object.fromEntries((formTmpl.items || [])
+      .filter(i => i.idv_workflow_id && itemIds.includes(i.outreach_template_id))
+      .map(i => [i.outreach_template_id, { idv_workflow_id: i.idv_workflow_id, idv_workflow_name: i.idv_workflow_name || '' }])));
 
     if (formTmpl.default_deadline_days) {
       setDeadline(format(addDays(new Date(), formTmpl.default_deadline_days), 'yyyy-MM-dd'));
@@ -295,20 +302,11 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
     const tokenExpiry = new Date(deadline);
     tokenExpiry.setDate(tokenExpiry.getDate() + 1);
 
+    // Full copy of each library item, including the Didit workflow and IDV settings the portal needs.
     const items = selectedItems.map((id, idx) => {
-      const item = libraryItems.find(d => d.id === id);
-      return {
-        item_id: id,
-        item_type: item?.item_type || 'document',
-        field_type: item?.field_type || 'file_upload',
-        label: item?.label || id,
-        description: item?.description || '',
-        field_options: item?.field_options || [],
-        validation_required: item?.validation_required || false,
-        validation_accepted_file_types: item?.validation_accepted_file_types || [],
-        status: 'Requested',
-        sort_order: idx,
-      };
+      const item = libraryItems.find(d => d.id === id) || { id };
+      const choice = workflowChoice[id];
+      return buildRequestItem(item, idx, { defaultFieldType: 'file_upload', overrides: choice?.idv_workflow_id ? choice : {} });
     });
 
     await base44.entities.OutreachRequest.create({
@@ -949,7 +947,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
       </Dialog>
 
       {/* ── Builder Dialog ── */}
-      <Dialog open={newOpen} onOpenChange={v => { setNewOpen(v); if (!v) { setAiSuggestions(null); setSelectedItems([]); setMessage(''); setEmailSubject(''); setSelectedEmailTemplate(null); setSelectedFormTemplate(null); } }}>
+      <Dialog open={newOpen} onOpenChange={v => { setNewOpen(v); if (!v) { setAiSuggestions(null); setSelectedItems([]); setWorkflowChoice({}); setMessage(''); setEmailSubject(''); setSelectedEmailTemplate(null); setSelectedFormTemplate(null); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New Outreach Request — {client?.full_name}</DialogTitle>
@@ -1146,6 +1144,21 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                       </label>
                     );
                   })}
+                </div>
+              )}
+              {selectedItemObjects.some(isVerificationItem) && (
+                <div className="mt-2 space-y-2 rounded-lg border border-indigo-100 bg-indigo-50/40 p-2.5">
+                  {selectedItemObjects.filter(isVerificationItem).map(item => (
+                    <div key={item.id} className="space-y-1">
+                      <div className="text-xs font-medium">{item.label}</div>
+                      <IdvWorkflowPicker
+                        compact tenant={tenant} item={item}
+                        value={workflowChoice[item.id]?.idv_workflow_id || ''}
+                        templateWorkflowId={item.idv_workflow_id || ''}
+                        onChange={(v) => setWorkflowChoice(c => ({ ...c, [item.id]: v }))}
+                      />
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
