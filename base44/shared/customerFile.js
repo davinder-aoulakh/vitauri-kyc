@@ -183,7 +183,7 @@ async function loadRelatedParties(E, tenantId, cid) {
   return links.filter((l) => byId[l.related_party_id]).map((l) => {
     const p = byId[l.related_party_id];
     return {
-      id: p.id, full_name: p.full_name, party_type: p.party_type,
+      id: p.id, full_name: p.full_name, party_type: p.party_type, registration_number: p.registration_number || null,
       role: l.role || p.role_in_relationship || null,
       ownership_percentage: l.ownership_percentage ?? p.ownership_percentage ?? null,
       nationality: p.nationality || null, country_of_residence: p.country_of_residence || null,
