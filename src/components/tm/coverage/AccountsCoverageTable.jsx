@@ -15,7 +15,7 @@ export default function AccountsCoverageTable({ rows, start, end }) {
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-border">
         <div>
           <h2 className="text-sm font-semibold">Coverage per account</h2>
-          <p className="text-xs text-muted-foreground">30 days: {start} → {end}</p>
+          <p className="text-xs text-muted-foreground">Daily coverage: {start} → {end}</p>
         </div>
         <CoverageLegend />
       </div>
