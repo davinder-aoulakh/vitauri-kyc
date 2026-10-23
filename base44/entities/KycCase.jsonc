@@ -256,6 +256,10 @@
     "tm_outcome_synced_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "tm_risk_divergence": {
+      "type": "object",
+      "description": "Rationale when the KYC risk rating is below the dynamic monitoring risk band: { kyc_rating, dynamic_band, dynamic_score, rationale, by_user_id, by_name, at }"
     }
   },
   "required": [
