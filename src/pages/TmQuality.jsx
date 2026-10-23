@@ -17,6 +17,7 @@ import ShadowTable from '@/components/tm/quality/ShadowTable';
 import StartSampleDialog from '@/components/tm/quality/StartSampleDialog';
 import AiModelInfo from '@/components/tm/quality/AiModelInfo';
 import ExportMenu from '@/components/tm/quality/ExportMenu';
+import ModelValidationCard, { useModelValidations, nextValidationState } from '@/components/tm/quality/ModelValidationCard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Lock } from 'lucide-react';
 
@@ -45,6 +46,8 @@ export default function TmQuality() {
   const selected = manual.find((s) => s.id === selectedId) || manual.find((s) => s.status === 'open') || null;
   const latest = useMemo(() => latestShadowByScenario(sampleList), [sampleList]);
   const count = (st) => matrix.filter((r) => r.status === st).length;
+  const validations = useModelValidations(tenantId, allowed);
+  const nextValidation = nextValidationState(validations.data?.[0]);
 
   if (!allowed) {
     return <AppShell><EmptyState icon={Lock} title="Not available" description="Quality control needs the TM quality feature to be enabled and the right permission." /></AppShell>;
@@ -83,11 +86,12 @@ export default function TmQuality() {
         {loading && <div className="flex justify-center py-10" role="status"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>}
         {!loading && (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
               <KpiCard label="Covered" value={count('Covered')} accent="bg-success" />
               <KpiCard label="Partial" value={count('Partial')} accent="bg-warning" />
               <KpiCard label="Gap" value={count('Gap')} accent="bg-destructive" />
               <KpiCard label="No data" value={count('No data')} accent="bg-muted-foreground" />
+              <KpiCard label="Next validation" value={validations.isLoading ? '…' : nextValidation.label} accent={nextValidation.tone === 'ok' ? 'bg-success' : nextValidation.tone === 'warn' ? 'bg-warning' : 'bg-destructive'} />
             </div>
             {matrix.length === 0
               ? <EmptyState title="No scenarios yet" description="Add scenarios from the library to see risk coverage." />
@@ -98,6 +102,7 @@ export default function TmQuality() {
                 onReview={review} onComplete={() => call('completeQualitySample', { action: 'complete', sample_id: selected.id }, 'Sample completed', 'complete')} />
             )}
             <AiModelInfo tenant={tenant} />
+            <ModelValidationCard tenantId={tenantId} role={role} />
             <ShadowTable scenarios={scenarioList} latest={latest} canRelease={canRelease} maxPct={maxPct} busy={busy} onRun={runShadow} onRelease={release} />
           </>
         )}
