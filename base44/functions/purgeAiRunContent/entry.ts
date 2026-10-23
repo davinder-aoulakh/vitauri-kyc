@@ -8,7 +8,7 @@ import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 
 const ADMIN_ROLES = ['Compliance Admin', 'Tenant Admin'];
 const BATCH = 200;
-const OPEN_CASE = ['open', 'in_review', 'escalated', 'pending_four_eyes', 'awaiting_info'];
+const OPEN_CASE = ['open', 'investigating', 'pending_co'];
 
 export default async function (req) {
   try {
