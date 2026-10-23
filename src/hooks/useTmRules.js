@@ -22,7 +22,7 @@ export function useTmRulesData(tenantId, enabled) {
   });
   const scenarios = useQuery({
     queryKey: ['tmScenarios', tenantId], enabled: on, staleTime: 60000,
-    queryFn: async () => (await base44.entities.TmScenario.filter({ tenant_id: tenantId }, { sort: 'code', limit: 200 })).items || [],
+    queryFn: async () => (await base44.entities.TmScenario.filter({ tenant_id: tenantId }, { sort: 'code', limit: 1000 })).items || [],
   });
   const risks = useQuery({
     queryKey: ['tmRisks', tenantId], enabled: on, staleTime: 60000,
