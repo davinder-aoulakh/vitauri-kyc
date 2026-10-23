@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Copy, Loader2, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sendCustomerEmail } from '@/lib/tippingOff';
+import IdvWorkflowPicker from '@/components/outreach/IdvWorkflowPicker';
 
 export const keyRoleKind = (role) => (/ubo|beneficial/i.test(role || '') ? 'UBO' : /director|board/i.test(role || '') ? 'Director' : null);
 const STATUS_CLS = {
@@ -19,12 +20,13 @@ export default function KeyPeopleVerification({ client, kycCase, tenant, people,
   const [emails, setEmails] = useState({});
   const [busy, setBusy] = useState(null);
   const [links, setLinks] = useState({});
+  const [wf, setWf] = useState({ idv_workflow_id: '', idv_workflow_name: '' });
 
   const send = async (p) => {
     setBusy(p.id);
     try {
       const email = (emails[p.id] || '').trim();
-      const res = await base44.functions.invoke('sendKeyPersonIdv', { client_id: client.id, related_party_id: p.id, kyc_case_id: kycCase?.id, email });
+      const res = await base44.functions.invoke('sendKeyPersonIdv', { client_id: client.id, related_party_id: p.id, kyc_case_id: kycCase?.id, email, workflow_id: wf.idv_workflow_id || undefined });
       const data = res?.data;
       if (data?.error) throw new Error(data.error);
       const link = `${window.location.origin}/portal/${data.access_token}`;
@@ -56,6 +58,7 @@ export default function KeyPeopleVerification({ client, kycCase, tenant, people,
         <h3 className="text-sm font-semibold">Key people — identity verification</h3>
         <p className="text-xs text-muted-foreground">Each UBO and director verifies their own identity with Didit through a personal link. Results update the related party, not the company.</p>
       </div>
+      <IdvWorkflowPicker compact tenant={tenant} item={{ field_type: 'id_verification' }} value={wf.idv_workflow_id} onChange={setWf} />
       {people.length === 0 ? (
         <p className="text-xs text-muted-foreground">No UBOs or directors recorded. Add them in Related Parties or from the registry list above.</p>
       ) : (
