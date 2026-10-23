@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Copy } from 'lucide-react';
 import InlineError from '@/components/shared/InlineError';
-import { fetchLocked, LOCK_BANNER } from '@/lib/tippingOff';
+import { fetchLocked, LOCK_BANNER, sendCustomerEmail } from '@/lib/tippingOff';
 
 const DEFAULT_ITEMS = 'Source of funds documentation\nSupporting documents for the flagged transactions';
 
@@ -27,8 +27,10 @@ export default function RequestInfoDialog({ open, onOpenChange, run, client, ten
     let emailed = false;
     if (client?.primary_contact_email) {
       try {
-        await base44.integrations.Core.SendEmail({
-          from_name: tenant?.email_from_name || tenant?.name || 'Compliance Team',
+        await sendCustomerEmail({
+          tenant,
+          clientId: client.id,
+          outreachRequestId: res.outreach_id,
           to: client.primary_contact_email,
           subject: `Information needed — ${tenant?.name || 'your account'}`,
           body: `<p>Dear ${client.full_name},</p><p>${message || 'We need some additional information about your account.'}</p><p><a href="${link}">Open your secure portal</a></p>`,
