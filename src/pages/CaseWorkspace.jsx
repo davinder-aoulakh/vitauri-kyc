@@ -369,6 +369,15 @@ export default function CaseWorkspace() {
               </span>
               <StatusBadge status={kycCase.status} />
               <RiskBadge risk={kycCase.risk_classification} />
+              {/* TM: dynamic monitoring risk next to the KYC rating (the KYC rating stays the legal classification). */}
+              {isFeatureEnabled(tenant, 'tm_core') && client?.customer_risk_score != null && (
+                <span
+                  title="Dynamic customer risk from transaction monitoring"
+                  className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary px-2 py-0.5 text-[11px] font-medium text-foreground"
+                >
+                  Monitoring {Math.round(client.customer_risk_score)}{client.customer_risk_band ? ` · ${client.customer_risk_band}` : ''}
+                </span>
+              )}
             </div>
 
             {/* Meta */}
