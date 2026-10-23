@@ -13,6 +13,8 @@ import { useTenant } from '@/lib/tenantContext';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { toast } from '@/components/ui/use-toast';
 import SignOffTmOutcome from '@/components/case/SignOffTmOutcome';
+import SignOffProfilePanel from '@/components/case/tm/SignOffProfilePanel';
+import { canDecideProfile } from '@/lib/profileApproval';
 
 const SIGN_OFF_MATRIX = {
   Low:          'Analyst (self-sign-off)',
@@ -136,15 +138,31 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
       });
     }
     onCaseUpdate?.(prev => ({ ...prev, status: 'Approved', step_8_status: 'complete' }));
-    // TM: propose an expected profile once sign-off is saved. Never blocks sign-off.
+    // TM: propose the expected profile (the step 4 draft when there is one) once sign-off is saved, and approve it
+    // in the same motion when this approver has the authority. Never blocks sign-off.
     try {
       if (isFeatureEnabled(tenant, 'tm_core')) {
-        await base44.functions.invoke('proposeExpectedProfile', {
+        const res = await base44.functions.invoke('proposeExpectedProfile', {
           client_id: kycCase.client_id, case_id: kycCase.id, source: 'kyc_case',
         });
+        const profile = res?.data?.profile;
+        const mayApprove = profile?.id && profile.status === 'proposed' && canDecideProfile({
+          role: currentUser?.app_role, userId: currentUser?.id, tenant,
+          riskClass: client?.risk_classification || kycCase.risk_classification, proposedBy: profile.proposed_by_user_id,
+        });
+        if (mayApprove) {
+          const ap = await base44.functions.invoke('approveExpectedProfile', {
+            profile_id: profile.id, decision: 'approve',
+            rationale: profile.rationale || `Approved with KYC sign-off of ${String(kycCase.case_type || 'case').replace(/_/g, ' ')}${approvalNote ? `: ${approvalNote}` : ''}`,
+          });
+          if (ap?.data?.error) throw new Error(ap.data.error);
+        } else if (profile?.id) {
+          toast({ title: `Expected profile v${profile.version} proposed`, description: 'It waits in My work for an approver with the right authority.' });
+        }
       }
     } catch (e) {
-      console.warn('proposeExpectedProfile failed (sign-off unaffected):', e?.message);
+      console.warn('expected profile propose/approve failed (sign-off unaffected):', e?.message);
+      toast({ title: 'Sign-off saved; the expected profile still needs approval', description: e?.response?.data?.error || e?.message });
     }
     await recordTmDecision('approved');
     setAction(null);
@@ -343,6 +361,7 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
             placeholder="Optional approval comment…"
             className="text-sm min-h-16 resize-none"
           />
+          <SignOffProfilePanel kycCase={kycCase} client={client} currentUser={currentUser} />
           <SignOffTmOutcome kycCase={kycCase} value={amlAssessment} onChange={setAmlAssessment} />
           <div className="flex gap-3">
             <Button className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={approve} disabled={submitting}>
