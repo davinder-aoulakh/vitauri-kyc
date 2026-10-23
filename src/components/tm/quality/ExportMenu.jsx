@@ -24,7 +24,12 @@ export default function ExportMenu({ tenantId, period }) {
         rows(base44.entities.QualitySample, { ...t, created_date: created }, '-created_date'),
       ]);
       const flat = (s) => ({ ...s, items: undefined, item_count: s.items?.length || 0 });
-      const data = { risks, scenarios, rules, backtests, samples: samples.map(flat) };
+      // Server-computed coverage matrix and validation record: the same figures MI and the Quality page use.
+      let coverage_matrix = [];
+      let model_validations = [];
+      try { coverage_matrix = (await base44.functions.invoke('getCoverageMatrix', {}))?.data?.rows || []; } catch { /* export the raw tables only */ }
+      try { model_validations = await rows(base44.entities.ModelValidation, t, '-validated_at'); } catch { /* not available */ }
+      const data = { coverage_matrix, model_validations, risks, scenarios, rules, backtests, samples: samples.map(flat) };
       const name = `tm-model-validation_${period.from}_${period.to}`;
       if (kind === 'json') download(`${name}.json`, JSON.stringify({ tenant_id: tenantId, period, exported_at: new Date().toISOString(), ...data, samples }, null, 2), 'application/json');
       else download(`${name}.csv`, toCsv(data), 'text/csv');
