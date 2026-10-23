@@ -18,7 +18,7 @@ import {
   addMonths, subMonths, differenceInDays, isSameMonth
 } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import EdrProposalsList from '@/components/reviewplanner/EdrProposalsList';
 
@@ -47,7 +47,9 @@ export default function ReviewPlanner() {
   const [filterAnalyst, setFilterAnalyst] = useState('all');
   const [filterRisk, setFilterRisk]       = useState('all');
   const [filterMonth, setFilterMonth]     = useState('all');
-  const [filterStatus, setFilterStatus]   = useState('upcoming'); // 'upcoming'|'overdue'|'all'
+  const [searchParams] = useSearchParams();
+  // ?filter=edr|overdue|all deep-links a status filter (e.g. from the dashboard EDR KPI).
+  const [filterStatus, setFilterStatus]   = useState(() => (['upcoming', 'overdue', 'all', 'edr'].includes(searchParams.get('filter')) ? searchParams.get('filter') : 'upcoming')); // 'upcoming'|'overdue'|'all'|'edr'
 
   // Bulk selection
   const [selected, setSelected] = useState(new Set());
