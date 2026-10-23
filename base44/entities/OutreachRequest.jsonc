@@ -1,161 +1,220 @@
 {
   "name": "OutreachRequest",
-  "type": "object",
   "properties": {
-    "tenant_id": {
+    "access_token": {
+      "description": "Secure unique token for client portal",
       "type": "string"
     },
     "case_id": {
-      "type": "string",
-      "description": "FK to KycCase \u2014 omitted for standalone outreach"
+      "description": "FK to KycCase \u2014 omitted for standalone outreach",
+      "type": "string"
     },
     "client_id": {
       "type": "string"
     },
-    "standalone": {
-      "type": "boolean",
-      "default": false,
-      "description": "True for outreach not linked to a KYC case"
-    },
-    "message": {
-      "type": "string",
-      "description": "Short custom note from analyst \u2014 NOT the email template body"
-    },
-    "email_template_body": {
-      "type": "string",
-      "description": "Resolved email template HTML body stored at creation time \u2014 used by sendEmail instead of message"
-    },
     "deadline": {
-      "type": "string",
-      "format": "date"
+      "format": "date",
+      "type": "string"
     },
     "delivery_channel": {
-      "type": "string",
+      "default": "Email",
       "enum": [
         "Email",
         "SMS",
         "Portal"
       ],
-      "default": "Email"
+      "type": "string"
     },
-    "status": {
-      "type": "string",
-      "enum": [
-        "Draft",
-        "Sent",
-        "Viewed",
-        "Partial_Response",
-        "Complete"
-      ],
-      "default": "Draft"
-    },
-    "access_token": {
-      "type": "string",
-      "description": "Secure unique token for client portal"
-    },
-    "token_expires_at": {
-      "type": "string",
-      "format": "date-time"
+    "email_template_body": {
+      "description": "Resolved email template HTML body stored at creation time \u2014 used by sendEmail instead of message",
+      "type": "string"
     },
     "items": {
-      "type": "array",
       "description": "Requested data points and documents",
       "items": {
-        "type": "object",
         "properties": {
-          "item_id": {
-            "type": "string"
-          },
-          "sort_order": {
-            "type": "number",
-            "description": "Display order within this request"
-          },
-          "item_type": {
-            "type": "string",
-            "enum": [
-              "document",
-              "data_point"
-            ]
-          },
-          "label": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "Requested",
-              "Received",
-              "Verified",
-              "Missing"
-            ]
-          },
-          "response_text": {
-            "type": "string"
-          },
-          "file_url": {
-            "type": "string"
-          },
-          "field_type": {
-            "type": "string",
-            "description": "Rich field type \u2014 controls how the portal renders the input"
-          },
-          "field_options": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Choices for dropdown and multi_select field types"
-          },
-          "validation_required": {
-            "type": "boolean"
-          },
-          "validation_accepted_file_types": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "validation_max_file_size_mb": {
-            "type": "number"
-          },
-          "validation_min_length": {
-            "type": "number"
-          },
-          "validation_max_length": {
-            "type": "number"
-          },
-          "validation_min_value": {
-            "type": "number"
-          },
-          "validation_max_value": {
-            "type": "number"
-          },
           "condition_depends_on_item_id": {
             "type": "string"
           },
           "condition_equals_value": {
             "type": "string"
           },
-          "section_title": {
+          "description": {
+            "type": "string"
+          },
+          "didit_session_id": {
+            "description": "Didit session UUID for this IDV field",
+            "type": "string"
+          },
+          "didit_session_status": {
+            "description": "Raw Didit session status e.g. Approved, Declined, In Review",
+            "type": "string"
+          },
+          "didit_session_url": {
+            "description": "Didit hosted verification URL for this session",
+            "type": "string"
+          },
+          "didit_workflow_id": {
+            "description": "Didit workflow the session was created with (resolved server-side)",
+            "type": "string"
+          },
+          "didit_workflow_name": {
+            "type": "string"
+          },
+          "field_options": {
+            "description": "Choices for dropdown and multi_select field types",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "field_type": {
+            "description": "Rich field type \u2014 controls how the portal renders the input",
+            "type": "string"
+          },
+          "file_url": {
             "type": "string"
           },
           "idv_accepted_doc_types": {
-            "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "type": "array"
           },
-          "idv_min_match_score": {
+          "idv_aml_adverse_media": {
+            "type": "boolean"
+          },
+          "idv_aml_approve_threshold": {
             "type": "number"
+          },
+          "idv_aml_country_weight": {
+            "type": "number"
+          },
+          "idv_aml_dob_weight": {
+            "type": "number"
+          },
+          "idv_aml_hits": {
+            "type": "number"
+          },
+          "idv_aml_match_threshold": {
+            "type": "number"
+          },
+          "idv_aml_name_weight": {
+            "type": "number"
+          },
+          "idv_aml_ongoing_monitoring": {
+            "type": "boolean"
+          },
+          "idv_aml_review_threshold": {
+            "type": "number"
+          },
+          "idv_aml_screenings": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "idv_aml_status": {
+            "type": "string"
+          },
+          "idv_aml_warnings": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "idv_auto_proceed": {
+            "type": "boolean"
+          },
+          "idv_checked_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "idv_confidence": {
+            "type": "number"
+          },
+          "idv_docs_created_for_session": {
+            "description": "Session ID for which Document records have already been created \u2014 dedup guard",
+            "type": "string"
+          },
+          "idv_document_expiry": {
+            "format": "date",
+            "type": "string"
+          },
+          "idv_document_number": {
+            "type": "string"
+          },
+          "idv_document_type": {
+            "type": "string"
+          },
+          "idv_extracted_address": {
+            "description": "Raw Didit address string",
+            "type": "string"
+          },
+          "idv_extracted_dob": {
+            "format": "date",
+            "type": "string"
+          },
+          "idv_extracted_first_name": {
+            "type": "string"
+          },
+          "idv_extracted_gender": {
+            "description": "Raw Didit gender code \u2014 M, F, or U",
+            "type": "string"
+          },
+          "idv_extracted_last_name": {
+            "type": "string"
+          },
+          "idv_extracted_nationality": {
+            "type": "string"
+          },
+          "idv_face_raw": {
+            "type": "object"
+          },
+          "idv_failure_reason": {
+            "type": "string"
+          },
+          "idv_issuing_country": {
+            "type": "string"
+          },
+          "idv_liveness_passed": {
+            "type": "boolean"
+          },
+          "idv_liveness_raw": {
+            "type": "object"
           },
           "idv_liveness_required": {
             "type": "boolean"
           },
-          "idv_auto_proceed": {
-            "type": "boolean"
+          "idv_liveness_score": {
+            "type": "number"
+          },
+          "idv_min_match_score": {
+            "type": "number"
+          },
+          "idv_profile_applied_fields": {
+            "description": "Client profile field keys already applied from this item's IDV extraction \u2014 prevents re-prompting on pipeline re-run",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "idv_provider": {
+            "type": "string"
+          },
+          "idv_similarity_score": {
+            "description": "Face match % score",
+            "type": "number"
+          },
+          "idv_status": {
+            "enum": [
+              "Pending",
+              "Pass",
+              "Fail",
+              "Inconclusive",
+              "Expired"
+            ],
+            "type": "string"
           },
           "idv_workflow_id": {
             "type": "string"
@@ -163,166 +222,114 @@
           "idv_workflow_name": {
             "type": "string"
           },
-          "didit_session_id": {
-            "type": "string",
-            "description": "Didit session UUID for this IDV field"
+          "item_id": {
+            "type": "string"
           },
-          "didit_session_url": {
-            "type": "string",
-            "description": "Didit hosted verification URL for this session"
-          },
-          "didit_session_status": {
-            "type": "string",
-            "description": "Raw Didit session status e.g. Approved, Declined, In Review"
-          },
-          "idv_docs_created_for_session": {
-            "type": "string",
-            "description": "Session ID for which Document records have already been created \u2014 dedup guard"
-          },
-          "idv_status": {
-            "type": "string",
+          "item_type": {
             "enum": [
-              "Pending",
-              "Pass",
-              "Fail",
-              "Inconclusive",
-              "Expired"
-            ]
+              "document",
+              "data_point"
+            ],
+            "type": "string"
           },
-          "idv_similarity_score": {
-            "type": "number",
-            "description": "Face match % score"
+          "kyb_status": {
+            "description": "Didit KYB session status for a kyb_verification item",
+            "type": "string"
           },
-          "idv_confidence": {
+          "kyb_verification_id": {
+            "description": "KybVerification record for a kyb_verification item",
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "response_text": {
+            "type": "string"
+          },
+          "section_title": {
+            "type": "string"
+          },
+          "sort_order": {
+            "description": "Display order within this request",
             "type": "number"
           },
-          "idv_liveness_passed": {
-            "type": "boolean"
-          },
-          "idv_liveness_score": {
-            "type": "number"
-          },
-          "idv_document_type": {
+          "status": {
+            "enum": [
+              "Requested",
+              "Received",
+              "Verified",
+              "Missing"
+            ],
             "type": "string"
           },
-          "idv_document_number": {
-            "type": "string"
-          },
-          "idv_document_expiry": {
-            "type": "string",
-            "format": "date"
-          },
-          "idv_extracted_first_name": {
-            "type": "string"
-          },
-          "idv_extracted_last_name": {
-            "type": "string"
-          },
-          "idv_extracted_dob": {
-            "type": "string",
-            "format": "date"
-          },
-          "idv_extracted_nationality": {
-            "type": "string"
-          },
-          "idv_extracted_gender": {
-            "type": "string",
-            "description": "Raw Didit gender code \u2014 M, F, or U"
-          },
-          "idv_extracted_address": {
-            "type": "string",
-            "description": "Raw Didit address string"
-          },
-          "idv_profile_applied_fields": {
-            "type": "array",
+          "validation_accepted_file_types": {
             "items": {
               "type": "string"
             },
-            "description": "Client profile field keys already applied from this item's IDV extraction \u2014 prevents re-prompting on pipeline re-run"
+            "type": "array"
           },
-          "idv_issuing_country": {
-            "type": "string"
-          },
-          "idv_failure_reason": {
-            "type": "string"
-          },
-          "idv_aml_hits": {
+          "validation_max_file_size_mb": {
             "type": "number"
           },
-          "idv_aml_status": {
-            "type": "string"
-          },
-          "idv_aml_screenings": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            }
-          },
-          "idv_aml_warnings": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            }
-          },
-          "idv_aml_match_threshold": {
+          "validation_max_length": {
             "type": "number"
           },
-          "idv_aml_approve_threshold": {
+          "validation_max_value": {
             "type": "number"
           },
-          "idv_aml_review_threshold": {
+          "validation_min_length": {
             "type": "number"
           },
-          "idv_aml_name_weight": {
+          "validation_min_value": {
             "type": "number"
           },
-          "idv_aml_dob_weight": {
-            "type": "number"
-          },
-          "idv_aml_country_weight": {
-            "type": "number"
-          },
-          "idv_aml_adverse_media": {
+          "validation_required": {
             "type": "boolean"
-          },
-          "idv_aml_ongoing_monitoring": {
-            "type": "boolean"
-          },
-          "idv_checked_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "idv_provider": {
-            "type": "string"
-          },
-          "idv_face_raw": {
-            "type": "object"
-          },
-          "idv_liveness_raw": {
-            "type": "object"
-          },
-          "kyb_verification_id": {
-            "type": "string",
-            "description": "KybVerification record for a kyb_verification item"
-          },
-          "kyb_status": {
-            "type": "string",
-            "description": "Didit KYB session status for a kyb_verification item"
           }
-        }
-      }
+        },
+        "type": "object"
+      },
+      "type": "array"
     },
-    "related_party_id": {
-      "type": "string",
-      "description": "Set when this outreach asks a related party (UBO/director) of an organisation client to verify their identity"
+    "message": {
+      "description": "Short custom note from analyst \u2014 NOT the email template body",
+      "type": "string"
     },
     "recipient_email": {
-      "type": "string",
-      "description": "Recipient override (e.g. the related party's email) instead of the client's primary contact"
+      "description": "Recipient override (e.g. the related party's email) instead of the client's primary contact",
+      "type": "string"
+    },
+    "related_party_id": {
+      "description": "Set when this outreach asks a related party (UBO/director) of an organisation client to verify their identity",
+      "type": "string"
+    },
+    "standalone": {
+      "default": false,
+      "description": "True for outreach not linked to a KYC case",
+      "type": "boolean"
+    },
+    "status": {
+      "default": "Draft",
+      "enum": [
+        "Draft",
+        "Sent",
+        "Viewed",
+        "Partial_Response",
+        "Complete"
+      ],
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "token_expires_at": {
+      "format": "date-time",
+      "type": "string"
     }
   },
   "required": [
     "tenant_id",
     "client_id"
-  ]
+  ],
+  "type": "object"
 }
