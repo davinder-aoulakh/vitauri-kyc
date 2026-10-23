@@ -5,6 +5,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { asList, errorResponse, httpError, loadTenantWithDiditCredentials } from '../../shared/tmAuth.js';
 import { pickWorkflow, isKybEnabled } from '../../shared/diditWorkflows.js';
+import { isClientLocked } from '../../shared/tippingOff.js';
 
 const API = 'https://verification.didit.me';
 const REGISTRY_COUNTRY = /^[A-Z]{2}(-[A-Z0-9]{1,3})?$/;
@@ -32,6 +33,8 @@ export default async function (req) {
     const client = asList(await E.Client.filter({ tenant_id: tenant.id, id: outreach.client_id }, undefined, 1))[0];
     if (!client) throw httpError(404, 'Client not found');
     if (client.client_type !== 'ORG') throw httpError(400, 'Business verification is only available for organisations');
+    // Tipping-off: no new verification while an FIU report locks the customer. Neutral wording, as the customer may see it.
+    if (await isClientLocked(base44, tenant.id, client.id)) throw httpError(423, 'Verification is temporarily unavailable. Please try again later.');
 
     const workflowId = pickWorkflow(tenant, 'kyb', item.idv_workflow_id || tmpl?.idv_workflow_id);
     if (!workflowId) throw httpError(412, 'No Didit KYB workflow is configured. Ask your administrator.');
