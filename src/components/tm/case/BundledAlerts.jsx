@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 import AddAlertPicker from '@/components/tm/case/AddAlertPicker';
 import { alertShortId } from '@/lib/tmCase';
+import { toAlert } from '@/lib/routes';
+import DeadlineChip from '@/components/tm/kit/DeadlineChip';
 
 const WORKABLE = ['open', 'investigating'];
 
@@ -21,7 +23,7 @@ export default function BundledAlerts({ tmCase, alerts, scenarios, canWork, tena
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-              <th className="pb-2 font-medium">Alert</th><th className="pb-2 font-medium">Scenario</th><th className="pb-2 font-medium text-right">Score</th><th className="w-8" />
+              <th className="pb-2 font-medium">Alert</th><th className="pb-2 font-medium">Scenario</th><th className="pb-2 font-medium">Deadline</th><th className="pb-2 font-medium text-right">Score</th><th className="w-8" />
             </tr>
           </thead>
           <tbody>
@@ -29,6 +31,7 @@ export default function BundledAlerts({ tmCase, alerts, scenarios, canWork, tena
               <tr key={a.id} className="border-t border-border">
                 <td className="py-2 pr-2"><Link to={toAlert(a.id)} className="font-mono text-xs text-primary hover:underline">{alertShortId(a)}</Link></td>
                 <td className="py-2 pr-2 truncate max-w-[10rem]">{scenarioName(a)}</td>
+                <td className="py-2 pr-2">{['new', 'triaged', 'in_review', 'escalated'].includes(a.status) ? <DeadlineChip dueAt={a.due_at} expiredOnArrival={a.expired_on_arrival} /> : <span className="text-xs text-muted-foreground">{String(a.status || '').replace(/_/g, ' ')}</span>}</td>
                 <td className="py-2 text-right tabular-nums">{a.score ?? '—'}{total > 0 && a.score ? <span className="text-xs text-muted-foreground"> · {Math.round((a.score / total) * 100)}%</span> : null}</td>
                 <td className="py-2 text-right">
                   {editable && alerts.length > 1 && (
