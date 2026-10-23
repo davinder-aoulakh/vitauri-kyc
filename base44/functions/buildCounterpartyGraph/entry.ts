@@ -6,7 +6,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { writeAudit } from '../../shared/tmAudit.js';
-import { countableTxns, amountInReporting, fetchAll } from '../../shared/tmActuals.js';
+import { countableTxns, amountInReporting } from '../../shared/tmActuals.js';
+import { fetchAll } from '../../shared/tmCoverage.js';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 
 const ADMIN_ROLES = ['Compliance Admin', 'Tenant Admin'];
