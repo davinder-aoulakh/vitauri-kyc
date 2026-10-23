@@ -40,7 +40,7 @@ export default function CounterpartyDrawer({ counterpartyId, open, onOpenChange 
   const { data, isLoading, error, refetch } = useQuery({ queryKey: key, enabled: open && !!tenantId, queryFn: () => fetchCounterparties({ id: counterpartyId }) });
   const cp = data?.counterparty;
   const linkRefs = [cp?.client_id && `client:${cp.client_id}`].filter(Boolean);
-  const linkLabels = useRefLabels(linkRefs);
+  const { data: linkLabels } = useRefLabels(linkRefs);
   const { data: linkedParty } = useQuery({
     queryKey: ['related-party', cp?.related_party_id],
     enabled: !!cp?.related_party_id && !!tenantId,
