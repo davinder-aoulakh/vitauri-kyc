@@ -88,8 +88,8 @@ export default function MonitoringTab({ client }) {
 
   return (
     <div className="space-y-4">
-      {/* Header band: stays in view while switching sub-views. */}
-      <div className="sticky top-0 z-10 -mx-1 px-1 pt-1 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      {/* Header band: risk next to the KYC rating, verification/screening and actions. */}
+      <div>
         <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-5">
             <RiskGauge risk={data.risk} />
@@ -104,7 +104,8 @@ export default function MonitoringTab({ client }) {
             <MonitoringActions client={client} currentUser={currentUser} data={data} onChanged={refresh} />
           </div>
         </div>
-        <div role="tablist" aria-label="Customer views" className="mt-3 flex flex-wrap gap-1 border-b border-border">
+        {/* View switcher stays in view while scrolling. */}
+        <div role="tablist" aria-label="Customer views" className="sticky top-0 z-10 mt-3 flex flex-wrap gap-1 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
           {VIEWS.map((v) => (
             <button
               key={v.key} type="button" role="tab" aria-selected={view === v.key} onClick={() => setView(v.key)}
