@@ -11,6 +11,33 @@ import { Textarea } from '@/components/ui/textarea';
 import { Sparkles, Loader2, Check, Pencil, AlertTriangle, X, ChevronRight, XCircle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
+import { isFeatureEnabled } from '@/lib/featureFlags';
+
+// Steps whose agents get the monitoring context. Never the outreach step (1): its drafts go to the customer.
+const TM_CONTEXT_STEPS = [4, 5, 6, 7, 8];
+
+/** Monitoring facts for the case AI, without anything about FIU reporting (tipping-off). Null when there is none. */
+async function loadTmContext(kycCase) {
+  try {
+    const ctx = (await base44.functions.invoke('getCaseTmContext', { kyc_case_id: kycCase.id }))?.data;
+    if (!ctx?.has_context) return null;
+    const p = ctx.period;
+    return {
+      trigger: ctx.trigger ? { type: ctx.trigger.type, label: ctx.trigger.label, summary: ctx.trigger.summary } : null,
+      period: p ? {
+        from: p.from, basis: p.basis, currency: p.currency, transactions: p.transactions,
+        per_month: p.per_month,
+        expected_profile: p.profile ? { version: p.profile.version, limits: p.profile.limits, breaches: p.profile.breaches, outside_countries: p.profile.outside_countries } : null,
+        alerts: p.alerts ? { total: p.alerts.total, open: p.alerts.open } : null,
+        risk: p.risk, coverage_missing_days: p.coverage_missing_days,
+        new_countries: p.new_countries, new_counterparties: p.new_counterparties,
+      } : null,
+    };
+  } catch (e) {
+    console.warn('AiAssistantPanel: monitoring context unavailable', e);
+    return null;
+  }
+}
 
 const STEP_CONFIGS = {
   1: { agentType: 'OutreachCopilot',        agentLabel: 'Outreach Co-pilot',       description: 'Recommend documents to request and draft outreach email' },
@@ -230,6 +257,10 @@ Review the AML screening results and provide a structured triage analysis:
 5) Recommend overall next steps.
 
 Be specific about the actual hits found. Do not say data is insufficient if hits are present above.`;
+    }
+    if (kycCase?.id && TM_CONTEXT_STEPS.includes(activeStep) && isFeatureEnabled(tenant, 'tm_core')) {
+      const tmContext = await loadTmContext(kycCase);
+      if (tmContext) payload.tmContext = tmContext;
     }
     await invoke(config.agentType, payload);
   }
