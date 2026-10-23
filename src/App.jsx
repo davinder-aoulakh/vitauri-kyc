@@ -50,6 +50,8 @@ import FiuReports from './pages/FiuReports';
 import TmRules from './pages/TmRules';
 import TmQuality from './pages/TmQuality';
 import TmRegression from './pages/TmRegression';
+import MyWork from './pages/MyWork';
+import TmMi from './pages/TmMi';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -113,6 +115,8 @@ const AuthenticatedApp = () => {
       <Route path="/tm/report/:id" element={<FiuReportWorkspace />} />
       <Route path="/tm/rules" element={<TmRules />} />
       <Route path="/tm/quality" element={<TmQuality />} />
+      <Route path="/tm/mi" element={<TmMi />} />
+      <Route path="/work" element={<MyWork />} />
 
       {/* Monitoring / Planning */}
       <Route path="/review-planner" element={<ReviewPlanner />} />

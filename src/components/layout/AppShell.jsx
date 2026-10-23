@@ -9,11 +9,13 @@ import OpsBanner from '@/components/layout/OpsBanner';
 import SessionWatcher from '@/components/layout/SessionWatcher';
 import ProfileFooterCard from '@/components/layout/ProfileFooterCard';
 import AppLogo from '@/components/shared/AppLogo';
+import CommandPalette from '@/components/layout/CommandPalette';
+import { useMyWork } from '@/hooks/useMyWork';
 import {
   LayoutDashboard, FolderOpen, Users, Search, Shield,
   Settings, BarChart3, AlertTriangle, Calendar, Archive,
   ChevronLeft, ChevronRight, Menu, X,
-  Building2, UserCircle, ClipboardList, ScanSearch, Mail, Send, Activity, SlidersHorizontal, ShieldCheck, Briefcase, FileText
+  Building2, UserCircle, ClipboardList, ScanSearch, Mail, Send, Activity, SlidersHorizontal, ShieldCheck, Briefcase, FileText, Inbox, PieChart
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -82,27 +84,42 @@ const navItems = [
 const groupOf = (name) => navItems.find((g) => g.group === name);
 
 // Sidebar when tm_core is on. Items keep their existing permission and feature checks.
+// Work first (what needs me now), then the customer, reviews, monitoring and control.
 const tmNavItems = [
-  groupOf('OVERVIEW'),
+  {
+    group: 'OVERVIEW',
+    items: [
+      { label: 'My Work', icon: Inbox, href: '/work', permission: null, badge: 'myWork' },
+      { label: 'Dashboard', icon: LayoutDashboard, href: '/', permission: null, featureKey: 'dashboard' },
+    ],
+  },
   { group: 'CUSTOMERS', items: groupOf('CLIENTS').items },
+  {
+    group: 'REVIEWS',
+    items: [
+      { label: 'My Cases', icon: FolderOpen, href: '/my-cases', permission: null, featureKey: 'my_cases' },
+      { label: 'All Cases', icon: FolderOpen, href: '/all-cases', permission: 'viewAllTenantCases', featureKey: 'all_cases' },
+      { label: 'Review Planner', icon: Calendar, href: '/review-planner', permission: 'viewAllTenantCases', featureKey: 'review_planner' },
+    ],
+  },
   {
     group: 'MONITORING',
     items: [
+      { label: 'Alerts', icon: AlertTriangle, href: '/tm/alerts', permission: 'tmViewAlerts', badge: 'tmAlerts', featureKey: 'tm_core' },
+      { label: 'Cases', icon: Briefcase, href: '/tm/cases', permission: 'tmViewAlerts', badge: 'tmCases', featureKey: 'tm_core' },
+      { label: 'FIU Reports', icon: FileText, href: '/tm/reports', permission: 'createRunCase', badge: 'fiu', featureKey: 'tm_fiu' }, // FiuArtefact readers
       { label: 'Screening', icon: Shield, href: '/monitoring', permission: null, badge: 'alerts', featureKey: 'monitoring' },
-      { label: 'TM Alerts', icon: AlertTriangle, href: '/tm/alerts', permission: 'tmViewAlerts', badge: 'tmAlerts', featureKey: 'tm_core' },
-      { label: 'TM Cases', icon: Briefcase, href: '/tm/cases', permission: 'tmViewAlerts', featureKey: 'tm_core' },
-      { label: 'FIU Reports', icon: FileText, href: '/tm/reports', permission: 'createRunCase', featureKey: 'tm_fiu' }, // FiuArtefact readers
       { label: 'Transactions', icon: Activity, href: '/transaction-monitoring', permission: null, featureKey: 'transaction_monitoring' },
       { label: 'Batch Screening', icon: ScanSearch, href: '/batch-screening', permission: 'createEditClient', featureKey: 'batch_screening' },
-      { label: 'Review Planner', icon: Calendar, href: '/review-planner', permission: 'viewAllTenantCases', featureKey: 'review_planner' },
     ],
   },
   {
     group: 'CONTROL',
     items: [
-      { label: 'Data Coverage', icon: Activity, href: '/tm/coverage', permission: 'tmViewAlerts', featureKey: 'tm_core' },
       { label: 'Rules', icon: SlidersHorizontal, href: '/tm/rules', anyPermission: ['tmManageRules', 'tmApproveRules'], featureKey: 'tm_rules' },
+      { label: 'Data Coverage', icon: Activity, href: '/tm/coverage', permission: 'tmViewAlerts', featureKey: 'tm_core' },
       { label: 'Quality', icon: ShieldCheck, href: '/tm/quality', permission: 'tmQuality', featureKey: 'tm_quality' },
+      { label: 'Monitoring MI', icon: PieChart, href: '/tm/mi', permission: 'viewMIDashboard', featureKey: 'tm_core' },
     ],
   },
   groupOf('OUTREACH'),
@@ -142,6 +159,14 @@ export default function AppShell({ children }) {
     staleTime: 60000,
   });
 
+  // My work, my TM cases and FIU reports needing action (only when tm_core is on).
+  const tmCoreOnShell = isFeatureEnabled(tenant, 'tm_core');
+  const { data: myWork } = useMyWork(currentUser?.tenant_id, tmCoreOnShell);
+  const myWorkDue = myWork?.due_now || 0;
+  const myTmCases = (myWork?.items || []).filter((i) => i.kind === 'tm_case').length;
+  const fiuToDo = (myWork?.items || []).filter((i) => i.kind === 'fiu_report').length;
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
   const isActive = (href) => {
     if (href === '/') return location.pathname === '/';
     return location.pathname.startsWith(href);
@@ -163,6 +188,20 @@ export default function AppShell({ children }) {
           </div>
         )}
       </div>
+
+      {/* Global search (⌘K), when transaction monitoring is on */}
+      {tmCoreOnShell && (
+        <div className="px-2 pt-3">
+          <button
+            type="button" onClick={() => setPaletteOpen(true)}
+            className={cn('w-full flex items-center gap-2 rounded-md border border-sidebar-border px-2.5 py-1.5 text-xs text-sidebar-foreground/60 hover:text-white hover:bg-sidebar-accent/50 transition-colors', collapsed && 'justify-center px-0')}
+            title="Search (Ctrl+K)"
+          >
+            <Search className="w-4 h-4 flex-shrink-0" />
+            {!collapsed && <><span className="flex-1 text-left">Search…</span><kbd className="text-[10px] font-mono opacity-70">⌘K</kbd></>}
+          </button>
+        </div>
+      )}
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-5">
@@ -212,6 +251,21 @@ export default function AppShell({ children }) {
                       <item.icon className={cn('flex-shrink-0', collapsed ? 'w-5 h-5' : 'w-4 h-4')} />
                       {!collapsed && <span className="truncate">{item.label}</span>}
                     </div>
+                    {item.badge === 'myWork' && myWorkDue > 0 && !collapsed && (
+                      <span className="ml-auto flex-shrink-0 px-2 py-0.5 bg-red-500 text-white text-xs font-semibold rounded-full" title="Due within 24 hours">
+                        {myWorkDue}
+                      </span>
+                    )}
+                    {item.badge === 'tmCases' && myTmCases > 0 && !collapsed && (
+                      <span className="ml-auto flex-shrink-0 px-2 py-0.5 bg-primary/20 text-white text-xs font-semibold rounded-full" title="Cases that need you">
+                        {myTmCases}
+                      </span>
+                    )}
+                    {item.badge === 'fiu' && fiuToDo > 0 && !collapsed && (
+                      <span className="ml-auto flex-shrink-0 px-2 py-0.5 bg-purple-500 text-white text-xs font-semibold rounded-full" title="Reports that need you">
+                        {fiuToDo}
+                      </span>
+                    )}
                     {item.badge === 'tmAlerts' && tmAlertCount > 0 && !collapsed && (
                       <span className="ml-auto flex-shrink-0 px-2 py-0.5 bg-red-500 text-white text-xs font-semibold rounded-full">
                         {tmAlertCount}
@@ -240,6 +294,7 @@ export default function AppShell({ children }) {
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       <SessionWatcher />
+      {tmCoreOnShell && <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />}
       {isOpsViewing && (
         <OpsBanner
           tenantName={tenant?.name}
