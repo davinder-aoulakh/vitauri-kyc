@@ -30,7 +30,7 @@ export default function TmDashboardKpis() {
       <KpiCard label="TM alerts due < 24 h" value={v('alerts_due_24h')} icon={AlertTriangle} accent="bg-destructive" onClick={() => navigate('/tm/alerts?filter=soon')} />
       <KpiCard label="Pending CO decisions" value={v('pending_co')} icon={Gavel} accent="bg-warning" onClick={() => navigate('/tm/cases?filter=pending_co')} />
       {fiuOn && <KpiCard label="FIU reports awaiting submission" value={v('fiu_awaiting_submission')} icon={FileText} accent="bg-primary" onClick={() => navigate('/tm/reports?status=generated')} />}
-      <KpiCard label="EDR proposals" value={v('edr_proposals')} icon={Zap} accent="bg-primary" subtitle="Accept or dismiss in the customer file" />
+      <KpiCard label="EDR proposals" value={v('edr_proposals')} icon={Zap} accent="bg-primary" subtitle="Accept or dismiss" onClick={() => navigate('/review-planner?filter=edr')} />
     </div>
   );
 }
