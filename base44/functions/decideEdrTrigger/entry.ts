@@ -1,5 +1,5 @@
 // decideEdrTrigger — accept or dismiss a proposed EdrTrigger. Requires tm_core.
-// Auth: signed-in user with tmWorkCase; tenant from the user.
+// Auth: signed-in user with tmWorkCase, or a Director; tenant from the user.
 //   accept  { edr_trigger_id }                  -> creates a KycCase (Event_Driven_Review), links it, status accepted
 //   dismiss { edr_trigger_id, dismiss_reason }  -> status dismissed
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
@@ -14,7 +14,7 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
-    const auth = await authenticate(base44, req, body, { roles: WORK_ROLES, allowApiKey: false });
+    const auth = await authenticate(base44, req, body, { roles: [...WORK_ROLES, 'Director'], allowApiKey: false });
     const tenantId = auth.tenantId;
     const tenant = await loadTenant(base44, tenantId);
     if (!isTmEnabled(tenant, 'tm_core')) throw httpError(403, 'Feature tm_core is not enabled');
@@ -47,7 +47,22 @@ export default async function (req) {
     const prevCase = asList(await E.KycCase.filter({ tenant_id: tenantId, client_id: client.id, status: 'Approved' }, '-created_date', 1))[0] || null;
     const dueDate = isoDate(new Date(Date.now() + 30 * 86400000));
     const triggerReason = `EDR trigger: ${label}${summary ? ` — ${summary}` : ''}`;
+    // Carry the trigger's evidence into the review: what changed (before/after), linked TM alert or case, risk at open.
+    const ref = String(trigger.source_ref || '');
+    const alertIds = [trigger.after?.tm_alert_id, ref.startsWith('alert:') ? ref.slice(6) : null].filter(Boolean);
+    const tmCaseId = trigger.after?.tm_case_id || (ref.startsWith('tm_case:') ? ref.slice(8) : null);
+    const tmContext = {
+      opened_by: 'edr_trigger', at: nowIso,
+      score: client.customer_risk_score ?? null, band: client.customer_risk_band || null,
+      trigger: {
+        id: trigger.id, type: trigger.trigger_type, label, summary: summary || null,
+        before: trigger.before || {}, after: trigger.after || {}, source_ref: trigger.source_ref || null, proposed_at: trigger.created_date || null,
+      },
+    };
     const kyc = await E.KycCase.create({
+      tm_context: tmContext,
+      ...(alertIds.length ? { tm_alert_ids: [...new Set(alertIds)] } : {}),
+      ...(tmCaseId ? { tm_case_id: tmCaseId } : {}),
       tenant_id: tenantId, client_id: client.id, case_type: 'Event_Driven_Review', status: 'Draft',
       assigned_analyst_id: prevCase?.assigned_analyst_id || auth.actorUserId, trigger_reason: triggerReason, due_date: dueDate,
       created_by_user_id: auth.actorUserId, previous_case_id: prevCase?.id || null, is_re_onboarding: false,
