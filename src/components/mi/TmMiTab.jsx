@@ -9,7 +9,8 @@ import FxMissingBadge from '@/components/shared/FxMissingBadge';
 import FiuReportsTable from '@/components/mi/FiuReportsTable';
 import { AlertsPerWeekChart, CoverageChart } from '@/components/mi/TmMiCharts';
 import { errorMessage } from '@/lib/tmAlerts';
-import { monthOptions, loadMonth, computeKpis, alertsByWeek, coverageByWeek, buildSupervisorCsv, downloadText } from '@/lib/tmMi';
+import { monthOptions, loadMonth, computeKpis, alertsByWeek, coverageByWeek, buildSupervisorCsv, downloadText, caseDecisionStats, slaBreachesByWeek, backlogAge, fpByScenario } from '@/lib/tmMi';
+import TmMiHandling from '@/components/mi/TmMiHandling';
 import { Download, Loader2, Bell, Percent, Clock, Timer, FileText, FileSearch } from 'lucide-react';
 
 const Card = ({ title, children }) => (
@@ -29,6 +30,9 @@ export default function TmMiTab({ tenantId }) {
   const k = useMemo(() => (d ? computeKpis(d.alerts, d.reports) : null), [d]);
   const weekly = useMemo(() => (d ? alertsByWeek(d.alerts, d.scenarios) : { data: [], codes: [] }), [d]);
   const coverage = useMemo(() => (d ? coverageByWeek(d.coverage) : []), [d]);
+  const handling = useMemo(() => (d ? {
+    decision: caseDecisionStats(d.cases || []), sla: slaBreachesByWeek(d.alerts), backlog: backlogAge(d.openAlerts || []), fp: fpByScenario(d.alerts, d.scenarios),
+  } : null), [d]);
 
   const exportCsv = async () => {
     setExporting(true);
@@ -74,6 +78,7 @@ export default function TmMiTab({ tenantId }) {
             <Card title="Alerts per week by scenario"><AlertsPerWeekChart data={weekly.data} codes={weekly.codes} /></Card>
             <Card title="Coverage % by week"><CoverageChart data={coverage} /></Card>
           </div>
+          {handling && <TmMiHandling {...handling} />}
         </>
       )}
     </div>
