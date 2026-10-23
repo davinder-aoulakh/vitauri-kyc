@@ -29,14 +29,14 @@ export function monthOptions(count = 12) {
   });
 }
 
-/** month 'YYYY-MM' -> calendar bounds plus the 30-day strip window ending at min(month end, yesterday). */
+/** month 'YYYY-MM' -> calendar bounds plus the strip window: the selected calendar month, up to yesterday. */
 export function coverageRange(month) {
   const [y, m] = month.split('-').map(Number);
   const monthStart = toIso(new Date(Date.UTC(y, m - 1, 1)));
   const monthEnd = toIso(new Date(Date.UTC(y, m, 0)));
   const yesterday = addDays(toIso(new Date()), -1);
   const end = monthEnd < yesterday ? monthEnd : yesterday;
-  return { monthStart, monthEnd, end, start: addDays(end, -(STRIP_DAYS - 1)) };
+  return { monthStart, monthEnd, end, start: monthStart <= end ? monthStart : end };
 }
 
 export function stripCells(rows, start, end) {

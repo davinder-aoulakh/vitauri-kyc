@@ -9,6 +9,7 @@ const PILL = {
 };
 
 const SOURCE = { api: 'API', psd2: 'PSD2', upload: 'Upload', manual: 'Manual' };
+const mask = (n) => { const s = String(n || ''); return s.length > 6 ? `…${s.slice(-4)}` : s; };
 
 export default function ConnectionsTable({ rows }) {
   return (
@@ -22,6 +23,7 @@ export default function ConnectionsTable({ rows }) {
           <thead className="text-xs text-muted-foreground">
             <tr className="border-b border-border">
               <th className="text-left font-medium px-4 py-2">Customer</th>
+              <th className="text-left font-medium px-4 py-2">Account</th>
               <th className="text-left font-medium px-4 py-2">Source</th>
               <th className="text-left font-medium px-4 py-2">Status</th>
               <th className="text-left font-medium px-4 py-2">Last upload</th>
@@ -31,6 +33,7 @@ export default function ConnectionsTable({ rows }) {
             {rows.map((r) => (
               <tr key={r.account.id}>
                 <td className="px-4 py-2.5 whitespace-nowrap">{r.customer}</td>
+                <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground" title={r.account.iban_or_number}>{[r.account.institution, mask(r.account.iban_or_number)].filter(Boolean).join(' · ') || '—'}</td>
                 <td className="px-4 py-2.5 whitespace-nowrap">{SOURCE[r.account.source_type] || '—'}{r.conn?.partner ? ` · ${r.conn.partner}` : ''}</td>
                 <td className="px-4 py-2.5">
                   <span className={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap', PILL[r.status.tone])}>{r.status.label}</span>
@@ -41,7 +44,7 @@ export default function ConnectionsTable({ rows }) {
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">No connections yet.</td></tr>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">No connections yet.</td></tr>
             )}
           </tbody>
         </table>

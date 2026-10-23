@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { buildCoverageView, coverageRange, fetchAll } from '@/lib/tmCoverage';
 
 const CLOSED_ALERT = ['closed_false_positive', 'closed_no_action', 'reported'];
+export const LIFECYCLES = ['booked', 'reversed', 'corrected', 'declined', 'intended'];
 
 /** All coverage data for one tenant + month. Every query is tenant-scoped and filtered on the server. */
 export function useCoverageData(tenantId, month, clients, enabled) {
@@ -23,10 +24,16 @@ export function useCoverageData(tenantId, month, clients, enabled) {
         fetchAll((cursor) => base44.entities.TmAlert.filter({ tenant_id: tenantId, status: { $in: CLOSED_ALERT } }, { limit: 1000, cursor, fields: ['transaction_ids'] })),
         base44.entities.TransactionIngestBatch.aggregate({ query: { tenant_id: tenantId, created_date: { $gte: monthFrom, $lte: monthTo } }, sum: ['duplicate_count'] }),
       ]);
+      // Tenant-level lifecycle counts for the month (executed date, or intended date for intended transactions).
+      const lifecycle = Object.fromEntries(await Promise.all(LIFECYCLES.map(async (lc) => {
+        const dateField = lc === 'intended' ? 'intended_at' : 'executed_at';
+        const n = await base44.entities.Transaction.count({ tenant_id: tenantId, lifecycle: lc, [dateField]: { $gte: monthFrom, $lte: monthTo } }).catch(() => null);
+        return [lc, typeof n === 'number' ? n : n?.count ?? null];
+      })));
       const closedTxn = new Set(closedAlerts.flatMap((a) => a.transaction_ids || []));
       const unreviewed = inReview.filter((t) => !closedTxn.has(t.id)).length;
       const duplicates = dupAgg?.rows?.[0]?.sum_duplicate_count || 0;
-      return { ...buildCoverageView({ accounts, rows, connections, uploads, clients, start, end, unreviewed, duplicates }), start, end };
+      return { ...buildCoverageView({ accounts, rows, connections, uploads, clients, start, end, unreviewed, duplicates }), start, end, lifecycle };
     },
   });
 }

@@ -66,7 +66,7 @@ export default function TmCoverage() {
       )}
       {data && (
         <div className={isFetching ? 'space-y-5 opacity-70 transition-opacity' : 'space-y-5 transition-opacity'}>
-          <CoverageKpis kpis={data.kpis} monthLabel={monthLabel} />
+          <CoverageKpis kpis={data.kpis} monthLabel={monthLabel} lifecycle={data.lifecycle} />
           <AccountsCoverageTable rows={data.accountRows} start={data.start} end={data.end} />
           <ConnectionsTable rows={data.accountRows} />
         </div>
