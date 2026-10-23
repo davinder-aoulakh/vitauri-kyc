@@ -1,6 +1,7 @@
 // manageTmCase actions: create, alerts, evidence, notes, escalation and decisions.
 import { asList, httpError, WORK_ROLES } from './tmAuth.js';
 import { safeRecompute } from './tmRisk.js';
+import { proposeTriggers } from './edrTriggers.js';
 import { collectEvidence } from './tmCaseEvidence.js';
 import {
   OPEN_CASE, WORKABLE_CASE, OPEN_ALERT, FOUR_EYES_ROLES, CO_ROLES, roleOf, tenantUsers, tlEntry, commit,
@@ -181,6 +182,22 @@ export async function coDecide(ctx, tmCase, body) {
     { type: 'tm_case_co_decision', before: { status: tmCase.status }, after: { status, co_decision: body.decision } });
   for (const cid of caseClients(tmCase.primary_client_id, tmCase.client_ids || [], tmCase.network_client_ids || [])) {
     await safeRecompute(ctx.base44, { tenantId, tenant, clientId: cid, trigger: 'tm_case_decision', actor: auth });
+  }
+  // A decision to report means the KYC file needs a fresh look: propose an event-driven review (unless one is linked already).
+  if (report && !tmCase.kyc_edr_case_id) {
+    try {
+      const client = asList(await E.Client.filter({ tenant_id: tenantId, id: tmCase.primary_client_id }, undefined, 1))[0];
+      if (client) {
+        await proposeTriggers(E, {
+          tenantId, client, sourceRef: `tm_case:${tmCase.id}`, actor: auth,
+          findings: [{
+            type: 'tm_case', key: `tm_case:${tmCase.id}:report`, before: {},
+            after: { tm_case_id: tmCase.id, tm_case_ref: tmCase.case_ref || null, co_decision: 'report', tm_alert_ids: tmCase.alert_ids || [] },
+            summary: `TM case ${tmCase.case_ref || tmCase.id} decided: report to FIU. Review the KYC file and expected profile.`,
+          }],
+        });
+      }
+    } catch (e) { console.warn('tm_case EDR trigger failed', e?.message || e); }
   }
   return { tm_case_id: tmCase.id, status };
 }
