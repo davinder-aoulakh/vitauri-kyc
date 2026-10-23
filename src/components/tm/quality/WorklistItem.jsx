@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Link } from 'react-router-dom';
+import { toAlert } from '@/lib/routes';
 import { OUTCOME_LABEL } from '@/lib/tmQuality';
 import { Loader2 } from 'lucide-react';
 
@@ -22,7 +23,7 @@ export default function WorklistItem({ item, type, open, userId, scenarios, busy
         <div className="flex-1 min-w-0">
           <div className="truncate">{item.summary || item.ref_id}</div>
           <div className="text-[11px] text-muted-foreground">
-            {item.ref_type} {item.ref_id}{item.ref_type === 'alert' && <> · <Link className="text-primary hover:underline" to="/tm/alerts">alerts</Link></>}
+            {item.ref_type === 'alert' ? <Link className="text-primary hover:underline" to={toAlert(item.ref_id)}>Open alert</Link> : <>{item.ref_type} {item.ref_id}</>}
           </div>
         </div>
         {item.outcome !== 'pending' && <span className="text-xs font-medium whitespace-nowrap">{OUTCOME_LABEL[item.outcome]}</span>}

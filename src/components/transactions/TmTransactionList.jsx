@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { toAlert } from '@/lib/routes';
 import { format } from 'date-fns';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
@@ -93,7 +94,7 @@ export default function TmTransactionList({ tenantId, clients, version, onSelect
                     <td className="px-4 py-3 text-xs text-muted-foreground">{label(tx.category) || '—'}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{tx.counterparty_name || '—'}{tx.counterparty_country && <span className="ml-1.5">{flag(tx.counterparty_country)} {tx.counterparty_country}</span>}</td>
                     <td className="px-4 py-3 text-xs" onClick={(e) => e.stopPropagation()}>
-                      {alert ? <Link className="text-primary hover:underline" to="/tm/alerts" title={alert.title}>{label(alert.status)}</Link> : '—'}
+                      {alert ? <Link className="text-primary hover:underline" to={toAlert(alert.id)} title={alert.title}>{label(alert.status)}</Link> : '—'}
                     </td>
                   </tr>
                 );

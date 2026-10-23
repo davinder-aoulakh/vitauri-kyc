@@ -7,6 +7,7 @@ import { Briefcase, AlertTriangle, FileText, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CASE_STATUS_LABEL } from '@/lib/tmCase';
 import { STATUS_LABEL as FIU_STATUS_LABEL } from '@/lib/fiuReport';
+import { toAlert } from '@/lib/routes';
 
 const OPEN_CASE = ['open', 'investigating', 'pending_co'];
 const OPEN_ALERT = ['new', 'triaged', 'in_review', 'escalated'];
@@ -51,7 +52,7 @@ export default function OpenItemsStrip({ file, clientId, showFiu }) {
           {alerts.map((a) => {
             const overdue = new Date(a.due_at).getTime() < now;
             return (
-              <Item key={`a-${a.id}`} to="/tm/alerts" icon={AlertTriangle} tone={overdue ? 'text-destructive' : 'text-amber-600'} title={a.title || 'TM alert'}>
+              <Item key={`a-${a.id}`} to={toAlert(a.id)} icon={AlertTriangle} tone={overdue ? 'text-destructive' : 'text-amber-600'} title={a.title || 'TM alert'}>
                 <span className={overdue ? 'font-medium text-destructive' : ''}>{overdue ? 'Overdue' : 'Due'} {fmt(a.due_at)}</span>
               </Item>
             );

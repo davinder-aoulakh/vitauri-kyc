@@ -2,7 +2,8 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CASE_STATUS_LABEL } from '@/lib/tmCase';
+import StatusPill from '@/components/tm/kit/StatusPill';
+import { toClient, toTmCases } from '@/lib/routes';
 
 const nameOf = (users, id) => (users || []).find((u) => u.id === id)?.full_name || (id ? 'Unknown user' : 'Not set');
 
@@ -18,16 +19,17 @@ function Meta({ label, value }) {
 export default function CaseHeader({ tmCase, users, client, pill }) {
   return (
     <div className="mb-5 space-y-3">
-      <Link to="/tm/alerts" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="w-3.5 h-3.5" /> Alerts
-      </Link>
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Link to={toTmCases()} className="inline-flex items-center gap-1 hover:text-foreground"><ArrowLeft className="w-3.5 h-3.5" /> Cases</Link>
+        {client && <><span aria-hidden>/</span><Link to={toClient(client.id)} className="hover:text-foreground">{client.full_name}</Link></>}
+      </nav>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-semibold">{tmCase.case_ref || 'Case'}</h1>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{CASE_STATUS_LABEL[tmCase.status] || tmCase.status}</span>
+            <StatusPill status={tmCase.status} />
           </div>
-          <p className="text-sm text-muted-foreground mt-0.5">{tmCase.title || 'Untitled case'}{client ? ` · ${client.full_name}` : ''}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{tmCase.title || 'Untitled case'}{client && <> · <Link to={toClient(client.id)} className="text-primary hover:underline">{client.full_name}</Link></>}</p>
         </div>
         {pill && (
           <span className={cn('inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border',

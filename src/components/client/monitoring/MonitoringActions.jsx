@@ -5,6 +5,7 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import InlineError from '@/components/shared/InlineError';
 import { AlertTriangle, ExternalLink, Loader2 } from 'lucide-react';
+import { toTmCase } from '@/lib/routes';
 
 /** Open the active TmCase, or start an Event_Driven_Review KycCase (same fields as the alert escalation). */
 export default function MonitoringActions({ client, currentUser, data, onChanged }) {
@@ -47,7 +48,7 @@ export default function MonitoringActions({ client, currentUser, data, onChanged
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
         {data.open_tm_case && (
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => navigate(`/transaction-monitoring?case=${data.open_tm_case.id}`)}>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => navigate(toTmCase(data.open_tm_case.id))}>
             <ExternalLink className="h-3.5 w-3.5" /> Open case{data.open_tm_case.case_ref ? ` ${data.open_tm_case.case_ref}` : ''}
           </Button>
         )}
