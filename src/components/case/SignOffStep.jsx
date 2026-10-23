@@ -95,7 +95,8 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
   async function recordTmDecision(outcome) {
     if (!isFeatureEnabled(tenant, 'tm_core')) return;
     try {
-      const showAml = kycCase.case_type === 'Event_Driven_Review' && kycCase.tm_case_id && amlAssessment?.outcome;
+      const hasTmContext = !!kycCase.tm_case_id || (kycCase.tm_alert_ids || []).length > 0 || !!kycCase.tm_context?.trigger;
+      const showAml = kycCase.case_type === 'Event_Driven_Review' && hasTmContext && amlAssessment?.outcome;
       const res = await base44.functions.invoke('recordKycDecision', {
         kyc_case_id: kycCase.id, outcome, ...(showAml ? { aml_assessment: amlAssessment } : {}),
       });

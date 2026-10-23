@@ -15,16 +15,17 @@ const AML_OPTIONS = [
 const NONE = '__none__';
 
 // TM outcome line + optional AML assessment for event-driven reviews opened from a TM case.
-// Renders nothing unless tm_core is on and the case is an EDR with tm_case_id.
+// Renders nothing unless tm_core is on and the case is an EDR with TM context (TM case, alerts or an EDR trigger).
 // value: { outcome, rationale } | null — passed to recordKycDecision as aml_assessment.
 export default function SignOffTmOutcome({ kycCase, value, onChange }) {
   const { tenant } = useTenant();
-  const show = isFeatureEnabled(tenant, 'tm_core') && kycCase?.case_type === 'Event_Driven_Review' && !!kycCase?.tm_case_id;
+  const show = isFeatureEnabled(tenant, 'tm_core') && kycCase?.case_type === 'Event_Driven_Review'
+    && (!!kycCase?.tm_case_id || (kycCase?.tm_alert_ids || []).length > 0 || !!kycCase?.tm_context?.trigger);
   const fiuOn = isFeatureEnabled(tenant, 'tm_fiu');
 
   const { data: tmCase } = useQuery({
     queryKey: ['signoff-tm-case', kycCase?.tm_case_id],
-    enabled: show,
+    enabled: show && !!kycCase?.tm_case_id,
     staleTime: 60000,
     queryFn: async () => (await base44.entities.TmCase.filter({ id: kycCase.tm_case_id }))?.[0] || null,
   });
@@ -36,7 +37,7 @@ export default function SignOffTmOutcome({ kycCase, value, onChange }) {
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Activity className="w-3.5 h-3.5 flex-shrink-0" />
-        The outcome will be recorded on TM case {tmCase?.case_ref || '…'}.
+        {kycCase.tm_case_id ? <>The outcome will be recorded on TM case {tmCase?.case_ref || '…'}.</> : <>This review was opened from monitoring; record the AML assessment with the KYC decision.</>}
       </div>
       <div className="bg-muted/40 border border-border rounded-xl p-3 space-y-2">
         <div className="text-xs font-semibold">AML assessment <span className="font-normal text-muted-foreground">(optional)</span></div>
