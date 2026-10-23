@@ -4,6 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { notificationRoute } from '@/lib/routes';
 import { format, formatDistanceToNow } from 'date-fns';
 
 const TYPE_LABELS = {
@@ -84,8 +85,9 @@ export default function NotificationBell({ userId, tenantId, className, badgeVar
   function handleClick(n) {
     if (!n.is_read) markRead(n);
     setOpen(false);
-    if (n.link_case_id) navigate(`/case/${n.link_case_id}`);
-    else if (n.link_client_id) navigate(`/client/${n.link_client_id}`);
+    // Every link_* field routes (KYC case, client, TM case, alert, FIU report).
+    const to = notificationRoute(n);
+    if (to) navigate(to);
   }
 
   const unreadCount = notifications.length;
