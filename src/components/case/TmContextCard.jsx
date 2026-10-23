@@ -12,6 +12,8 @@ import { toast } from '@/components/ui/use-toast';
 import DeadlineCell from '@/components/tm/alerts/DeadlineCell';
 import EvidenceItem from '@/components/tm/case/EvidenceItem';
 import { CASE_STATUS_LABEL } from '@/lib/tmCase';
+import { toClient, toTmCase, toReport } from '@/lib/routes';
+import ReviewPeriodSection from '@/components/case/tm/ReviewPeriodSection';
 
 const scoreCls = (s) => (s >= 70 ? 'bg-red-100 text-red-700' : s >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-muted text-muted-foreground');
 const noop = () => {};
@@ -38,7 +40,8 @@ export default function TmContextCard({ kycCase, client }) {
   const fiuOn = isFeatureEnabled(tenant, 'tm_fiu');
   const canPrepare = fiuOn && (hasPermission(role, 'tmWorkCase') || hasPermission(role, 'tmApproveFiuReport'));
   const isEdr = kycCase?.case_type === 'Event_Driven_Review';
-  const [open, setOpen] = useState(isEdr);
+  // Reviews start open: the monitoring picture is the point of a periodic or event-driven review.
+  const [open, setOpen] = useState(isEdr || kycCase?.case_type === 'Periodic_Review');
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t); }, []);
@@ -61,7 +64,7 @@ export default function TmContextCard({ kycCase, client }) {
     try {
       const res = (await base44.functions.invoke('prepareFiuReport', { kyc_case_id: kycCase.id })).data;
       qc.invalidateQueries({ queryKey: key });
-      if (res?.report_id) navigate(`/tm/report/${res.report_id}`);
+      if (res?.report_id) navigate(toReport(res.report_id));
     } catch (e) {
       toast({ title: 'Could not prepare FIU report', description: e?.response?.data?.error || e.message, variant: 'destructive' });
     } finally { setBusy(false); }
@@ -73,7 +76,7 @@ export default function TmContextCard({ kycCase, client }) {
         {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         <Activity className="w-4 h-4 text-primary" />
         <span className="text-sm font-semibold flex-1">
-          {tm ? `Opened from TM case ${tm.case_ref || ''}` : 'Transaction monitoring context'}
+          {tm ? `Opened from TM case ${tm.case_ref || ''}` : data.period ? 'Monitoring since last review' : 'Transaction monitoring context'}
         </span>
         {tm && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted">{CASE_STATUS_LABEL[tm.status] || tm.status}</span>}
       </button>
@@ -82,10 +85,13 @@ export default function TmContextCard({ kycCase, client }) {
           {data.tipping_off_locked && (
             <p className="flex items-center gap-1.5 text-xs font-semibold text-red-700"><Lock className="w-3.5 h-3.5" /> Customer communications locked</p>
           )}
+          {data.period && <ReviewPeriodSection period={data.period} />}
+          {(tm || (data.alerts || []).length > 0 || data.profile) && (
           <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
             <RiskPair risk={data.risk} />
             {data.profile && <span className="text-xs text-muted-foreground">Expected profile v{data.profile.version}</span>}
           </div>
+          )}
           {data.profile?.breach_summary && <p className="text-xs text-foreground">{data.profile.breach_summary}</p>}
           {(data.alerts || []).length > 0 && (
             <ul className="divide-y divide-border">
@@ -103,9 +109,9 @@ export default function TmContextCard({ kycCase, client }) {
             <ul>{tm.evidence.map((e) => <EvidenceItem key={e.id} item={e} canEdit={false} busy={false} onAccept={noop} onSave={noop} />)}</ul>
           )}
           <div className="flex flex-wrap gap-2">
-            {tm && <Button asChild variant="outline" size="sm"><Link to={`/tm/case/${tm.id}`}>Open TM case</Link></Button>}
-            <Button asChild variant="outline" size="sm"><Link to={`/client/${clientId}?tab=overview`}>View customer file</Link></Button>
-            {report && <Button asChild size="sm"><Link to={`/tm/report/${report.id}`}>Open FIU report {report.report_ref} · {report.status}</Link></Button>}
+            {tm && <Button asChild variant="outline" size="sm"><Link to={toTmCase(tm.id)}>Open TM case</Link></Button>}
+            <Button asChild variant="outline" size="sm"><Link to={toClient(clientId)}>View customer file</Link></Button>
+            {report && <Button asChild size="sm"><Link to={toReport(report.id)}>Open FIU report {report.report_ref} · {report.status}</Link></Button>}
             {!report && canPrepare && (
               <Button size="sm" disabled={busy} onClick={prepare}>
                 {busy && <Loader2 className="w-4 h-4 animate-spin" />} Prepare FIU report
