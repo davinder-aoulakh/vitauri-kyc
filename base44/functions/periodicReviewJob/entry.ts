@@ -51,6 +51,8 @@ Deno.serve(async (req) => {
         due_date: dueDate,
         previous_case_id: prevCase?.id || null,
         risk_classification: prevCase?.risk_classification || client.risk_classification || null,
+        // Transaction monitoring: dynamic risk at the moment the review opens (only set when TM has scored the client).
+        ...(client.customer_risk_score != null ? { tm_context: { score: client.customer_risk_score, band: client.customer_risk_band || null, opened_by: 'periodic_review', at: new Date().toISOString() } } : {}),
         step_1_status: 'not_started', step_2_status: 'not_started', step_3_status: 'not_started',
         step_4_status: 'not_started', step_5_status: 'not_started', step_6_status: 'not_started',
         step_7_status: 'not_started', step_8_status: 'not_started',
