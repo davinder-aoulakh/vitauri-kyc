@@ -12,6 +12,8 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import FormTemplatePreview from './FormTemplatePreview';
+import IdvWorkflowPicker from '@/components/outreach/IdvWorkflowPicker';
+import { isVerificationItem } from '@/lib/outreachItems';
 
 const CLIENT_TYPES  = ['NP', 'ORG'];
 const CASE_TYPES    = ['Onboarding', 'Periodic_Review', 'Event_Driven_Review', 'Offboarding'];
@@ -52,7 +54,7 @@ function CheckChip({ label, checked, onChange }) {
 }
 
 // Draggable item row
-function ItemRow({ item, index, onRemove, onMoveUp, onMoveDown, isFirst, isLast }) {
+function ItemRow({ item, index, onRemove, onMoveUp, onMoveDown, isFirst, isLast, tenant, onWorkflowChange }) {
   const ft = item.field_type || (item.item_type === 'document' ? 'file_upload' : 'textarea');
   const typeColors = {
     file_upload: 'bg-blue-50 text-blue-700',
@@ -82,6 +84,13 @@ function ItemRow({ item, index, onRemove, onMoveUp, onMoveDown, isFirst, isLast 
       <div className="flex-1 min-w-0">
         <div className="text-xs font-medium truncate">{item.label}</div>
         {item.description && <div className="text-xs text-muted-foreground truncate">{item.description?.replace(/<[^>]*>/g, '')}</div>}
+        {isVerificationItem(item) && tenant && (
+          <div className="mt-1">
+            <IdvWorkflowPicker compact tenant={tenant} item={item}
+              value={item.idv_workflow_id || ''} templateWorkflowId={item._template_workflow_id || ''}
+              onChange={(v) => onWorkflowChange?.(index, v)} />
+          </div>
+        )}
       </div>
       <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', typeColors[ft] || 'bg-slate-50 text-slate-600')}>
         {ft.replace('_', ' ')}
@@ -180,7 +189,8 @@ export default function FormTemplatesTab({ tenant }) {
   async function save() {
     if (!modal?.data?.name) return;
     setSaving(true);
-    const items = (modal.data.items || []).map((it, i) => ({ ...it, sort_order: i }));
+    // _template_workflow_id is display-only (the library field's workflow); the form stores only its own choice.
+    const items = (modal.data.items || []).map(({ _template_workflow_id, ...it }, i) => ({ ...it, sort_order: i })); // eslint-disable-line no-unused-vars
     const d = { ...modal.data, items, tenant_id: tenant.id };
     if (modal.mode === 'add') {
       await base44.entities.OutreachFormTemplate.create(d);
@@ -233,8 +243,10 @@ export default function FormTemplatesTab({ tenant }) {
       idv_accepted_doc_types:         tmpl.idv_accepted_doc_types || [],
       idv_min_match_score:            tmpl.idv_min_match_score ?? 75,
       idv_liveness_required:          tmpl.idv_liveness_required ?? true,
-      idv_workflow_id:                tmpl.idv_workflow_id   || '',
-      idv_workflow_name:              tmpl.idv_workflow_name || '',
+      // Empty = use the workflow set on the library field; the picker can set one for this form only.
+      idv_workflow_id:                '',
+      idv_workflow_name:              '',
+      _template_workflow_id:          tmpl.idv_workflow_id || '',
     };
     setModal(m => ({ ...m, data: { ...m.data, items: [...(m.data.items || []), newItem] } }));
   }
@@ -445,8 +457,10 @@ Only include items whose ids exist in the library list above. Return valid JSON 
                               idv_accepted_doc_types:         lib.idv_accepted_doc_types || [],
                               idv_min_match_score:            lib.idv_min_match_score ?? 75,
                               idv_liveness_required:          lib.idv_liveness_required ?? true,
-                              idv_workflow_id:                lib.idv_workflow_id   || '',
-                              idv_workflow_name:              lib.idv_workflow_name || '',
+                              // The form's own workflow choice is kept; the library field's is shown as the fallback.
+                              idv_workflow_id:                item.idv_workflow_id   || '',
+                              idv_workflow_name:              item.idv_workflow_name || '',
+                              _template_workflow_id:          lib.idv_workflow_id    || '',
                             };
                           });
                           setModal({ mode: 'edit', data: { ...tmpl, items: hydratedItems } });
@@ -613,6 +627,8 @@ Only include items whose ids exist in the library list above. Return valid JSON 
                     onMoveDown={() => moveItem(idx, 1)}
                     isFirst={idx === 0}
                     isLast={idx === (modal.data.items?.length || 0) - 1}
+                    tenant={tenant}
+                    onWorkflowChange={(i, v) => setModal(m => ({ ...m, data: { ...m.data, items: m.data.items.map((it, j) => (j === i ? { ...it, ...v } : it)) } }))}
                   />
                 ))}
                 <Button type="button" variant="outline" size="sm" className="text-xs gap-1.5 w-full"
