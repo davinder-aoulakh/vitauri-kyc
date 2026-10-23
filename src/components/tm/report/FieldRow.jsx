@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { sourceTone, TONE_CLASS } from '@/lib/fiuReport';
 import { cn } from '@/lib/utils';
+import StatusPill from '@/components/tm/kit/StatusPill';
 
 /** One report field. Missing rows (amber) always show an input; filled rows show one in edit mode. */
 export default function FieldRow({ field, missing, editable, editing, busy, onSave }) {
@@ -14,7 +15,7 @@ export default function FieldRow({ field, missing, editable, editing, busy, onSa
     <tr className={cn('border-b border-border last:border-0 align-top', missing && 'bg-amber-50')}>
       <td className="px-3 py-2 text-muted-foreground w-[38%]">
         {label}
-        {missing && <div className="text-[10px] font-mono text-amber-700">{field.path} · required</div>}
+        {missing && <div className="text-[10px] text-amber-700" title={field.path}>Required by the FIU profile</div>}
       </td>
       <td className="px-3 py-2">
         {showInput ? (
@@ -25,7 +26,9 @@ export default function FieldRow({ field, missing, editable, editing, busy, onSa
         ) : <span className="break-words">{field.value}</span>}
       </td>
       <td className="px-3 py-2 w-28">
-        {!missing && <span className={cn('text-[11px] px-2 py-0.5 rounded-full border', TONE_CLASS[tone])}>{field.source || '—'}</span>}
+        {missing
+          ? <StatusPill tone="warning">Input needed</StatusPill>
+          : <span className={cn('text-[11px] px-2 py-0.5 rounded-full border', TONE_CLASS[tone])}>{field.source || '—'}</span>}
       </td>
     </tr>
   );

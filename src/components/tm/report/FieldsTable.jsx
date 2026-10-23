@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import FieldRow from '@/components/tm/report/FieldRow';
+import { fieldLabel } from '@/lib/fiuReport';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 
@@ -42,7 +43,7 @@ function Head({ title, children, onClick, open, collapsible }) {
 
 export default function FieldsTable({ report, editable, editing, busy, onSave, canRefresh, onRefresh }) {
   const [txOpen, setTxOpen] = useState(false);
-  const missing = (report.missing_fields || []).map((p) => ({ path: p, label: p, value: '' }));
+  const missing = (report.missing_fields || []).map((p) => ({ path: p, label: fieldLabel(p), value: '' }));
   const rows = [...missing.map((f) => ({ f, m: true })), ...(report.fields || []).map((f) => ({ f, m: false }))];
   const groups = Object.fromEntries(SECTIONS.map((s) => [s.key, []]));
   rows.forEach((r) => groups[sectionOf(r.f.path)].push(r));

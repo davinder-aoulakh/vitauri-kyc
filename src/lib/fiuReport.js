@@ -14,6 +14,42 @@ export const SUBMISSION_METHODS = [
 
 export const rank = (report) => STATUS_RANK[report?.status] ?? 0;
 
+export const REPORT_TYPE_LABEL = {
+  unusual_objective: 'Unusual transaction report · objective',
+  unusual_subjective: 'Unusual transaction report · subjective',
+};
+
+// Readable labels for goAML paths (mandatory fields); anything else is humanised from the path.
+const FIELD_LABEL = {
+  'reporting_entity.id': 'Reporting entity ID',
+  'report.type': 'Report type',
+  'report.indicator': 'Indicator code',
+  'report.reason': 'Reason for reporting',
+  't_person.first_name': 'Subject first name',
+  't_person.last_name': 'Subject last name',
+  't_person.birthdate': 'Subject date of birth',
+  't_person.nationality1': 'Subject nationality',
+  't_person.identification.number': 'ID document number',
+  't_person.addresses.address.address': 'Subject address',
+  't_entity.name': 'Entity name',
+  't_entity.incorporation_number': 'Registration number',
+  't_from_my_client.from_account.account': 'Customer account number / IBAN',
+  'transaction.date_transaction': 'Transaction date',
+  'transaction.amount_local': 'Transaction amount (local currency)',
+  'transaction.currency_code': 'Transaction currency',
+};
+const SEGMENT = { t_person: 'Subject', t_entity: 'Entity', t_from_my_client: 'From customer', t_to_my_client: 'To customer', reporting_entity: 'Reporting entity' };
+
+export function fieldLabel(path) {
+  const p = String(path || '');
+  if (FIELD_LABEL[p]) return FIELD_LABEL[p];
+  const parts = p.replace(/\[\d+\]/g, '').split('.');
+  const head = SEGMENT[parts[0]] || parts[0].replace(/_/g, ' ');
+  const tail = parts.slice(1).filter((x) => !['address', 'addresses', 'identification'].includes(x) || parts.length < 3).pop() || '';
+  const text = `${head}${tail ? ` ${tail.replace(/_/g, ' ').replace(/\d+$/, '')}` : ''}`.trim();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 export function buildSteps(report) {
   const r = rank(report);
   const missing = (report.missing_fields || []).length;

@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
-import { STATUS_LABEL } from '@/lib/fiuReport';
+import { STATUS_LABEL, REPORT_TYPE_LABEL } from '@/lib/fiuReport';
+import { toClient, toKycCase, toTmCase } from '@/lib/routes';
 import { deadlineState, formatCountdown } from '@/lib/tmAlerts';
 import { cn } from '@/lib/utils';
 
@@ -13,12 +14,13 @@ export default function ReportHeader({ report, fiu, preparedBy, now }) {
   return (
     <div>
       <PageHeader
-        title={`Unusual transaction report · ${fiu?.name || report.fiu_profile_code}`}
-        subtitle={`${report.report_ref} · Draft v${report.version || 1} · Prepared by ${preparedBy || 'the system'}`}
+        title={`${REPORT_TYPE_LABEL[report.type] || 'Unusual transaction report'} · ${fiu?.name || report.fiu_profile_code}`}
+        subtitle={`${report.report_ref} · ${STATUS_LABEL[report.status] || 'Draft'} · v${report.version || 1} · Prepared by ${preparedBy || 'the system'}`}
         actions={(
           <div className="flex items-center gap-3">
-            <Link to={`/tm/case/${report.tm_case_id}`} className="text-sm text-primary hover:underline">Back to case</Link>
-            {report.kyc_case_id && <Link to={`/case/${report.kyc_case_id}`} className="text-sm text-primary hover:underline">KYC case</Link>}
+            {report.tm_case_id && <Link to={toTmCase(report.tm_case_id)} className="text-sm text-primary hover:underline">Back to case</Link>}
+            {report.client_id && <Link to={toClient(report.client_id)} className="text-sm text-primary hover:underline">Customer</Link>}
+            {report.kyc_case_id && <Link to={toKycCase(report.kyc_case_id)} className="text-sm text-primary hover:underline">KYC case</Link>}
           </div>
         )}
       />
