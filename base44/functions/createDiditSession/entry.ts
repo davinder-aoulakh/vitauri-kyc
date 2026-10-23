@@ -2,6 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
 import { authorizeOutreachCaller } from '../../shared/diditSessionAuth.js';
 import { isClientLocked } from '../../shared/tippingOff.js';
+import { pickWorkflow, parseWorkflows } from '../../shared/diditWorkflows.js';
 
 Deno.serve(async (req) => {
   try {
@@ -60,22 +61,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Priority 1: item-level workflow ID (set on the OutreachTemplate field)
-    let resolvedWorkflowId = idv_workflow_id || '';
-
-    // Priority 2: tenant default workflow from didit_workflows array
-    if (!resolvedWorkflowId && tenant?.didit_workflows) {
-      try {
-        // KYB (business) workflows are never used for a person session.
-        const workflows = JSON.parse(tenant.didit_workflows).filter(w => w?.type !== 'kyb');
-        const defaultWf = workflows.find(w => w.is_default) || workflows[0];
-        if (defaultWf?.workflow_id) resolvedWorkflowId = defaultWf.workflow_id;
-      } catch { /* invalid JSON — skip */ }
-    }
-
-    // Priority 3: legacy single workflow_id field
-    if (!resolvedWorkflowId && tenant?.didit_workflow_id) {
-      resolvedWorkflowId = tenant.didit_workflow_id;
+    // Workflow: the one stored on the request item (set from the template, form or request) wins over the
+    // portal-supplied value. pickWorkflow accepts it only when it is one of this tenant's KYC workflows;
+    // otherwise the tenant KYC default, then the legacy single workflow. KYB workflows are never used here.
+    const storedItem = (auth.outreach.items || []).find((i) => i.item_id === item_id);
+    const requestedWorkflowId = storedItem?.idv_workflow_id || idv_workflow_id || '';
+    const resolvedWorkflowId = pickWorkflow(tenant, 'kyc', requestedWorkflowId) || '';
+    const resolvedWorkflowName = parseWorkflows(tenant).find((w) => w.workflow_id === resolvedWorkflowId)?.name || '';
+    if (requestedWorkflowId && requestedWorkflowId !== resolvedWorkflowId) {
+      console.warn('createDiditSession: requested workflow is not a KYC workflow of this tenant; using the default instead');
     }
 
     if (!resolvedWorkflowId) {
@@ -165,6 +159,8 @@ Deno.serve(async (req) => {
                 didit_session_status: 'Not Started',
                 idv_status:           'Pending',
                 idv_provider:         'didit',
+                didit_workflow_id:    resolvedWorkflowId,
+                didit_workflow_name:  resolvedWorkflowName,
               }
             : it
         );
