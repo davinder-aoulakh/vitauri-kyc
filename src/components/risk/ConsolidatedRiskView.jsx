@@ -10,6 +10,7 @@ import { AlertTriangle, CheckCircle, Loader2, ArrowRight, User, Building2 } from
 import { cn } from '@/lib/utils';
 import { RISK_COLORS } from '@/lib/riskColors';
 import { ALL_INDICATORS } from './IndicatorPicker';
+import RiskDivergenceGuard from './RiskDivergenceGuard';
 
 const RISK_ORDER = ['Unacceptable', 'High', 'Medium', 'Low'];
 
@@ -32,6 +33,8 @@ export default function ConsolidatedRiskView({
   const [overrideApplied, setOverrideApplied] = useState(!!persistedOverride?.level);
   const [saving, setSaving] = useState(false);
   const [proceeding, setProceeding] = useState(false);
+  // TM: a rating below the dynamic monitoring band needs a rationale before proceeding.
+  const [divergenceOk, setDivergenceOk] = useState(true);
 
   // Per-entity summaries
   const entitySummaries = entities.map(e => {
@@ -226,10 +229,12 @@ export default function ConsolidatedRiskView({
         )}
       </div>
 
+      <RiskDivergenceGuard kycCase={kycCase} client={client} currentUser={currentUser} rating={finalConsolidated} onReadyChange={setDivergenceOk} />
+
       {/* Proceed Button */}
       <Button
         className="w-full gap-2"
-        disabled={!finalConsolidated || proceeding}
+        disabled={!finalConsolidated || proceeding || !divergenceOk}
         onClick={proceedToControlMeasures}
       >
         {proceeding
