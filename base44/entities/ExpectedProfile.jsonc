@@ -56,8 +56,19 @@
         "type": "string"
       }
     },
+    "countries_out": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Expected countries for outbound transfers abroad (ISO2); allowed_countries covers all counterparties"
+    },
     "cash_max_month": {
       "type": "number"
+    },
+    "max_single_txn": {
+      "type": "number",
+      "description": "Largest expected single transaction (profile currency)"
     },
     "expected_categories": {
       "type": "array",
