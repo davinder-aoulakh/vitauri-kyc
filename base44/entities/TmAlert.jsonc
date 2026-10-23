@@ -1,45 +1,140 @@
 {
   "name": "TmAlert",
-  "type": "object",
   "properties": {
-    "tenant_id": {
+    "ai_insufficient_evidence": {
+      "default": false,
+      "type": "boolean"
+    },
+    "ai_missing": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "ai_proposal": {
+      "enum": [
+        "escalate",
+        "close",
+        "request_info",
+        "insufficient_evidence"
+      ],
+      "type": "string"
+    },
+    "ai_reason_refs": {
+      "description": "AI triage reasons with their cited sources",
+      "items": {
+        "properties": {
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "ai_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "ai_run_id": {
+      "type": "string"
+    },
+    "assigned_to_user_id": {
       "type": "string"
     },
     "client_id": {
       "type": "string"
     },
-    "transaction_ids": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+    "close_reason": {
+      "type": "string"
     },
-    "rule_ids": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+    "closed_by_user_id": {
+      "type": "string"
     },
-    "scenario_id": {
+    "dedupe_key": {
       "type": "string"
     },
     "didit_transaction_ids": {
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "type": "array"
     },
-    "title": {
+    "discovered_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "due_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "executed_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "expired_on_arrival": {
+      "default": false,
+      "type": "boolean"
+    },
+    "indicator_type": {
+      "enum": [
+        "objective",
+        "subjective"
+      ],
+      "type": "string"
+    },
+    "intended_at": {
+      "description": "Intended (payment instruction) time, when known \u2014 first moment of the deadline clock",
+      "format": "date-time",
+      "type": "string"
+    },
+    "phase": {
+      "description": "Deadline clock phase: escalate | investigate | report",
+      "type": "string"
+    },
+    "priority": {
+      "type": "number"
+    },
+    "received_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ref": {
+      "description": "Human-readable reference AL-<year>-<seq>, per tenant",
+      "type": "string"
+    },
+    "rule_ids": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "scenario_id": {
       "type": "string"
     },
     "score": {
       "type": "number"
     },
-    "priority": {
-      "type": "number"
+    "source": {
+      "default": "didit_rule",
+      "enum": [
+        "didit_rule",
+        "profile_deviation",
+        "manual",
+        "quality_sample"
+      ],
+      "type": "string"
     },
     "status": {
-      "type": "string",
+      "default": "new",
       "enum": [
         "new",
         "triaged",
@@ -49,124 +144,29 @@
         "escalated",
         "reported"
       ],
-      "default": "new"
-    },
-    "indicator_type": {
-      "type": "string",
-      "enum": [
-        "objective",
-        "subjective"
-      ]
-    },
-    "ai_proposal": {
-      "type": "string",
-      "enum": [
-        "escalate",
-        "close",
-        "request_info",
-        "insufficient_evidence"
-      ]
-    },
-    "ai_reasons": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "ai_run_id": {
       "type": "string"
     },
-    "assigned_to_user_id": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "title": {
       "type": "string"
     },
     "tm_case_id": {
       "type": "string"
     },
-    "close_reason": {
-      "type": "string"
-    },
-    "closed_by_user_id": {
-      "type": "string"
-    },
-    "intended_at": {
-      "type": "string",
-      "format": "date-time",
-      "description": "Intended (payment instruction) time, when known \u2014 first moment of the deadline clock"
-    },
-    "executed_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "received_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "discovered_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "due_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "dedupe_key": {
-      "type": "string"
-    },
-    "source": {
-      "type": "string",
-      "enum": [
-        "didit_rule",
-        "profile_deviation",
-        "manual",
-        "quality_sample"
-      ],
-      "default": "didit_rule"
-    },
-    "ai_reason_refs": {
-      "type": "array",
-      "description": "AI triage reasons with their cited sources",
-      "items": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "type": "string"
-          },
-          "source_refs": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      }
-    },
-    "ai_insufficient_evidence": {
-      "type": "boolean",
-      "default": false
-    },
-    "ai_missing": {
-      "type": "array",
+    "transaction_ids": {
       "items": {
         "type": "string"
-      }
-    },
-    "phase": {
-      "type": "string",
-      "description": "Deadline clock phase: escalate | investigate | report"
-    },
-    "expired_on_arrival": {
-      "type": "boolean",
-      "default": false
-    },
-    "ref": {
-      "type": "string",
-      "description": "Human-readable reference AL-<year>-<seq>, per tenant"
+      },
+      "type": "array"
     }
   },
   "required": [
     "tenant_id",
     "client_id"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "data.tenant_id": "{{user.data.tenant_id}}"
