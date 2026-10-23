@@ -10,6 +10,7 @@
  * - Never mix data across tenants or cases
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { aiLogFields } from '../../shared/aiLog.js';
 
 // ── Token cost guard ───────────────────────────────────────────────────────────
 const DEFAULT_DAILY_TOKEN_CAP = 50_000;
@@ -318,16 +319,21 @@ Deno.serve(async (req) => {
   const outputSummary = JSON.stringify(result).substring(0, 500);
 
   // ── 5. Log AiAgentRun — fire-and-forget so the audit write never delays the response ──
-  base44.asServiceRole.entities.AiAgentRun.create({
-    tenant_id: tenantId,
-    case_id: case_id || null,
-    agent_type,
-    prompt_hash: promptHash,
-    model_used: useFastModel ? 'gpt-5-mini' : 'automatic',
-    tokens_input: tokensInput,
-    tokens_output: tokensOutput,
-    output_summary: outputSummary,
-  }).catch(err => console.error('AiAgentRun log failed:', err));
+  base44.asServiceRole.entities.Tenant.filter({ id: tenantId })
+    .then((rows) => (Array.isArray(rows) ? rows : rows?.items || [])[0] || null)
+    .catch(() => null)
+    .then((tenantRec) => base44.asServiceRole.entities.AiAgentRun.create({
+      tenant_id: tenantId,
+      case_id: case_id || null,
+      agent_type,
+      prompt_hash: promptHash,
+      model_used: useFastModel ? 'gpt-5-mini' : 'automatic',
+      tokens_input: tokensInput,
+      tokens_output: tokensOutput,
+      output_summary: outputSummary,
+      ...aiLogFields({ prompt: fullPrompt, output: result, tenant: tenantRec }),
+    }))
+    .catch(err => console.error('AiAgentRun log failed:', err));
 
   return Response.json({
     output: result,
