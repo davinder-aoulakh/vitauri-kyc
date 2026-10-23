@@ -88,6 +88,11 @@
     "closed_by_user_id": {
       "type": "string"
     },
+    "intended_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Intended (payment instruction) time, when known \u2014 first moment of the deadline clock"
+    },
     "executed_at": {
       "type": "string",
       "format": "date-time"
@@ -152,6 +157,10 @@
     "expired_on_arrival": {
       "type": "boolean",
       "default": false
+    },
+    "ref": {
+      "type": "string",
+      "description": "Human-readable reference AL-<year>-<seq>, per tenant"
     }
   },
   "required": [

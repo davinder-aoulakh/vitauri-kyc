@@ -1,6 +1,7 @@
 // Create or merge the open 'profile_deviation' TmAlert (scenario S-30) for a client.
 import { asList } from './tmAuth.js';
 import { scheduleAutoTriage } from './tmAutoTriage.js';
+import { safeAlertRef } from './tmRefs.js';
 
 const OPEN = ['new', 'triaged', 'in_review'];
 const SYSTEM = { actor_type: 'System', actor_name: 'Profile Deviation Job' };
