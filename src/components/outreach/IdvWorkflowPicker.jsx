@@ -11,9 +11,10 @@ export default function IdvWorkflowPicker({ tenant, item, value, templateWorkflo
   const type = item?.field_type === 'kyb_verification' ? 'kyb' : 'kyc';
   const list = workflowsOfType(tenant, type);
   const def = defaultWorkflow(tenant, type);
-  const current = value || templateWorkflowId || '';
-  const { workflow, source } = effectiveWorkflow(tenant, { ...item, idv_workflow_id: current });
+  const { workflow, source } = effectiveWorkflow(tenant, { ...item, idv_workflow_id: value || templateWorkflowId || '' });
   const fromTemplate = !value && templateWorkflowId && source === 'item';
+  const templateWf = templateWorkflowId && list.find((w) => w.workflow_id === templateWorkflowId);
+  const emptyLabel = templateWf ? `As set on the template — ${templateWf.name}` : `Tenant default${def ? ` — ${def.name}` : ''}`;
 
   if (!list.length) {
     return (
@@ -29,7 +30,7 @@ export default function IdvWorkflowPicker({ tenant, item, value, templateWorkflo
         <ShieldCheck className="h-3 w-3" /> Didit workflow
       </label>
       <select
-        value={current}
+        value={value || ''}
         onChange={(e) => {
           const wf = list.find((w) => w.workflow_id === e.target.value);
           onChange({ idv_workflow_id: e.target.value, idv_workflow_name: wf?.name || '' });
@@ -38,7 +39,7 @@ export default function IdvWorkflowPicker({ tenant, item, value, templateWorkflo
         className="h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
         aria-label="Didit workflow"
       >
-        <option value="">Tenant default{def ? ` — ${def.name}` : ''}</option>
+        <option value="">{emptyLabel}</option>
         {list.map((w) => (
           <option key={w.id || w.workflow_id} value={w.workflow_id}>{w.name}{w.description ? ` — ${w.description}` : ''}</option>
         ))}
