@@ -27,7 +27,7 @@ export default function BundledAlerts({ tmCase, alerts, scenarios, canWork, tena
           <tbody>
             {alerts.map((a) => (
               <tr key={a.id} className="border-t border-border">
-                <td className="py-2 pr-2"><Link to="/tm/alerts" className="font-mono text-xs text-primary hover:underline">{alertShortId(a.id)}</Link></td>
+                <td className="py-2 pr-2"><Link to={toAlert(a.id)} className="font-mono text-xs text-primary hover:underline">{alertShortId(a)}</Link></td>
                 <td className="py-2 pr-2 truncate max-w-[10rem]">{scenarioName(a)}</td>
                 <td className="py-2 text-right tabular-nums">{a.score ?? '—'}{total > 0 && a.score ? <span className="text-xs text-muted-foreground"> · {Math.round((a.score / total) * 100)}%</span> : null}</td>
                 <td className="py-2 text-right">

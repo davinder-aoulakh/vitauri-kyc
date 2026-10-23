@@ -18,7 +18,8 @@ export const PROPOSAL_LABEL = {
   insufficient_evidence: 'Insufficient evidence',
 };
 
-export const shortId = (id) => `AL-${String(id || '').slice(-4).toUpperCase()}`;
+/** Readable alert reference: the stored ref (AL-2026-0412) when present, else a short id. Accepts an alert or an id. */
+export const shortId = (a) => (a && typeof a === 'object' ? a.ref : null) || `AL-${String((a && typeof a === 'object' ? a.id : a) || '').slice(-4).toUpperCase()}`;
 
 /** Server-side query for a filter pill. */
 export function buildAlertQuery(filter, tenantId, userId, now = Date.now()) {

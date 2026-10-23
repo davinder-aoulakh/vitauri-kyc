@@ -56,4 +56,4 @@ export function clockPill(tmCase, indicatorType, now = Date.now()) {
   return { text: `${prefix}: ${PHASE_LABEL[phase] || phase} · ${left}`, overdue: ms < 0 };
 }
 
-export const alertShortId = (id) => `AL-${String(id || '').slice(-4).toUpperCase()}`;
+export const alertShortId = (a) => (a && typeof a === 'object' ? a.ref : null) || `AL-${String((a && typeof a === 'object' ? a.id : a) || '').slice(-4).toUpperCase()}`;

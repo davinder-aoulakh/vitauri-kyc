@@ -33,11 +33,11 @@ export default function AlertsTable({ alerts, clientsById, now, selected, onTogg
                 {canSelect && (
                   <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                     {CLOSABLE_STATUSES.includes(a.status) && (
-                      <Checkbox checked={selected.has(a.id)} onCheckedChange={() => onToggle(a.id)} aria-label={`Select ${shortId(a.id)}`} />
+                      <Checkbox checked={selected.has(a.id)} onCheckedChange={() => onToggle(a.id)} aria-label={`Select ${shortId(a)}`} />
                     )}
                   </td>
                 )}
-                <td className="px-3 py-3 font-mono text-xs">{shortId(a.id)}</td>
+                <td className="px-3 py-3 font-mono text-xs">{shortId(a)}</td>
                 <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                   <Link to={`/client/${a.client_id}?tab=overview`} className="text-primary hover:underline">{client?.full_name || 'Customer'}</Link>
                 </td>

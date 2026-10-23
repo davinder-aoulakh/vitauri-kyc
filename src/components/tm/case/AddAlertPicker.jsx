@@ -17,7 +17,7 @@ export default function AddAlertPicker({ tenantId, onAdd, busy }) {
       <Select value={id} onValueChange={setId}>
         <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder={options.length ? 'Add an open alert' : 'No unlinked alerts'} /></SelectTrigger>
         <SelectContent>
-          {options.map((a) => <SelectItem key={a.id} value={a.id}>{alertShortId(a.id)} · {a.title || 'Alert'}</SelectItem>)}
+          {options.map((a) => <SelectItem key={a.id} value={a.id}>{alertShortId(a)} · {a.title || 'Alert'}</SelectItem>)}
         </SelectContent>
       </Select>
       <Button size="sm" className="h-8 text-xs" disabled={!id || busy} onClick={async () => { if (await onAdd(id)) setId(''); }}>Add</Button>

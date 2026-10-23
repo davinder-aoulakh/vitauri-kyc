@@ -44,8 +44,8 @@ export default function AlertSidePanel({ alert, client, tenantId, userId, canWor
         {alert && (
           <div className="space-y-5">
             <SheetHeader>
-              <SheetTitle>{alert.title || shortId(alert.id)}</SheetTitle>
-              <SheetDescription>{shortId(alert.id)} · {alert.status.replace(/_/g, ' ')}</SheetDescription>
+              <SheetTitle>{alert.title || shortId(alert)}</SheetTitle>
+              <SheetDescription>{shortId(alert)} · {alert.status.replace(/_/g, ' ')}</SheetDescription>
             </SheetHeader>
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <Link to={`/client/${alert.client_id}?tab=overview`} className="text-primary hover:underline font-medium">{client?.full_name || 'Customer'}</Link>
