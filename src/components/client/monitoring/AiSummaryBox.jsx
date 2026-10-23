@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import InlineError from '@/components/shared/InlineError';
 import { Loader2, Sparkles } from 'lucide-react';
+import SourceChips from '@/components/tm/kit/SourceChips';
 
 /** 90-day evidence summary from the TmEvidence agent, with sources and explicit data gaps. */
 export default function AiSummaryBox({ clientId }) {
@@ -38,16 +39,16 @@ export default function AiSummaryBox({ clientId }) {
           <p className="leading-relaxed">{result.summary}</p>
           {result.findings?.length > 0 && (
             <ul className="list-disc space-y-1 pl-5 text-xs">
-              {result.findings.map((f, i) => <li key={i}>{f.text}</li>)}
+              {result.findings.map((f, i) => <li key={i}>{f.text}{f.source_refs?.length > 0 && <SourceChips refs={f.source_refs} className="ml-1.5" max={4} />}</li>)}
             </ul>
           )}
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
             <div className="mb-1 font-semibold">Data gaps</div>
             {result.missing?.length ? <ul className="list-disc pl-4">{result.missing.map((m, i) => <li key={i}>{m}</li>)}</ul> : 'None identified.'}
           </div>
-          <p className="break-words text-[11px] text-muted-foreground">
-            Sources: {result.sources?.length ? result.sources.join(', ') : 'none cited'}
-          </p>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+            Sources: {result.sources?.length ? <SourceChips refs={result.sources} /> : 'none cited'}
+          </div>
         </div>
       )}
     </div>

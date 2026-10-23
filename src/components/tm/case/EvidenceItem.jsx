@@ -4,7 +4,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Check, Pencil, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EVIDENCE_MARK } from '@/lib/tmCase';
-import CounterpartyLink from '@/components/tm/counterparty/CounterpartyLink';
+import SourceChips from '@/components/tm/kit/SourceChips';
 
 export default function EvidenceItem({ item, canEdit, busy, onAccept, onSave }) {
   const [editing, setEditing] = useState(false);
@@ -29,9 +29,7 @@ export default function EvidenceItem({ item, canEdit, busy, onAccept, onSave }) 
           <p className="text-sm text-foreground">{item.text}</p>
         )}
         <div className="flex flex-wrap items-center gap-1.5">
-          {(item.source_refs || []).map((r) => (r.startsWith('counterparty:')
-            ? <CounterpartyLink key={r} id={r.slice('counterparty:'.length)} className="text-[10px] bg-muted px-1.5 py-0.5 rounded">Counterparty ↗</CounterpartyLink>
-            : <span key={r} className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded">{r}</span>))}
+          <SourceChips refs={item.source_refs} />
           {item.accepted && <span className="text-[11px] text-emerald-700 font-medium">Accepted{item.edited ? ' (edited)' : ''}</span>}
           {!item.accepted && <span className="text-[11px] text-muted-foreground">Proposed by {item.by === 'user' ? 'user' : 'AI'}, not yet accepted</span>}
         </div>

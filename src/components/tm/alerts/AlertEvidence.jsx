@@ -1,6 +1,7 @@
 import React from 'react';
 import { PROPOSAL_LABEL } from '@/lib/tmAlerts';
 import CounterpartyLink from '@/components/tm/counterparty/CounterpartyLink';
+import SourceChips from '@/components/tm/kit/SourceChips';
 
 const Section = ({ title, children }) => (
   <section className="space-y-2">
@@ -24,7 +25,7 @@ export default function AlertEvidence({ alert, txns }) {
               {refs.map((r, i) => (
                 <li key={i} className="text-xs text-foreground">
                   {r.text}
-                  {r.source_refs?.length > 0 && <span className="block text-[11px] text-muted-foreground font-mono">Sources: {r.source_refs.join(', ')}</span>}
+                  {r.source_refs?.length > 0 && <SourceChips refs={r.source_refs} className="mt-1 flex" />}
                 </li>
               ))}
             </ul>
