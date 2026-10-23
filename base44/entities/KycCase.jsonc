@@ -1,25 +1,116 @@
 {
   "name": "KycCase",
-  "type": "object",
   "properties": {
-    "tenant_id": {
+    "ai_outputs": {
+      "description": "Persisted AI assistant outputs keyed by step number.",
+      "type": "object"
+    },
+    "assigned_analyst_id": {
+      "description": "FK to User",
       "type": "string"
     },
-    "client_id": {
-      "type": "string",
-      "description": "FK to Client"
+    "case_notes": {
+      "type": "string"
+    },
+    "case_notes_threads": {
+      "description": "Array of threaded notes with replies",
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
     },
     "case_type": {
-      "type": "string",
       "enum": [
         "Onboarding",
         "Periodic_Review",
         "Event_Driven_Review",
         "Offboarding"
-      ]
+      ],
+      "type": "string"
+    },
+    "client_id": {
+      "description": "FK to Client",
+      "type": "string"
+    },
+    "completed_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "compliance_advisory_note": {
+      "type": "string"
+    },
+    "created_by_user_id": {
+      "type": "string"
+    },
+    "due_date": {
+      "format": "date",
+      "type": "string"
+    },
+    "expected_transaction_behavior": {
+      "type": "string"
+    },
+    "is_re_onboarding": {
+      "default": false,
+      "type": "boolean"
+    },
+    "kyc_txn_analysis_id": {
+      "type": "string"
+    },
+    "osint_cache": {
+      "type": "string"
+    },
+    "previous_case_id": {
+      "type": "string"
+    },
+    "profile_proposal_id": {
+      "type": "string"
+    },
+    "profile_suggestions": {
+      "description": "Structured field suggestions for the Profile Verification step.",
+      "type": "object"
+    },
+    "purpose_nature_text": {
+      "type": "string"
+    },
+    "risk_assessment_meta": {
+      "description": "Persisted S-090/S-092 state: { selections, selectionConfirmed, narrativeAccepted, overallNarratives, entityOverrides, consolidatedOverride }",
+      "type": "object"
+    },
+    "risk_classification": {
+      "enum": [
+        "Low",
+        "Medium",
+        "High",
+        "Unacceptable"
+      ],
+      "type": "string"
+    },
+    "sign_off_approved_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "sign_off_approved_by": {
+      "type": "string"
+    },
+    "sign_off_rejection_reason": {
+      "type": "string"
+    },
+    "sign_off_submitted_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "sign_off_submitted_by": {
+      "type": "string"
+    },
+    "sof_narrative": {
+      "type": "string"
+    },
+    "sow_applicable": {
+      "default": false,
+      "type": "boolean"
     },
     "status": {
-      "type": "string",
+      "default": "Draft",
       "enum": [
         "Draft",
         "In_Progress",
@@ -33,233 +124,141 @@
         "Rejected",
         "Closed"
       ],
-      "default": "Draft"
-    },
-    "risk_classification": {
-      "type": "string",
-      "enum": [
-        "Low",
-        "Medium",
-        "High",
-        "Unacceptable"
-      ]
-    },
-    "assigned_analyst_id": {
-      "type": "string",
-      "description": "FK to User"
-    },
-    "trigger_reason": {
-      "type": "string",
-      "description": "EDR trigger description"
-    },
-    "due_date": {
-      "type": "string",
-      "format": "date"
-    },
-    "completed_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "created_by_user_id": {
       "type": "string"
     },
     "step_1_status": {
-      "type": "string",
+      "default": "not_started",
       "enum": [
         "not_started",
         "in_progress",
         "complete",
         "flagged"
       ],
-      "default": "not_started"
-    },
-    "step_2_status": {
-      "type": "string",
-      "enum": [
-        "not_started",
-        "in_progress",
-        "complete",
-        "flagged"
-      ],
-      "default": "not_started"
+      "type": "string"
     },
     "step_2_not_required": {
-      "type": "boolean",
       "default": false,
-      "description": "Identity Verification \u2014 waived for existing/returning clients"
+      "description": "Identity Verification \u2014 waived for existing/returning clients",
+      "type": "boolean"
+    },
+    "step_2_status": {
+      "default": "not_started",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
+      ],
+      "type": "string"
     },
     "step_3_status": {
-      "type": "string",
+      "default": "not_started",
       "enum": [
         "not_started",
         "in_progress",
         "complete",
         "flagged"
       ],
-      "default": "not_started"
+      "type": "string"
     },
     "step_4_status": {
-      "type": "string",
+      "default": "not_started",
       "enum": [
         "not_started",
         "in_progress",
         "complete",
         "flagged"
       ],
-      "default": "not_started"
-    },
-    "step_5_status": {
-      "type": "string",
-      "enum": [
-        "not_started",
-        "in_progress",
-        "complete",
-        "flagged"
-      ],
-      "default": "not_started"
+      "type": "string"
     },
     "step_5_not_required": {
-      "type": "boolean",
       "default": false,
-      "description": "Source of Funds/Wealth \u2014 conditional on risk level"
+      "description": "Source of Funds/Wealth \u2014 conditional on risk level",
+      "type": "boolean"
+    },
+    "step_5_status": {
+      "default": "not_started",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
+      ],
+      "type": "string"
     },
     "step_6_status": {
-      "type": "string",
+      "default": "not_started",
       "enum": [
         "not_started",
         "in_progress",
         "complete",
         "flagged"
       ],
-      "default": "not_started"
-    },
-    "step_7_status": {
-      "type": "string",
-      "enum": [
-        "not_started",
-        "in_progress",
-        "complete",
-        "flagged"
-      ],
-      "default": "not_started"
+      "type": "string"
     },
     "step_7_not_required": {
-      "type": "boolean",
       "default": false,
-      "description": "Control Measures \u2014 conditional on risk outcome"
+      "description": "Control Measures \u2014 conditional on risk outcome",
+      "type": "boolean"
+    },
+    "step_7_status": {
+      "default": "not_started",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
+      ],
+      "type": "string"
     },
     "step_8_status": {
-      "type": "string",
+      "default": "not_started",
       "enum": [
         "not_started",
         "in_progress",
         "complete",
         "flagged"
       ],
-      "default": "not_started"
+      "type": "string"
     },
     "step_9_status": {
-      "type": "string",
+      "default": "not_started",
+      "description": "Profile Verification \u2014 displayed as the 2nd step, right after Outreach & Documents",
       "enum": [
         "not_started",
         "in_progress",
         "complete",
         "flagged"
       ],
-      "default": "not_started",
-      "description": "Profile Verification \u2014 displayed as the 2nd step, right after Outreach & Documents"
-    },
-    "case_notes": {
       "type": "string"
     },
-    "case_notes_threads": {
-      "type": "array",
-      "description": "Array of threaded notes with replies",
+    "tenant_id": {
+      "type": "string"
+    },
+    "tm_alert_ids": {
       "items": {
-        "type": "object"
-      }
-    },
-    "ai_outputs": {
-      "type": "object",
-      "description": "Persisted AI assistant outputs keyed by step number."
-    },
-    "profile_suggestions": {
-      "type": "object",
-      "description": "Structured field suggestions for the Profile Verification step."
-    },
-    "risk_assessment_meta": {
-      "type": "object",
-      "description": "Persisted S-090/S-092 state: { selections, selectionConfirmed, narrativeAccepted, overallNarratives, entityOverrides, consolidatedOverride }"
-    },
-    "purpose_nature_text": {
-      "type": "string"
-    },
-    "expected_transaction_behavior": {
-      "type": "string"
-    },
-    "sof_narrative": {
-      "type": "string"
-    },
-    "sow_applicable": {
-      "type": "boolean",
-      "default": false
-    },
-    "osint_cache": {
-      "type": "string"
-    },
-    "sign_off_submitted_by": {
-      "type": "string"
-    },
-    "sign_off_submitted_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "sign_off_approved_by": {
-      "type": "string"
-    },
-    "sign_off_approved_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "sign_off_rejection_reason": {
-      "type": "string"
-    },
-    "compliance_advisory_note": {
-      "type": "string"
-    },
-    "is_re_onboarding": {
-      "type": "boolean",
-      "default": false
-    },
-    "previous_case_id": {
-      "type": "string"
-    },
-    "profile_proposal_id": {
-      "type": "string"
-    },
-    "kyc_txn_analysis_id": {
-      "type": "string"
+        "type": "string"
+      },
+      "type": "array"
     },
     "tm_case_id": {
       "type": "string"
     },
-    "tm_alert_ids": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
     "tm_context": {
-      "type": "object",
-      "description": "Snapshot when an event-driven review is opened from TM"
+      "description": "Snapshot when an event-driven review is opened from TM",
+      "type": "object"
     },
     "tm_outcome_synced_at": {
-      "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "type": "string"
     },
     "tm_risk_divergence": {
-      "type": "object",
-      "description": "Rationale when the KYC risk rating is below the dynamic monitoring risk band: { kyc_rating, dynamic_band, dynamic_score, rationale, by_user_id, by_name, at }"
+      "description": "Rationale when the KYC risk rating is below the dynamic monitoring risk band: { kyc_rating, dynamic_band, dynamic_score, rationale, by_user_id, by_name, at }",
+      "type": "object"
+    },
+    "trigger_reason": {
+      "description": "EDR trigger description",
+      "type": "string"
     }
   },
   "required": [
@@ -267,6 +266,7 @@
     "client_id",
     "case_type"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "$or": [
