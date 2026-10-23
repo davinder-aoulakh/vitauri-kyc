@@ -93,6 +93,7 @@ export default function TmRules() {
             canManage={canManage} canApprove={canApprove} userId={currentUser?.id} call={call} busy={busy} onSelect={setSelectedId} onSaved={setSelectedId} />
         )}
         <LibraryDialog code={library} scenarios={scenarioList} onOpenChange={(v) => !v && setLibrary(null)} onPick={pick} />
+        {importing && <ScenarioImportDialog tenantId={tenantId} onOpenChange={setImporting} />}
       </div>
     </AppShell>
   );
