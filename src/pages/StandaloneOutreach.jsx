@@ -16,6 +16,8 @@ import { cn } from '@/lib/utils';
 import { format, addDays } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
 import { fetchLocked, LOCK_BANNER, sendCustomerEmail, isLockError } from '@/lib/tippingOff';
+import { buildRequestItem, isVerificationItem } from '@/lib/outreachItems';
+import IdvWorkflowPicker from '@/components/outreach/IdvWorkflowPicker';
 
 
 function generateToken() {
@@ -52,6 +54,7 @@ export default function StandaloneOutreach() {
   const [deadline, setDeadline] = useState(format(addDays(new Date(), 14), 'yyyy-MM-dd'));
   const [channel, setChannel] = useState('Email');
   const [selectedItems, setSelectedItems] = useState([]);
+  const [workflowChoice, setWorkflowChoice] = useState({}); // { [libraryItemId]: { idv_workflow_id, idv_workflow_name } }
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState(null);
   const [showItemsError, setShowItemsError] = useState(false);
@@ -145,6 +148,10 @@ export default function StandaloneOutreach() {
         .map(i => i.outreach_template_id)
         .filter(Boolean);
       setSelectedItems(itemIds);
+      // A form template may set its own Didit workflow on a verification field.
+      setWorkflowChoice(Object.fromEntries(tmpl.items
+        .filter(i => i.idv_workflow_id && i.outreach_template_id)
+        .map(i => [i.outreach_template_id, { idv_workflow_id: i.idv_workflow_id, idv_workflow_name: i.idv_workflow_name || '' }])));
     }
 
     if (tmpl.email_template_id) {
@@ -242,39 +249,11 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
 
   async function sendAll() {
     setSending(true);
+    // Full copy of each library item (field type, validation, IDV settings and Didit workflow) for the portal.
     const items = selectedItems.map((id, idx) => {
-      const item = libraryItems.find(d => d.id === id);
-      return {
-        // Core fields
-        item_id:     id,
-        label:       item?.label || id,
-        description: item?.description || '',
-        status:      'Requested',
-        sort_order:  idx,
-
-        // Field type — BOTH slots so portal resolves correctly
-        field_type: item?.field_type || 'textarea',
-        item_type:  item?.item_type  || (item?.field_type === 'file_upload' ? 'document' : 'data_point'),
-
-        // Type-specific config — portal needs these to render correctly
-        field_options:                  item?.field_options               || [],
-        validation_required:            item?.validation_required         ?? false,
-        validation_accepted_file_types: item?.validation_accepted_file_types || [],
-        validation_max_file_size_mb:    item?.validation_max_file_size_mb || 25,
-        validation_min_length:          item?.validation_min_length       || null,
-        validation_max_length:          item?.validation_max_length       || null,
-
-        // IDV config — required for the identity verification flow to activate
-        idv_accepted_doc_types: item?.idv_accepted_doc_types || ['Passport', 'Driving_Licence', 'National_ID'],
-        idv_min_match_score:    item?.idv_min_match_score    ?? 75,
-        idv_liveness_required:  item?.idv_liveness_required  ?? true,
-        idv_auto_proceed:       item?.idv_auto_proceed        ?? false,
-        idv_workflow_id:        item?.idv_workflow_id         || '',
-        idv_workflow_name:      item?.idv_workflow_name       || '',
-
-        // Section header
-        section_title: item?.section_title || '',
-      };
+      const item = libraryItems.find(d => d.id === id) || { id };
+      const choice = workflowChoice[id];
+      return buildRequestItem(item, idx, { defaultFieldType: 'textarea', overrides: choice?.idv_workflow_id ? choice : {} });
     });
 
     const results = { sent: 0, failed: [] };
@@ -634,6 +613,21 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
                       </label>
                     );
                   })}
+                </div>
+              )}
+              {libraryItems.some(i => selectedItems.includes(i.id) && isVerificationItem(i)) && (
+                <div className="mt-2 space-y-2 rounded-lg border border-indigo-100 bg-indigo-50/40 p-2.5">
+                  {libraryItems.filter(i => selectedItems.includes(i.id) && isVerificationItem(i)).map(item => (
+                    <div key={item.id} className="space-y-1">
+                      <div className="text-xs font-medium">{item.label}</div>
+                      <IdvWorkflowPicker
+                        compact tenant={tenant} item={item}
+                        value={workflowChoice[item.id]?.idv_workflow_id || ''}
+                        templateWorkflowId={item.idv_workflow_id || ''}
+                        onChange={(v) => setWorkflowChoice(c => ({ ...c, [item.id]: v }))}
+                      />
+                    </div>
+                  ))}
                 </div>
               )}
               {showItemsError && (
