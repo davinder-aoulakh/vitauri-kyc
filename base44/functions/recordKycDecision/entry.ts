@@ -4,6 +4,35 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { authenticate, errorResponse, httpError, loadTenant, asList } from '../../shared/tmAuth.js';
+import { summariseTxns, countableTxns, OPEN_ALERT_STATUSES } from '../../shared/tmActuals.js';
+
+const DAY_MS = 86400000;
+
+/** Monitoring baseline at the moment of the KYC decision, so later reviews can diff behaviour, not only KYC fields. */
+async function buildTmBaseline(E, tenantId, tenant, client, profile) {
+  const since = new Date(Date.now() - 90 * DAY_MS).toISOString();
+  const cur = tenant.tm_reporting_currency || 'USD';
+  const [txns, openAlerts] = await Promise.all([
+    E.Transaction.filter({ tenant_id: tenantId, client_id: client.id, executed_at: { $gte: since } }, '-executed_at', 2000).then(asList),
+    E.TmAlert.filter({ tenant_id: tenantId, client_id: client.id, status: { $in: OPEN_ALERT_STATUSES } }, undefined, 200).then(asList),
+  ]);
+  const sum = summariseTxns(txns, { client, reportingCurrency: cur });
+  const per = (v) => Math.round((v || 0) / 3);
+  const cpCount = new Map();
+  for (const t of countableTxns(txns)) {
+    const k = t.counterparty_id || t.counterparty_name;
+    if (k) cpCount.set(k, { id: t.counterparty_id || null, name: t.counterparty_name || null, n: (cpCount.get(k)?.n || 0) + 1 });
+  }
+  return {
+    window_days: 90, currency: cur, transactions: sum.txnCount,
+    per_month: { inbound: per(sum.inbound), inbound_count: Math.round((sum.inboundCount / 3) * 10) / 10, outbound: per(sum.outbound), foreign_out: per(sum.foreignOut), cash: per(sum.cash) },
+    known_countries: sum.countries,
+    top_counterparties: [...cpCount.values()].sort((a, b) => b.n - a.n).slice(0, 10),
+    open_alerts: openAlerts.length,
+    profile_id: profile?.id || null, profile_version: profile?.version ?? null,
+    dynamic_risk: client.customer_risk_score != null ? { score: client.customer_risk_score, band: client.customer_risk_band || null } : null,
+  };
+}
 
 const CREATE_RUN_CASE = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin']; // createRunCase
 const OUTCOMES = ['approved', 'rejected'];
@@ -67,6 +96,8 @@ async function buildSnapshot(E, tenantId, tenant, kycCase, client) {
         verification_status: p?.verification_status || null,
       };
     }),
+    tm_baseline: client ? await buildTmBaseline(E, tenantId, tenant, client, profiles[0]).catch(() => null) : null,
+    ...(kycCase.tm_risk_divergence?.rationale ? { tm_risk_divergence: kycCase.tm_risk_divergence } : {}),
     ...(kybs[0] ? { kyb: { session_id: kybs[0].didit_session_id || null, status: kybs[0].status || null, registration_number: kybs[0].registry?.registration_number || null, decided_at: kybs[0].decided_at || null } } : {}),
     ai_model: tenant.tm_settings?.ai_model || 'automatic',
   };
