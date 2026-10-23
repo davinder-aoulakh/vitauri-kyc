@@ -28,7 +28,7 @@ const SITUATION_LABELS = {
 import { format, addDays, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import TippingOffBanner from '@/components/shared/TippingOffBanner';
-import { isLocked, fetchLocked } from '@/lib/tippingOff';
+import { isLocked, fetchLocked, sendCustomerEmail, isLockError } from '@/lib/tippingOff';
 
 
 
@@ -369,14 +369,18 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
     }
 
     try {
-      await base44.integrations.Core.SendEmail({
-        from_name: fromName,
-        ...(tenant?.email_from_address ? { from_email: tenant.email_from_address } : {}),
+      await sendCustomerEmail({
+        tenant: { ...tenant, email_from_name: fromName },
+        clientId: kycCase.client_id,
+        caseId: kycCase.id,
+        outreachRequestId: req.id,
         to: client.primary_contact_email,
         subject: emailSubject || `Action Required: Documents needed — ${tenant?.name || 'KYC Review'}`,
         body,
       });
     } catch (err) {
+      // A server-side tipping-off refusal must never be marked as sent.
+      if (isLockError(err)) { setSending(false); load(); return; }
       console.warn('Email send failed (external email not supported), marking as sent anyway:', err);
     }
 
