@@ -15,7 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { format, addDays } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
-import { fetchLocked, LOCK_BANNER } from '@/lib/tippingOff';
+import { fetchLocked, LOCK_BANNER, sendCustomerEmail, isLockError } from '@/lib/tippingOff';
 
 
 function generateToken() {
@@ -318,18 +318,19 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
             const body      = buildEmailHtml(client, req, portalUrl);
             const fromName  = tenant?.email_from_name || tenant?.name || 'Compliance Team';
             try {
-              await base44.integrations.Core.SendEmail({
-                from_name:  fromName,
-                ...(tenant?.email_from_address ? { from_email: tenant.email_from_address } : {}),
-                to:         client.primary_contact_email,
-                subject:    emailSubject || `Action Required: Documents needed — ${tenant?.name || 'KYC Review'}`,
+              await sendCustomerEmail({
+                tenant:   { ...tenant, email_from_name: fromName },
+                clientId: client.id,
+                outreachRequestId: req.id,
+                to:       client.primary_contact_email,
+                subject:  emailSubject || `Action Required: Documents needed — ${tenant?.name || 'KYC Review'}`,
                 body,
               });
             } catch (emailErr) {
               console.error('Email send failed for', client.full_name, emailErr);
               results.failed.push({
                 name:   client.full_name,
-                reason: `Email delivery failed: ${emailErr?.message || 'Unknown error'}`,
+                reason: isLockError(emailErr) ? LOCK_BANNER : `Email delivery failed: ${emailErr?.message || 'Unknown error'}`,
               });
               emailFailed = true;
               finalStatus = 'Draft';
