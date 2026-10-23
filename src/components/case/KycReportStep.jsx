@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import { PDFDocument } from 'pdf-lib';
 import { isStepComplete, getStepStatus } from '@/lib/caseUtils';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 
 // ── PDF design tokens ──────────────────────────────────────────────────────
 const C = {
@@ -161,7 +162,7 @@ function divider(doc, y) {
 // ── Main generate function ─────────────────────────────────────────────────
 async function buildPDF({ kycCase, client, currentUser, screeningHits, assessments,
   controlMeasures, auditEvents, relatedPartyLinks, relatedParties, tenant, nextVersion,
-  annexManifest = [], txnAnalysis = null }) {
+  annexManifest = [], txnAnalysis = null, tmMonitoring = null }) {
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const dateStr = format(new Date(), 'd MMMM yyyy');
@@ -267,6 +268,7 @@ async function buildPDF({ kycCase, client, currentUser, screeningHits, assessmen
     '3.  Screening & Adverse Media',
     '4.  Source of Funds / Wealth',
     ...(txnAnalysis ? ['4A.  Transaction Analysis (statements)'] : []),
+    ...(tmMonitoring ? ['4B.  Transaction Monitoring & Expected Profile'] : []),
     '5.  Risk Indicators & Assessment',
     '6.  Consolidated Risk Classification',
     '7.  Control Measures',
@@ -498,6 +500,51 @@ async function buildPDF({ kycCase, client, currentUser, screeningHits, assessmen
     y = para(doc, a.analyst_conclusion, y);
     y = kvRow(doc, 'Signed off by', a.signed_off_by_name || '—', y);
     y = kvRow(doc, 'Signed off at', a.signed_off_at ? format(new Date(a.signed_off_at), 'd MMM yyyy HH:mm') : '—', y);
+    y = divider(doc, y + 4);
+  }
+
+  // ── 4B. Transaction Monitoring & Expected Profile (tm_core; never contains FIU reporting details) ──
+  if (tmMonitoring) {
+    const m = tmMonitoring;
+    const cur = m.currency || '';
+    const num = (n) => (n == null ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 }));
+    y = checkBreak(doc, y, 20);
+    y = sectionHeader(doc, '4B', 'Transaction Monitoring & Expected Profile', y);
+    [
+      ['Period', `${m.from ? format(new Date(m.from), 'd MMM yyyy') : '—'} to ${format(new Date(), 'd MMM yyyy')} (${m.basis === 'last_kyc_approval' ? 'since last review' : 'last 12 months'})`],
+      ['Transactions', m.transactions],
+      ['Expected profile', m.profile ? `v${m.profile.version} (approved)` : 'No approved expected profile'],
+      ['Dynamic risk', `${m.risk?.from ? `${m.risk.from.score} ${m.risk.from.band}` : '—'} → ${m.risk?.now ? `${m.risk.now.score} ${m.risk.now.band}` : '—'}`],
+      ['Alerts in period', `${m.alerts?.total ?? 0} (${m.alerts?.open ?? 0} open)`],
+      ['Data gaps', `${m.coverage_missing_days ?? 0} day(s) without expected transaction data`],
+      ['New in period', `${(m.new_countries || []).length ? (m.new_countries || []).join(', ') : 'no new countries'} · ${m.new_counterparties ?? 0} new counterparties`],
+    ].forEach(([l, v]) => { y = checkBreak(doc, y, 8); y = kvRow(doc, l, v, y); });
+    y += 2;
+    const L = m.profile?.limits || {};
+    const cols = [{ label: 'Per month', w: 60 }, { label: 'Actual (average)', w: 45 }, { label: 'Expected profile', w: 45 }];
+    y = checkBreak(doc, y, 16);
+    y = tableHeader(doc, cols, y);
+    [
+      ['Inbound', `${cur} ${num(m.per_month?.inbound)}`, L.inbound == null ? '—' : `${cur} ${num(L.inbound)}`],
+      ['Inbound transactions', num(m.per_month?.inbound_count), L.inbound_count == null ? '—' : num(L.inbound_count)],
+      ['Outbound', `${cur} ${num(m.per_month?.outbound)}`, L.outbound == null ? '—' : `${cur} ${num(L.outbound)}`],
+      ['Outbound abroad', `${cur} ${num(m.per_month?.foreign_out)}`, L.foreign_out == null ? '—' : `${cur} ${num(L.foreign_out)}`],
+      ['Cash', `${cur} ${num(m.per_month?.cash)}`, L.cash == null ? '—' : `${cur} ${num(L.cash)}`],
+    ].forEach((row, i) => { y = checkBreak(doc, y, 8); y = tableRow(doc, cols, row, y, i % 2 === 1); });
+    y += 3;
+    const flags = [...(m.profile?.breaches || []), ...((m.profile?.outside_countries || []).length ? [`Countries outside the expected profile: ${m.profile.outside_countries.join(', ')}`] : [])];
+    if (flags.length) {
+      y = checkBreak(doc, y, 12);
+      doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...C.sectionText);
+      doc.text('Deviations from the expected profile', MARGIN, y); y += 5;
+      flags.forEach((f) => { y = checkBreak(doc, y, 8); y = para(doc, `- ${f}`, y); });
+    }
+    if (kycCase.tm_risk_divergence?.rationale) {
+      y = checkBreak(doc, y, 14);
+      doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...C.sectionText);
+      doc.text(`KYC rating below monitoring band (${kycCase.tm_risk_divergence.kyc_rating} vs ${kycCase.tm_risk_divergence.dynamic_band})`, MARGIN, y); y += 5;
+      y = para(doc, kycCase.tm_risk_divergence.rationale, y);
+    }
     y = divider(doc, y + 4);
   }
 
@@ -834,6 +881,14 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
       .filter({ tenant_id: kycCase.tenant_id, case_id: kycCase.id, status: 'signed_off' }, '-signed_off_at', 1)
       .catch(() => []);
     const txnAnalysis = signedAnalyses?.[0] || null;
+    // Transaction monitoring summary for the review period (tm_core only). FIU details are never included.
+    let tmMonitoring = null;
+    if (isFeatureEnabled(tenant, 'tm_core')) {
+      try {
+        const ctx = (await base44.functions.invoke('getCaseTmContext', { kyc_case_id: kycCase.id }))?.data;
+        tmMonitoring = ctx?.period || null;
+      } catch { tmMonitoring = null; }
+    }
     const nextVersion = (reports[0]?.version_number || 0) + 1;
 
     // Merge + dedupe case/client documents, excluding prior report PDFs
@@ -883,6 +938,7 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
       nextVersion,
       annexManifest,
       txnAnalysis,
+      tmMonitoring,
     });
 
     const pdfBlob = await mergeAnnexPdfs({ doc, auditTrailStartPage, documents, diditSessionIds, tenant, kycCase });
