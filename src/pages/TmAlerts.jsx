@@ -50,13 +50,36 @@ export default function TmAlerts() {
   const [caseIds, setCaseIds] = useState(null);
   const [triaging, setTriaging] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [limit, setLimit] = useState(200);
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t); }, []);
 
-  const { list, count } = useTmAlerts(tenantId, userId, filter, allowed);
+  const { list, count } = useTmAlerts(tenantId, userId, filter, allowed, limit);
+  const alerts = list.data || [];
+  // Scenarios (bulk-close release + names) and rules (Didit rule id → name) for the queue.
+  const lookups = useQuery({
+    queryKey: ['tmAlertLookups', tenantId],
+    enabled: allowed && !!tenantId,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const [sc, ru] = await Promise.all([
+        base44.entities.TmScenario.filter({ tenant_id: tenantId }, { limit: 500 }),
+        base44.entities.TmRule.filter({ tenant_id: tenantId }, { limit: 500 }),
+      ]);
+      const list = (r) => (Array.isArray(r) ? r : r?.items || []);
+      return {
+        scenarios: new Map(list(sc).map((s) => [s.id, s])),
+        rulesByDiditId: new Map(list(ru).filter((r) => r.didit_rule_id).map((r) => [r.didit_rule_id, r])),
+      };
+    },
+  });
+  const scenarios = lookups.data?.scenarios || new Map();
+  const rulesByDiditId = lookups.data?.rulesByDiditId || new Map();
+  // Bulk close only for alert types compliance released after measurement (closeTmAlert enforces the same).
+  const selectedAlerts = alerts.filter((a) => selected.has(a.id));
+  const bulkCloseBlocked = selected.size > 1 && selectedAlerts.some((a) => !scenarios.get(a.scenario_id)?.bulk_close_released);
   const { data: clients } = useTenantClients(tenantId, { enabled: allowed });
   const clientsById = useMemo(() => new Map((clients || []).map((c) => [c.id, c])), [clients]);
-  const alerts = list.data || [];
   const listed = alerts.find((a) => a.id === openId) || null;
   // Deep-linked alert that is not in the current list (e.g. closed or outside the filter).
   const deep = useQuery({
@@ -114,7 +137,11 @@ export default function TmAlerts() {
               </Button>
             )}
             {canWork && selected.size > 0 && (
-              <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setCloseIds([...selected])}>
+              <Button
+                size="sm" variant="outline" className="gap-1.5 text-xs" disabled={bulkCloseBlocked}
+                title={bulkCloseBlocked ? 'Bulk closing is only released for some alert types. Close these one by one, or select only released types.' : undefined}
+                onClick={() => setCloseIds([...selected])}
+              >
                 <XCircle className="w-3.5 h-3.5" /> Close {selected.size} selected
               </Button>
             )}
@@ -132,7 +159,17 @@ export default function TmAlerts() {
         <EmptyState icon={Inbox} title={filter === 'all' ? 'No open alerts' : 'No alerts match this filter'} description={EMPTY_COPY[filter]} />
       )}
       {alerts.length > 0 && (
-        <AlertsTable alerts={alerts} clientsById={clientsById} now={now} selected={selected} onToggle={toggle} onOpen={(a) => setOpenId(a.id)} canSelect={canWork} />
+        <AlertsTable
+          alerts={alerts} clientsById={clientsById} scenarios={scenarios} rulesByDiditId={rulesByDiditId} now={now}
+          selected={selected} onToggle={toggle} onOpen={(a) => setOpenId(a.id)} canSelect={canWork}
+        />
+      )}
+      {alerts.length >= limit && (
+        <div className="flex justify-center mt-3">
+          <Button size="sm" variant="outline" className="text-xs" onClick={() => setLimit((l) => l + 200)} disabled={list.isFetching}>
+            {list.isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Show more alerts
+          </Button>
+        </div>
       )}
       <p className="text-xs text-muted-foreground mt-4">
         AI proposals show reasons, not percentages. Bulk closing is only possible for alert types released after measurement.

@@ -9,7 +9,7 @@ export default function AiProposalPill({ alert }) {
   return (
     <span
       title={alert.ai_reasons?.join(' • ') || shortId(alert)}
-      className="inline-block max-w-[280px] truncate align-middle text-[11px] font-medium px-2.5 py-1 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-purple-200"
+      className="inline-block max-w-[320px] line-clamp-2 align-middle text-[11px] font-medium px-2.5 py-1 rounded-xl bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-purple-200"
     >
       {text}
     </span>

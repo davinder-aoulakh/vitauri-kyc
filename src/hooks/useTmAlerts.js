@@ -4,14 +4,14 @@ import { base44 } from '@/api/base44Client';
 import { buildAlertQuery, sortAlerts } from '@/lib/tmAlerts';
 
 /** Tenant-scoped open alerts for a filter pill + open count, refreshed in realtime via TmAlert.subscribe. */
-export function useTmAlerts(tenantId, userId, filter, enabled) {
+export function useTmAlerts(tenantId, userId, filter, enabled, limit = 200) {
   const qc = useQueryClient();
 
   const list = useQuery({
-    queryKey: ['tmAlerts', tenantId, filter, userId],
+    queryKey: ['tmAlerts', tenantId, filter, userId, limit],
     enabled: !!tenantId && enabled,
     queryFn: async () => {
-      const page = await base44.entities.TmAlert.filter(buildAlertQuery(filter, tenantId, userId), { sort: '-score', limit: 200 });
+      const page = await base44.entities.TmAlert.filter(buildAlertQuery(filter, tenantId, userId), { sort: '-score', limit });
       return sortAlerts(page.items || []);
     },
   });
