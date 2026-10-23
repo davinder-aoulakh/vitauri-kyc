@@ -5,6 +5,7 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 import { hasPermission } from '@/lib/permissions';
 import { useTmCaseData, useCaseAction, useCaseUsers } from '@/hooks/useTmCase';
 import { clockPill } from '@/lib/tmCase';
+import TippingOffBanner from '@/components/shared/TippingOffBanner';
 import AppShell from '@/components/layout/AppShell';
 import EmptyState from '@/components/shared/EmptyState';
 import InlineError from '@/components/shared/InlineError';
@@ -49,17 +50,21 @@ export default function TmCaseWorkspace() {
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
         <CaseHeader tmCase={c} users={users} client={client.data} pill={pill} />
         {isFeatureEnabled(tenant, 'tm_fiu') && canWork && <FiuCtaBar caseId={c.id} tenantId={tenantId} report={(fiuReports.data || []).find((r) => r.status !== 'rejected')} />}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <div className="space-y-5">
+        {client.data && <TippingOffBanner client={client.data} userRole={role} onChanged={() => client.refetch?.()} className="mb-5" />}
+        {/* Work on the left; decisions stay in view in a sticky right rail. */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 items-start">
+          <div className="space-y-5 xl:col-span-2">
             <EvidencePanel tmCase={c} canWork={canWork} run={run} busy={busy} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <BundledAlerts tmCase={c} alerts={alertList} scenarios={scenarios.data || []} canWork={canWork} tenantId={tenantId} run={run} busy={busy} />
+              <CaseActionsPanel tmCase={c} client={client.data} tenant={tenant} tenantId={tenantId} canWork={canWork} fiuLocked={fiuLocked} run={run} busy={busy} />
+            </div>
+            <CaseTimeline timeline={c.timeline} canWork={canWork} run={run} busy={busy} />
           </div>
-          <div className="space-y-5">
-            <BundledAlerts tmCase={c} alerts={alertList} scenarios={scenarios.data || []} canWork={canWork} tenantId={tenantId} run={run} busy={busy} />
-            <CaseActionsPanel tmCase={c} client={client.data} tenant={tenant} tenantId={tenantId} canWork={canWork} fiuLocked={fiuLocked} run={run} busy={busy} />
+          <div className="space-y-5 xl:sticky xl:top-4">
             <DecisionsPanel tmCase={c} decisions={decisions.data || []} users={users} currentUserId={currentUser?.id} canWork={canWork} isCO={isCO} run={run} busy={busy} />
           </div>
         </div>
-        <CaseTimeline timeline={c.timeline} canWork={canWork} run={run} busy={busy} />
       </div>
     </AppShell>
   );

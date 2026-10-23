@@ -9,7 +9,7 @@ export default function CaseTimeline({ timeline, canWork, run, busy }) {
   const add = async () => { if (await run('add_note', { text: note }, { success: 'Note added' })) setNote(''); };
 
   return (
-    <section className="bg-card border border-border rounded-xl p-5 mt-5">
+    <section className="bg-card border border-border rounded-xl p-5">
       <h2 className="text-sm font-semibold mb-3">Timeline</h2>
       {canWork && (
         <div className="flex gap-2 mb-4">
@@ -17,6 +17,7 @@ export default function CaseTimeline({ timeline, canWork, run, busy }) {
           <Button size="sm" disabled={!note.trim() || busy === 'add_note'} onClick={add}>Add note</Button>
         </div>
       )}
+      {rows.length === 0 && <p className="text-sm text-muted-foreground">Nothing has happened on this case yet. Actions, decisions and notes appear here.</p>}
       <ol className="space-y-3 border-l border-border ml-1.5">
         {rows.map((t, i) => (
           <li key={`${t.at}-${i}`} className="pl-4 relative">
