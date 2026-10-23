@@ -112,7 +112,8 @@ export default function TmContextCard({ kycCase, client }) {
             {tm && <Button asChild variant="outline" size="sm"><Link to={toTmCase(tm.id)}>Open TM case</Link></Button>}
             <Button asChild variant="outline" size="sm"><Link to={toClient(clientId)}>View customer file</Link></Button>
             {report && <Button asChild size="sm"><Link to={toReport(report.id)}>Open FIU report {report.report_ref} · {report.status}</Link></Button>}
-            {!report && canPrepare && (
+            {/* FIU preparation only when this case was opened from TM (case or alerts), not for every review. */}
+            {!report && canPrepare && (tm || (data.alerts_from_case_field || []).length > 0) && (
               <Button size="sm" disabled={busy} onClick={prepare}>
                 {busy && <Loader2 className="w-4 h-4 animate-spin" />} Prepare FIU report
               </Button>
