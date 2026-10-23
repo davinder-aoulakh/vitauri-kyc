@@ -3,6 +3,7 @@ import { asList, httpError, WORK_ROLES } from './tmAuth.js';
 import { safeRecompute } from './tmRisk.js';
 import { proposeTriggers } from './edrTriggers.js';
 import { collectEvidence } from './tmCaseEvidence.js';
+import { riskAt, caseInputs } from './decisionSnapshot.js';
 import {
   OPEN_CASE, WORKABLE_CASE, OPEN_ALERT, FOUR_EYES_ROLES, CO_ROLES, roleOf, tenantUsers, tlEntry, commit,
   clockPatch, distinct, caseClients, nextCaseRef,
@@ -176,7 +177,10 @@ export async function coDecide(ctx, tmCase, body) {
   await E.Decision.create({
     tenant_id: tenantId, subject_type: 'case', subject_id: tmCase.id, client_id: tmCase.primary_client_id, decision_type: 'report_decision',
     outcome: body.decision, rationale, decided_by_user_id: auth.actorUserId, decided_at: nowIso, four_eyes_user_id: tmCase.assigned_to_user_id,
-    snapshot: { ...(profile ? { profile_version: profile.version } : {}) },
+    snapshot: {
+      ...(profile ? { profile_version: profile.version, profile_id: profile.id } : {}),
+      case: await caseInputs(E, tenantId, tmCase), dynamic_risk: await riskAt(E, tenantId, tmCase.primary_client_id),
+    },
   });
   await commit(ctx, tmCase, patch, tlEntry(auth, 'co_decision', `Compliance Officer ${auth.actorName} decided: ${report ? 'report to FIU' : 'do not report'}. ${rationale}`),
     { type: 'tm_case_co_decision', before: { status: tmCase.status }, after: { status, co_decision: body.decision } });
@@ -211,7 +215,10 @@ export async function recordDecision(ctx, tmCase, body) {
   const row = await E.Decision.create({
     tenant_id: tenantId, subject_type: 'case', subject_id: tmCase.id, client_id: tmCase.primary_client_id, decision_type: body.decision_type,
     outcome, rationale, decided_by_user_id: auth.actorUserId, decided_at: new Date().toISOString(), four_eyes_user_id: tmCase.four_eyes_user_id || undefined,
-    snapshot: { ...(profile ? { profile_version: profile.version } : {}) },
+    snapshot: {
+      ...(profile ? { profile_version: profile.version, profile_id: profile.id } : {}),
+      case: await caseInputs(E, tenantId, tmCase), dynamic_risk: await riskAt(E, tenantId, tmCase.primary_client_id),
+    },
   });
   const label = { kyc_approval: 'KYC decision', aml_assessment: 'AML assessment', payment_release: 'Payment release' }[body.decision_type];
   await commit(ctx, tmCase, {}, tlEntry(auth, 'decision', `${label} recorded by ${auth.actorName}: ${outcome}. ${rationale}`, { ref_id: row.id }),
