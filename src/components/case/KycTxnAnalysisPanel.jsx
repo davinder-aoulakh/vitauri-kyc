@@ -126,7 +126,7 @@ export default function KycTxnAnalysisPanel({ kycCase, onCaseUpdate }) {
         <EmptyState icon={BarChart3} title="No analysis yet" description="Select committed statements and run the analysis." />
       ) : (
         <>
-          <AnalysisKpis analysis={analysis} />
+          <AnalysisKpis analysis={analysis} uploads={uploads} />
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <CategoryBars title="Income by category" data={analysis.income_by_category} barClass="bg-success" currency={analysis.currency} />
             <CategoryBars title="Spending by category" data={analysis.spend_by_category} barClass="bg-warning" currency={analysis.currency} />
