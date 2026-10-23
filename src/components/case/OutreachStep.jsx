@@ -338,6 +338,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
     setNewOpen(false);
     setPreviewOpen(false);
     setSelectedItems([]);
+    setWorkflowChoice({});
     setMessage('');
     setEmailSubject('');
     setSelectedEmailTemplate(null);
@@ -1000,7 +1001,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                 {selectedFormTemplate && (
                   <button type="button"
                     className="text-xs text-muted-foreground hover:text-foreground mt-1.5 underline"
-                    onClick={() => { setSelectedFormTemplate(null); setSelectedItems([]); setMessage(''); setEmailSubject(''); }}>
+                    onClick={() => { setSelectedFormTemplate(null); setSelectedItems([]); setWorkflowChoice({}); setMessage(''); setEmailSubject(''); }}>
                     Clear template selection
                   </button>
                 )}
