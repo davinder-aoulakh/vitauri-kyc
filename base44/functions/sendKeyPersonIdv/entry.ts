@@ -4,7 +4,7 @@
 // Returns the portal link; the caller emails it (Core.SendEmail) or hands it over.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { authenticate, asList, errorResponse, httpError, loadTenant } from '../../shared/tmAuth.js';
-import { isKybEnabled } from '../../shared/diditWorkflows.js';
+import { isKybEnabled, pickWorkflow, parseWorkflows } from '../../shared/diditWorkflows.js';
 import { assertClientNotLocked } from '../../shared/tippingOff.js';
 
 const CREATE_RUN_CASE = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'];
@@ -39,12 +39,23 @@ export default async function (req) {
     }
     const email = String(body.email || '').trim();
     if (email && !EMAIL.test(email)) throw httpError(400, 'Invalid email address');
+    // Optional Didit workflow chosen in the case; only a KYC workflow of this tenant is accepted (else the default applies).
+    const wfId = body.workflow_id ? pickWorkflow(tenant, 'kyc', String(body.workflow_id)) : '';
+    const workflow = wfId && wfId === body.workflow_id
+      ? { idv_workflow_id: wfId, idv_workflow_name: parseWorkflows(tenant).find((w) => w.workflow_id === wfId)?.name || '' }
+      : null;
 
     // One open request per person: reuse it instead of creating a duplicate.
     const open = asList(await E.OutreachRequest.filter({ tenant_id: tenantId, client_id: client.id, related_party_id: rp.id }, '-created_date', 5))
       .find((r) => !['Complete', 'Cancelled'].includes(r.status) && (!r.token_expires_at || new Date(r.token_expires_at).getTime() > Date.now()));
     if (open) {
-      if (email && email !== open.recipient_email) await E.OutreachRequest.update(open.id, { recipient_email: email });
+      const patch: Record<string, unknown> = {};
+      if (email && email !== open.recipient_email) patch.recipient_email = email;
+      // A newly chosen workflow applies only while the person has not started their session.
+      if (workflow && (open.items || []).some((i) => i.field_type === 'id_verification' && !i.didit_session_id && i.idv_workflow_id !== workflow.idv_workflow_id)) {
+        patch.items = (open.items || []).map((i) => (i.field_type === 'id_verification' && !i.didit_session_id ? { ...i, ...workflow } : i));
+      }
+      if (Object.keys(patch).length) await E.OutreachRequest.update(open.id, patch);
       return Response.json({ ok: true, reused: true, outreach_id: open.id, access_token: open.access_token, recipient_email: email || open.recipient_email || null });
     }
 
@@ -56,6 +67,7 @@ export default async function (req) {
       label: `Identity verification — ${rp.full_name}`,
       description: `As ${link.role || rp.role_in_relationship || 'a key person'} of ${client.full_name}, please verify your identity.`,
       idv_accepted_doc_types: ['Passport', 'Driving_Licence', 'National_ID'], idv_min_match_score: 75, idv_liveness_required: true, idv_auto_proceed: false, idv_workflow_id: '',
+      ...(workflow || {}),
       validation_required: true,
     };
     const req2 = await E.OutreachRequest.create({
