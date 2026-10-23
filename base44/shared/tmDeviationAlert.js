@@ -29,6 +29,7 @@ export async function upsertDeviationAlert(base44, { tenantId, client, breaches,
 
   const scenario = asList(await E.TmScenario.filter({ tenant_id: tenantId, code: 'S-30' }))[0];
   const created = await E.TmAlert.create({
+    ref: await safeAlertRef(E, tenantId),
     tenant_id: tenantId, client_id: client.id, scenario_id: scenario?.id || undefined, title, score, priority: score,
     status: 'new', indicator_type: scenario?.indicator_type || 'subjective', source: 'profile_deviation',
     ai_reasons: reasons, executed_at: nowIso, received_at: nowIso, discovered_at: nowIso, dedupe_key: dedupeKey,
