@@ -1,0 +1,85 @@
+{
+  "name": "ModelValidation",
+  "properties": {
+    "evidence_url": {
+      "type": "string"
+    },
+    "findings": {
+      "type": "string"
+    },
+    "next_due_at": {
+      "format": "date",
+      "type": "string"
+    },
+    "outcome": {
+      "enum": [
+        "passed",
+        "passed_with_findings",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "owner_name": {
+      "type": "string"
+    },
+    "owner_user_id": {
+      "type": "string"
+    },
+    "recorded_by_user_id": {
+      "type": "string"
+    },
+    "scope": {
+      "description": "What was validated, e.g. rule set, scenarios, AI triage model",
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "validated_at": {
+      "description": "When the validation was completed",
+      "format": "date-time",
+      "type": "string"
+    },
+    "validator": {
+      "description": "Internal function or external party that performed the validation",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "validated_at",
+    "scope",
+    "outcome",
+    "next_due_at"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "Vitauri Ops"
+      }
+    }
+  },
+  "type": "object"
+}
