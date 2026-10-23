@@ -110,6 +110,9 @@
     "clock": {
       "type": "object",
       "properties": {
+        "intended_at": {
+          "type": "string"
+        },
         "executed_at": {
           "type": "string"
         },

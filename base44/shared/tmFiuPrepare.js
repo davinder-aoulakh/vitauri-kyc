@@ -91,6 +91,7 @@ export async function prepareReport(ctx, { tmCaseId, alertId, kycCaseId, profile
   // Didit template for this report type (same lookup as tmFiuGenerate); 'UTR' when the profile has none configured.
   const templateCode = String(fiu.didit_template_ids?.[reportType] || fiu.didit_template_ids?.[objective ? 'objective' : 'subjective'] || '').trim() || 'UTR';
   const clock = {
+    intended_at: earliest(d.txns.map((t) => t.intended_at)) || earliest(d.alerts.map((a) => a.intended_at)),
     executed_at: earliest(d.txns.map((t) => t.executed_at)) || earliest(d.alerts.map((a) => a.executed_at)),
     received_at: earliest(d.alerts.map((a) => a.received_at || a.created_date)),
     discovered_at: earliest(d.alerts.map((a) => a.discovered_at || a.received_at || a.created_date)) || tmCase.created_date,

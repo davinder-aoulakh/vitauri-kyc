@@ -89,7 +89,7 @@ export function sourceTone(f) {
 
 const HOUR = 3600000;
 const CLOCK = [
-  ['executed_at', 'Executed'], ['received_at', 'Received by Vitauri'], ['discovered_at', 'Discovered'],
+  ['intended_at', 'Intended'], ['executed_at', 'Executed'], ['received_at', 'Received by Vitauri'], ['discovered_at', 'Discovered'],
   ['escalated_at', 'Escalated to CO'], ['decided_at', 'CO decision'],
 ];
 
