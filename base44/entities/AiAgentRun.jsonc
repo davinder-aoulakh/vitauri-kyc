@@ -1,16 +1,11 @@
 {
   "name": "AiAgentRun",
-  "type": "object",
   "properties": {
-    "tenant_id": {
-      "type": "string"
-    },
-    "case_id": {
-      "type": "string",
-      "description": "nullable"
+    "abstained": {
+      "default": false,
+      "type": "boolean"
     },
     "agent_type": {
-      "type": "string",
       "enum": [
         "OrgChart",
         "OutreachCopilot",
@@ -28,12 +23,70 @@
         "TmEvidence",
         "TmNarrative",
         "TmRuleDraft"
-      ]
+      ],
+      "type": "string"
+    },
+    "analyst_action": {
+      "enum": [
+        "Accepted",
+        "Edited",
+        "Overridden",
+        "Rejected"
+      ],
+      "type": "string"
+    },
+    "analyst_justification": {
+      "type": "string"
+    },
+    "case_id": {
+      "description": "nullable",
+      "type": "string"
+    },
+    "content_purged_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "model_used": {
+      "type": "string"
+    },
+    "model_version": {
+      "type": "string"
+    },
+    "output_full": {
+      "description": "Full model output (JSON), masked the same way",
+      "type": "string"
+    },
+    "output_summary": {
+      "type": "string"
     },
     "prompt_hash": {
       "type": "string"
     },
-    "model_used": {
+    "prompt_redacted": {
+      "description": "Full prompt sent to the model, with contact details, account and ID numbers masked",
+      "type": "string"
+    },
+    "prompt_version": {
+      "type": "string"
+    },
+    "retain_until": {
+      "description": "After this date purgeAiRunContent blanks prompt_redacted and output_full; the hash and summary stay",
+      "format": "date",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "tm_alert_id": {
+      "type": "string"
+    },
+    "tm_case_id": {
       "type": "string"
     },
     "tokens_input": {
@@ -41,49 +94,13 @@
     },
     "tokens_output": {
       "type": "number"
-    },
-    "output_summary": {
-      "type": "string"
-    },
-    "analyst_action": {
-      "type": "string",
-      "enum": [
-        "Accepted",
-        "Edited",
-        "Overridden",
-        "Rejected"
-      ]
-    },
-    "analyst_justification": {
-      "type": "string"
-    },
-    "tm_case_id": {
-      "type": "string"
-    },
-    "tm_alert_id": {
-      "type": "string"
-    },
-    "model_version": {
-      "type": "string"
-    },
-    "prompt_version": {
-      "type": "string"
-    },
-    "sources": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "abstained": {
-      "type": "boolean",
-      "default": false
     }
   },
   "required": [
     "tenant_id",
     "agent_type"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "$or": [
