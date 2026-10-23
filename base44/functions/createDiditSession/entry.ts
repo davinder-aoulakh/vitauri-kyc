@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
 import { authorizeOutreachCaller } from '../../shared/diditSessionAuth.js';
+import { isClientLocked } from '../../shared/tippingOff.js';
 
 Deno.serve(async (req) => {
   try {
@@ -44,6 +45,10 @@ Deno.serve(async (req) => {
     const client_id = auth.outreach.client_id;
     if (!item_id || !(auth.outreach.items || []).some((i) => i.item_id === item_id)) {
       return Response.json({ error: 'Item not found on this request' }, { status: 400 });
+    }
+    // Tipping-off: no new verification while an FIU report locks the customer. Neutral wording, as the customer may see it.
+    if (client_id && await isClientLocked(base44, tenant_id, client_id)) {
+      return Response.json({ error: 'Verification is temporarily unavailable. Please try again later.' }, { status: 423 });
     }
 
     // 1. Load tenant credentials (service role — portal user is unauthenticated)
