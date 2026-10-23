@@ -1,6 +1,7 @@
 // manageTmCase actions that reach the client or other records: EDR, customer requests, identity re-verification, network case.
 import { asList, httpError } from './tmAuth.js';
 import { fetchAll } from './tmCoverage.js';
+import { pickWorkflow, parseWorkflows } from './diditWorkflows.js';
 import { OPEN_CASE, WORKABLE_CASE, tlEntry, commit, assertCustomerRequestAllowed, createOutreach, nextCaseRef, distinct } from './tmCaseCommon.js';
 
 const isoDate = (d) => d.toISOString().slice(0, 10);
@@ -83,9 +84,15 @@ export async function reverifyIdentity(ctx, tmCase) {
   const { auth } = ctx;
   if (!WORKABLE_CASE.includes(tmCase.status)) throw httpError(409, `Case is ${tmCase.status}`);
   const client = await assertCustomerRequestAllowed(ctx, tmCase);
+  // Re-verification workflow: tm_settings.reverify_workflow_id when it is a KYC workflow of the tenant, else the KYC default.
+  let tmSettings = ctx.tenant?.tm_settings;
+  if (typeof tmSettings === 'string') { try { tmSettings = JSON.parse(tmSettings); } catch { tmSettings = null; } }
+  const wanted = tmSettings?.reverify_workflow_id || '';
+  const wfId = wanted ? pickWorkflow(ctx.tenant, 'kyc', wanted) : '';
+  const wf = wfId && wfId === wanted ? { idv_workflow_id: wfId, idv_workflow_name: parseWorkflows(ctx.tenant).find((w) => w.workflow_id === wfId)?.name || '' } : { idv_workflow_id: '' };
   const item = {
     item_id: crypto.randomUUID(), sort_order: 0, item_type: 'data_point', field_type: 'id_verification', label: 'Identity re-verification', status: 'Requested',
-    idv_accepted_doc_types: ['Passport', 'Driving_Licence', 'National_ID'], idv_min_match_score: 75, idv_liveness_required: true, idv_auto_proceed: false, idv_workflow_id: '',
+    idv_accepted_doc_types: ['Passport', 'Driving_Licence', 'National_ID'], idv_min_match_score: 75, idv_liveness_required: true, idv_auto_proceed: false, ...wf,
   };
   const req = await createOutreach(ctx, { clientId: client.id, message: 'Identity re-verification', deadline: isoDate(plusDays(7)), items: [item] });
   await commit(ctx, tmCase, {}, tlEntry(auth, 'idv_requested', `Identity re-verification started for ${client.full_name} by ${auth.actorName}.`, { ref_id: req.id }),
