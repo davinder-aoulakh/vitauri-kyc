@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { hasPermission } from '@/lib/permissions';
@@ -80,7 +80,12 @@ export default function CaseWorkspace() {
   const [auditEvents, setAuditEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeStep, setActiveStep] = useState(1);
+  const [searchParams] = useSearchParams();
+  // Deep link: /case/:id?step=N opens that step (1-8).
+  const [activeStep, setActiveStep] = useState(() => {
+    const s = Number(searchParams.get('step'));
+    return Number.isInteger(s) && s >= 1 && s <= 8 ? s : 1;
+  });
   const [mainTab, setMainTab] = useState('workspace'); // 'workspace' | 'audit'
   const [aiCollapsed, setAiCollapsed] = useState(false);
   const [osintAddCallback, setOsintAddCallback] = useState(null);
