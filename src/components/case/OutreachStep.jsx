@@ -29,7 +29,7 @@ import { format, addDays, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import TippingOffBanner from '@/components/shared/TippingOffBanner';
 import { isLocked, fetchLocked, sendCustomerEmail, isLockError } from '@/lib/tippingOff';
-import { buildRequestItem, isVerificationItem } from '@/lib/outreachItems';
+import { buildRequestItem, isVerificationItem, effectiveWorkflow } from '@/lib/outreachItems';
 import IdvWorkflowPicker from '@/components/outreach/IdvWorkflowPicker';
 
 
@@ -667,6 +667,12 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                             <FileText className={cn('w-3.5 h-3.5 flex-shrink-0', item.status === 'Verified' ? 'text-emerald-500' : itemOverdue ? 'text-amber-500' : 'text-muted-foreground')} />
                             <div className="min-w-0">
                               <div className="text-xs text-foreground truncate">{item.label}</div>
+                              {isVerificationItem(item) && (
+                                <div className="text-[11px] text-muted-foreground truncate">
+                                  Didit workflow: {item.didit_workflow_name || effectiveWorkflow(tenant, item).workflow?.name || 'not configured'}
+                                  {!item.didit_workflow_name && !item.idv_workflow_id ? ' (tenant default)' : ''}
+                                </div>
+                              )}
                               {item.response_text && item.field_type !== 'id_verification' && !item.response_text.trim().startsWith('{') && (
                                 <div className="text-xs text-muted-foreground truncate">{item.response_text}</div>
                               )}
