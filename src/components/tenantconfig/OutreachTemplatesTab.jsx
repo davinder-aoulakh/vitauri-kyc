@@ -15,6 +15,7 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 import FieldTypeConfig from './outreach/FieldTypeConfig';
 import PortalPreviewModal from './outreach/PortalPreviewModal';
 import AiGenerateModal from './outreach/AiGenerateModal';
+import { workflowsOfType, defaultWorkflow } from '@/lib/outreachItems';
 
 const CLIENT_TYPES = ['NP', 'ORG'];
 const CASE_TYPES   = ['Onboarding', 'Periodic_Review', 'Event_Driven_Review', 'Offboarding'];
@@ -106,7 +107,6 @@ function getFieldTypeIcon(ft) {
   return ALL_FIELD_TYPES.find(f => f.value === ft)?.icon || '📄';
 }
 // Didit workflow type: entries without a type are KYC (person). KYB workflows are business verification.
-const wfType = (w) => (w?.type === 'kyb' ? 'kyb' : 'kyc');
 
 export default function OutreachTemplatesTab({ tenant }) {
   const [templates, setTemplates]       = useState([]);
@@ -114,8 +114,12 @@ export default function OutreachTemplatesTab({ tenant }) {
   const [modal, setModal]               = useState(null);
   const [diditWorkflows, setDiditWorkflows] = useState([]);
   const kybOn = isFeatureEnabled(tenant, 'didit_kyb');
-  const kycWorkflows = diditWorkflows.filter(w => wfType(w) === 'kyc');
-  const kybWorkflows = diditWorkflows.filter(w => wfType(w) === 'kyb');
+  // Shared helpers: same typing and defaults as the server; the legacy single workflow counts as the KYC default.
+  const wfTenant = { didit_workflows: diditWorkflows, didit_workflow_id: tenant?.didit_workflow_id };
+  const kycWorkflows = workflowsOfType(wfTenant, 'kyc');
+  const kybWorkflows = workflowsOfType(wfTenant, 'kyb');
+  const kycDefault = defaultWorkflow(wfTenant, 'kyc');
+  const kybDefault = defaultWorkflow(wfTenant, 'kyb');
   const [saving, setSaving]       = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewTemplates, setPreviewTemplates] = useState(null); // null = all, otherwise [tmpl]
@@ -296,7 +300,7 @@ export default function OutreachTemplatesTab({ tenant }) {
                                   {tmpl.idv_workflow_name ? (
                                     <div className="text-xs text-muted-foreground">Workflow: {tmpl.idv_workflow_name}</div>
                                   ) : (
-                                    <div className="text-xs text-muted-foreground">Workflow: tenant default</div>
+                                    <div className="text-xs text-muted-foreground">Workflow: tenant default{kycDefault ? ` (${kycDefault.name})` : ''}</div>
                                   )}
                                 </div>
                               ) : tmpl.field_type === 'kyb_verification' ? (
@@ -304,7 +308,7 @@ export default function OutreachTemplatesTab({ tenant }) {
                                   <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
                                     🏢 Business Verification
                                   </span>
-                                  <div className="text-xs text-muted-foreground mt-0.5">Workflow: {tmpl.idv_workflow_name || 'tenant default KYB'}</div>
+                                  <div className="text-xs text-muted-foreground mt-0.5">Workflow: {tmpl.idv_workflow_name || `tenant default KYB${kybDefault ? ` (${kybDefault.name})` : ''}`}</div>
                                 </div>
                               ) : (
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
@@ -408,7 +412,7 @@ export default function OutreachTemplatesTab({ tenant }) {
                         onChange={e => setModal(m => ({ ...m, data: { ...m.data, idv_workflow_id: e.target.value, idv_workflow_name: kybWorkflows.find(w => w.workflow_id === e.target.value)?.name || '' } }))}
                         className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
                       >
-                        <option value="">Use tenant default KYB workflow</option>
+                        <option value="">Use tenant default KYB workflow{kybDefault ? ` — ${kybDefault.name}` : ''}</option>
                         {kybWorkflows.map(wf => (
                           <option key={wf.id} value={wf.workflow_id}>{wf.name}{wf.is_default_kyb ? ' (default)' : ''}{wf.description ? ` — ${wf.description}` : ''}</option>
                         ))}
@@ -444,7 +448,7 @@ export default function OutreachTemplatesTab({ tenant }) {
                         }))}
                         className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
                       >
-                        <option value="">Use tenant default workflow</option>
+                        <option value="">Use tenant default workflow{kycDefault ? ` — ${kycDefault.name}` : ''}</option>
                         {kycWorkflows.map(wf => (
                           <option key={wf.id} value={wf.workflow_id}>
                             {wf.name}{wf.is_default ? ' (default)' : ''}{wf.description ? ` — ${wf.description}` : ''}
