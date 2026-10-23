@@ -106,7 +106,6 @@ function getFieldTypeLabel(ft) {
 function getFieldTypeIcon(ft) {
   return ALL_FIELD_TYPES.find(f => f.value === ft)?.icon || '📄';
 }
-// Didit workflow type: entries without a type are KYC (person). KYB workflows are business verification.
 
 export default function OutreachTemplatesTab({ tenant }) {
   const [templates, setTemplates]       = useState([]);
