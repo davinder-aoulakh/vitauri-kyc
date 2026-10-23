@@ -15,6 +15,7 @@ import FxRatesCard from '@/components/tenantconfig/tm/FxRatesCard';
 import { errorMessage } from '@/lib/tmAlerts';
 import TmExportButton from '@/components/tenantconfig/tm/TmExportButton';
 import ThresholdsEditor from '@/components/tenantconfig/tm/ThresholdsEditor';
+import IdvWorkflowPicker from '@/components/outreach/IdvWorkflowPicker';
 import { Loader2, Save } from 'lucide-react';
 
 const WEIGHTS = [['kyc', 'KYC profile'], ['behaviour', 'Behaviour'], ['screening', 'Screening'], ['alerts', 'Alerts']];
@@ -34,6 +35,7 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
   const [maxPct, setMaxPct] = useState(String(s.max_wrongly_closed_pct ?? 2));
   const [psd2Partner, setPsd2Partner] = useState(s.psd2_partner || 'manual');
   const [autoTriage, setAutoTriage] = useState(s.auto_triage_new_alerts === true);
+  const [reverifyWf, setReverifyWf] = useState(s.reverify_workflow_id || '');
   const isOps = isVitauriOps(currentUser?.app_role);
   const [reg, setReg] = useState({ sessionId: s.regression_session_id || '', outreachId: s.regression_outreach_ref?.outreach_id || '', itemId: s.regression_outreach_ref?.item_id || '' });
   const savedModel = { model: s.ai_model || '', note: s.ai_model_change_note || '' };
@@ -59,6 +61,7 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
         max_wrongly_closed_pct: pct,
         psd2_partner: psd2Partner,
         auto_triage_new_alerts: autoTriage,
+        reverify_workflow_id: reverifyWf || undefined,
         ...(isOps ? {
           regression_session_id: reg.sessionId.trim() || undefined,
           regression_outreach_ref: reg.outreachId.trim() && reg.itemId.trim() ? { outreach_id: reg.outreachId.trim(), item_id: reg.itemId.trim() } : undefined,
@@ -120,6 +123,11 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
         <div className="flex items-center gap-3">
           <Switch checked={autoTriage} onCheckedChange={setAutoTriage} aria-label="Auto-triage new alerts" />
           <div><div className="text-sm font-medium">Auto-triage new alerts</div><div className="text-xs text-muted-foreground">AI adds a proposal to each newly created alert. It never closes or escalates; a person decides.</div></div>
+        </div>
+        <div>
+          <div className="text-sm font-medium">Identity re-verification workflow</div>
+          <div className="text-xs text-muted-foreground mb-1.5">Didit workflow used when a TM case asks the customer to verify their identity again.</div>
+          <IdvWorkflowPicker tenant={tenant} item={{ field_type: 'id_verification' }} value={reverifyWf} onChange={(v) => setReverifyWf(v.idv_workflow_id)} />
         </div>
         <AiModelCard saved={savedModel} value={aiModel} onChange={setAiModel} note={modelNote} onNote={setModelNote} canChange={canChangeModel} changedAt={s.ai_model_changed_at} />
         <div className="max-w-xs">
