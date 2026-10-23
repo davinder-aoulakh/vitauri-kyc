@@ -5,6 +5,7 @@ import { isTmEnabled } from '../../shared/tmGuards.js';
 import { authenticate, errorResponse, httpError, loadTenant, asList, WORK_ROLES } from '../../shared/tmAuth.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import { safeRecompute } from '../../shared/tmRisk.js';
+import { riskAt, alertInputs } from '../../shared/decisionSnapshot.js';
 
 const OUTCOMES = ['closed_false_positive', 'closed_no_action'];
 const OPEN = ['new', 'triaged', 'in_review'];
@@ -65,6 +66,8 @@ export default async function (req) {
         profile_version: profiles.get(a.client_id)?.version,
         rule_versions: Object.fromEntries((a.rule_ids || []).map((id) => [id, ruleVersion.get(id) ?? null])),
         model_version: modelVersion,
+        alert: alertInputs(a),
+        dynamic_risk: await riskAt(E, tenantId, a.client_id),
       };
       Object.keys(snapshot).forEach((k) => snapshot[k] === undefined && delete snapshot[k]);
       await E.Decision.create({
