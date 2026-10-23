@@ -92,6 +92,21 @@
           }
         }
       }
+    },
+    "related_party_id": {
+      "type": "string",
+      "description": "Linked RelatedParty (UBO, director, related company) when this counterparty is one of the customer's own related parties"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "Linked Vitauri customer (Client) when this counterparty is itself a customer of the tenant"
+    },
+    "link_history": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Audit of link/unlink actions: { action, related_party_id, client_id, by_user_id, by_name, at, reason }"
     }
   },
   "required": [
