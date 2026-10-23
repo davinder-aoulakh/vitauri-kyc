@@ -7,8 +7,9 @@ import { hasPermission } from '@/lib/permissions';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { toAlert, toClient, toKycCase, toReport, toTmCase, toWork } from '@/lib/routes';
 import {
-  CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut,
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut,
 } from '@/components/ui/command';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { AlertTriangle, Briefcase, FileText, FolderOpen, Inbox, Users, SlidersHorizontal, Activity, Sparkles } from 'lucide-react';
 
 const list = (r) => (Array.isArray(r) ? r : r?.items || []);
@@ -79,8 +80,14 @@ export default function CommandPalette({ open: openProp, onOpenChange }) {
   ].filter(Boolean), [tmOn, tenant, role]);
 
   const r = results.data;
+  const needle = text.trim().toLowerCase();
+  const shownActions = needle ? actions.filter((a) => a.label.toLowerCase().includes(needle)) : actions;
   return (
-    <CommandDialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="overflow-hidden p-0">
+      <DialogTitle className="sr-only">Search</DialogTitle>
+      {/* Results are already filtered on the server: no client-side cmdk filtering. */}
+      <Command shouldFilter={false} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-2 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2.5">
       <CommandInput value={text} onValueChange={setText} placeholder="Search customers, cases, alerts (AL-…), reports (UTR-…)…" />
       <CommandList>
         <CommandEmpty>{q.length < 2 ? 'Type at least 2 characters.' : results.isFetching ? 'Searching…' : 'No results.'}</CommandEmpty>
@@ -131,18 +138,20 @@ export default function CommandPalette({ open: openProp, onOpenChange }) {
         )}
         <CommandSeparator />
         <CommandGroup heading="Go to">
-          {actions.map((a) => (
+          {shownActions.map((a) => (
             <CommandItem key={a.to + a.label} value={`action ${a.label}`} onSelect={() => go(a.to)}>
               <a.icon className="mr-2 h-4 w-4" />{a.label}
             </CommandItem>
           ))}
-          {tmOn && (
+          {tmOn && (!needle || 'run ai triage'.includes(needle)) && (
             <CommandItem value="action run ai triage" onSelect={() => go('/tm/alerts')}>
               <Sparkles className="mr-2 h-4 w-4 text-purple-600" />Run AI triage on new alerts<CommandShortcut>Alerts</CommandShortcut>
             </CommandItem>
           )}
         </CommandGroup>
       </CommandList>
-    </CommandDialog>
+      </Command>
+      </DialogContent>
+    </Dialog>
   );
 }
