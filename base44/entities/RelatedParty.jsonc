@@ -1,105 +1,170 @@
 {
   "name": "RelatedParty",
-  "type": "object",
   "properties": {
-    "tenant_id": {
+    "country_of_residence": {
+      "description": "NP only",
       "type": "string"
     },
-    "party_type": {
-      "type": "string",
-      "enum": [
-        "NP",
-        "ORG"
-      ]
+    "date_of_birth": {
+      "description": "NP only",
+      "format": "date",
+      "type": "string"
+    },
+    "didit_applied_fields": {
+      "description": "Fields whose value an analyst accepted from Didit (ID&V or KYB registry)",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "didit_idv_snapshot": {
+      "description": "Data extracted by the person's own Didit ID verification, kept for review. Not applied until an analyst accepts it.",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "checked_at": {
+          "type": "string"
+        },
+        "date_of_birth": {
+          "type": "string"
+        },
+        "first_name": {
+          "type": "string"
+        },
+        "full_name": {
+          "type": "string"
+        },
+        "gender": {
+          "type": "string"
+        },
+        "id_expiry_date": {
+          "type": "string"
+        },
+        "id_number": {
+          "type": "string"
+        },
+        "id_type": {
+          "type": "string"
+        },
+        "idv_status": {
+          "type": "string"
+        },
+        "issuing_country": {
+          "type": "string"
+        },
+        "last_name": {
+          "type": "string"
+        },
+        "nationality": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "didit_reviewed_fields": {
+      "description": "Fields where the analyst kept the recorded value over Didit's",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
     "full_name": {
       "type": "string"
     },
-    "date_of_birth": {
-      "type": "string",
+    "id_expiry_date": {
+      "description": "NP only",
       "format": "date",
-      "description": "NP only"
-    },
-    "nationality": {
-      "type": "string",
-      "description": "NP only"
-    },
-    "country_of_residence": {
-      "type": "string",
-      "description": "NP only"
-    },
-    "id_type": {
-      "type": "string",
-      "description": "NP only"
+      "type": "string"
     },
     "id_number": {
-      "type": "string",
-      "description": "NP only"
+      "description": "NP only",
+      "type": "string"
     },
-    "id_expiry_date": {
-      "type": "string",
-      "format": "date",
-      "description": "NP only"
+    "id_type": {
+      "description": "NP only",
+      "type": "string"
     },
-    "registration_number": {
-      "type": "string",
-      "description": "ORG only"
-    },
-    "registered_country": {
-      "type": "string",
-      "description": "ORG only"
-    },
-    "registered_address": {
-      "type": "string",
-      "description": "ORG only"
-    },
-    "sector": {
-      "type": "string",
-      "description": "ORG only"
+    "is_active": {
+      "default": true,
+      "type": "boolean"
     },
     "legal_form": {
-      "type": "string",
-      "description": "ORG only"
+      "description": "ORG only",
+      "type": "string"
     },
-    "role_in_relationship": {
-      "type": "string",
-      "description": "UBO, Director, Shareholder, Beneficiary, Insured"
+    "nationality": {
+      "description": "NP only",
+      "type": "string"
     },
     "ownership_percentage": {
       "type": "number"
     },
-    "is_active": {
-      "type": "boolean",
-      "default": true
+    "party_type": {
+      "enum": [
+        "NP",
+        "ORG"
+      ],
+      "type": "string"
+    },
+    "registered_address": {
+      "description": "ORG only",
+      "type": "string"
+    },
+    "registered_country": {
+      "description": "ORG only",
+      "type": "string"
+    },
+    "registration_number": {
+      "description": "ORG only",
+      "type": "string"
+    },
+    "residential_address": {
+      "description": "NP only \u2014 address as on the identity document",
+      "type": "string"
     },
     "risk_classification": {
-      "type": "string",
       "enum": [
         "Low",
         "Medium",
         "High",
         "Unacceptable"
-      ]
+      ],
+      "type": "string"
+    },
+    "role_in_relationship": {
+      "description": "UBO, Director, Shareholder, Beneficiary, Insured",
+      "type": "string"
+    },
+    "sector": {
+      "description": "ORG only",
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "verification_notes": {
+      "type": "string"
     },
     "verification_status": {
-      "type": "string",
+      "default": "Unverified",
       "enum": [
         "Unverified",
         "Pending_Verification",
         "Verified",
         "Rejected"
       ],
-      "default": "Unverified"
+      "type": "string"
     },
-    "verification_notes": {
+    "verified_at": {
+      "format": "date-time",
       "type": "string"
     },
     "verified_by_user_id": {
       "type": "string"
-    },
-    "verified_at": {
-      "type": "string",
-      "format": "date-time"
     }
   },
   "required": [
@@ -107,6 +172,7 @@
     "party_type",
     "full_name"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "$or": [
