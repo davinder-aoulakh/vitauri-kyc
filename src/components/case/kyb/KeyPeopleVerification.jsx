@@ -7,6 +7,7 @@ import { Copy, Loader2, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sendCustomerEmail } from '@/lib/tippingOff';
 import IdvWorkflowPicker from '@/components/outreach/IdvWorkflowPicker';
+import RelatedPartyDataReview from './RelatedPartyDataReview';
 
 export const keyRoleKind = (role) => (/ubo|beneficial/i.test(role || '') ? 'UBO' : /director|board/i.test(role || '') ? 'Director' : null);
 const STATUS_CLS = {
@@ -16,7 +17,7 @@ const STATUS_CLS = {
 };
 
 /** UBOs and directors of an organisation with their own Didit ID verification (one portal link per person). */
-export default function KeyPeopleVerification({ client, kycCase, tenant, people, requests, onChanged }) {
+export default function KeyPeopleVerification({ client, kycCase, tenant, people, requests, onChanged, currentUser }) {
   const [emails, setEmails] = useState({});
   const [busy, setBusy] = useState(null);
   const [links, setLinks] = useState({});
@@ -80,6 +81,7 @@ export default function KeyPeopleVerification({ client, kycCase, tenant, people,
                     Request {req.status}{item?.didit_session_status ? ` · Didit: ${item.didit_session_status}` : ''}{item?.idv_status ? ` · Result: ${item.idv_status}` : ''}{req.recipient_email ? ` · ${req.recipient_email}` : ''}
                   </div>
                 )}
+                <RelatedPartyDataReview party={p} clientId={client.id} caseId={kycCase?.id} currentUser={currentUser} onChanged={onChanged} />
                 {p.verification_status !== 'Verified' && (
                   <div className="flex flex-wrap items-center gap-2">
                     <Input value={emails[p.id] ?? ''} onChange={(e) => setEmails((m) => ({ ...m, [p.id]: e.target.value }))} placeholder="Email (optional)" className="h-8 text-xs w-56" />
