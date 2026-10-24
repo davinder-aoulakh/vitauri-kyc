@@ -51,9 +51,22 @@ export async function applyRelatedPartyIdv(base44, { tenantId, outreach, session
   const rp = asList(await E.RelatedParty.filter({ tenant_id: tenantId, id: outreach.related_party_id }, undefined, 1))[0];
   if (!rp) return null;
 
+  // Identity data is stored as a snapshot for review (RelatedPartyDataReview); it is not written to the party's fields
+  // until an analyst accepts it — the same rule as the person (NP) and company (KYB) paths.
   const patch = {};
-  const fill = { date_of_birth: idvFields?.idv_extracted_dob, nationality: idvFields?.idv_extracted_nationality, id_number: idvFields?.idv_document_number, id_expiry_date: idvFields?.idv_document_expiry, id_type: idvFields?.idv_document_type };
-  for (const [k, v] of Object.entries(fill)) if (v && !rp[k]) patch[k] = String(v);
+  const str = (v) => (v == null || v === '' ? undefined : String(v));
+  const snapshot = Object.fromEntries(Object.entries({
+    first_name: str(idvFields?.idv_extracted_first_name), last_name: str(idvFields?.idv_extracted_last_name),
+    full_name: str([idvFields?.idv_extracted_first_name, idvFields?.idv_extracted_last_name].filter(Boolean).join(' ')),
+    date_of_birth: str(idvFields?.idv_extracted_dob), nationality: str(idvFields?.idv_extracted_nationality), gender: str(idvFields?.idv_extracted_gender),
+    id_type: str(idvFields?.idv_document_type), id_number: str(idvFields?.idv_document_number), id_expiry_date: str(idvFields?.idv_document_expiry),
+    issuing_country: str(idvFields?.idv_issuing_country), address: str(idvFields?.idv_extracted_address),
+    idv_status: str(idvFields?.idv_status), session_id: str(sessionId), checked_at: new Date().toISOString(),
+  }).filter(([, v]) => v !== undefined));
+  const hasIdentity = ['full_name', 'date_of_birth', 'nationality', 'id_number'].some((k) => snapshot[k]);
+  if (hasIdentity && JSON.stringify({ ...snapshot, checked_at: null }) !== JSON.stringify({ ...(rp.didit_idv_snapshot || {}), checked_at: null })) {
+    patch.didit_idv_snapshot = snapshot;
+  }
   const status = STATUS[idvFields?.idv_status] || (idvFields?.idv_status ? 'Pending_Verification' : null);
   if (status && rp.verification_status !== status) {
     patch.verification_status = status;
@@ -86,7 +99,7 @@ export async function applyRelatedPartyIdv(base44, { tenantId, outreach, session
       tenant_id: tenantId, client_id: outreach.client_id, case_id: outreach.case_id || undefined, actor_type: 'System', actor_name: actorName,
       event_type: 'related_party_idv_applied',
       before_state: { verification_status: rp.verification_status || null },
-      after_state: { related_party_id: rp.id, verification_status: patch.verification_status || rp.verification_status || null, fields: Object.keys(patch), aml_hits_created: created },
+      after_state: { related_party_id: rp.id, verification_status: patch.verification_status || rp.verification_status || null, snapshot_stored: !!patch.didit_idv_snapshot, aml_hits_created: created },
       notes: `Didit ID verification for related party ${rp.full_name}: ${idvFields?.idv_status || 'pending'}.`,
     }).catch(() => {});
   }
