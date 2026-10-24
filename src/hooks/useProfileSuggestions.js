@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { getNestedValue, buildFieldUpdatePayload } from '@/lib/clientNameUtils';
+import { upsertRelatedParty } from '@/lib/relatedPartyUpsert';
 
 export const CONFIDENCE_THRESHOLD = 70;
 
@@ -32,13 +33,15 @@ export const ORG_FIELD_LABELS = {
   registered_address:  'Registered Address',
   sector:              'Sector / Industry',
   lei_code:            'LEI Code',
+  business_activity:   'Business Activity',
+  nature_of_business_code: 'Nature of Business Code',
 };
 
 /**
  * Shared pipeline logic for the Structured Profile Fields grid.
  * Used by OutreachStep (Step 1 — unified verification grid).
  */
-export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVerified, onCaseUpdate }) {
+export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVerified, onCaseUpdate, tenant }) {
   const isOrg = client?.client_type === 'ORG';
   const fieldLabels = isOrg ? ORG_FIELD_LABELS : NP_FIELD_LABELS;
 
@@ -278,27 +281,17 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
     onFieldVerified?.(fieldKey, fieldLabels[fieldKey]);
   }
 
-  async function acceptRelatedParty(rpIndex, rp) {
-    const rpRecord = await base44.entities.RelatedParty.create({
-      tenant_id:            kycCase.tenant_id,
-      party_type:           rp.party_type || 'NP',
-      full_name:            rp.full_name,
-      role_in_relationship: rp.role_in_relationship,
-      ownership_percentage: rp.ownership_percentage ? Number(rp.ownership_percentage) : undefined,
-      verification_status:  'Unverified',
-    });
-
-    await base44.entities.ClientRelatedPartyLink.create({
-      tenant_id:        kycCase.tenant_id,
-      client_id:        kycCase.client_id,
-      related_party_id: rpRecord.id,
-      role:             rp.role_in_relationship,
-      ownership_percentage: rp.ownership_percentage ? Number(rp.ownership_percentage) : undefined,
-      added_by_user_id: currentUser?.id,
+  // Adds the party, or — when it is already linked — applies only the differing values (acceptFields). Never duplicates.
+  async function acceptRelatedParty(rpIndex, rp, acceptFields) {
+    const { rp: rpRecord } = await upsertRelatedParty({
+      tenant, tenantId: kycCase.tenant_id, clientId: kycCase.client_id, caseId: kycCase.id, currentUser,
+      candidate: { ...rp, source_type: rp.source_type || rp.fields?.full_name?.source_type || 'document' },
+      matchRpId: rp.match_rp_id || rp.rp_id || null,
+      acceptFields: acceptFields || (rp.diffs && Object.keys(rp.diffs).length ? Object.keys(rp.diffs) : undefined),
     });
 
     const updatedRps = (suggestions.related_parties || []).map((r, i) =>
-      i === rpIndex ? { ...r, status: 'confirmed', rp_id: rpRecord.id } : r
+      i === rpIndex ? { ...r, status: 'confirmed', rp_id: rpRecord.id, match_rp_id: rpRecord.id, match_status: 'matched', diffs: {} } : r
     );
     const updated = { ...suggestions, related_parties: updatedRps };
     await saveSuggestions(updated);
