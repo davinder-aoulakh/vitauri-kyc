@@ -722,6 +722,7 @@ export default function CaseWorkspace() {
                   onCaseUpdate={setKycCase}
                   onNavigateToStep={setActiveStep}
                   onAddNote={addNote}
+                  tenant={tenant}
                 />
               </div>
             ) : activeStep === 4 ? (
