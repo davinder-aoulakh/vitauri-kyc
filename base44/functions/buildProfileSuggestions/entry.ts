@@ -547,7 +547,7 @@ Return 4-6 findings. Be specific. If nothing found, say so clearly.`,
   }
   const seenRp = new Set<string>(kybRps.map((r) => normName(r.full_name)));
   const uniqueRps = relatedPartyCandidates.filter(rp => {
-    const key = rp.full_name.toLowerCase().trim();
+    const key = normName(rp.full_name);
     if (seenRp.has(key)) return false;
     seenRp.add(key);
     return true;
