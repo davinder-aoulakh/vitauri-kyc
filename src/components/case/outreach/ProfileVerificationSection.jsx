@@ -14,9 +14,9 @@ import { format } from 'date-fns';
 import { getNestedValue } from '@/lib/clientNameUtils';
 
 export default function ProfileVerificationSection({
-  kycCase, client, currentUser, onFieldVerified, onRequestInfoEmail, onAddNote, onCaseUpdate,
+  kycCase, client, currentUser, onFieldVerified, onRequestInfoEmail, onAddNote, onCaseUpdate, tenant,
 }) {
-  const profile = useProfileSuggestions({ kycCase, client, currentUser, onFieldVerified, onCaseUpdate });
+  const profile = useProfileSuggestions({ kycCase, client, currentUser, onFieldVerified, onCaseUpdate, tenant });
   const {
     isOrg, fieldLabels, fieldKeys, clientFields, suggestions, pipelineRunning, acceptingField,
     confirmed, conflicts, highConfPending,
@@ -106,6 +106,15 @@ export default function ProfileVerificationSection({
 
       {suggestions && !pipelineRunning && (
         <div className="space-y-5">
+          {(suggestions.flags || []).filter(f => f.type === 'registry_status').map(f => (
+            <div key={f.value} className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-red-800">
+                <span className="font-semibold">Company registry status: {f.value}.</span>{' '}
+                <span className="text-xs">Reported by the Didit KYB registry check. Confirm the company is still active before continuing.</span>
+              </div>
+            </div>
+          ))}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center gap-2">
               {isOrg ? <Building2 className="w-4 h-4 text-blue-600" /> : <User className="w-4 h-4 text-violet-600" />}
@@ -137,7 +146,7 @@ export default function ProfileVerificationSection({
               <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center gap-2">
                 <User className="w-4 h-4 text-blue-600" />
                 <span className="font-semibold text-sm">Related Party Suggestions</span>
-                <span className="text-xs text-muted-foreground">(from incorporation docs)</span>
+                <span className="text-xs text-muted-foreground">(from the Didit KYB registry and incorporation docs)</span>
                 <span className="text-xs text-muted-foreground ml-auto">
                   {(suggestions.related_parties || []).filter(r => r.status === 'confirmed').length}/{(suggestions.related_parties || []).length} confirmed
                 </span>
@@ -145,8 +154,8 @@ export default function ProfileVerificationSection({
               <div className="p-4 space-y-2.5">
                 {!suggestions.related_parties?.length ? (
                   <div className="text-sm text-muted-foreground py-4 text-center">
-                    No related parties extracted from documents.<br />
-                    <span className="text-xs">Directors, UBOs, and shareholders will appear here if found in incorporation docs.</span>
+                    No related parties found in the Didit KYB registry or in documents.<br />
+                    <span className="text-xs">Directors, UBOs, and shareholders appear here once the business verification or incorporation documents are in.</span>
                   </div>
                 ) : (
                   suggestions.related_parties.map((rp, i) => (
