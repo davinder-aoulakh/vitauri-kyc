@@ -102,29 +102,20 @@ export async function applyKybDecision(ctx, kyb, decision, { eventId } = {}) {
   if (DECIDED.includes(status) && !kyb.decided_at) patch.decided_at = patch.checked_at;
   if (status === 'Resubmitted' && decision?.resubmit_info) patch.resubmit_info = decision.resubmit_info;
 
-  // Registry: keep the company record (officer KYC links removed), fill only empty client registry fields.
+  // Registry: keep the company record (officer KYC links removed). Nothing is written to the Client here: like the
+  // person ID&V path, registry values are offered in the Profile Verification grid / KYB card for the analyst to accept.
   if (company) {
     const { officers, beneficial_owners, ...rest } = company;
     patch.registry = { ...rest, officers_count: (officers || []).length, beneficial_owners_count: (beneficial_owners || []).length };
     patch.registry_status = company.registry_status || company.status || null;
-    const client = asList(await E.Client.filter({ tenant_id: tenantId, id: kyb.client_id }, undefined, 1))[0];
-    if (client) {
-      const fill = {};
-      const cand = {
-        registration_number: company.registration_number, legal_form: company.company_type,
-        registered_address: company.registered_address, registered_country: company.country_code,
-        lei_code: company.legal_entity_identifier, business_activity: company.nature_of_business,
-      };
-      for (const [k, v] of Object.entries(cand)) if (v && !client[k]) fill[k] = String(v).slice(0, 500);
-      if (Object.keys(fill).length) {
-        await E.Client.update(client.id, fill);
-        await E.AuditEvent.create({
-          tenant_id: tenantId, client_id: client.id, case_id: kyb.kyc_case_id || undefined, actor_user_id: actor?.actorUserId,
-          actor_name: actor?.actorName || 'Didit KYB', actor_type: actor?.actorType || 'System', event_type: 'kyb_registry_applied',
-          before_state: {}, after_state: { fields: Object.keys(fill), kyb_verification_id: kyb.id },
-          notes: `Empty registry fields filled from Didit KYB: ${Object.keys(fill).join(', ')}.`,
-        });
-      }
+    const isNew = JSON.stringify(patch.registry) !== JSON.stringify(kyb.registry || null);
+    if (isNew) {
+      await E.AuditEvent.create({
+        tenant_id: tenantId, client_id: kyb.client_id, case_id: kyb.kyc_case_id || undefined, actor_user_id: actor?.actorUserId,
+        actor_name: actor?.actorName || 'Didit KYB', actor_type: actor?.actorType || 'System', event_type: 'kyb_registry_received',
+        before_state: {}, after_state: { kyb_verification_id: kyb.id, registry_status: patch.registry_status },
+        notes: 'Didit KYB registry data received. Review and accept the company fields in Profile Verification.',
+      });
     }
   }
   patch.key_people_found = keyPeopleFrom(company, decision?.key_people_checks);
