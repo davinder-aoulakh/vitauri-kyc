@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
-import { reportEdrChange } from '@/lib/edrChange';
+import { upsertRelatedParty, findLinkedMatch } from '@/lib/relatedPartyUpsert';
 import { CheckCircle, FileText, Loader2, RefreshCw, ShieldAlert, UserPlus, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import KeyPeopleVerification, { keyRoleKind } from './KeyPeopleVerification';
@@ -16,6 +16,27 @@ const STATUS_CLS = {
   Declined: 'bg-red-50 text-red-700 border-red-200',
 };
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+// A registry person as a related-party candidate (same shape the Profile Verification grid uses).
+const toCandidate = (p) => ({
+  full_name: p.name, party_type: p.entity_type === 'company' ? 'ORG' : 'NP',
+  role_in_relationship: p.source === 'beneficial_owner' ? 'UBO' : (p.designation || p.role || 'Director'),
+  ownership_percentage: p.ownership_percent != null && Number.isFinite(Number(p.ownership_percent)) ? Number(p.ownership_percent) : null,
+  nationality: p.nationality || null, date_of_birth: p.date_of_birth || null, registration_number: p.registration_number || null,
+  source_type: 'didit',
+});
+
+// Fields where the registry differs from (or adds to) what is recorded for a linked party.
+function registryDiffs(c, { rp, link }) {
+  const d = {};
+  const recOwn = link?.ownership_percentage ?? rp.ownership_percentage;
+  if (c.ownership_percentage != null && (recOwn == null || Math.abs(Number(recOwn) - c.ownership_percentage) >= 0.01)) d.ownership_percentage = { recorded: recOwn ?? null, registry: c.ownership_percentage };
+  if (c.nationality && norm(rp.nationality) !== norm(c.nationality)) d.nationality = { recorded: rp.nationality || null, registry: c.nationality };
+  if (c.date_of_birth && !rp.date_of_birth) d.date_of_birth = { recorded: null, registry: c.date_of_birth };
+  const recRole = link?.role || rp.role_in_relationship;
+  if (c.role_in_relationship && recRole && norm(recRole) !== norm(c.role_in_relationship)) d.role_in_relationship = { recorded: recRole, registry: c.role_in_relationship };
+  return d;
+}
 
 function Fact({ label, value }) {
   return (
@@ -65,8 +86,13 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
       return kind ? { ...p, role, kind, ownership_percentage: l.ownership_percentage ?? p.ownership_percentage } : null;
     }).filter(Boolean);
   }, [data]);
-  const linkedNames = new Set((data?.parties || []).map((p) => norm(p.full_name)));
-  const registryPeople = (kyb?.key_people_found || []).filter((p) => p.name && p.is_active !== false);
+  const linked = useMemo(() => (data ? data.links.map((link) => ({ link, rp: data.parties.find((p) => p.id === link.related_party_id) })).filter((x) => x.rp) : []), [data]);
+  // Each registry person: not linked yet (Add), linked and agreeing (Recorded), or linked with differences (review).
+  const registryPeople = (kyb?.key_people_found || []).filter((p) => p.name && p.is_active !== false).map((p) => {
+    const candidate = toCandidate(p);
+    const match = findLinkedMatch(linked, candidate);
+    return { ...p, candidate, match, diffs: match ? registryDiffs(candidate, match) : {} };
+  });
 
   const sync = async () => {
     if (!kyb) return;
@@ -76,6 +102,8 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
       if (res?.data?.error) throw new Error(res.data.error);
       toast({ title: `Business verification: ${res?.data?.status || 'no result yet'}` });
       refresh();
+      // Refresh the Profile Verification suggestions so new registry data shows up for review (as the NP pipeline does).
+      if (kycCase?.id) base44.functions.invoke('buildProfileSuggestions', { case_id: kycCase.id, client_id: client.id, client_type: 'ORG' }).catch(() => {});
     } catch (e) {
       toast({ title: 'Sync failed', description: e?.response?.data?.error || e.message, variant: 'destructive' });
     } finally {
@@ -83,27 +111,15 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
     }
   };
 
+  // Adds the person, or applies the registry's differing values to the party already linked — never a duplicate.
   const addFromRegistry = async (p) => {
     setAdding(p.name);
     try {
-      const role = p.source === 'beneficial_owner' ? 'UBO' : (p.designation || p.role || 'Director');
-      const ownership = p.ownership_percent != null ? Number(p.ownership_percent) : undefined;
-      const rp = await base44.entities.RelatedParty.create({
-        tenant_id: tenantId, party_type: p.entity_type === 'company' ? 'ORG' : 'NP', full_name: p.name,
-        nationality: p.nationality || undefined, date_of_birth: p.date_of_birth || undefined,
-        registration_number: p.registration_number || undefined, role_in_relationship: role,
-        ownership_percentage: Number.isFinite(ownership) ? ownership : undefined, verification_status: 'Unverified',
+      const { created, updatedFields } = await upsertRelatedParty({
+        tenant, tenantId, clientId: client.id, caseId: kycCase?.id, currentUser,
+        candidate: p.candidate, matchRpId: p.match?.rp.id, acceptFields: p.match ? Object.keys(p.diffs) : undefined,
       });
-      await base44.entities.ClientRelatedPartyLink.create({
-        tenant_id: tenantId, client_id: client.id, related_party_id: rp.id, role,
-        ownership_percentage: Number.isFinite(ownership) ? ownership : undefined, added_by_user_id: currentUser?.id,
-      });
-      await base44.entities.AuditEvent.create({
-        tenant_id: tenantId, client_id: client.id, case_id: kycCase?.id, actor_user_id: currentUser?.id, actor_name: currentUser?.full_name,
-        actor_type: 'User', event_type: 'related_party_created_and_linked', notes: `${p.name} added as ${role} from the Didit KYB registry.`,
-      });
-      reportEdrChange(tenant, client.id, { type: 'related_party', source_ref: `related_party:${rp.id}`, before: null, after: { related_party_id: rp.id, full_name: rp.full_name, role, ownership_percentage: ownership ?? null } });
-      toast({ title: `${p.name} added as ${role}` });
+      toast({ title: created ? `${p.name} added as ${p.candidate.role_in_relationship}` : `${p.name}: ${updatedFields.join(', ').replace(/_/g, ' ') || 'no changes'} updated from the registry` });
       refresh();
     } catch (e) {
       toast({ title: 'Could not add related party', description: e.message, variant: 'destructive' });
@@ -171,19 +187,31 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
           <h3 className="text-sm font-semibold">Officers and owners reported by the registry</h3>
           <div className="divide-y divide-border">
             {registryPeople.map((p, i) => {
-              const linked = linkedNames.has(norm(p.name));
+              const diffKeys = Object.keys(p.diffs);
               return (
-                <div key={`${p.name}-${i}`} className="flex flex-wrap items-center gap-2 py-2 text-xs">
-                  <span className="font-medium">{p.name}</span>
-                  <span className="text-muted-foreground">{p.source === 'beneficial_owner' ? 'Beneficial owner' : (p.designation || p.role || 'Officer')}{p.ownership_percent != null ? ` · ${p.ownership_percent}%` : ''}{p.nationality ? ` · ${p.nationality}` : ''}</span>
-                  {p.kyc_status && <span className="text-muted-foreground">· Didit KYC: {p.kyc_status}</span>}
-                  {linked
-                    ? <span className="ml-auto text-emerald-700 inline-flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Recorded</span>
-                    : (
+                <div key={`${p.name}-${i}`} className="py-2 text-xs space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{p.name}</span>
+                    <span className="text-muted-foreground">{p.source === 'beneficial_owner' ? 'Beneficial owner' : (p.designation || p.role || 'Officer')}{p.ownership_percent != null ? ` · ${p.ownership_percent}%` : ''}{p.nationality ? ` · ${p.nationality}` : ''}</span>
+                    {p.kyc_status && <span className="text-muted-foreground">· Didit KYC: {p.kyc_status}</span>}
+                    {p.match && !diffKeys.length && <span className="ml-auto text-emerald-700 inline-flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Recorded</span>}
+                    {(!p.match || diffKeys.length > 0) && (
                       <Button size="sm" variant="outline" className="ml-auto h-7 gap-1 text-xs" disabled={adding === p.name} onClick={() => addFromRegistry(p)}>
-                        {adding === p.name ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />} Add as related party
+                        {adding === p.name ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
+                        {p.match ? 'Apply registry values' : 'Add as related party'}
                       </Button>
                     )}
+                  </div>
+                  {p.match && diffKeys.length > 0 && (
+                    <div className="rounded-md border border-amber-200 bg-amber-50/60 px-2 py-1.5 space-y-0.5">
+                      <div className="text-amber-800 font-medium">Recorded, but the registry differs:</div>
+                      {diffKeys.map((k) => (
+                        <div key={k} className="text-muted-foreground">
+                          <span className="capitalize">{k.replace(/_/g, ' ')}</span>: <span className="line-through">{p.diffs[k].recorded ?? 'not recorded'}</span> → <span className="font-medium text-foreground">{p.diffs[k].registry}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
