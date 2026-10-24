@@ -219,7 +219,7 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
         </div>
       )}
 
-      <KeyPeopleVerification client={client} kycCase={kycCase} tenant={tenant} people={people} requests={data?.requests || []} onChanged={refresh} />
+      <KeyPeopleVerification client={client} kycCase={kycCase} tenant={tenant} people={people} requests={data?.requests || []} onChanged={refresh} currentUser={currentUser} />
 
       <div className="flex flex-wrap items-center justify-end gap-3">
         {!stepDone && !canComplete && (
