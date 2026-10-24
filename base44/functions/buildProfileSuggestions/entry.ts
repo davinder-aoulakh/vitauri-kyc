@@ -20,7 +20,13 @@ const NP_FIELDS = [
   'residential_address.zipcode','residential_address.city',
 ];
 // ORG fields we can extract from sources
-const ORG_FIELDS = ['full_name','legal_form','registration_number','registered_country','registered_address','sector','lei_code'];
+const ORG_FIELDS = ['full_name','legal_form','registration_number','registered_country','registered_address','sector','lei_code','business_activity','nature_of_business_code'];
+
+// Registry statuses that mean the company is not (fully) active — surfaced as a red flag in the grid.
+const INACTIVE_REGISTRY = /dissolv|struck|strike|liquidat|inactive|closed|cancel|deregist|bankrupt|insolv|ceased/i;
+
+const normName = (s: any) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+const sameNum = (a: any, b: any) => a != null && b != null && a !== '' && b !== '' && Math.abs(Number(a) - Number(b)) < 0.01;
 
 // Source priority for merging (higher index = higher priority)
 const SOURCE_PRIORITY = { osint: 0, outreach: 1, document: 2, didit: 3 };
@@ -269,6 +275,86 @@ function extractFromOcr(ocrResults: Array<{ doc_id: string; file_name: string; e
   return { fieldCandidates: candidates, relatedPartyCandidates: rpCandidates };
 }
 
+// Didit KYB registry data (KybVerification.registry) for ORG profile fields. Same source type and priority as the
+// person ID&V path; source_request_id/source_item_id point at the kyb_verification outreach item so the shared
+// idv_profile_applied_fields marker records what the analyst has accepted.
+function extractFromKyb(kybs: any[], outreaches: any[]): Record<string, any[]> {
+  const candidates: Record<string, any[]> = {};
+  for (const kyb of kybs) {
+    const reg = kyb?.registry;
+    if (!reg) continue;
+    const req = (outreaches || []).find((r: any) => r.id === kyb.outreach_id);
+    const item = req?.items?.find((i: any) => i.item_id === kyb.item_id);
+    const applied = new Set(item?.idv_profile_applied_fields || []);
+    const ids = req && item ? { source_request_id: req.id, source_item_id: item.item_id } : {};
+    const ref = `Didit KYB registry${kyb.decided_at ? ` (${String(kyb.decided_at).slice(0, 10)})` : ''}`;
+    const push = (field: string, value: any) => {
+      if (value == null || String(value).trim() === '') return;
+      (candidates[field] ||= []).push({ value: String(value).trim().slice(0, 500), confidence: 95, source_type: 'didit', source_ref: ref, applied: applied.has(field), ...ids });
+    };
+    push('full_name', reg.company_name || reg.name);
+    push('registration_number', reg.registration_number);
+    push('legal_form', reg.company_type || reg.legal_form);
+    push('registered_country', reg.country_code || reg.country);
+    push('registered_address', typeof reg.registered_address === 'object' ? Object.values(reg.registered_address || {}).filter(Boolean).join(', ') : reg.registered_address);
+    push('lei_code', reg.legal_entity_identifier || reg.lei);
+    push('business_activity', reg.nature_of_business || reg.business_activity);
+    push('nature_of_business_code', reg.industry_code || reg.sic_code || reg.nace_code || (Array.isArray(reg.sic_codes) ? reg.sic_codes[0] : undefined));
+    break; // the most recent KYB with registry data wins; older ones are history
+  }
+  return candidates;
+}
+
+// UBOs / directors reported by the Didit KYB registry, matched against the related parties already linked to the client.
+// status: 'new' (not linked yet), 'matched' (linked, registry agrees), 'differs' (linked, registry differs on some fields).
+function kybRelatedPartyCandidates(kyb: any, linked: Array<{ rp: any; link: any }>): any[] {
+  const people = (kyb?.key_people_found || []).filter((p: any) => p?.name && p.is_active !== false);
+  const out: any[] = [];
+  const ref = 'Didit KYB registry';
+  const f = (value: any) => (value == null || value === '' ? null : { value: String(value), confidence: 95, source_type: 'didit', source_ref: ref, status: 'suggested', conflict_note: null });
+  for (const p of people) {
+    const role = p.source === 'beneficial_owner' ? 'UBO' : (p.designation || p.role || 'Director');
+    const ownership = p.ownership_percent != null && Number.isFinite(Number(p.ownership_percent)) ? Number(p.ownership_percent) : null;
+    const match = linked.find(({ rp }) => normName(rp.full_name) === normName(p.name)
+      && (!p.date_of_birth || !rp.date_of_birth || String(rp.date_of_birth).slice(0, 10) === String(p.date_of_birth).slice(0, 10)));
+    const diffs: Record<string, any> = {};
+    if (match) {
+      const recOwn = match.link?.ownership_percentage ?? match.rp.ownership_percentage;
+      if (ownership != null && !sameNum(recOwn, ownership)) diffs.ownership_percentage = { recorded: recOwn ?? null, registry: ownership };
+      if (p.nationality && match.rp.nationality && normName(match.rp.nationality) !== normName(p.nationality)) diffs.nationality = { recorded: match.rp.nationality, registry: p.nationality };
+      if (p.nationality && !match.rp.nationality) diffs.nationality = { recorded: null, registry: p.nationality };
+      if (p.date_of_birth && !match.rp.date_of_birth) diffs.date_of_birth = { recorded: null, registry: p.date_of_birth };
+      const recRole = match.link?.role || match.rp.role_in_relationship;
+      if (role && recRole && normName(recRole) !== normName(role)) diffs.role_in_relationship = { recorded: recRole, registry: role };
+    }
+    out.push({
+      full_name: p.name,
+      party_type: p.entity_type === 'company' ? 'ORG' : 'NP',
+      role_in_relationship: role,
+      ownership_percentage: ownership,
+      nationality: p.nationality || null,
+      date_of_birth: p.date_of_birth || null,
+      registration_number: p.registration_number || null,
+      source_type: 'didit',
+      source_ref: ref,
+      confidence: 95,
+      match_rp_id: match?.rp.id || null,
+      diffs,
+      match_status: !match ? 'new' : Object.keys(diffs).length ? 'differs' : 'matched',
+      fields: {
+        full_name: f(p.name),
+        role_in_relationship: f(role),
+        ownership_percentage: f(ownership),
+        nationality: f(p.nationality),
+        date_of_birth: f(p.date_of_birth),
+      },
+      status: match && !Object.keys(diffs).length ? 'confirmed' : 'suggested',
+      rp_id: match?.rp.id || null,
+    });
+  }
+  return out;
+}
+
 // Build candidate map from OSINT cache findings
 function extractFromOsint(osintResults: any, isOrg: boolean): Record<string, any[]> {
   const candidates: Record<string, any[]> = {};
@@ -421,7 +507,18 @@ Return 4-6 findings. Be specific. If nothing found, say so clearly.`,
   // ── 4. Merge all sources per field ────────────────────────────────────────────
   const allFields = isOrg ? ORG_FIELDS : NP_FIELDS;
   const clientFields: Record<string, any> = {};
-  const diditCandidates = isOrg ? {} : extractFromDidit(outreaches || []);
+  // ORG: Didit KYB registry (most recent decided verification). NP: Didit ID&V on the outreach items.
+  const kybs = isOrg
+    ? ((await base44.asServiceRole.entities.KybVerification.filter({ tenant_id: tenantId, client_id }, '-created_date', 5)) || [])
+    : [];
+  const kybWithRegistry = kybs.find((k: any) => k.registry) || null;
+  // KYB items may sit in standalone outreach (no case_id): include the KYB's own request for the source pointer.
+  const kybOutreaches = [...(outreaches || [])];
+  if (kybWithRegistry?.outreach_id && !kybOutreaches.some((r: any) => r.id === kybWithRegistry.outreach_id)) {
+    const extra = await base44.asServiceRole.entities.OutreachRequest.filter({ tenant_id: tenantId, id: kybWithRegistry.outreach_id });
+    if (extra?.[0]) kybOutreaches.push(extra[0]);
+  }
+  const diditCandidates = isOrg ? extractFromKyb(kybWithRegistry ? [kybWithRegistry] : [], kybOutreaches) : extractFromDidit(outreaches || []);
 
   for (const field of allFields) {
     const merged: any[] = [
@@ -439,7 +536,16 @@ Return 4-6 findings. Be specific. If nothing found, say so clearly.`,
   }
 
   // ── 5. Deduplicate related party candidates ───────────────────────────────────
-  const seenRp = new Set<string>();
+  // KYB registry people come first (structured, matched to linked parties); document candidates follow, deduped by name.
+  let kybRps: any[] = [];
+  if (isOrg && kybWithRegistry) {
+    const links = (await base44.asServiceRole.entities.ClientRelatedPartyLink.filter({ tenant_id: tenantId, client_id })) || [];
+    const ids = [...new Set(links.map((l: any) => l.related_party_id).filter(Boolean))];
+    const parties = ids.length ? ((await base44.asServiceRole.entities.RelatedParty.filter({ tenant_id: tenantId, id: { $in: ids } })) || []) : [];
+    const linked = links.map((l: any) => ({ link: l, rp: parties.find((p: any) => p.id === l.related_party_id) })).filter((x: any) => x.rp);
+    kybRps = kybRelatedPartyCandidates(kybWithRegistry, linked);
+  }
+  const seenRp = new Set<string>(kybRps.map((r) => normName(r.full_name)));
   const uniqueRps = relatedPartyCandidates.filter(rp => {
     const key = rp.full_name.toLowerCase().trim();
     if (seenRp.has(key)) return false;
@@ -455,6 +561,12 @@ Return 4-6 findings. Be specific. If nothing found, say so clearly.`,
     status: 'suggested',
     rp_id: null,
   }));
+  const allRps = [...kybRps, ...uniqueRps];
+
+  // Registry status flag (dissolved, struck off, in liquidation …).
+  const flags: any[] = [];
+  const regStatus = kybWithRegistry?.registry_status || kybWithRegistry?.registry?.registry_status || kybWithRegistry?.registry?.status;
+  if (regStatus && INACTIVE_REGISTRY.test(String(regStatus))) flags.push({ type: 'registry_status', value: String(regStatus), source_ref: 'Didit KYB registry' });
 
   // ── 6. Build sources_summary ──────────────────────────────────────────────────
   const sourcesSummary = {
@@ -463,11 +575,14 @@ Return 4-6 findings. Be specific. If nothing found, say so clearly.`,
     documents_skipped: ocrableDocs.length - ocrResults.length,
     osint_findings: osintResults?.findings?.length || 0,
     osint_adverse: osintResults?.adverse_count || 0,
+    kyb_registry: kybWithRegistry ? 1 : 0,
+    kyb_key_people: kybRps.length,
   };
 
   const suggestion = {
     client_fields: clientFields,
-    related_parties: uniqueRps,
+    related_parties: allRps,
+    flags,
     run_at: new Date().toISOString(),
     sources_summary: sourcesSummary,
     pipeline_running: false,
