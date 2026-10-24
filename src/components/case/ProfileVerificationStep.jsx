@@ -9,7 +9,7 @@ import { base44 } from '@/api/base44Client';
 import ProfileVerificationSection from '@/components/case/outreach/ProfileVerificationSection';
 import { isFieldMappedLabel } from '@/lib/outreachFieldMatch';
 
-export default function ProfileVerificationStep({ kycCase, client, currentUser, onCaseUpdate, onNavigateToStep, onAddNote }) {
+export default function ProfileVerificationStep({ kycCase, client, currentUser, onCaseUpdate, onNavigateToStep, onAddNote, tenant }) {
   async function handleFieldVerified(fieldKey, fieldLabel) {
     if (!fieldLabel || !kycCase?.id) return;
     const reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
@@ -42,6 +42,7 @@ export default function ProfileVerificationStep({ kycCase, client, currentUser, 
       onRequestInfoEmail={handleRequestInfoEmail}
       onAddNote={onAddNote}
       onCaseUpdate={onCaseUpdate}
+      tenant={tenant}
     />
   );
 }
