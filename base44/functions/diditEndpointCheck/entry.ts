@@ -39,6 +39,7 @@ export default async function (req) {
 
     const plan = [
       { name: 'rules', method: 'GET', path: tmPath(tenant, 'rules') },
+      { name: 'ruleLibrary', method: 'GET', path: `${tmPath(tenant, 'ruleLibrary')}?limit=1`, note: 'List only. Nothing is installed.' },
       rule
         ? { name: 'rule', method: 'GET', path: tmPath(tenant, 'rule', rule.didit_rule_id), note: AMBIGUOUS }
         : { name: 'rule', method: 'GET', path: tmPath(tenant, 'rule', '{id}'), skip: 'No synced rule in this tenant to probe' },
