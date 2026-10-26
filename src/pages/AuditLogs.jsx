@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Download, Loader2, Search, RefreshCw, Filter, X } from 'lucide-react';
 import { format, isWithinInterval } from 'date-fns';
 import { cn } from '@/lib/utils';
+import ChangeDiff from '@/components/didit/ChangeDiff';
 
 const EVENT_TYPES = [
   'case_created','case_status_changed','case_assigned','case_note_updated',
@@ -286,16 +287,10 @@ export default function AuditLogs() {
                                   <div className="text-muted-foreground mb-1 font-semibold uppercase tracking-wide">Full Notes</div>
                                   <div className="text-foreground whitespace-pre-wrap">{ev.notes || '—'}</div>
                                 </div>
-                                {ev.before_state && (
-                                  <div>
-                                    <div className="text-muted-foreground mb-1 font-semibold uppercase tracking-wide">Before State</div>
-                                    <pre className="bg-muted/50 rounded p-2 text-xs overflow-auto max-h-32 font-mono">{JSON.stringify(ev.before_state, null, 2)}</pre>
-                                  </div>
-                                )}
-                                {ev.after_state && (
-                                  <div>
-                                    <div className="text-muted-foreground mb-1 font-semibold uppercase tracking-wide">After State</div>
-                                    <pre className="bg-muted/50 rounded p-2 text-xs overflow-auto max-h-32 font-mono">{JSON.stringify(ev.after_state, null, 2)}</pre>
+                                {(ev.before_state || ev.after_state) && (
+                                  <div className="md:col-span-2">
+                                    <div className="text-muted-foreground mb-1 font-semibold uppercase tracking-wide">Changes</div>
+                                    <ChangeDiff before={ev.before_state} after={ev.after_state} />
                                   </div>
                                 )}
                               </div>
