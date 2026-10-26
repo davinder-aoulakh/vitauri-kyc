@@ -13,6 +13,7 @@ export const DIDIT_TM_PATHS = {
   rules: '/v3/transactions/rules/',
   rule: (id) => `/v3/transactions/rules/${enc(id)}/`,
   ruleBacktest: '/v3/transactions/rules/backtest/',
+  ruleLibrary: '/v3/transactions/rules/library/',
   userCustomProperties: (vendorData) => `/v3/users/${enc(vendorData)}/`,
   fiuReports: '/v3/fiu-reports/',
   fiuReport: (id) => `/v3/fiu-reports/${enc(id)}/`,
@@ -171,6 +172,20 @@ export const upsertRule = (tenant, ruleJson, diditRuleId) =>
     : createRule(tenant, ruleJson);
 
 export const getRule = (tenant, diditRuleId) => request(tenant, 'GET', tmPath(tenant, 'rule', diditRuleId));
+
+const qs = (params) => {
+  const p = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => `${enc(k)}=${enc(v)}`);
+  return p.length ? `?${p.join('&')}` : '';
+};
+const pageOf = (res) => ({ count: res?.count ?? (Array.isArray(res) ? res.length : 0), results: Array.isArray(res) ? res : (res?.results || []), next: !!res?.next });
+
+/** Didit's preset rule library (read-only). Returns { count, results, next }. */
+export const listLibraryRules = async (tenant, { search, category, bundle, limit = 50, offset = 0 } = {}) =>
+  pageOf(await request(tenant, 'GET', `${tmPath(tenant, 'ruleLibrary')}${qs({ search, category, bundle, limit, offset })}`));
+
+/** Rules registered in Didit for this application (read-only). Returns { count, results, next }. */
+export const listRules = async (tenant, { limit = 100, offset = 0, mode } = {}) =>
+  pageOf(await request(tenant, 'GET', `${tmPath(tenant, 'rules')}${qs({ limit, offset, mode })}`));
 
 /** Stateless: evaluates a candidate configuration against recent history. Returns { evaluated, matched, affected_entities, period_days }. */
 export const backtestRule = (tenant, payload) => request(tenant, 'POST', tmPath(tenant, 'ruleBacktest'), payload);
