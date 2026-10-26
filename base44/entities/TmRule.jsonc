@@ -1,71 +1,22 @@
 {
   "name": "TmRule",
-  "type": "object",
   "properties": {
-    "tenant_id": {
-      "type": "string"
-    },
-    "name": {
-      "type": "string"
-    },
-    "scenario_id": {
-      "type": "string"
-    },
-    "version": {
-      "type": "number",
-      "default": 1
-    },
-    "definition": {
-      "type": "object",
-      "description": "Didit rule JSON"
-    },
-    "nl_source": {
-      "type": "string"
-    },
-    "mode": {
-      "type": "string",
+    "approval_status": {
+      "default": "not_requested",
       "enum": [
-        "draft",
-        "test",
-        "active",
-        "disabled",
-        "retired"
+        "not_requested",
+        "requested",
+        "approved",
+        "rejected"
       ],
-      "default": "draft"
-    },
-    "didit_rule_id": {
       "type": "string"
     },
-    "sync_status": {
-      "type": "string",
-      "enum": [
-        "not_synced",
-        "synced",
-        "failed",
-        "drift"
-      ],
-      "default": "not_synced"
-    },
-    "last_synced_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "sync_error": {
-      "type": "string"
-    },
-    "created_by_user_id": {
+    "approved_at": {
+      "format": "date-time",
       "type": "string"
     },
     "approved_by_user_id": {
       "type": "string"
-    },
-    "approved_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "review_date": {
-      "type": "string",
-      "format": "date"
     },
     "backtest_id": {
       "type": "string"
@@ -73,63 +24,142 @@
     "change_note": {
       "type": "string"
     },
-    "previous_version_id": {
+    "created_by_user_id": {
+      "type": "string"
+    },
+    "definition": {
+      "description": "Didit rule JSON",
+      "type": "object"
+    },
+    "didit_library_id": {
+      "description": "Didit library_key the draft was imported from",
+      "type": "string"
+    },
+    "didit_rule_history": {
+      "description": "Didit rules replaced when rule updates are unavailable: { old_didit_rule_id, new_didit_rule_id, old_title, new_title, old_disabled, at }",
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "didit_rule_id": {
+      "type": "string"
+    },
+    "drift_detected_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "last_synced_at": {
+      "format": "date-time",
       "type": "string"
     },
     "lineage_id": {
-      "type": "string",
-      "description": "Shared by every version of the same rule"
+      "description": "Shared by every version of the same rule",
+      "type": "string"
+    },
+    "mode": {
+      "default": "draft",
+      "enum": [
+        "draft",
+        "test",
+        "active",
+        "disabled",
+        "retired",
+        "unmanaged"
+      ],
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "nl_source": {
+      "type": "string"
     },
     "owner_user_id": {
       "type": "string"
     },
-    "approval_status": {
-      "type": "string",
-      "enum": [
-        "not_requested",
-        "requested",
-        "approved",
-        "rejected"
-      ],
-      "default": "not_requested"
-    },
-    "requested_by_user_id": {
+    "previous_version_id": {
       "type": "string"
-    },
-    "requested_at": {
-      "type": "string",
-      "format": "date-time"
     },
     "rejection_reason": {
       "type": "string"
     },
+    "requested_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "requested_by_user_id": {
+      "type": "string"
+    },
     "retired_at": {
-      "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "type": "string"
     },
     "retired_by_user_id": {
       "type": "string"
     },
-    "drift_detected_at": {
-      "type": "string",
-      "format": "date-time"
+    "review_date": {
+      "format": "date",
+      "type": "string"
+    },
+    "scenario_id": {
+      "type": "string"
     },
     "seed_key": {
-      "type": "string",
-      "description": "Makes starter-rule seeding idempotent, e.g. starter:S-07a"
+      "description": "Makes starter-rule seeding idempotent, e.g. starter:S-07a",
+      "type": "string"
     },
-    "didit_rule_history": {
-      "type": "array",
-      "description": "Didit rules replaced when rule updates are unavailable: { old_didit_rule_id, new_didit_rule_id, old_title, new_title, old_disabled, at }",
-      "items": {
-        "type": "object"
-      }
+    "source": {
+      "description": "Where the rule came from. Empty = authored in Vitauri.",
+      "enum": [
+        "vitauri",
+        "didit_library",
+        "didit_console"
+      ],
+      "type": "string"
+    },
+    "sync_error": {
+      "type": "string"
+    },
+    "sync_status": {
+      "default": "not_synced",
+      "enum": [
+        "not_synced",
+        "synced",
+        "failed",
+        "drift"
+      ],
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "unmanaged_ack_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "unmanaged_ack_by_user_id": {
+      "type": "string"
+    },
+    "unmanaged_ack_reason": {
+      "description": "Why an unmanaged Didit rule was marked as known",
+      "type": "string"
+    },
+    "unmanaged_since": {
+      "description": "When the nightly check first found this rule in Didit without a Vitauri rule (mode unmanaged)",
+      "format": "date-time",
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "type": "number"
     }
   },
   "required": [
     "tenant_id",
     "name"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "data.tenant_id": "{{user.data.tenant_id}}"
