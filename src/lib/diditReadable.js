@@ -100,7 +100,7 @@ export function transactionDecision(raw, txn = {}) {
     row('Status', formatValue('status', status), statusTone(status)),
     row('Risk score', score != null ? String(score) : null),
     row('Risk level', formatValue('risk_level', level)),
-    row('Decision reason', pick(r, 'decision_reason_label') || pick(r?.decision || {}, 'reason')),
+    row('Decision reason', pick(r, 'decision_reason_label', 'decision_reason_text') || pick(r?.decision || {}, 'reason')),
     row('Action required', formatValue('action_required', pick(r, 'action_required'))),
     row('Tags', formatValue('tags', pick(r, 'tags'))),
     row('Assigned to (Didit)', pick(r, 'assigned_to_name')),
@@ -135,7 +135,7 @@ export function transactionDecision(raw, txn = {}) {
     row('Last updated', pick(r, 'updated_at') ? formatDate(r.updated_at) : null),
   ].filter(Boolean);
 
-  const known = new Set(['status', 'risk_score', 'score', 'risk_level', 'severity', 'decision_reason_label', 'decision_reason_code', 'action_required', 'tags',
+  const known = new Set(['status', 'risk_score', 'score', 'risk_level', 'severity', 'decision_reason_label', 'decision_reason_text', 'decision_reason_code', 'action_required', 'tags',
     'assigned_to_name', 'transaction_type', 'action_type', 'direction', 'amount', 'currency', 'preferred_currency_amount', 'preferred_currency_code',
     'source', 'txn_id', 'transaction_number', 'subject_name', 'subject_country', 'counterparty_name', 'counterparty_country', 'travel_rule_status',
     'txn_date', 'created_at', 'updated_at', 'rule_runs', 'rules_triggered', 'triggered_rules', 'rules', 'decision', 'subject_vendor_data',
