@@ -8,7 +8,9 @@ import { asList, authenticate, errorResponse, httpError, loadTenant } from '../.
 import { MANAGE_ROLES } from '../../shared/tmRuleSchema.js';
 import { loadRule } from '../../shared/tmRuleActions.js';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
-import { syncRule, driftCheckTenant, errText } from '../../shared/tmRuleSync.js';
+import { syncRule, driftCheckTenant, errText, SYSTEM_AUTH } from '../../shared/tmRuleSync.js';
+import { recordUnmanagedRules } from '../../shared/tmDiditLibrary.js';
+import { latestEndpointCheck, isMissingInCheck } from '../../shared/diditEndpointStatus.js';
 
 export default async function (req) {
   try {
@@ -46,7 +48,17 @@ export default async function (req) {
     }
     const results = [];
     for (const tenant of tenants) {
-      try { results.push(await driftCheckTenant(base44, tenant)); } catch (e) { results.push({ tenant_id: tenant.id, error: errText(e) }); }
+      let res;
+      try { res = await driftCheckTenant(base44, tenant); } catch (e) { res = { tenant_id: tenant.id, error: errText(e) }; }
+      // Didit rules that run without a Vitauri rule behind them (created in the Didit console or installed from its library).
+      try {
+        const E = base44.asServiceRole.entities;
+        const check = await latestEndpointCheck(E, tenant.id).catch(() => null);
+        if (!isMissingInCheck(check, 'rules')) {
+          res.unmanaged = await recordUnmanagedRules({ base44, E, tenant, tenantId: tenant.id, auth: SYSTEM_AUTH('Nightly Didit rule drift check') });
+        }
+      } catch (e) { res.unmanaged_error = errText(e); }
+      results.push(res);
     }
     return Response.json({ ok: true, tenants: results.length, results });
   } catch (error) {
