@@ -2,6 +2,7 @@ import React from 'react';
 import { PROPOSAL_LABEL } from '@/lib/tmAlerts';
 import CounterpartyLink from '@/components/tm/counterparty/CounterpartyLink';
 import SourceChips from '@/components/tm/kit/SourceChips';
+import RuleRunsTable from '@/components/didit/RuleRunsTable';
 
 const Section = ({ title, children }) => (
   <section className="space-y-2">
@@ -46,15 +47,7 @@ export default function AlertEvidence({ alert, txns }) {
         </ul>
       </Section>
       <Section title="Rule runs">
-        {ruleRuns.length === 0 && <p className="text-xs text-muted-foreground">No rule runs recorded.</p>}
-        <ul className="space-y-1">
-          {ruleRuns.map((r, i) => (
-            <li key={i} className="text-xs flex justify-between gap-3 bg-secondary/60 rounded px-2.5 py-1.5">
-              <span className="truncate">{r.rule_name || r.name || r.rule_id || r.id || 'Rule'}</span>
-              <span className="text-muted-foreground">{r.result || r.status || r.action || ''}</span>
-            </li>
-          ))}
-        </ul>
+        <RuleRunsTable runs={ruleRuns} tenantId={alert.tenant_id} showTxn={txns.length > 1} />
       </Section>
     </div>
   );
