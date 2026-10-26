@@ -72,13 +72,18 @@ export default function TmRules() {
         <PageHeader
           title={`Rules · ${active.data ?? '…'} active · ${test.data ?? '…'} in test · synced with Didit via Management API`}
           subtitle="Rules are authored and versioned here and run in Didit. Nothing is switched on without a second approver."
-          actions={canManage && (
+          actions={(
             <>
+              {/* Browsing Didit's library is open to approvers too; importing stays with rule managers. */}
+              <Button size="sm" variant="outline" className="text-xs" onClick={() => setDiditLibrary(true)}>Didit library</Button>
+              {canManage && (
+              <>
               <Button size="sm" variant="outline" className="text-xs" onClick={() => setLibrary('CW')}>Library: Curaçao objective indicators</Button>
               <Button size="sm" variant="outline" className="text-xs" onClick={() => setLibrary('NL')}>Library: Wwft indicators</Button>
               <Button size="sm" variant="outline" className="text-xs" onClick={() => setImporting(true)}>Import indicators</Button>
-              <Button size="sm" variant="outline" className="text-xs" onClick={() => setDiditLibrary(true)}>Didit library</Button>
               <Button size="sm" className="gap-1.5 text-xs" onClick={() => { setSelectedId(null); setFromScenario(null); }}><Plus className="w-3.5 h-3.5" /> New rule</Button>
+              </>
+              )}
             </>
           )}
         />
@@ -103,10 +108,8 @@ export default function TmRules() {
         )}
         <LibraryDialog code={library} scenarios={scenarioList} onOpenChange={(v) => !v && setLibrary(null)} onPick={pick} />
         {importing && <ScenarioImportDialog tenantId={tenantId} onOpenChange={setImporting} />}
-        {canManage && (
-          <DiditLibraryDialog open={diditLibrary} onOpenChange={setDiditLibrary} tenantId={tenantId} scenarios={scenarioList} call={call} busy={busy}
-            onImported={(id) => { setDiditLibrary(false); setSelectedId(id); setFromScenario(null); }} />
-        )}
+        <DiditLibraryDialog open={diditLibrary} onOpenChange={setDiditLibrary} tenantId={tenantId} scenarios={scenarioList} call={call} busy={busy} canManage={canManage}
+          onImported={(id) => { setDiditLibrary(false); setSelectedId(id); setFromScenario(null); }} />
       </div>
     </AppShell>
   );
