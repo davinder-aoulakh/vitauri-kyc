@@ -14,6 +14,8 @@ import RuleEditor from '@/components/tm/rules/RuleEditor';
 import DraftPanel from '@/components/tm/rules/DraftPanel';
 import LibraryDialog from '@/components/tm/rules/LibraryDialog';
 import ScenarioImportDialog from '@/components/tm/rules/ScenarioImportDialog';
+import DiditLibraryDialog from '@/components/tm/rules/DiditLibraryDialog';
+import UnmanagedRules from '@/components/tm/rules/UnmanagedRules';
 import { Button } from '@/components/ui/button';
 import { Loader2, Lock, ListChecks, Plus } from 'lucide-react';
 
@@ -32,9 +34,13 @@ export default function TmRules() {
   const [library, setLibrary] = useState(null);
   const [fromScenario, setFromScenario] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [diditLibrary, setDiditLibrary] = useState(false);
   const seeded = useRef(false);
 
-  const list = rules.data || [];
+  const all = rules.data || [];
+  // Didit rules without a Vitauri rule behind them are listed separately and never opened in the editor.
+  const unmanaged = useMemo(() => all.filter((r) => r.mode === 'unmanaged'), [all]);
+  const list = useMemo(() => all.filter((r) => r.mode !== 'unmanaged'), [all]);
   const lineages = useMemo(() => groupLineages(list), [list]);
   const scenarioList = scenarios.data || [];
   const scenariosById = useMemo(() => new Map(scenarioList.map((s) => [s.id, s])), [scenarioList]);
@@ -71,6 +77,7 @@ export default function TmRules() {
               <Button size="sm" variant="outline" className="text-xs" onClick={() => setLibrary('CW')}>Library: Curaçao objective indicators</Button>
               <Button size="sm" variant="outline" className="text-xs" onClick={() => setLibrary('NL')}>Library: Wwft indicators</Button>
               <Button size="sm" variant="outline" className="text-xs" onClick={() => setImporting(true)}>Import indicators</Button>
+              {tenant?.didit_tm_enabled !== false && <Button size="sm" variant="outline" className="text-xs" onClick={() => setDiditLibrary(true)}>Didit library</Button>}
               <Button size="sm" className="gap-1.5 text-xs" onClick={() => { setSelectedId(null); setFromScenario(null); }}><Plus className="w-3.5 h-3.5" /> New rule</Button>
             </>
           )}
@@ -81,6 +88,8 @@ export default function TmRules() {
           <EmptyState icon={ListChecks} title="No rules yet" description="Create four inactive starter drafts from the scenario library, or describe a rule below."
             action={canManage && scenarioList.length > 0 ? <Button size="sm" onClick={seed}>Create starter drafts</Button> : undefined} />
         )}
+        <UnmanagedRules rules={unmanaged} scenarios={scenarioList} users={users} usersById={usersById} currentUserId={currentUser?.id} canManage={canManage}
+          call={call} busy={busy} onAdopted={(id) => { setSelectedId(id); setFromScenario(null); }} />
         {lineages.length > 0 && <RulesList lineages={lineages} scenariosById={scenariosById} usersById={usersById} selectedId={selected?.id} onSelect={(id) => { setSelectedId(id); setFromScenario(null); }} />}
 
         {canManage && !selected && (
@@ -94,6 +103,10 @@ export default function TmRules() {
         )}
         <LibraryDialog code={library} scenarios={scenarioList} onOpenChange={(v) => !v && setLibrary(null)} onPick={pick} />
         {importing && <ScenarioImportDialog tenantId={tenantId} onOpenChange={setImporting} />}
+        {canManage && (
+          <DiditLibraryDialog open={diditLibrary} onOpenChange={setDiditLibrary} tenantId={tenantId} scenarios={scenarioList} call={call} busy={busy}
+            onImported={(id) => { setDiditLibrary(false); setSelectedId(id); setFromScenario(null); }} />
+        )}
       </div>
     </AppShell>
   );
