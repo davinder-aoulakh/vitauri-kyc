@@ -104,6 +104,10 @@
       ],
       "type": "string"
     },
+    "suggested_related_party_id": {
+      "description": "RelatedParty whose name (and registration number for companies) matches this counterparty. A suggestion only; never linked automatically.",
+      "type": "string"
+    },
     "tenant_id": {
       "type": "string"
     }
