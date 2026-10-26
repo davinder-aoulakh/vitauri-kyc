@@ -1,11 +1,12 @@
 // Helpers for the TM rules page (/tm/rules).
-export const MODE_LABEL = { draft: 'Draft', test: 'Test', active: 'Active', disabled: 'Disabled', retired: 'Retired' };
+export const MODE_LABEL = { draft: 'Draft', test: 'Test', active: 'Active', disabled: 'Disabled', retired: 'Retired', unmanaged: 'Unmanaged in Didit' };
 export const MODE_TONE = {
   draft: 'bg-secondary text-muted-foreground border-border',
   test: 'bg-sky-50 text-sky-700 border-sky-200',
   active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   disabled: 'bg-amber-50 text-amber-700 border-amber-200',
   retired: 'bg-secondary text-muted-foreground border-border',
+  unmanaged: 'bg-orange-50 text-orange-700 border-orange-200',
 };
 export const SYNC_LABEL = { not_synced: 'Not synced', synced: 'Synced', failed: 'Sync failed', drift: 'Drift' };
 export const SYNC_TONE = {
