@@ -151,7 +151,11 @@ export default function MonitoringTab({ client }) {
         <div className="space-y-4">
           <div className="rounded-xl border border-border bg-card p-4">
             <h3 className="text-sm font-semibold mb-3">Dynamic customer risk</h3>
-            <RiskBreakdown risk={data.risk} kycRating={client.risk_classification} />
+            <RiskBreakdown risk={data.risk} kycRating={client.risk_classification} onShowDiditHigh={() => {
+              const next = new URLSearchParams(searchParams);
+              next.set('tab', 'overview'); next.set('view', 'transactions'); next.set('risk', 'didit_high');
+              setSearchParams(next, { replace: true });
+            }} />
           </div>
           <ProfileKvStrip data={data} />
           <ExpectedProfileCard client={client} onChanged={refresh} />
