@@ -78,6 +78,30 @@ async function clientParties(E, tenantId, clientId) {
 }
 
 /**
+ * For evidence and AI context: which counterparties are (or look like) one of the clients' own related parties.
+ * Returns Map(counterpartyId -> { related_party_id, name, role, ownership_percentage, linked, text }).
+ */
+export async function counterpartyRelations(E, tenantId, clientIds, counterparties) {
+  const out = new Map();
+  const wanted = counterparties.filter((c) => c.related_party_id || c.suggested_related_party_id);
+  if (!wanted.length) return out;
+  const parties = [];
+  for (const cid of [...new Set(clientIds.filter(Boolean))].slice(0, 10)) parties.push(...await clientParties(E, tenantId, cid));
+  for (const c of wanted) {
+    const linked = !!c.related_party_id;
+    const p = parties.find((x) => x.id === (c.related_party_id || c.suggested_related_party_id));
+    if (!p) continue;
+    const role = p.role || 'related party';
+    const pct = p.ownership_percentage ? ` (${p.ownership_percentage}%)` : '';
+    out.set(c.id, {
+      related_party_id: p.id, name: p.full_name, role, ownership_percentage: p.ownership_percentage, linked,
+      text: linked ? `Counterparty is the client's ${role} ${p.full_name}${pct}.` : `Counterparty name matches the client's ${role} ${p.full_name}${pct} (not confirmed).`,
+    });
+  }
+  return out;
+}
+
+/**
  * txns: Transaction records (tenant already verified by caller).
  * screenFn(cp) -> { status, hit_refs } | null   (called only for NEW person/company counterparties)
  * Returns { updates: [{id, counterparty_id, counterparty_match_confidence}], stats }
