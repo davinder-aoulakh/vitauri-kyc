@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import RuleSentence from '@/components/tm/rules/RuleSentence';
 import StatusPill from '@/components/tm/kit/StatusPill';
-import { errorMessage } from '@/lib/errors';
+import { errorMessage } from '@/lib/tmAlerts';
 import { humanise } from '@/lib/diditReadable';
 import { Loader2, Search } from 'lucide-react';
 
@@ -74,8 +74,8 @@ export default function DiditLibraryDialog({ open, onOpenChange, tenantId, scena
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-sm font-medium">{r.title}</span>
                   {r.category && <StatusPill tone="neutral">{humanise(r.category).replace('Aml Ctf', 'AML / CTF').replace('Fatf', 'FATF')}</StatusPill>}
-                  {r.installed_in_didit && <StatusPill tone="warn" title="Installed directly in Didit, outside Vitauri">Installed in Didit</StatusPill>}
-                  {r.imported_rule_id && <StatusPill tone="ok">In Vitauri</StatusPill>}
+                  {r.installed_in_didit && <StatusPill tone="warning" title="Installed directly in Didit, outside Vitauri">Installed in Didit</StatusPill>}
+                  {r.imported_rule_id && <StatusPill tone="success">In Vitauri</StatusPill>}
                 </div>
                 {r.description && <p className="text-xs text-muted-foreground line-clamp-3">{r.description}</p>}
                 <RuleSentence definition={r.definition} className="text-xs" />
