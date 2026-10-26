@@ -77,7 +77,7 @@ export default function TmRules() {
               <Button size="sm" variant="outline" className="text-xs" onClick={() => setLibrary('CW')}>Library: Curaçao objective indicators</Button>
               <Button size="sm" variant="outline" className="text-xs" onClick={() => setLibrary('NL')}>Library: Wwft indicators</Button>
               <Button size="sm" variant="outline" className="text-xs" onClick={() => setImporting(true)}>Import indicators</Button>
-              {tenant?.didit_tm_enabled !== false && <Button size="sm" variant="outline" className="text-xs" onClick={() => setDiditLibrary(true)}>Didit library</Button>}
+              <Button size="sm" variant="outline" className="text-xs" onClick={() => setDiditLibrary(true)}>Didit library</Button>
               <Button size="sm" className="gap-1.5 text-xs" onClick={() => { setSelectedId(null); setFromScenario(null); }}><Plus className="w-3.5 h-3.5" /> New rule</Button>
             </>
           )}
