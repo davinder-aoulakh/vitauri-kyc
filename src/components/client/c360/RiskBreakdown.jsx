@@ -11,8 +11,29 @@ const COMPONENTS = [
 ];
 const RANK = { Low: 0, Medium: 1, High: 2, Unacceptable: 3 };
 
+/** Behaviour is the higher of two signals: deviation from the approved profile, and Didit's own transaction risk (last 30 days). */
+function BehaviourDetail({ detail, onShowDiditHigh }) {
+  const d = detail || {};
+  return (
+    <div className="mt-1 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+      <span>Profile deviation <span className="tabular-nums font-medium text-foreground">{Math.round(d.profile ?? 0)}</span></span>
+      <span>
+        Didit transaction risk <span className="tabular-nums font-medium text-foreground">{Math.round(d.didit ?? 0)}</span>
+        {d.didit_high_count > 0 && (
+          <>
+            {' · '}
+            {onShowDiditHigh
+              ? <button type="button" className="text-primary hover:underline" onClick={onShowDiditHigh}>{d.didit_high_count} High+</button>
+              : <>{d.didit_high_count} High+</>}
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
+
 /** Dynamic risk explained: component scores, reasons, history, and how it compares with the KYC rating. */
-export default function RiskBreakdown({ risk, kycRating }) {
+export default function RiskBreakdown({ risk, kycRating, onShowDiditHigh }) {
   if (!risk) {
     return <p className="text-sm text-muted-foreground">No dynamic risk score yet. It is computed after the next alert, profile approval or nightly run.</p>;
   }
@@ -38,6 +59,7 @@ export default function RiskBreakdown({ risk, kycRating }) {
                 <div className="mt-1 h-1.5 rounded-full bg-muted overflow-hidden">
                   <div className={cn('h-full rounded-full', pct >= 70 ? 'bg-red-500' : pct >= 50 ? 'bg-amber-500' : 'bg-emerald-500')} style={{ width: `${pct}%` }} />
                 </div>
+                {c.key === 'behaviour' && comps.behaviour_detail && <BehaviourDetail detail={comps.behaviour_detail} onShowDiditHigh={onShowDiditHigh} />}
               </div>
             );
           })}
