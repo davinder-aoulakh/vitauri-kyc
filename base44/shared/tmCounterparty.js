@@ -44,6 +44,39 @@ function guessKind(name, category) {
   return 'unknown';
 }
 
+const RP_MATCH_THRESHOLD = 0.95;
+
+/**
+ * Related party of the transaction's client that this counterparty looks like: same normalised name (Jaro-Winkler >= 0.95);
+ * for companies a known registration number on both sides must also agree. A suggestion only, never a link.
+ */
+export function matchRelatedParty(cp, parties) {
+  const regs = (cp.identifiers || []).filter((i) => i.type === 'registration').map((i) => normaliseAccount(i.value));
+  const names = [cp.display_name, ...(cp.names || [])].map(normaliseDescription).filter(Boolean);
+  let best = null, bestScore = 0;
+  for (const p of parties) {
+    const pn = normaliseDescription(p.full_name);
+    if (!pn) continue;
+    if (p.party_type === 'ORG' && p.registration_number && regs.length && !regs.includes(normaliseAccount(p.registration_number))) continue;
+    for (const n of names) {
+      const s = n === pn ? 1 : jaroWinkler(n, pn);
+      if (s >= RP_MATCH_THRESHOLD && s > bestScore) { best = p; bestScore = s; }
+    }
+  }
+  return best;
+}
+
+async function clientParties(E, tenantId, clientId) {
+  const links = asList(await E.ClientRelatedPartyLink.filter({ tenant_id: tenantId, client_id: clientId }, undefined, 200));
+  const ids = [...new Set(links.map((l) => l.related_party_id).filter(Boolean))];
+  if (!ids.length) return [];
+  const parties = asList(await E.RelatedParty.filter({ tenant_id: tenantId, id: { $in: ids } }, undefined, 200));
+  return parties.filter((p) => p.is_active !== false).map((p) => {
+    const l = links.find((x) => x.related_party_id === p.id) || {};
+    return { id: p.id, full_name: p.full_name, party_type: p.party_type, registration_number: p.registration_number, role: l.role || p.role_in_relationship || '', ownership_percentage: l.ownership_percentage ?? p.ownership_percentage ?? null };
+  });
+}
+
 /**
  * txns: Transaction records (tenant already verified by caller).
  * screenFn(cp) -> { status, hit_refs } | null   (called only for NEW person/company counterparties)
@@ -105,6 +138,7 @@ export async function resolveTransactions(base44, { tenantId, txns, sourceRef, s
   };
 
   const updates = [];
+  const pendingRp = [];
   for (const t of txns) {
     const name = t.counterparty_name ? String(t.counterparty_name).trim() : '';
     const acct = normaliseAccount(t.counterparty_account_id);
@@ -160,6 +194,27 @@ export async function resolveTransactions(base44, { tenantId, txns, sourceRef, s
       newOnes.push(cp);
     }
     updates.push({ id: t.id, counterparty_id: cp.id, counterparty_match_confidence: Math.round(confidence * 1000) / 1000 });
+    if (t.client_id && !cp.related_party_id && !cp.suggested_related_party_id && !cp.client_id) pendingRp.push({ cp, clientId: t.client_id });
+  }
+
+  // Related-party suggestions: a counterparty that looks like the client's own UBO, director or related company.
+  const partiesByClient = new Map();
+  for (const { cp, clientId } of pendingRp) {
+    if (cp.suggested_related_party_id) continue;
+    try {
+      if (!partiesByClient.has(clientId)) partiesByClient.set(clientId, await clientParties(E, tenantId, clientId));
+      const p = matchRelatedParty(cp, partiesByClient.get(clientId));
+      if (!p) continue;
+      patch(cp, (c) => { c.suggested_related_party_id = p.id; });
+      stats.related_party_suggested = (stats.related_party_suggested || 0) + 1;
+      await E.AuditEvent.create({
+        tenant_id: tenantId, client_id: clientId, actor_name: 'System', actor_type: 'System', event_type: 'counterparty_related_party_suggested',
+        before_state: { suggested_related_party_id: null }, after_state: { counterparty_id: cp.id, suggested_related_party_id: p.id },
+        notes: `Counterparty "${cp.display_name}" looks like the client's ${p.role || 'related party'} ${p.full_name}. Not linked; a user must confirm.`,
+      });
+    } catch (e) {
+      console.warn('related-party suggestion failed:', e?.message);
+    }
   }
 
   // AML screening: only NEW person/company counterparties (screenEntityAml supports NP/ORG only)
@@ -186,8 +241,8 @@ export async function resolveTransactions(base44, { tenantId, txns, sourceRef, s
 
   const dirtyList = [...dirty.values()];
   await mapLimit(dirtyList, 6, (c) => {
-    const { id, names, identifiers, provenance, screening_status, screening_hit_ids, last_screened_at } = c;
-    return E.Counterparty.update(id, { names, identifiers, provenance, screening_status, screening_hit_ids, last_screened_at });
+    const { id, names, identifiers, provenance, screening_status, screening_hit_ids, last_screened_at, suggested_related_party_id } = c;
+    return E.Counterparty.update(id, { names, identifiers, provenance, screening_status, screening_hit_ids, last_screened_at, ...(suggested_related_party_id ? { suggested_related_party_id } : {}) });
   });
 
   return { updates, stats };
