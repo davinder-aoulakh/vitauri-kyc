@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { X, Activity, RefreshCw, Loader2, CheckCircle, ShieldOff, ArrowUpRight } from 'lucide-react';
 import CounterpartyLink from '@/components/tm/counterparty/CounterpartyLink';
 import CanonicalData from '@/components/transactions/CanonicalData';
+import DiditDecisionView from '@/components/didit/DiditDecisionView';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -108,14 +109,12 @@ export default function TransactionDetailPanel({ transaction, clientName, curren
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Didit Decision (Raw)</div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Didit decision</div>
               <Button size="sm" variant="ghost" className="h-6 text-xs gap-1" onClick={refresh} disabled={refreshing}>
                 {refreshing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} Refresh
               </Button>
             </div>
-            <pre className="bg-muted/30 rounded-lg p-3 text-[11px] leading-relaxed overflow-x-auto max-h-64 whitespace-pre-wrap break-all">
-              {transaction.decision_raw ? JSON.stringify(transaction.decision_raw, null, 2) : 'No decision data yet.'}
-            </pre>
+            <DiditDecisionView raw={transaction.decision_raw} transaction={transaction} />
           </div>
 
           {alreadyReviewed && (
