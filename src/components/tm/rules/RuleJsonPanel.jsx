@@ -9,7 +9,6 @@ import RuleSentence from '@/components/tm/rules/RuleSentence';
 /** Read-only generated Didit rule, with an advanced mode to edit the JSON. The server validates every save. */
 export default function RuleJsonPanel({ rule, canEdit, busy, onSave }) {
   const [advanced, setAdvanced] = useState(false);
-  const [showJson, setShowJson] = useState(false);
   const [text, setText] = useState(prettyJson(rule.definition));
   const [error, setError] = useState('');
   useEffect(() => { setText(prettyJson(rule.definition)); setAdvanced(false); setError(''); }, [rule.id, rule.updated_date]);
@@ -27,7 +26,6 @@ export default function RuleJsonPanel({ rule, canEdit, busy, onSave }) {
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold">What this rule does</h2>
         <div className="flex items-center gap-3">
-          {!advanced && <button type="button" className="text-xs text-primary hover:underline" onClick={() => setShowJson(!showJson)}>{showJson ? 'Hide JSON' : 'Show JSON'}</button>}
           {canEdit && <button type="button" className="text-xs text-primary hover:underline" onClick={() => setAdvanced(!advanced)}>{advanced ? 'Cancel editing' : 'Advanced: edit JSON'}</button>}
         </div>
       </div>
@@ -38,10 +36,7 @@ export default function RuleJsonPanel({ rule, canEdit, busy, onSave }) {
           <Button size="sm" disabled={!!busy} onClick={save}>{busy === 'save' && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Validate and save</Button>
         </div>
       ) : (
-        <>
-          <RuleSentence definition={rule.definition} className="text-sm text-foreground bg-secondary/60 rounded-lg px-3 py-2.5" />
-          {showJson && <pre className="mt-2 font-mono text-xs bg-secondary rounded-lg p-3 overflow-auto max-h-96 whitespace-pre-wrap break-words">{prettyJson(rule.definition)}</pre>}
-        </>
+        <RuleSentence definition={rule.definition} className="text-sm text-foreground bg-secondary/60 rounded-lg px-3 py-2.5" />
       )}
       <p className="text-xs text-muted-foreground mt-2">Thresholds are illustrative; field names follow Didit docs.</p>
     </section>
