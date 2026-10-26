@@ -15,7 +15,7 @@ const CATEGORIES = ['all', 'finance', 'aml_ctf', 'anomaly_detection', 'fatf'];
 const PAGE = 25;
 
 /** Browse Didit's preset rule library and import a rule as an inactive Vitauri draft (it still needs approval before it runs). */
-export default function DiditLibraryDialog({ open, onOpenChange, tenantId, scenarios, call, busy, onImported }) {
+export default function DiditLibraryDialog({ open, onOpenChange, tenantId, scenarios, call, busy, onImported, canManage = false }) {
   const [search, setSearch] = useState('');
   const [term, setTerm] = useState('');
   const [category, setCategory] = useState('all');
@@ -44,6 +44,7 @@ export default function DiditLibraryDialog({ open, onOpenChange, tenantId, scena
           <DialogTitle>Didit rule library</DialogTitle>
           <DialogDescription>
             Didit's preset rules. "Use as draft" copies a rule into Vitauri as an inactive draft. It runs only after a second person approves it.
+            {!canManage && ' Only a Compliance Admin or Compliance Officer can import a library rule.'}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col sm:flex-row gap-2">
@@ -55,13 +56,15 @@ export default function DiditLibraryDialog({ open, onOpenChange, tenantId, scena
             <SelectTrigger className="h-9 text-sm sm:w-44" aria-label="Category"><SelectValue /></SelectTrigger>
             <SelectContent>{CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c === 'all' ? 'All categories' : humanise(c).replace('Aml Ctf', 'AML / CTF').replace('Fatf', 'FATF')}</SelectItem>)}</SelectContent>
           </Select>
-          <Select value={scenarioId || 'none'} onValueChange={(v) => setScenarioId(v === 'none' ? '' : v)}>
-            <SelectTrigger className="h-9 text-sm sm:w-48" aria-label="Link drafts to scenario"><SelectValue placeholder="Scenario (optional)" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No scenario yet</SelectItem>
-              {(scenarios || []).map((s) => <SelectItem key={s.id} value={s.id}>{s.code} · {s.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {canManage && (
+            <Select value={scenarioId || 'none'} onValueChange={(v) => setScenarioId(v === 'none' ? '' : v)}>
+              <SelectTrigger className="h-9 text-sm sm:w-48" aria-label="Link drafts to scenario"><SelectValue placeholder="Scenario (optional)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No scenario yet</SelectItem>
+                {(scenarios || []).map((s) => <SelectItem key={s.id} value={s.id}>{s.code} · {s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         <div className="max-h-[28rem] overflow-y-auto divide-y divide-border -mx-1 px-1">
@@ -82,12 +85,12 @@ export default function DiditLibraryDialog({ open, onOpenChange, tenantId, scena
                 {r.industries?.length > 0 && <p className="text-[11px] text-muted-foreground">For: {r.industries.map(humanise).join(', ')}</p>}
                 {!r.importable && <p className="text-[11px] text-amber-700">Can't be imported yet: {r.problem}</p>}
               </div>
-              <div className="shrink-0">
+              {canManage && <div className="shrink-0">
                 <Button size="sm" variant="outline" className="text-xs" disabled={!r.importable || !!r.imported_rule_id || busy === 'import'}
                   onClick={() => (r.imported_rule_id ? onImported(r.imported_rule_id) : use(r))}>
                   {r.imported_rule_id ? 'Already imported' : 'Use as draft'}
                 </Button>
-              </div>
+              </div>}
             </div>
           ))}
         </div>
