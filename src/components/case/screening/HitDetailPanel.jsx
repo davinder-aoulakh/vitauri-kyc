@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import AmlHitView from '@/components/didit/AmlHitView';
 
 const SOURCE_LABELS = {
   PEP_List: 'PEP List',
@@ -89,21 +90,19 @@ export default function HitDetailPanel({ hit, onClose, onDecision, submitting })
           </div>
         </div>
 
-        {/* Raw Details expandable */}
+        {/* Provider details (readable; raw data stays stored for audit) */}
         {hit.hit_details && Object.keys(hit.hit_details).length > 0 && (
           <div className="border border-border rounded-xl overflow-hidden">
             <button
               className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-muted-foreground hover:bg-muted/30 transition-colors"
               onClick={() => setRawOpen(o => !o)}
             >
-              <span>Raw Source Details</span>
+              <span>Provider details</span>
               {rawOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
             {rawOpen && (
-              <div className="px-4 pb-3 border-t border-border bg-muted/20">
-                <pre className="text-xs text-foreground/80 whitespace-pre-wrap overflow-auto max-h-40 mt-2">
-                  {JSON.stringify(hit.hit_details, null, 2)}
-                </pre>
+              <div className="px-4 pb-3 pt-2 border-t border-border bg-muted/20">
+                <AmlHitView details={hit.hit_details} />
               </div>
             )}
           </div>
