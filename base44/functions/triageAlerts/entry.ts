@@ -5,6 +5,7 @@ import { isTmEnabled } from '../../shared/tmGuards.js';
 import { authenticate, errorResponse, httpError, loadTenant, asList, mapLimit } from '../../shared/tmAuth.js';
 import { runTmAgent } from '../../shared/tmAi.js';
 import { writeAudit } from '../../shared/tmAudit.js';
+import { counterpartyRelations } from '../../shared/tmCounterparty.js';
 
 const VIEW_ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin']; // tmViewAlerts
 const CLOSED = ['closed_false_positive', 'closed_no_action', 'reported'];
@@ -53,6 +54,8 @@ async function triageOne(base44, auth, tenantId, alertId) {
   const cpIds = [...new Set(txns.map((t) => t.counterparty_id).filter(Boolean))].slice(0, 50);
   const cps = cpIds.length ? asList(await E.Counterparty.filter({ tenant_id: tenantId, id: { $in: cpIds } }, undefined, 50)) : [];
   const priorOthers = prior.filter((a) => a.id !== alert.id);
+  // Flows with the client's own UBO / director / related company read very differently from third-party flows.
+  const relations = await counterpartyRelations(E, tenantId, [alert.client_id], cps).catch(() => new Map());
 
   const gaps: string[] = [];
   if (!profile) gaps.push('No approved expected profile.');
@@ -68,7 +71,7 @@ async function triageOne(base44, auth, tenantId, alertId) {
       profile: profile ? { ref: `profile:${profile.id}`, version: profile.version, currency: profile.currency, inbound_max_month: profile.inbound_max_month, inbound_max_count_month: profile.inbound_max_count_month, outbound_foreign_max_month: profile.outbound_foreign_max_month, cash_max_month: profile.cash_max_month, allowed_countries: profile.allowed_countries } : null,
       transactions: txns.map((t) => ({ ref: `txn:${t.id}`, date: t.executed_at, direction: t.direction, amount: t.amount, currency: t.currency, country: t.counterparty_country, category: t.category, counterparty: t.counterparty_name, rule_runs: t.didit_rule_runs })),
       prior_alerts_90d: priorOthers.map((a) => ({ ref: `alert:${a.id}`, title: a.title, status: a.status, created: a.created_date })),
-      counterparties: cps.map((c) => ({ ref: `cp:${c.id}`, name: c.display_name, country: c.country, screening_status: c.screening_status })),
+      counterparties: cps.map((c) => ({ ref: `cp:${c.id}`, name: c.display_name, country: c.country, screening_status: c.screening_status, ...(relations.get(c.id) ? { related_party: relations.get(c.id).text } : {}) })),
       data_gaps: gaps,
     },
     sources, schema: SCHEMA, systemPrompt: SYSTEM_PROMPT,
