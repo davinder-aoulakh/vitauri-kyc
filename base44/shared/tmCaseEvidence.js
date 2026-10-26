@@ -1,6 +1,7 @@
 // AI evidence collection for a TM case: alerts, transactions, KYC file, screening, counterparties and coverage gaps.
 import { asList, chunk } from './tmAuth.js';
 import { runTmAgent } from './tmAi.js';
+import { counterpartyRelations } from './tmCounterparty.js';
 
 const DAY_MS = 86400000;
 const MAX_TXNS = 100;
@@ -64,6 +65,7 @@ export async function collectEvidence(ctx, tmCase) {
   ]);
   const cpIds = [...new Set(txns.map((t) => t.counterparty_id).filter(Boolean))];
   const counterparties = await byIds((p) => E.Counterparty.filter({ tenant_id: tenantId, id: { $in: p } }, undefined, 100), cpIds, 50);
+  const relations = await counterpartyRelations(E, tenantId, clientIds, counterparties).catch(() => new Map());
 
   // Deterministic gaps (always present, independent of the model).
   const gaps = [];
@@ -77,6 +79,8 @@ export async function collectEvidence(ctx, tmCase) {
   }
   if (!profile) gaps.push({ text: 'There is no approved expected profile for the primary client.', source_refs: [`client:${tmCase.primary_client_id}`] });
   if (!kyc) gaps.push({ text: 'No KYC case with purpose or expected behaviour is on file for the primary client.', source_refs: [`client:${tmCase.primary_client_id}`] });
+  // Deterministic related-party facts: linked ones are findings, name-only matches are open questions.
+  const relFacts = [...relations.entries()].map(([cpId, r]) => ({ kind: r.linked ? 'unclear' : 'gap', text: r.linked ? r.text : `${r.text} Confirm or reject the link on the counterparty.`, source_refs: [`counterparty:${cpId}`] }));
 
   const sources = [
     ...alerts.map((a) => `alert:${a.id}`), ...txns.map((t) => `txn:${t.id}`), ...clients.map((c) => `client:${c.id}`),
@@ -91,7 +95,7 @@ export async function collectEvidence(ctx, tmCase) {
     kyc_file: kyc ? { ref: `kyc:${kyc.id}`, purpose_nature: kyc.purpose_nature_text, expected_behaviour: kyc.expected_transaction_behavior, source_of_funds: kyc.sof_narrative, risk_classification: kyc.risk_classification } : null,
     expected_profile: profile ? { ref: `profile:${profile.id}`, inbound_max_month: profile.inbound_max_month, outbound_foreign_max_month: profile.outbound_foreign_max_month, cash_max_month: profile.cash_max_month, allowed_countries: profile.allowed_countries } : null,
     screening: hits.map((h) => ({ ref: `screening:${h.id}`, source: h.source, name: h.hit_name, status: h.status, confidence: h.confidence_score })),
-    counterparties: counterparties.map((c) => ({ ref: `counterparty:${c.id}`, name: c.display_name, country: c.country, kind: c.entity_kind, screening_status: c.screening_status })),
+    counterparties: counterparties.map((c) => ({ ref: `counterparty:${c.id}`, name: c.display_name, country: c.country, kind: c.entity_kind, screening_status: c.screening_status, ...(relations.get(c.id) ? { related_party: relations.get(c.id).text } : {}) })),
     data_gaps: gaps.map((g) => g.text),
   };
 
@@ -103,6 +107,7 @@ export async function collectEvidence(ctx, tmCase) {
   const items = [
     ...(output.findings || []).map((f) => mk(f.kind || 'unclear', f.text, f.source_refs)),
     ...gaps.map((g) => mk('gap', g.text, g.source_refs)),
+    ...relFacts.map((f) => mk(f.kind, f.text, f.source_refs)),
     ...(output.missing || []).slice(0, 10).map((m) => mk('gap', String(m), [`client:${tmCase.primary_client_id}`])),
   ];
   const seen = new Set();
