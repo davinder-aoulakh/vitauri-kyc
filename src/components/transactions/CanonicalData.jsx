@@ -1,4 +1,5 @@
 import React from 'react';
+import RuleRunsTable from '@/components/didit/RuleRunsTable';
 
 const Row = ({ label, value }) => (
   <div className="flex justify-between gap-3 text-xs"><span className="text-muted-foreground">{label}</span><span className="font-medium max-w-[60%] truncate text-right">{value}</span></div>
@@ -18,7 +19,7 @@ export default function CanonicalData({ transaction: t }) {
         <Row label="Rule runs" value={runs.length} />
       </div>
       {runs.length > 0 && (
-        <pre className="bg-muted/30 rounded-lg p-3 text-[11px] leading-relaxed overflow-x-auto max-h-40 whitespace-pre-wrap break-all">{JSON.stringify(runs, null, 2)}</pre>
+        <RuleRunsTable runs={runs} tenantId={t.tenant_id} />
       )}
     </div>
   );
