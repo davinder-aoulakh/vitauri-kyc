@@ -2,11 +2,16 @@
 // the client's own words (labelled, dated) plus the matching source checkboxes. Pure functions; no I/O.
 import { format } from 'date-fns';
 
+// Order matters: the first matching kind wins (e.g. "bedrijfsactiviteiten" is a business activity, not "specific activities").
 const KINDS = {
   sof: /source of funds|herkomst (van (het|de) )?(geld|middelen)|bron van (de )?(inkomsten|middelen)/i,
   sow: /source of wealth|herkomst (van (het )?)?vermogen|bron van (het )?vermogen/i,
   employment: /employment status|employment|dienstverband|werksituatie|arbeidssituatie/i,
   income: /income range|annual income|inkomen/i,
+  // Organisations
+  funding: /origin of (the )?(capital|equity|share capital)|initial capital|start[- ]?up capital|share capital|funding of the (company|business)|herkomst (van (het )?)?(kapitaal|startkapitaal)|startkapitaal|financiering/i,
+  revenue: /annual (turnover|revenue)|expected (turnover|revenue)|turnover|revenue|jaaromzet|omzet/i,
+  business: /nature of (the )?business|business activit|description of (the )?(business|company activities)|main activit|bedrijfsactiviteit|aard van (de )?(onderneming|activiteiten)/i,
   activities: /specific activities|activiteiten/i,
 };
 const ANSWERED = ['Received', 'Verified'];
@@ -18,7 +23,7 @@ const fmt = (d) => { const x = new Date(d); return Number.isNaN(x.getTime()) ? '
  * The SoW kind wins over SoF when a label matches both.
  */
 export function collectSofAnswers(requests = []) {
-  const out = { sof: null, sow: null, employment: null, income: null, activities: null };
+  const out = { sof: null, sow: null, employment: null, income: null, funding: null, revenue: null, business: null, activities: null };
   const items = (requests || []).flatMap((r) => (r.items || []).map((i) => ({ ...i, _date: i.submitted_at || i.received_at || r.updated_date || r.created_date })));
   for (const item of items) {
     const text = clean(Array.isArray(item.response_value) ? item.response_value.join(', ') : item.response_text);
@@ -36,7 +41,7 @@ export function collectSofAnswers(requests = []) {
 const RULES = [
   ['Salary / Employment Income', /salar|wage|(?<!self[- ]?)(?<!un)employ(ed|ment)|payroll|\bloon\b|salaris|in dienst/i],
   ['Business Income / Dividends', /business|dividend|self[- ]?employ|zzp|freelanc|consultan|onderneming|eigen bedrijf|winst/i],
-  ['Trading / Operating Revenue', /business|trading|operat|revenue|turnover|sales|consultan|services|omzet|bedrijfsactiviteit/i],
+  ['Trading / Operating Revenue', /business|trading|operat|revenue|turnover|sales|consultan|services|clients|customers|advies|dienstverlening|omzet|bedrijfsactiviteit|handel/i],
   ['Dividend Income', /dividend/i],
   ['Sale of Property', /(sold|sale of|selling|verkoop).{0,25}(house|home|property|apartment|real estate|woning|huis|pand)|(house|property|woning|huis).{0,15}(sold|verkocht)/i],
   ['Asset Sale Proceeds', /(sold|sale of|verkoop)/i],
@@ -46,7 +51,7 @@ const RULES = [
   ['Pension', /pension|pensioen|retire/i],
   ['Loan / Credit Facility', /\bloan\b|mortgage|credit|lening|hypotheek|krediet/i],
   ['Loan / Debt Facility', /\bloan\b|debt|credit|lening|financiering/i],
-  ['Capital Raise / Equity', /capital raise|equity|funding round|investor|kapitaal/i],
+  ['Capital Raise / Equity', /capital raise|equity|funding round|investor|share capital|shareholder (contribution|funding)|capital contribution|aandelenkapitaal|startkapitaal|kapitaalstorting|agio/i],
   ['Gift', /\bgift\b|donation|schenking/i],
   // Source of wealth
   ['Lifetime Savings', /saving|spaargeld|spaar|savings/i],
@@ -78,6 +83,9 @@ export function buildExplanation(answers, which = 'sof') {
     const ctx = [
       answers?.employment && `Employment status: ${answers.employment.text}`,
       answers?.income && `Income range: ${answers.income.text}`,
+      answers?.business && `Business activity: ${answers.business.text}`,
+      answers?.revenue && `Annual turnover: ${answers.revenue.text}`,
+      answers?.funding && `Origin of capital: ${answers.funding.text}`,
       answers?.activities && `Specific activities: ${answers.activities.text}`,
     ].filter(Boolean);
     if (ctx.length) lines.push(ctx.join(' · '));
@@ -93,10 +101,11 @@ export const declarationMarker = (answers, which = 'sof') => (answers?.[which] ?
  * SoW comes from a SoW answer, or from wealth words in the SoF answer (savings, investments, inheritance, property).
  */
 export function prefillFromAnswers(answers, { sofOptions = [], sowOptions = [] } = {}) {
-  if (!answers?.sof && !answers?.sow && !answers?.employment) return null;
-  const sofText = [answers.sof?.text, answers.employment?.text].filter(Boolean).join('. ');
+  if (!answers?.sof && !answers?.sow && !answers?.employment && !answers?.business && !answers?.revenue && !answers?.funding) return null;
+  const sofText = [answers.sof?.text, answers.employment?.text, answers.business?.text, answers.funding?.text].filter(Boolean).join('. ');
+  const hasMain = answers.sof || answers.employment || answers.business || answers.funding;
   const sof = {
-    sources: answers.sof || answers.employment ? mapSources(sofText, sofOptions, { allowOther: !!answers.sof }) : [],
+    sources: hasMain ? mapSources(sofText, sofOptions, { allowOther: !!answers.sof }) : [],
     explanation: buildExplanation(answers, 'sof'),
   };
   let sow = null;
