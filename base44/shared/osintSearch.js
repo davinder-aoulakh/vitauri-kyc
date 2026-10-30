@@ -188,10 +188,10 @@ Run web searches with these queries (and close variations), not only the full le
 ${queries.map((q) => `- ${q}`).join('\n')}
 
 For EVERY result decide whether it is about THIS subject:
-- confirmed: at least two independent identifiers match (e.g. name variant + employer, name + company, name + city + birth year)
+- confirmed: at least two independent identifiers match (e.g. name variant + employer, name + company, name + city + birth year; for a company: registration number, or name + address/town, or name + a key person)
 - likely: name variant plus one identifier matches, nothing contradicts
 - possible: only the name matches, no contradiction
-- not_subject: a namesake or contradicted (different birth year/era, location, profession, deceased, different company)
+- not_subject: a namesake or contradicted (different birth year/era, location, profession, deceased, different company; for a company: different registration number, country or town, or a different legal entity with a similar name)
 List matched_on (which identifiers matched) and, for not_subject, the mismatch.
 Include namesakes you came across as not_subject so the analyst can see they were checked.
 For each finding: title, 2-3 sentence factual summary, source_type, credibility, source_url (real URL you saw), is_adverse.
@@ -227,14 +227,36 @@ export async function runOsint(base44, { client, kycCase, hints = '' }) {
     } catch { linkedCompanies = []; }
   }
 
-  const profile = subjectProfile({ client, kycCase, outreachItems, linkedCompanies, hints });
+  // For an organisation: its UBOs and directors ("Jan de Vries (UBO 40%)").
+  let keyPeople = [];
+  if (client?.client_type === 'ORG' && client?.tenant_id) {
+    try {
+      const links = asList(await E.ClientRelatedPartyLink.filter({ tenant_id: client.tenant_id, client_id: client.id }, undefined, 50));
+      const ids = [...new Set(links.map((l) => l.related_party_id).filter(Boolean))];
+      const parties = ids.length ? asList(await E.RelatedParty.filter({ tenant_id: client.tenant_id, id: { $in: ids } }, undefined, 50)) : [];
+      keyPeople = links.map((l) => {
+        const p = parties.find((x) => x.id === l.related_party_id);
+        if (!p?.full_name || p.is_active === false) return '';
+        const role = l.role || p.role_in_relationship || '';
+        const pct = l.ownership_percentage ?? p.ownership_percentage;
+        return role || pct ? `${p.full_name} (${[role, pct ? `${pct}%` : ''].filter(Boolean).join(' ')})` : p.full_name;
+      }).filter(Boolean);
+    } catch { keyPeople = []; }
+  }
+
+  const profile = subjectProfile({ client, kycCase, outreachItems, linkedCompanies, keyPeople, hints });
+  const isOrg = profile.type === 'Organisation';
   const queries = buildQueries(profile);
   const base = { add_context_from_internet: true, response_json_schema: FINDING_SCHEMA };
   const [identity, adverse] = await Promise.allSettled([
     ask(base44, { ...base, prompt: prompt(profile, queries.filter((q) => !/fraud|sanction|court|investigation|fraude|oplichting|rechtbank|veroordeeld|FIOD|faillissement|Betrug|Gericht|verurteilt|Insolvenz|hof/i.test(q)),
-      'Find the subject\'s online presence: professional profiles (LinkedIn), company roles and registrations, own websites, interviews, publications and news.') }),
+      isOrg
+        ? 'Find the company\'s presence: trade/company register entries (e.g. KvK, Companies House, OpenCorporates), its own website, activities, key people (UBOs/directors), group structure, news and reviews.'
+        : 'Find the subject\'s online presence: professional profiles (LinkedIn), company roles and registrations, own websites, interviews, publications and news.') }),
     ask(base44, { ...base, prompt: prompt(profile, queries,
-      'Find adverse information: regulatory actions, enforcement, sanctions, court cases, insolvency, fraud allegations and negative media.') }),
+      isOrg
+        ? 'Find adverse information on the company and its key people: regulatory actions, enforcement, sanctions, court cases, insolvency/bankruptcy, fraud allegations and negative media.'
+        : 'Find adverse information: regulatory actions, enforcement, sanctions, court cases, insolvency, fraud allegations and negative media.') }),
   ]);
   if (identity.status === 'rejected' && adverse.status === 'rejected') throw identity.reason || adverse.reason;
 
