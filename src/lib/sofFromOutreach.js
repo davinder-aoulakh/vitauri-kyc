@@ -34,7 +34,7 @@ export function collectSofAnswers(requests = []) {
 
 // Keyword rules (EN + NL) per checkbox label used in SoFSoWStep. A rule only applies when its label is in the step's options.
 const RULES = [
-  ['Salary / Employment Income', /salar|wage|employ(ed|ment)|payroll|\bloon\b|salaris|in dienst/i],
+  ['Salary / Employment Income', /salar|wage|(?<!self[- ]?)(?<!un)employ(ed|ment)|payroll|\bloon\b|salaris|in dienst/i],
   ['Business Income / Dividends', /business|dividend|self[- ]?employ|zzp|freelanc|consultan|onderneming|eigen bedrijf|winst/i],
   ['Trading / Operating Revenue', /business|trading|operat|revenue|turnover|sales|consultan|services|omzet|bedrijfsactiviteit/i],
   ['Dividend Income', /dividend/i],
