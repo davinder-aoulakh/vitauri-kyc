@@ -31,11 +31,27 @@ const countryCode = (c) => {
   return '';
 };
 
+/** Address as text: ORG registered_address is a string, NP residential_address an object. */
+const addressText = (a) => (a && typeof a === 'object' ? [a.street, a.number, a.zipcode, a.city, a.country].filter(Boolean).join(' ') : clean(a));
+
+/** City from an address object, or the town part of a free-text address ("Street 1, Town, 1234AB"). */
+function cityOf(a) {
+  if (a && typeof a === 'object') return clean(a.city);
+  const parts = clean(a).split(',').map((p) => p.trim()).filter(Boolean);
+  const town = parts.slice(1).find((p) => /[a-z]/i.test(p) && !/\d/.test(p));
+  return town || '';
+}
+
+const LEGAL_FORM = /[\s,]+(b\.?\s?v\.?|n\.?\s?v\.?|v\.?o\.?f\.?|c\.?v\.?|ltd\.?|limited|llc|inc\.?|gmbh|ag|s\.?a\.?|sarl|plc|pty\.?\s+ltd\.?|holding)$/i;
+/** "Zwarts Management B.V." -> "Zwarts Management" (companies are often written without their legal form). */
+export const withoutLegalForm = (name) => { let n = clean(name); for (let i = 0; i < 2; i++) n = n.replace(LEGAL_FORM, '').trim(); return n; };
+
 /** Stable key of the client fields that drive the search; the panel uses it to say "details changed since this search". */
 export function clientIdentityKey(c) {
   const a = c?.residential_address || {};
   return [c?.full_name, c?.preferred_name, c?.first_names, c?.last_name, c?.date_of_birth, c?.employer_name, c?.occupation,
-    c?.primary_contact_email, a?.city, c?.registration_number, c?.registered_country, c?.country_of_residence]
+    c?.primary_contact_email, a?.city, c?.registration_number, c?.registered_country, c?.country_of_residence,
+    addressText(c?.registered_address), c?.sector]
     .map((v) => clean(v).toLowerCase()).join('|');
 }
 
@@ -50,7 +66,7 @@ export function employerFromText(text) {
 }
 
 /** Everything we know about the subject that helps to tell them apart from namesakes. */
-export function subjectProfile({ client = {}, kycCase = {}, outreachItems = [], linkedCompanies = [], hints = '' }) {
+export function subjectProfile({ client = {}, kycCase = {}, outreachItems = [], linkedCompanies = [], keyPeople = [], hints = '' }) {
   const isOrg = client.client_type === 'ORG';
   const first = clean(client.first_names).split(' ').filter(Boolean);
   const last = clean(client.last_name);
@@ -59,7 +75,7 @@ export function subjectProfile({ client = {}, kycCase = {}, outreachItems = [], 
   const lastName = last || (fullParts.length > 1 ? fullParts[fullParts.length - 1] : '');
   const givenNames = first.length ? first : fullParts.slice(0, -1);
 
-  const names = isOrg ? uniq([full, client.preferred_name]) : uniq([
+  const names = isOrg ? uniq([full, client.preferred_name, withoutLegalForm(full), withoutLegalForm(client.preferred_name)]) : uniq([
     full, client.preferred_name,
     givenNames.length && lastName ? `${givenNames[0]} ${lastName}` : '',
     givenNames.length > 1 && lastName ? `${givenNames[1]} ${lastName}` : '',
@@ -78,8 +94,8 @@ export function subjectProfile({ client = {}, kycCase = {}, outreachItems = [], 
     const d = String(client.primary_contact_email || '').split('@')[1]?.toLowerCase().trim();
     return d && !GENERIC_MAIL.has(d) ? d : '';
   })();
-  const addr = client.residential_address || client.registered_address || {};
-  const city = clean(typeof addr === 'object' ? addr.city : '');
+  const addr = isOrg ? client.registered_address : (client.residential_address || {});
+  const city = cityOf(addr);
   const country = countryText(isOrg ? client.registered_country : (client.country_of_residence || client.nationality));
 
   return {
@@ -89,7 +105,11 @@ export function subjectProfile({ client = {}, kycCase = {}, outreachItems = [], 
       ...(isOrg ? {} : { date_of_birth: client.date_of_birth || '', birth_year: String(client.date_of_birth || '').slice(0, 4), place_of_birth: clean(client.place_of_birth), nationality: countryText(client.nationality) }),
       country, country_code: countryCode(country), city, occupation, employers, email_domain: emailDomain,
       linked_companies: uniq(linkedCompanies).slice(0, 5),
-      ...(isOrg ? { registration_number: clean(client.registration_number), lei: clean(client.lei_code), sector: clean(client.sector || client.business_activity) } : {}),
+      ...(isOrg ? {
+        registration_number: clean(client.registration_number), lei: clean(client.lei_code), legal_form: clean(client.legal_form),
+        registered_address: addressText(client.registered_address), sector: clean(client.sector), business_activity: clean(client.business_activity).slice(0, 200),
+        key_people: uniq(keyPeople).slice(0, 6),
+      } : {}),
     },
     hints: clean(hints).slice(0, 500),
   };
@@ -99,14 +119,25 @@ export function subjectProfile({ client = {}, kycCase = {}, outreachItems = [], 
 export function buildQueries(profile) {
   const id = profile.identifiers;
   const brand = id.email_domain ? id.email_domain.split('.')[0] : '';
-  const ctx = uniq([...(id.employers || []), brand, ...(id.linked_companies || []), id.city]).slice(0, 5);
+  const isOrg = profile.type === 'Organisation';
+  const ctx = isOrg
+    ? uniq([id.city, ...(id.key_people || []).map((p) => p.split(' (')[0]), brand]).slice(0, 5)
+    : uniq([...(id.employers || []), brand, ...(id.linked_companies || []), id.city]).slice(0, 5);
   const q = [];
+  if (isOrg) {
+    // Register and identity first: the registration number is the strongest identifier a company has.
+    const short = profile.names[2] || profile.names[0];
+    const regLabel = id.country_code === 'NL' ? 'KvK' : 'company registration';
+    if (id.registration_number) { q.push(`"${id.registration_number}"`); q.push(`"${short}" ${regLabel} ${id.registration_number}`); }
+    if (id.lei) q.push(`"${id.lei}"`);
+  }
   // The preferred name (names[1] when set) is usually the one used online: it gets the full set of combinations first.
   const ordered = uniq([profile.names[1], profile.names[0], ...profile.names.slice(2)]).filter(Boolean);
   ordered.slice(0, 4).forEach((n, i) => {
     q.push(`"${n}"`);
     ctx.slice(0, i < 2 ? 4 : 1).forEach((c) => q.push(`"${n}" ${c.includes(' ') ? `"${c}"` : c}`));
-    if (profile.type === 'Natural person' && i < 2) q.push(`"${n}" LinkedIn`);
+    if (!isOrg && i < 2) q.push(`"${n}" LinkedIn`);
+    if (isOrg && i < 2) q.push(`"${n}" website OR company profile`);
   });
   const main = ordered[0];
   const local = LOCAL_ADVERSE[id.country_code] || [];
@@ -207,7 +238,8 @@ export async function runOsint(base44, { client, kycCase, hints = '' }) {
   ]);
   if (identity.status === 'rejected' && adverse.status === 'rejected') throw identity.reason || adverse.reason;
 
-  const all = [identity, adverse].flatMap((r) => (r.status === 'fulfilled' ? r.value?.findings || [] : []));
+  const all = [identity, adverse]
+    // (identity first so its version of a duplicate is kept).flatMap((r) => (r.status === 'fulfilled' ? r.value?.findings || [] : []));
   const seen = new Set();
   const merged = all.filter((f) => {
     if (!f?.title) return false;
