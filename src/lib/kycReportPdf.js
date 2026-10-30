@@ -146,7 +146,7 @@ export function buildReportBody(input) {
   let y = TOP;
 
   const font = (style = 'normal', size = 8.5, color = b.text) => { doc.setFont('helvetica', style); doc.setFontSize(size); doc.setTextColor(...color); };
-  const text = (s, x, yy, opts) => doc.text(safeText(s), x, yy, opts);
+  const text = (s, x, yy, opts) => doc.text(Array.isArray(s) ? s.map(safeText) : safeText(s), x, yy, opts);
   const wrap = (s, w) => doc.splitTextToSize(safeText(s), w);
   const ensure = (h) => { if (y + h > BOTTOM) { doc.addPage(); y = TOP; return true; } return false; };
   const gap = (h = 3) => { y += h; };
@@ -154,7 +154,7 @@ export function buildReportBody(input) {
   const sectionPages = {};
 
   function section(num, title) {
-    ensure(22);
+    ensure(34); // keep the header with at least a few lines of its content
     if (y > TOP) gap(3);
     sectionPages[num] = pageNo();
     doc.setFillColor(...b.tint);
@@ -278,8 +278,9 @@ export function buildReportBody(input) {
     const textIn = String(src || '').replace(/\\n/g, '\n').replace(/\r/g, '').trim();
     if (!textIn) return;
     const lines = textIn.split('\n');
+    // Each source line keeps its own line (AI narratives use line breaks for "Client: …" style rows); blank lines separate paragraphs.
     let para = [];
-    const flush = () => { if (para.length) { richLine(para.join(' '), MARGIN, INNER_W); y += 1.6; para = []; } };
+    const flush = () => { if (para.length) { para.forEach((l) => richLine(l, MARGIN, INNER_W)); y += 1.6; para = []; } };
     for (const raw of lines) {
       const line = raw.trimEnd();
       if (!line.trim()) { flush(); continue; }
