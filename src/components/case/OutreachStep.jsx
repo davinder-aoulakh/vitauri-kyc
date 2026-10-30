@@ -30,6 +30,7 @@ const SITUATION_LABELS = {
 import { format, addDays, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import TippingOffBanner from '@/components/shared/TippingOffBanner';
+import { finishCaseOpenTrace } from '@/lib/perfTrace';
 import { isLocked, fetchLocked, sendCustomerEmail, isLockError } from '@/lib/tippingOff';
 import { buildRequestItem, isVerificationItem, effectiveWorkflow } from '@/lib/outreachItems';
 import IdvWorkflowPicker from '@/components/outreach/IdvWorkflowPicker';
@@ -189,6 +190,7 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
       setLoadError(err?.message || 'Failed to load outreach requests.');
     } finally {
       setLoading(false);
+      finishCaseOpenTrace(kycCase.id);
     }
   }
 
