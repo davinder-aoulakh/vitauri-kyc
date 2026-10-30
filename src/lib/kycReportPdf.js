@@ -327,7 +327,7 @@ export function buildReportBody(input) {
       const w = props.width * s, h = props.height * s;
       const x = PAGE_W - MARGIN - w, yy = (bandH - h) / 2;
       if (!light) { doc.setFillColor(...WHITE); doc.roundedRect(x - 3, yy - 3, w + 6, h + 6, 2, 2, 'F'); }
-      doc.addImage(logo.dataUrl, logo.format || props.fileType || 'PNG', x, yy, w, h);
+      doc.addImage(logo.dataUrl, logo.format || props.fileType || 'PNG', x, yy, w, h, 'tenant-logo', 'FAST');
       logoDone = true;
     } catch { logoDone = false; }
   }
@@ -614,7 +614,12 @@ export async function assembleReport({ doc, marks, branding: b, dateStr, annexIt
   const helv = await out.embedFont(StandardFonts.Helvetica);
   const bold = await out.embedFont(StandardFonts.HelveticaBold);
   const total = body.getPageCount();
-  const pre = await out.copyPages(body, Array.from({ length: marks.annexEndPage }, (_, i) => i));
+  // One copyPages call: jsPDF pages share one resource dictionary, so separate calls would duplicate the logo.
+  const preIdx = Array.from({ length: marks.annexEndPage }, (_, i) => i);
+  const auditIdx = Array.from({ length: total - marks.auditStartPage + 1 }, (_, i) => marks.auditStartPage - 1 + i);
+  const copied = await out.copyPages(body, [...preIdx, ...auditIdx]);
+  const pre = copied.slice(0, preIdx.length);
+  const auditPages = copied.slice(preIdx.length);
   pre.forEach((p) => out.addPage(p));
   const kinds = new Array(out.getPageCount()).fill('report');
 
@@ -658,7 +663,6 @@ export async function assembleReport({ doc, marks, branding: b, dateStr, annexIt
     }
   }
 
-  const auditPages = await out.copyPages(body, Array.from({ length: total - marks.auditStartPage + 1 }, (_, i) => marks.auditStartPage - 1 + i));
   const auditFirst = out.getPageCount() + 1;
   auditPages.forEach((p) => { out.addPage(p); kinds.push('report'); });
 
