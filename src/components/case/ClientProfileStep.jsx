@@ -5,7 +5,7 @@
  *   1B  Expected Transaction Behaviour (unchanged)
  *   2   Verified Profile Summary (read-only) — editing happens in Step 1 Profile Verification
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import AutoSaveIndicator from '@/components/shared/AutoSaveIndicator';
@@ -91,6 +91,14 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
 
   // ── Section 1A ───────────────────────────────────────────────────────────────
   const [purposeText, setPurposeText]           = useState('');
+  const purposeRef = useRef(null);
+  // Grow the purpose box with its text (typing, AI draft, load); CSS caps it at 70vh, after which it scrolls.
+  useLayoutEffect(() => {
+    const el = purposeRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [purposeText]);
   const [generatingPurpose, setGeneratingPurpose] = useState(false);
   const [purposeError, setPurposeError]         = useState(null);
   const [draftStage, setDraftStage]             = useState('drafting'); // 'gathering' | 'drafting'
@@ -244,10 +252,11 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
           </Button>
         </div>
         <Textarea
+          ref={purposeRef}
           value={purposeText}
           onChange={e => setPurposeText(e.target.value)}
           placeholder={`Describe the nature of the client relationship, intended products/services…`}
-          className={cn('text-sm min-h-24 resize-none', !purposeText && 'border-amber-300 focus:ring-amber-400')}
+          className={cn('text-sm leading-relaxed min-h-56 max-h-[70vh] overflow-y-auto resize-y', !purposeText && 'border-amber-300 focus:ring-amber-400')}
         />
         {!purposeText && !purposeError && (
           <div className="flex items-center gap-1.5 text-xs text-amber-600">
