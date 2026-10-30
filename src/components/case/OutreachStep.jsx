@@ -17,6 +17,7 @@ import { NP_FIELD_LABELS, ORG_FIELD_LABELS } from '@/hooks/useProfileSuggestions
 import { isFieldMappedLabel } from '@/lib/outreachFieldMatch';
 import SuggestedProfileUpdatesCard from '@/components/case/outreach/SuggestedProfileUpdatesCard';
 import SuggestedKybUpdatesCard from '@/components/case/outreach/SuggestedKybUpdatesCard';
+import BulkVerifyDialog, { bulkVerifyCandidates } from '@/components/case/outreach/BulkVerifyDialog';
 
 const SITUATION_LABELS = {
   Welcome: 'Welcome',
@@ -122,6 +123,8 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
   const [creating, setCreating]   = useState(false);
   const [sending, setSending]     = useState(false);
   const [verifyingItemId, setVerifyingItemId] = useState(null); // "reqId:itemIndex"
+  const [bulkReq, setBulkReq] = useState(null); // request whose "Verify all" dialog is open
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   // Email templates
   const [emailTemplates, setEmailTemplates] = useState([]);
@@ -413,42 +416,62 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
     load();
   }
 
+  // The Profile Verification step is gated on every outreach item being Verified.
+  function reportAllVerified(reqs) {
+    const allItems = (reqs || []).flatMap(r => r.items || []);
+    onOutreachAllVerified?.((reqs || []).length > 0 && allItems.length > 0 && allItems.every(i => i.status === 'Verified'));
+  }
+
   async function verifyItem(req, itemIndex) {
     const key = `${req.id}:${itemIndex}`;
     setVerifyingItemId(key);
-
     // Brief spinner acknowledgment (~300ms) then optimistic flip
     await new Promise(r => setTimeout(r, 300));
+    setVerifyingItemId(null);
+    await verifyItems(req, [itemIndex], false);
+  }
 
-    const updatedItems = req.items.map((item, i) =>
-      i === itemIndex ? { ...item, status: 'Verified' } : item
-    );
-
-    // Capture previous state for silent rollback
+  /** Marks the given items Verified in one write, with one audit event per item. Rolls back on failure. */
+  async function verifyItems(req, indices, bulk = true) {
+    const wanted = new Set(indices);
+    const current = requests.find(r => r.id === req.id) || req;
+    const updatedItems = current.items.map((item, i) => (wanted.has(i) ? { ...item, status: 'Verified' } : item));
     const prevRequests = requests;
+    const nextRequests = requests.map(r => (r.id === req.id ? { ...r, items: updatedItems } : r));
 
     // Optimistic update — UI reflects Verified immediately
-    setRequests(prev => prev.map(r => r.id === req.id ? { ...r, items: updatedItems } : r));
-    setVerifyingItemId(null);
-
-    // Parallel backend writes
+    setRequests(nextRequests);
+    reportAllVerified(nextRequests);
     try {
       await Promise.all([
         base44.entities.OutreachRequest.update(req.id, { items: updatedItems }),
-        base44.entities.AuditEvent.create({
+        base44.entities.AuditEvent.bulkCreate(indices.map(i => ({
           tenant_id: kycCase.tenant_id,
           case_id: kycCase.id,
           actor_user_id: currentUser?.id,
           actor_name: currentUser?.full_name,
           actor_type: 'User',
           event_type: 'document_verified',
-          notes: `Verified: ${req.items[itemIndex].label}`,
-        }),
+          notes: `${bulk ? 'Verified (bulk)' : 'Verified'}: ${current.items[i].label}`,
+        }))),
       ]);
+      return true;
     } catch {
       // Silent revert
       setRequests(prevRequests);
+      reportAllVerified(prevRequests);
+      return false;
     }
+  }
+
+  const isTrackerVisible = (item) => item.field_type === 'id_verification' || !isFieldMappedLabel(item.label, fieldLabels);
+
+  async function confirmBulkVerify(indices) {
+    if (!bulkReq) return;
+    setBulkBusy(true);
+    const ok = await verifyItems(bulkReq, indices, true);
+    setBulkBusy(false);
+    if (ok) setBulkReq(null);
   }
 
   function getPortalUrl(req) {
@@ -593,7 +616,9 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
             const isOverdue = req.deadline && isPast(parseISO(req.deadline)) && req.status !== 'Complete';
             const portalUrl = getPortalUrl(req);
             const pendingCount = req.items?.filter(i => i.status === 'Requested').length || 0;
-            const verifiedCount = req.items?.filter(i => i.status === 'Verified' || i.status === 'Received').length || 0;
+            const verifiedCount = req.items?.filter(i => i.status === 'Verified').length || 0;
+            const toVerifyCount = req.items?.filter(i => i.status === 'Received').length || 0;
+            const bulk = bulkVerifyCandidates(req, isTrackerVisible);
 
             return (
               <div key={req.id} className={cn('bg-card border rounded-xl overflow-hidden', isOverdue ? 'border-amber-300' : 'border-border')}>
@@ -611,10 +636,16 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                       </span>
                     )}
                     <span className="text-xs text-muted-foreground">
-                      {verifiedCount}/{req.items?.length || 0} verified
+                      {verifiedCount}/{req.items?.length || 0} verified{toVerifyCount > 0 ? ` · ${toVerifyCount} to verify` : ''}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
+                    {bulk.eligible.length > 1 && !isLocked(client) && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                        onClick={() => setBulkReq(req)}>
+                        <ShieldCheck className="w-3 h-3" /> Verify all ({bulk.eligible.length})
+                      </Button>
+                    )}
                     {req.access_token && (
                       <>
                         <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => copyPortalLink(req)}>
