@@ -7,11 +7,32 @@ import { base44 } from '@/api/base44Client';
 
 const STALE_TIME = 60000; // 60s — navigating between pages within this window reuses the cache
 
+/**
+ * The tenant's users via the listTenantUsers function (service role, tenant-scoped, sanitised).
+ * Reading the built-in User entity from the browser does not reliably return colleagues, which left
+ * analyst names blank on All Cases. Falls back to the direct read only if the function fails.
+ */
+export async function fetchTenantUsers(tenantId) {
+  let users;
+  try {
+    users = (await base44.functions.invoke('listTenantUsers', {}))?.data?.users;
+  } catch {
+    users = null;
+  }
+  if (!Array.isArray(users)) {
+    const res = await base44.entities.User.filter({ tenant_id: tenantId }).catch(() => []);
+    users = Array.isArray(res) ? res : res?.items || [];
+  }
+  return users
+    .filter((u) => !tenantId || !u.tenant_id || u.tenant_id === tenantId)
+    .map((u) => ({ ...u, full_name: u.full_name || u.email || 'Unnamed user' }));
+}
+
 export function useTenantUsers(tenantId, options = {}) {
   const { enabled = true } = options;
   return useQuery({
     queryKey: ['users', tenantId],
-    queryFn: () => base44.entities.User.filter({ tenant_id: tenantId }).catch(() => []),
+    queryFn: () => fetchTenantUsers(tenantId),
     enabled: !!tenantId && enabled,
     staleTime: STALE_TIME,
   });
