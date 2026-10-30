@@ -16,6 +16,8 @@ import InlineError from '@/components/shared/InlineError';
 import TxnAnalysisSection from '@/components/case/TxnAnalysisSection';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { collectSofAnswers, prefillFromAnswers, declarationMarker } from '@/lib/sofFromOutreach';
+import { format } from 'date-fns';
 
 const NARRATIVE_TIMEOUT_MS = 60000;
 
@@ -128,6 +130,39 @@ function SectionCard({ title, state, setState, sources }) {
   );
 }
 
+const isEmptySection = (s) => !s || (!(s.sources || []).length && !String(s.explanation || '').trim());
+
+/** The client's own SoF/SoW answers from the outreach portal, with "Apply to form". */
+function OutreachDeclarationCard({ answers, onApply, applied }) {
+  const rows = [
+    ['Source of funds', answers.sof], ['Source of wealth', answers.sow], ['Employment status', answers.employment],
+    ['Income range', answers.income], ['Specific activities', answers.activities],
+  ].filter(([, v]) => v);
+  const latest = rows.map(([, v]) => v.date).filter(Boolean).sort().pop();
+  return (
+    <div className="rounded-xl border border-sky-200 bg-sky-50/60 dark:border-sky-500/30 dark:bg-sky-500/10 p-4 space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Client declaration (outreach)</p>
+          <p className="text-xs text-muted-foreground">What the client answered in the portal{latest ? ` · ${format(new Date(latest), 'd MMM yyyy')}` : ''}. Assess it below; the adequacy rating stays your judgement.</p>
+        </div>
+        <Button size="sm" variant="outline" className="text-xs gap-1.5 flex-shrink-0" onClick={onApply} disabled={applied}>
+          {applied ? <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          {applied ? 'Applied' : 'Apply to form'}
+        </Button>
+      </div>
+      <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-[10rem_1fr] text-xs">
+        {rows.map(([label, v]) => (
+          <React.Fragment key={label}>
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="text-foreground whitespace-pre-wrap">{v.text}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 export default function SoFSoWStep({ kycCase, client, currentUser, onCaseUpdate }) {
   const isNP = client?.client_type === 'NP';
 
@@ -164,6 +199,10 @@ export default function SoFSoWStep({ kycCase, client, currentUser, onCaseUpdate 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [narrativeError, setNarrativeError] = useState(null);
+  // Client's SoF answers from outreach, and which sections were prefilled from them (until the analyst edits them).
+  const [outreachAnswers, setOutreachAnswers] = useState(null);
+  const [prefilled, setPrefilled] = useState({ sof: false, sow: false });
+  const [declarationApplied, setDeclarationApplied] = useState(false);
 
   // Documents for evidence linking — declared before useAutoSave so `evidence` is in scope
   const [documents, setDocuments] = useState([]);
@@ -208,6 +247,68 @@ export default function SoFSoWStep({ kycCase, client, currentUser, onCaseUpdate 
       base44.entities.Document.filter({ client_id: kycCase.client_id }).then(d => setDocuments(d || []));
     }
   }, [kycCase?.client_id]);
+
+  const sofOptions = isNP ? SOF_SOURCES_NP : SOF_SOURCES_ORG;
+  const sowOptions = isNP ? SOW_SOURCES_NP : [];
+
+  function auditPrefill(fields, how) {
+    if (!fields.length || !kycCase?.id) return;
+    base44.entities.AuditEvent.create({
+      tenant_id: kycCase.tenant_id, case_id: kycCase.id, client_id: kycCase.client_id,
+      actor_user_id: currentUser?.id, actor_name: currentUser?.full_name, actor_type: 'User',
+      event_type: 'sof_prefilled_from_outreach',
+      notes: `${how === 'auto' ? 'Prefilled' : 'Applied'} from the client's outreach answers: ${fields.join(', ')}. Adequacy left to the analyst.`,
+    }).catch(() => {});
+  }
+
+  // Prefill from the client's outreach answers. Only empty sections are filled; analyst entries are never overwritten.
+  useEffect(() => {
+    if (!kycCase?.id) return;
+    let cancelled = false;
+    base44.entities.OutreachRequest.filter({ case_id: kycCase.id }).then((reqs) => {
+      if (cancelled) return;
+      const answers = collectSofAnswers(reqs || []);
+      const plan = prefillFromAnswers(answers, { sofOptions, sowOptions });
+      if (!plan) return;
+      setOutreachAnswers(answers);
+      let saved = {};
+      try { saved = kycCase.sof_narrative ? JSON.parse(kycCase.sof_narrative) : {}; } catch { saved = {}; }
+      if (saved.accepted) return; // an accepted assessment is never changed by a prefill
+      const filled = [];
+      if (isEmptySection(saved.sof) && (plan.sof.sources.length || plan.sof.explanation)) {
+        setSof((s) => (isEmptySection(s) ? { ...s, sources: plan.sof.sources, explanation: plan.sof.explanation } : s));
+        filled.push('SoF sources and explanation');
+      }
+      if (plan.sow && isNP && getDefaultSowApplicable() && isEmptySection(saved.sow)) {
+        setSow((s) => (isEmptySection(s) ? { ...s, sources: plan.sow.sources, explanation: plan.sow.explanation } : s));
+        filled.push('SoW sources and explanation');
+      }
+      if (filled.length) {
+        setPrefilled({ sof: filled.some((f) => f.startsWith('SoF')), sow: filled.some((f) => f.startsWith('SoW')) });
+        auditPrefill(filled, 'auto');
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [kycCase?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Merge the declaration into the form: add mapped sources, append the client's words if not already there. */
+  function applyDeclaration() {
+    const plan = outreachAnswers && prefillFromAnswers(outreachAnswers, { sofOptions, sowOptions });
+    if (!plan) return;
+    const merge = (s, p, marker) => ({
+      ...s,
+      sources: [...new Set([...(s.sources || []), ...p.sources])],
+      explanation: marker && String(s.explanation || '').includes(marker) ? s.explanation : [s.explanation, p.explanation].filter((x) => String(x || '').trim()).join('\n\n'),
+    });
+    setSof((s) => merge(s, plan.sof, declarationMarker(outreachAnswers, 'sof')));
+    const fields = ['SoF sources and explanation'];
+    if (plan.sow && isNP && sowApplicable) {
+      setSow((s) => merge(s, plan.sow, outreachAnswers.sow ? declarationMarker(outreachAnswers, 'sow') : declarationMarker(outreachAnswers, 'sof')));
+      fields.push('SoW sources and explanation');
+    }
+    setDeclarationApplied(true);
+    auditPrefill(fields, 'manual');
+  }
 
   // Always flush the latest SoF/SoW data on unmount — the debounced autosave
   // above is cancelled by React when the user navigates to another step
@@ -381,8 +482,12 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`;
     setSaved(true);
   }
 
-  const handleSetSof = useCallback(setSof, []);
-  const handleSetSow = useCallback(setSow, []);
+  // An analyst edit clears the "prefilled from outreach" note for that section.
+  const handleSetSof = useCallback((v) => { setSof(v); setPrefilled((p) => (p.sof ? { ...p, sof: false } : p)); }, []);
+  const handleSetSow = useCallback((v) => { setSow(v); setPrefilled((p) => (p.sow ? { ...p, sow: false } : p)); }, []);
+  const prefillNote = (
+    <p className="text-[11px] text-sky-700 dark:text-sky-300 -mb-3 pl-1">Prefilled from the client's outreach answers — review and complete the adequacy assessment.</p>
+  );
 
   return (
     <div className="space-y-5">
@@ -405,7 +510,10 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`;
         </Button>
       </div>
 
+      {outreachAnswers && <OutreachDeclarationCard answers={outreachAnswers} onApply={applyDeclaration} applied={declarationApplied} />}
+
       {/* Source Cards */}
+      {prefilled.sof && prefillNote}
       <SectionCard title="Source of Funds (SoF)" state={sof} setState={handleSetSof} sources={isNP ? SOF_SOURCES_NP : SOF_SOURCES_ORG} />
 
       {/* SoW — NP only: optional/collapsible */}
@@ -451,6 +559,7 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`;
                 transition={{ duration: 0.2, ease: 'easeInOut' }}
                 className="overflow-hidden"
               >
+                {prefilled.sow && <div className="pb-3">{prefillNote}</div>}
                 <SectionCard title="Source of Wealth (SoW)" state={sow} setState={handleSetSow} sources={SOW_SOURCES_NP} />
               </motion.div>
             )}
