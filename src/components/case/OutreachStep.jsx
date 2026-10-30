@@ -802,6 +802,15 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
         </div>
       )}
 
+      <BulkVerifyDialog
+        req={bulkReq ? (requests.find(r => r.id === bulkReq.req.id) || bulkReq.req) : null}
+        candidates={bulkReq?.candidates || null}
+        open={!!bulkReq}
+        onOpenChange={(v) => { if (!v && !bulkBusy) setBulkReq(null); }}
+        onConfirm={confirmBulkVerify}
+        busy={bulkBusy}
+      />
+
       {viewerDoc && (
         <DocumentViewer
           fileUrl={viewerDoc.url}
