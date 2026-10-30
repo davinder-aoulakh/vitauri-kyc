@@ -118,6 +118,8 @@ export default function CaseWorkspace() {
     if (seeded && kycCase?.id === id) {
       setNoteThreads(kycCase.case_notes_threads || []);
       markCaseOpen('first_render_ms');
+      // Drop the seed so a browser reload fetches fresh data.
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
       refreshCaseData(true);
     } else {
       loadAll();
