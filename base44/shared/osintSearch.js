@@ -101,17 +101,19 @@ export function buildQueries(profile) {
   const brand = id.email_domain ? id.email_domain.split('.')[0] : '';
   const ctx = uniq([...(id.employers || []), brand, ...(id.linked_companies || []), id.city]).slice(0, 5);
   const q = [];
-  for (const n of profile.names.slice(0, 4)) {
+  // The preferred name (names[1] when set) is usually the one used online: it gets the full set of combinations first.
+  const ordered = uniq([profile.names[1], profile.names[0], ...profile.names.slice(2)]).filter(Boolean);
+  ordered.slice(0, 4).forEach((n, i) => {
     q.push(`"${n}"`);
-    ctx.slice(0, 3).forEach((c) => q.push(`"${n}" ${c.includes(' ') ? `"${c}"` : c}`));
-    if (profile.type === 'Natural person') q.push(`"${n}" LinkedIn`);
-  }
-  const main = profile.names[1] || profile.names[0];
+    ctx.slice(0, i < 2 ? 4 : 1).forEach((c) => q.push(`"${n}" ${c.includes(' ') ? `"${c}"` : c}`));
+    if (profile.type === 'Natural person' && i < 2) q.push(`"${n}" LinkedIn`);
+  });
+  const main = ordered[0];
   const local = LOCAL_ADVERSE[id.country_code] || [];
   const adverse = [...['fraud', 'sanction', 'court', 'investigation'], ...local].slice(0, 8);
   adverse.forEach((t) => q.push(`"${main}" ${t}`));
   if (profile.names[0] !== main) q.push(`"${profile.names[0]}" ${adverse.slice(0, 3).join(' OR ')}`);
-  return uniq(q).slice(0, 24);
+  return uniq(q).slice(0, 30);
 }
 
 const FINDING_SCHEMA = {
