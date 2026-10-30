@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { markCaseOpen } from '@/lib/perfTrace';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { hasPermission } from '@/lib/permissions';
@@ -74,11 +75,15 @@ export default function CaseWorkspace() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { currentUser, tenant } = useTenant();
+  const location = useLocation();
+  // A just-created case arrives with its records in navigation state, so the
+  // first render needs no fetch.
+  const seeded = location.state?.kycCase?.id === id ? location.state : null;
 
-  const [kycCase, setKycCase] = useState(null);
-  const [client, setClient]   = useState(null);
+  const [kycCase, setKycCase] = useState(() => seeded?.kycCase || null);
+  const [client, setClient]   = useState(() => seeded?.client || null);
   const [auditEvents, setAuditEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !seeded);
   const [error, setError] = useState(null);
   const [searchParams] = useSearchParams();
   // Deep link: /case/:id?step=N opens that step (1-8).
@@ -109,7 +114,15 @@ export default function CaseWorkspace() {
   const canOverrideStatus = hasPermission(userRole, 'viewAllTenantCases');
   const { data: users = [] } = useTenantUsers(currentUser?.tenant_id);
 
-  useEffect(() => { loadAll(); }, [id]);
+  useEffect(() => {
+    if (seeded && kycCase?.id === id) {
+      setNoteThreads(kycCase.case_notes_threads || []);
+      markCaseOpen('first_render_ms');
+      refreshCaseData(true);
+    } else {
+      loadAll();
+    }
+  }, [id]);
 
   // Fires on navigation to step 8 — silent reload, no full-screen spinner
   useEffect(() => {
