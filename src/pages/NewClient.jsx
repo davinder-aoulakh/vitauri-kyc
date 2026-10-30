@@ -14,6 +14,7 @@ import { NaturalPersonStep2A, NaturalPersonStep2B } from '@/components/client/fo
 import { OrganizationStep2A, OrganizationStep2B } from '@/components/client/forms/OrganizationForm';
 import { computeFullName, syncPreferredContacts } from '@/lib/clientNameUtils';
 import { startCaseOpenTrace, markCaseOpen } from '@/lib/perfTrace';
+import { toast } from '@/components/ui/use-toast';
 
 // Only what the duplicate check and the duplicate warnings display.
 const DEDUP_FIELDS = ['id', 'full_name', 'registered_country', 'nationality', 'country_of_residence', 'status', 'is_deleted', 'registration_number'];
@@ -129,7 +130,11 @@ export default function NewClient() {
         });
         if (res?.data?.kycCase?.id) created = res.data;
       } catch (err) {
-        console.warn('createClientWithCase failed, using the step-by-step path', err);
+        // Fall back only when the function isn't deployed; any other error may
+        // mean the client was already written, so retrying could duplicate it.
+        const status = err?.response?.status ?? err?.status;
+        if (status !== 404) throw new Error(err?.response?.data?.error || err?.message || 'Create failed');
+        console.warn('createClientWithCase not available, using the step-by-step path');
       }
       if (!created) created = await createStepByStep(clientData, stepConfig, dueDate);
 
