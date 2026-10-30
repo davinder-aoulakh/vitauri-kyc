@@ -325,12 +325,14 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
 
       {/* What's included */}
       <div className="bg-muted/30 border border-border rounded-xl p-3 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-        {['Client Profile','Related Parties','Screening Hits','Risk Indicators','Control Measures','Sign-Off, Annex & Audit Trail'].map(s => (
+        {['Client Profile','Related Parties','Screening Hits','Risk Indicators','Control Measures','Sign-Off', 'Annex: Didit report & all documents', 'Audit Trail'].map(s => (
           <div key={s} className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <CheckCircle className="w-3 h-3 text-emerald-500 flex-shrink-0" />{s}
           </div>
         ))}
       </div>
+
+      {genError && <InlineError message={`Report not generated: ${genError}`} onRetry={generateReport} />}
 
       {loadError ? (
         <InlineError message={loadError} onRetry={loadReports} />
