@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
@@ -13,6 +13,10 @@ import RestrictedClientGate from '@/components/archive/RestrictedClientGate';
 import { NaturalPersonStep2A, NaturalPersonStep2B } from '@/components/client/forms/NaturalPersonForm';
 import { OrganizationStep2A, OrganizationStep2B } from '@/components/client/forms/OrganizationForm';
 import { computeFullName, syncPreferredContacts } from '@/lib/clientNameUtils';
+import { startCaseOpenTrace, markCaseOpen } from '@/lib/perfTrace';
+
+// Only what the duplicate check and the duplicate warnings display.
+const DEDUP_FIELDS = ['id', 'full_name', 'registered_country', 'nationality', 'country_of_residence', 'status', 'is_deleted', 'registration_number'];
 
 // Steps: 1=Type, 2=Core Details, 3=Additional Details, 4=Review
 const STEP_LABELS = {
@@ -28,7 +32,11 @@ export default function NewClient() {
   const [clientType, setClientType] = useState(null);
   const [saving, setSaving]       = useState(false);
   const [allClients, setAllClients] = useState([]);
+  const clientsLoad = useRef(null);
+  const creating = useRef(false);
   const [dupWarning, setDupWarning] = useState(null);
+  // Name the user confirmed is NOT a duplicate, so Create doesn't re-block on it.
+  const [dupAckName, setDupAckName] = useState(null);
   const [restrictedBlock, setRestrictedBlock] = useState(null);
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
 
@@ -57,13 +65,16 @@ export default function NewClient() {
 
   useEffect(() => {
     if (currentUser?.tenant_id) {
-      base44.entities.Client.filter({ tenant_id: currentUser.tenant_id }).then(d => setAllClients((d || []).filter(c => !c.is_deleted)));
+      clientsLoad.current = base44.entities.Client
+        .filter({ tenant_id: currentUser.tenant_id }, { limit: 1000, fields: DEDUP_FIELDS })
+        .then(d => { const list = (d || []).filter(c => !c.is_deleted); setAllClients(list); return list; })
+        .catch(err => { console.error('NewClient: duplicate-check list failed', err); return []; });
     }
-  }, [currentUser]);
+  }, [currentUser?.tenant_id]);
 
-  function runDedup() {
+  function runDedup(clients = allClients) {
     const country = form.registered_country || form.nationality || form.country_of_residence;
-    return findDuplicates(form.full_name, country, allClients);
+    return findDuplicates(form.full_name, country, clients);
   }
 
   function splitDups(dups) {
@@ -84,20 +95,64 @@ export default function NewClient() {
   }
 
   async function handleCreate() {
-    const dups = runDedup();
-    if (dups.length > 0) {
-      const { restricted, normal } = splitDups(dups);
-      if (restricted.length > 0) { setRestrictedBlock(restricted); return; }
-      setDupWarning({ duplicates: normal });
-      return;
-    }
+    if (creating.current) return; // a create is already in flight
+    creating.current = true;
+    try {
+      // Wait for the duplicate-check list if it hasn't arrived yet.
+      const clients = allClients.length > 0 || !clientsLoad.current ? allClients : await clientsLoad.current;
+      const dups = runDedup(clients);
+      if (dups.length > 0) {
+        const { restricted, normal } = splitDups(dups);
+        if (restricted.length > 0) { setRestrictedBlock(restricted); return; }
+        if (dupAckName !== form.full_name) { setDupWarning({ duplicates: normal }); return; }
+      }
 
-    setSaving(true);
-    const contactMirror = syncPreferredContacts(form.contact_entries);
+      setSaving(true);
+      startCaseOpenTrace({ tenant_id: currentUser.tenant_id, user_id: currentUser.id, user_name: currentUser.full_name });
+      const contactMirror = syncPreferredContacts(form.contact_entries);
+      const clientData = {
+        ...form,
+        ...(form.contact_entries?.length > 0 ? contactMirror : {}),
+        ...(clientType === 'ORG' ? { registered_country: form.residential_address?.country || form.registered_country } : {}),
+      };
+      const stepConfig = getDefaultStepConfig(clientType, 'Onboarding');
+      const dueDate = format(addDays(new Date(), 30), 'yyyy-MM-dd');
+
+      let created = null;
+      try {
+        const res = await base44.functions.invoke('createClientWithCase', {
+          client: clientData,
+          client_type: clientType,
+          audit_after_state: { ...form, client_type: clientType },
+          step_config: stepConfig,
+          due_date: dueDate,
+        });
+        if (res?.data?.kycCase?.id) created = res.data;
+      } catch (err) {
+        console.warn('createClientWithCase failed, using the step-by-step path', err);
+      }
+      if (!created) created = await createStepByStep(clientData, stepConfig, dueDate);
+
+      markCaseOpen('created_ms', {
+        client_id: created.client.id,
+        server_ms: created.timings?.total_ms ?? null,
+        path: created.timings ? 'function' : 'fallback',
+      });
+      navigate(`/case/${created.kycCase.id}`, { state: { kycCase: created.kycCase, client: created.client } });
+      markCaseOpen('navigate_ms');
+    } catch (err) {
+      console.error('NewClient create failed', err);
+      setSaving(false);
+      toast({ variant: 'destructive', title: 'Could not create the client', description: err?.message || 'Please try again.' });
+    } finally {
+      creating.current = false;
+    }
+  }
+
+  // Previous browser-side path; used only when createClientWithCase is unavailable.
+  async function createStepByStep(clientData, stepConfig, dueDate) {
     const client = await base44.entities.Client.create({
-      ...form,
-      ...(form.contact_entries?.length > 0 ? contactMirror : {}),
-      ...(clientType === 'ORG' ? { registered_country: form.residential_address?.country || form.registered_country } : {}),
+      ...clientData,
       tenant_id: currentUser.tenant_id,
       client_type: clientType,
       status: 'Prospect',
@@ -113,19 +168,18 @@ export default function NewClient() {
       after_state: { ...form, client_type: clientType },
     });
 
-    const dueDate = addDays(new Date(), 30);
     const kycCase = await base44.entities.KycCase.create({
       tenant_id: currentUser.tenant_id,
       client_id: client.id,
       case_type: 'Onboarding',
       status: 'Draft',
       assigned_analyst_id: currentUser.id,
-      due_date: format(dueDate, 'yyyy-MM-dd'),
+      due_date: dueDate,
       created_by_user_id: currentUser.id,
-      ...getDefaultStepConfig(clientType, 'Onboarding'),
+      ...stepConfig,
     });
 
-    navigate(`/case/${kycCase.id}`);
+    return { client, kycCase, timings: null };
   }
 
   const stepLabels = clientType ? STEP_LABELS[clientType] : ['Client Type', 'Details', 'Additional Details', 'Review & Create'];
@@ -217,7 +271,7 @@ export default function NewClient() {
               {!restrictedBlock && dupWarning && (
                 <DupWarningBlock
                   duplicates={dupWarning.duplicates}
-                  onDismiss={() => { setDupWarning(null); setStep(3); }}
+                  onDismiss={() => { setDupWarning(null); setDupAckName(form.full_name); setStep(3); }}
                   onViewClient={id => navigate(`/client/${id}`)}
                 />
               )}
@@ -285,7 +339,7 @@ export default function NewClient() {
               {dupWarning && (
                 <DupWarningBlock
                   duplicates={dupWarning.duplicates}
-                  onDismiss={() => setDupWarning(null)}
+                  onDismiss={() => { setDupWarning(null); setDupAckName(form.full_name); }}
                   onViewClient={id => navigate(`/client/${id}`)}
                 />
               )}
