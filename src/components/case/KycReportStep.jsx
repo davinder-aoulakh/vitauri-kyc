@@ -1,8 +1,8 @@
 /**
- * KYC Investigation Report — Professional branded PDF export
+ * KYC Investigation Report — Professional branded PDF export (builder: src/lib/kycReportPdf.js)
  * Sections: Cover · Client Profile · Related Parties · Screening Hits ·
  *           SoF/SoW · Risk Indicators · Consolidated Risk · Control Measures ·
- *           Sign-Off · Annex · Audit Trail Appendix
+ *           Sign-Off · 9 Annex (Didit report + all file documents inline) · 10 Audit Trail Appendix
  */
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
@@ -15,9 +15,33 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { isStepComplete, getStepStatus } from '@/lib/caseUtils';
 import { isFeatureEnabled } from '@/lib/featureFlags';
+import { buildKycReportPdf, prepareAnnex } from '@/lib/kycReportPdf';
 
+// Tenant logo as a data URL, downscaled to at most 900 px wide so the PDF stays small. Null on any failure.
+async function loadLogo(url) {
+  if (!url) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const bitmapUrl = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = bitmapUrl; });
+      const scale = Math.min(1, 900 / (img.naturalWidth || 900));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      return { dataUrl: canvas.toDataURL('image/png'), format: 'PNG' };
+    } finally {
+      URL.revokeObjectURL(bitmapUrl);
+    }
+  } catch {
+    return null;
+  }
+}
 
-// ── Annex merging helpers (pdf-lib) ─────────────────────────────────────────
+// ── Annex fetch helpers ────────────────────────────────────────────────────
 async function fetchDiditPdfBytes(sessionId, tenantId) {
   try {
     const res = await base44.functions.invoke('diditProxy', { action: 'session_pdf', session_id: sessionId, tenant_id: tenantId });
