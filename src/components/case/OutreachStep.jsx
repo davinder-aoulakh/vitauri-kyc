@@ -123,7 +123,7 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
   const [creating, setCreating]   = useState(false);
   const [sending, setSending]     = useState(false);
   const [verifyingItemId, setVerifyingItemId] = useState(null); // "reqId:itemIndex"
-  const [bulkReq, setBulkReq] = useState(null); // request whose "Verify all" dialog is open
+  const [bulkReq, setBulkReq] = useState(null); // { req, candidates } of the open "Verify all" dialog
   const [bulkBusy, setBulkBusy] = useState(false);
 
   // Email templates
@@ -469,7 +469,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
   async function confirmBulkVerify(indices) {
     if (!bulkReq) return;
     setBulkBusy(true);
-    const ok = await verifyItems(bulkReq, indices, true);
+    const ok = await verifyItems(bulkReq.req, indices, true);
     setBulkBusy(false);
     if (ok) setBulkReq(null);
   }
@@ -642,7 +642,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                   <div className="flex items-center gap-2">
                     {bulk.eligible.length > 1 && !isLocked(client) && (
                       <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                        onClick={() => setBulkReq(req)}>
+                        onClick={() => setBulkReq({ req, candidates: bulk })}>
                         <ShieldCheck className="w-3 h-3" /> Verify all ({bulk.eligible.length})
                       </Button>
                     )}
