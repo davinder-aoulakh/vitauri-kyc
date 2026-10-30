@@ -90,6 +90,7 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
   const [loadError, setLoadError]   = useState(null);
   const [shareLink, setShareLink]   = useState(null);
   const [viewerDoc, setViewerDoc]   = useState(null);
+  const [genError, setGenError]     = useState(null);
 
   useEffect(() => { loadReports(); }, [kycCase.id]);
 
@@ -108,6 +109,16 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
 
   async function generateReport() {
     setGenerating(true);
+    setGenError(null);
+    try { await buildAndSave(); } catch (err) {
+      console.error('KYC report generation failed:', err);
+      setGenError(err?.message || 'The report could not be generated.');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function buildAndSave() {
 
     // Fetch all supporting data in parallel
     const [screeningHits, assessments, controlMeasures, auditEvents,
@@ -153,31 +164,35 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
       return new Date(a.created_date || 0) - new Date(b.created_date || 0);
     });
 
-    // Collect unique Didit session IDs from completed IDV items
-    const diditSessionIds = [];
+    // Unique Didit sessions from completed IDV items (their report goes first in the annex)
+    const diditSessions = [];
     const seenSessions = new Set();
     (outreachRequests || []).forEach(req => {
       (req.items || []).forEach(item => {
         if (item.didit_session_id && item.idv_status && item.idv_status !== 'Pending' && !seenSessions.has(item.didit_session_id)) {
           seenSessions.add(item.didit_session_id);
-          diditSessionIds.push(item.didit_session_id);
+          diditSessions.push({ session_id: item.didit_session_id, date: item.idv_completed_at || item.submitted_at || req.updated_date || null });
         }
       });
     });
 
-    // Build the Annex manifest (Didit reports first, then documents)
-    const annexManifest = [
-      ...diditSessionIds.map(() => ['Didit Identity Verification Report', 'IDV Report', 'didit', '—']),
-      ...documents.map(d => [
-        d.file_name || '—',
-        (d.doc_type || '—').replace(/_/g, ' '),
-        d.source || 'manual',
-        d.created_date ? format(new Date(d.created_date), 'd MMM yyyy') : '—',
-      ]),
-    ];
+    // Annex: every item fetched once; files are typed from their bytes, so portal uploads named "Additional Documents" are attached too.
+    const [annexItems, logo, analyst] = await Promise.all([
+      prepareAnnex({
+        diditSessions, documents,
+        fetchDidit: (sessionId) => fetchDiditPdfBytes(sessionId, kycCase.tenant_id),
+        fetchBytes: fetchFileBytes,
+      }),
+      loadLogo(tenant?.branding_logo_url),
+      kycCase.assigned_analyst_id
+        ? base44.entities.User.filter({ id: kycCase.assigned_analyst_id }).then((r) => r?.[0] || null).catch(() => null)
+        : Promise.resolve(null),
+    ]);
 
-    const { doc, auditTrailStartPage } = await buildPDF({
-      kycCase, client, currentUser,
+    const built = await buildKycReportPdf({
+      kycCase, client,
+      preparedBy: currentUser?.full_name,
+      analystName: analyst?.full_name || currentUser?.full_name,
       screeningHits: screeningHits || [],
       assessments: assessments || [],
       controlMeasures: controlMeasures || [],
@@ -186,12 +201,12 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
       relatedParties: relatedPartiesAll || [],
       tenant,
       nextVersion,
-      annexManifest,
+      annexItems,
       txnAnalysis,
       tmMonitoring,
+      logo,
     });
-
-    const pdfBlob = await mergeAnnexPdfs({ doc, auditTrailStartPage, documents, diditSessionIds, tenant, kycCase });
+    const pdfBlob = new Blob([built.bytes], { type: 'application/pdf' });
 
     const safeName = (client?.full_name || 'Client').replace(/[^a-zA-Z0-9_-]/g, '_');
     const fileName = `KYC_Report_${safeName}_v${nextVersion}_${format(new Date(), 'yyyyMMdd')}.pdf`;
@@ -203,7 +218,10 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
     const reportSnapshot = {
       client: client,
       case: { status: kycCase.status, risk_classification: kycCase.risk_classification },
-      summary: { total_pages: doc.getNumberOfPages(), generated_at: new Date().toISOString(), annex_documents: documents.length, didit_reports: diditSessionIds.length }
+      summary: {
+        total_pages: built.pageCount, generated_at: new Date().toISOString(), annex_documents: documents.length, didit_reports: diditSessions.length,
+        annex_attached: built.attached, annex_listed_only: built.listedOnly,
+      },
     };
 
     await base44.entities.KycReport.create({
@@ -224,7 +242,6 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
     });
 
     await loadReports();
-    setGenerating(false);
   }
 
   const latestReport = reports[0];
