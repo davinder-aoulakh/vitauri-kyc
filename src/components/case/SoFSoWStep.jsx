@@ -136,7 +136,8 @@ const isEmptySection = (s) => !s || (!(s.sources || []).length && !String(s.expl
 function OutreachDeclarationCard({ answers, onApply, applied }) {
   const rows = [
     ['Source of funds', answers.sof], ['Source of wealth', answers.sow], ['Employment status', answers.employment],
-    ['Income range', answers.income], ['Specific activities', answers.activities],
+    ['Income range', answers.income], ['Business activity', answers.business], ['Annual turnover', answers.revenue],
+    ['Origin of capital', answers.funding], ['Specific activities', answers.activities],
   ].filter(([, v]) => v);
   const latest = rows.map(([, v]) => v.date).filter(Boolean).sort().pop();
   return (
