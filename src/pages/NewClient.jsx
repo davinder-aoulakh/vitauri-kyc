@@ -128,7 +128,8 @@ export default function NewClient() {
           step_config: stepConfig,
           due_date: dueDate,
         });
-        if (res?.data?.kycCase?.id) created = res.data;
+        if (!res?.data?.kycCase?.id) throw new Error(res?.data?.error || 'The case could not be created');
+        created = res.data;
       } catch (err) {
         // Fall back only when the function isn't deployed; any other error may
         // mean the client was already written, so retrying could duplicate it.
