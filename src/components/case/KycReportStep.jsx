@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { isStepComplete, getStepStatus } from '@/lib/caseUtils';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { buildKycReportPdf, prepareAnnex } from '@/lib/kycReportPdf';
+import { fetchTenantUsers } from '@/hooks/useTenantData';
 
 // Tenant logo as a data URL, downscaled to at most 900 px wide so the PDF stays small. Null on any failure.
 async function loadLogo(url) {
@@ -185,7 +186,7 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
       }),
       loadLogo(tenant?.branding_logo_url),
       kycCase.assigned_analyst_id
-        ? base44.entities.User.filter({ id: kycCase.assigned_analyst_id }).then((r) => r?.[0] || null).catch(() => null)
+        ? fetchTenantUsers(kycCase.tenant_id).then((us) => us.find((u) => u.id === kycCase.assigned_analyst_id) || null).catch(() => null)
         : Promise.resolve(null),
     ]);
 
