@@ -126,7 +126,7 @@ export function buildQueries(profile) {
   const q = [];
   if (isOrg) {
     // Register and identity first: the registration number is the strongest identifier a company has.
-    const short = profile.names[2] || profile.names[0];
+    const short = withoutLegalForm(profile.names[0]) || profile.names[0];
     const regLabel = id.country_code === 'NL' ? 'KvK' : 'company registration';
     if (id.registration_number) { q.push(`"${id.registration_number}"`); q.push(`"${short}" ${regLabel} ${id.registration_number}`); }
     if (id.lei) q.push(`"${id.lei}"`);
@@ -238,8 +238,7 @@ export async function runOsint(base44, { client, kycCase, hints = '' }) {
   ]);
   if (identity.status === 'rejected' && adverse.status === 'rejected') throw identity.reason || adverse.reason;
 
-  const all = [identity, adverse]
-    // (identity first so its version of a duplicate is kept).flatMap((r) => (r.status === 'fulfilled' ? r.value?.findings || [] : []));
+  const all = [identity, adverse].flatMap((r) => (r.status === 'fulfilled' ? r.value?.findings || [] : []));
   const seen = new Set();
   const merged = all.filter((f) => {
     if (!f?.title) return false;
