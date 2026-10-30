@@ -8,6 +8,7 @@
  *  5. Persist to KycCase.profile_suggestions and return result
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
+import { runOsint } from '../../shared/osintSearch.js';
 
 const CONFIDENCE_THRESHOLD = 70;
 
@@ -358,7 +359,8 @@ function kybRelatedPartyCandidates(kyb: any, linked: Array<{ rp: any; link: any 
 // Build candidate map from OSINT cache findings
 function extractFromOsint(osintResults: any, isOrg: boolean): Record<string, any[]> {
   const candidates: Record<string, any[]> = {};
-  const findings = osintResults?.findings || [];
+  // Only findings about the subject itself: namesakes and name-only matches never feed profile suggestions.
+  const findings = (osintResults?.findings || []).filter((f: any) => !f.subject_match || f.subject_match === 'confirmed' || f.subject_match === 'likely');
 
   const push = (field: string, value: string, finding: any, confidence: number) => {
     if (!value || String(value).trim() === '') return;
@@ -460,40 +462,11 @@ Deno.serve(async (req) => {
     try { osintResults = JSON.parse(kycCase.osint_cache)?.results; } catch {}
   }
   if (!osintResults || force_osint_refresh) {
-    // Run fresh OSINT
-    const name = clientRecord?.full_name || '';
-    const country = clientRecord?.registered_country || clientRecord?.nationality || '';
+    // Run fresh OSINT (same search as the OSINT panel: all name variants + identifiers, namesakes set aside)
     try {
-      osintResults = await base44.asServiceRole.integrations.Core.InvokeLLM({
-        prompt: `You are an OSINT analyst. Research "${name}" (${isOrg ? 'Organisation' : 'Natural Person'}, ${country}).
-Report: official presence, corporate register data, sector, news, adverse media.
-For each finding: title, summary (2-3 sentences), source_type, credibility (high/medium/low), source_url, is_adverse.
-Return 4-6 findings. Be specific. If nothing found, say so clearly.`,
-        add_context_from_internet: true,
-        model: 'gemini_3_flash',
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            entity_searched: { type: 'string' },
-            overall_summary: { type: 'string' },
-            adverse_count: { type: 'number' },
-            findings: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  title: { type: 'string' },
-                  summary: { type: 'string' },
-                  source_type: { type: 'string' },
-                  credibility: { type: 'string' },
-                  source_url: { type: 'string' },
-                  is_adverse: { type: 'boolean' },
-                }
-              }
-            }
-          }
-        }
-      });
+      let prevHints = '';
+      try { prevHints = JSON.parse(kycCase?.osint_cache || '{}')?.results?.hints || ''; } catch { prevHints = ''; }
+      osintResults = await runOsint(base44, { client: clientRecord, kycCase, hints: prevHints });
       // Cache it
       await base44.asServiceRole.entities.KycCase.update(case_id, {
         osint_cache: JSON.stringify({ results: osintResults, run_at: new Date().toISOString() }),
