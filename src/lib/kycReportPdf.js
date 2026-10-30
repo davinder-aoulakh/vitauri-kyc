@@ -105,16 +105,19 @@ export async function prepareAnnex({ diditSessions = [], documents = [], fetchDi
   for (let i = 0; i < docs.length; i += 4) {
     fetched.push(...await Promise.all(docs.slice(i, i + 4).map((d) => fetchBytes(d.file_url).catch(() => null))));
   }
-  docs.forEach((d, i) => {
+  for (let i = 0; i < docs.length; i++) {
+    const d = docs[i];
     const bytes = fetched[i];
     const kind = bytes ? sniffType(bytes, d.file_url, d.file_name) : null;
-    const usable = kind === 'pdf' || kind === 'png' || kind === 'jpg';
+    let usable = kind === 'pdf' || kind === 'png' || kind === 'jpg';
+    // A damaged or password-protected PDF cannot be merged: list it instead of claiming it is attached.
+    if (kind === 'pdf') { try { await PDFDocument.load(bytes, { ignoreEncryption: true }); } catch { usable = false; } }
     items.push({
       name: displayName(d), type: pretty(d.doc_type), source: d.source || 'portal', date: d.created_date || null,
       kind: usable ? kind : null, bytes: usable ? bytes : null, status: !bytes ? 'Not available' : usable ? 'Attached' : 'Listed only',
       fileType: kind ? TYPE_LABEL[kind] : '',
     });
-  });
+  }
   return items.map((it, i) => ({ ...it, ref: `9.${i + 1}` }));
 }
 
@@ -436,7 +439,7 @@ export function buildReportBody(input) {
     subheading(title);
     if (s.adequacy) { ensure(8); font('bold', 7, MUTED); text('ADEQUACY', MARGIN, y + 4.2); pill(s.adequacy, adequacyColors(s.adequacy), MARGIN + 46); y += 8; }
     if (s.sources?.length) kv('Declared sources', (s.sources || []).map((x) => (typeof x === 'string' ? x : x?.label || x?.name || x?.type || '')).filter(Boolean).join(', '));
-    if (s.explanation) { kv('Explanation', ''); y -= LH + 1.2; gap(LH + 1); markdown(s.explanation); }
+    if (s.explanation) { ensure(10); font('bold', 7, MUTED); text('EXPLANATION', MARGIN, y + 3); y += 5; markdown(s.explanation); }
     gap(2);
     return true;
   };
