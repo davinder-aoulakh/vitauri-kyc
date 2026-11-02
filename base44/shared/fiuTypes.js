@@ -14,7 +14,7 @@ export const FIU_TYPES = {
 export const FIU_TYPE_CODES = Object.keys(FIU_TYPES);
 
 /** Legacy rows (unusual_objective / unusual_subjective) read as UTR. */
-export const normaliseType = (t) => (FIU_TYPES[t] ? t : /^unusual_/.test(String(t || '')) ? 'UTR' : 'UTR');
+export const normaliseType = (t) => (FIU_TYPES[t] ? t : 'UTR');
 
 /** Types the profile allows; all types when the profile has no list yet. */
 export const enabledTypes = (fiu) => {
@@ -26,9 +26,10 @@ export const enabledTypes = (fiu) => {
 export const reportCodeFor = (fiu, type) => String(fiu?.report_codes?.[normaliseType(type)] || '').trim() || normaliseType(type);
 
 export const CASH_CATEGORIES = ['cash_deposit', 'cash_withdrawal'];
-export const isCash = (t) => CASH_CATEGORIES.includes(t?.category) || /\b(cash|contant|bearer|cheque|check)\b/i.test(String(t?.description_raw || '')) && !t?.counterparty_method_type;
+export const isCash = (t) => CASH_CATEGORIES.includes(t?.category)
+  || (!t?.counterparty_method_type && /\b(cash|contant|bearer|cheque)\b/i.test(String(t?.description_raw || '')));
 const COUNTRY_ALIASES = { curacao: 'CW', 'curaçao': 'CW', cw: 'CW', cuw: 'CW', netherlands: 'NL', nederland: 'NL', nl: 'NL', nld: 'NL' };
-export const iso2 = (c) => { const v = String(c || '').trim(); if (!v) return ''; return COUNTRY_ALIASES[v.toLowerCase()] || (v.length === 2 ? v.toUpperCase() : v.toUpperCase()); };
+export const iso2 = (c) => { const v = String(c || '').trim(); if (!v) return ''; return COUNTRY_ALIASES[v.toLowerCase()] || v.toUpperCase(); };
 /** Reporting country of a profile: country_code, else the profile code (CW / NL). */
 export const profileCountry = (fiu) => iso2(fiu?.country_code || fiu?.code);
 export const isCrossBorder = (t, fiu) => { const c = iso2(t?.counterparty_country); return !!c && c !== profileCountry(fiu); };
