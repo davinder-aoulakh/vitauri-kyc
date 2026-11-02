@@ -91,7 +91,13 @@ export default async function (req) {
     }
 
     // ── 4. Submit to Didit (not own transfers) ──
-    const submitIds = txns.filter((t) => !t.own_transfer).map((t) => t.id);
+    // Not sent: own transfers; historical back-loads (> 7 days old — screening them now would raise stale alerts);
+    // payments that never happened (declined) or were undone (reversed). Intended payments ARE sent: screening before
+    // execution is the point of Didit's pre-transaction check.
+    const skipReason = (t) => (t.historical ? 'historical back-load' : t.lifecycle === 'declined' ? 'declined by the bank' : t.lifecycle === 'reversed' ? 'reversed booking' : null);
+    const skipped = txns.filter((t) => !t.own_transfer && skipReason(t) && t.didit_submission_status !== 'submitted');
+    await mapLimit(skipped, 6, (t) => E.Transaction.update(t.id, { didit_submission_status: 'skipped', didit_submission_note: `Not sent to Didit: ${skipReason(t)}` }).catch(() => {}));
+    const submitIds = txns.filter((t) => !t.own_transfer && !skipReason(t)).map((t) => t.id);
     let submit = { skipped: true };
     if (submitIds.length) {
       try {
