@@ -1,56 +1,52 @@
 {
   "name": "FiuProfile",
-  "type": "object",
   "properties": {
-    "tenant_id": {
-      "type": "string"
-    },
-    "code": {
-      "type": "string",
-      "enum": [
-        "CW",
-        "NL"
-      ]
-    },
-    "name": {
-      "type": "string"
-    },
-    "law": {
-      "type": "string"
-    },
-    "system": {
-      "type": "string",
-      "default": "goAML"
-    },
-    "language": {
-      "type": "string"
-    },
-    "objective_deadline_hours": {
-      "type": "number"
-    },
-    "subjective_escalation_hours": {
-      "type": "number"
-    },
     "co_investigation_working_days": {
       "type": "number"
     },
-    "report_deadline_hours": {
-      "type": "number"
+    "code": {
+      "enum": [
+        "CW",
+        "NL"
+      ],
+      "type": "string"
     },
-    "report_without_delay": {
-      "type": "boolean"
+    "country_code": {
+      "description": "ISO 3166-1 alpha-2 of the reporting country (cross-border detection)",
+      "type": "string"
     },
-    "mandatory_fields": {
-      "type": "array",
+    "currency_code_local": {
+      "description": "goAML currency_code_local, e.g. EUR / XCG",
+      "type": "string"
+    },
+    "didit_template_ids": {
+      "type": "object"
+    },
+    "enabled_report_types": {
       "items": {
+        "enum": [
+          "SAR",
+          "STR",
+          "CTR",
+          "TTR",
+          "UTR",
+          "IFT",
+          "CBR",
+          "TFR"
+        ],
         "type": "string"
       },
-      "description": "goAML paths"
+      "type": "array"
+    },
+    "holiday_calendar": {
+      "items": {
+        "format": "date",
+        "type": "string"
+      },
+      "type": "array"
     },
     "indicator_codes": {
-      "type": "array",
       "items": {
-        "type": "object",
         "properties": {
           "code": {
             "type": "string"
@@ -58,42 +54,155 @@
           "label": {
             "type": "string"
           },
-          "type": {
-            "type": "string"
-          },
           "sector": {
             "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
-        }
-      }
+        },
+        "type": "object"
+      },
+      "type": "array"
     },
-    "didit_template_ids": {
+    "language": {
+      "type": "string"
+    },
+    "law": {
+      "type": "string"
+    },
+    "location": {
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "address_type": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "country_code": {
+          "type": "string"
+        },
+        "zip": {
+          "type": "string"
+        }
+      },
       "type": "object"
     },
+    "mandatory_fields": {
+      "description": "goAML paths",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "name": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "objective_deadline_hours": {
+      "type": "number"
+    },
+    "rentity_branch": {
+      "type": "string"
+    },
+    "rentity_id": {
+      "description": "goAML reporting entity id issued by the FIU",
+      "type": "string"
+    },
+    "report_codes": {
+      "description": "Report type -> goAML report_code for this FIU",
+      "type": "object"
+    },
+    "report_deadline_hours": {
+      "type": "number"
+    },
+    "report_without_delay": {
+      "type": "boolean"
+    },
+    "reporting_person": {
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "first_name": {
+          "type": "string"
+        },
+        "last_name": {
+          "type": "string"
+        },
+        "occupation": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "subjective_escalation_hours": {
+      "type": "number"
+    },
+    "submission_code": {
+      "default": "E",
+      "description": "goAML submission_code: E electronic, M manual",
+      "enum": [
+        "E",
+        "M"
+      ],
+      "type": "string"
+    },
     "submission_method": {
-      "type": "string",
+      "default": "portal_upload",
       "enum": [
         "portal_upload",
         "xml_upload",
         "m2m"
       ],
-      "default": "portal_upload"
-    },
-    "holiday_calendar": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "format": "date"
-      }
-    },
-    "notes": {
       "type": "string"
+    },
+    "system": {
+      "default": "goAML",
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "tf_report_deadline_hours": {
+      "description": "TFR deadline (report without delay), default 24",
+      "type": "number"
+    },
+    "thresholds": {
+      "description": "In the tenant reporting currency. 0 or empty disables the proposal.",
+      "properties": {
+        "cbr": {
+          "type": "number"
+        },
+        "ctr_cash": {
+          "type": "number"
+        },
+        "ift": {
+          "type": "number"
+        },
+        "ttr": {
+          "type": "number"
+        }
+      },
+      "type": "object"
     }
   },
   "required": [
     "tenant_id",
     "code"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "data.tenant_id": "{{user.data.tenant_id}}"
