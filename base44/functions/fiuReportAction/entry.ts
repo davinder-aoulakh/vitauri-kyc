@@ -2,7 +2,8 @@
 // Auth: signed-in user (tmWorkCase roles); tenant from the user. approve / reject need the Compliance Officer role (tmApproveFiuReport).
 // Actions: update_field, toggle_attachment, submit_for_approval, approve, reject, checks (read only), signed_url (private file link),
 // upload_generated (CO only, approved report: manual goAML XML upload), didit_status (read only: is the Didit FIU endpoint missing?),
-// refresh_fields (draft / in_review only: re-run the field mapping from the file; fields edited by a user are kept).
+// refresh_fields (draft / in_review only: re-run the field mapping from the file; fields edited by a user are kept),
+// preview_xml (read only: goAML XML + validation as generation would produce it now), preview_pdf (read only: PDF, DRAFT watermark before approval).
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { authenticate, errorResponse, httpError, loadTenant, WORK_ROLES } from '../../shared/tmAuth.js';
