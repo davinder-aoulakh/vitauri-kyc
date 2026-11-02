@@ -151,8 +151,12 @@ export default async function (req) {
         if (own) { r.own_transfer = true; r.category = 'own_transfer'; ownTransfers++; }
       }
       const cl = clients.get(r.client_id);
-      r.transaction_category = 'finance';
-      r.counterparty_method_type = r.counterparty_account_id ? 'bank_account' : undefined;
+      const CATEGORIES = ['finance', 'kyc', 'travel_rule', 'user_event', 'audit_trail_event', 'gambling_bet', 'gambling_limit_change', 'gambling_bonus_change'];
+      const METHODS = ['bank_card', 'bank_account', 'crypto_wallet', 'unhosted_wallet', 'ewallet', 'other'];
+      r.transaction_category = CATEGORIES.includes(r.transaction_category) ? r.transaction_category : 'finance';
+      r.counterparty_method_type = METHODS.includes(r.counterparty_method_type)
+        ? r.counterparty_method_type
+        : r.counterparty_account_id ? (r.currency_kind === 'crypto' ? 'crypto_wallet' : 'bank_account') : undefined;
       r.subject_entity_type = cl.client_type === 'ORG' ? 'company' : 'person';
       r.subject_full_name = cl.full_name;
       r.didit_submission_status = 'not_submitted';
