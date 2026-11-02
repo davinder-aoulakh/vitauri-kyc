@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,8 +54,8 @@ function CheckChip({ label, checked, onChange }) {
   );
 }
 
-// Draggable item row
-function ItemRow({ item, index, onRemove, onMoveUp, onMoveDown, isFirst, isLast, tenant, onWorkflowChange }) {
+// Draggable item row — drag by the grip handle, or nudge with the arrows
+function ItemRow({ item, index, onRemove, onMoveUp, onMoveDown, isFirst, isLast, tenant, onWorkflowChange, dragHandleProps, isDragging }) {
   const ft = item.field_type || (item.item_type === 'document' ? 'file_upload' : 'textarea');
   const typeColors = {
     file_upload: 'bg-blue-50 text-blue-700',
@@ -71,7 +72,10 @@ function ItemRow({ item, index, onRemove, onMoveUp, onMoveDown, isFirst, isLast,
   };
 
   return (
-    <div className="flex items-center gap-2 py-2 px-3 bg-white border border-border rounded-lg group hover:border-primary/30 transition-colors">
+    <div className={cn(
+      'flex items-center gap-2 py-2 px-3 bg-white border border-border rounded-lg group hover:border-primary/30 transition-colors',
+      isDragging && 'border-primary/50 shadow-lg ring-1 ring-primary/20'
+    )}>
       <div className="flex flex-col gap-0.5">
         <button onClick={onMoveUp} disabled={isFirst} className="text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors">
           <ChevronDown className="w-3 h-3 rotate-180" />
@@ -80,7 +84,14 @@ function ItemRow({ item, index, onRemove, onMoveUp, onMoveDown, isFirst, isLast,
           <ChevronDown className="w-3 h-3" />
         </button>
       </div>
-      <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40" />
+      <span
+        {...(dragHandleProps || {})}
+        aria-label="Drag to reorder"
+        title="Drag to reorder"
+        className={cn('p-0.5 -m-0.5 rounded text-muted-foreground/50 hover:text-foreground hover:bg-muted', isDragging ? 'cursor-grabbing' : 'cursor-grab')}
+      >
+        <GripVertical className="w-3.5 h-3.5" />
+      </span>
       <div className="flex-1 min-w-0">
         <div className="text-xs font-medium truncate">{item.label}</div>
         {item.description && <div className="text-xs text-muted-foreground truncate">{item.description?.replace(/<[^>]*>/g, '')}</div>}
@@ -164,6 +175,13 @@ export default function FormTemplatesTab({ tenant }) {
   const [modal, setModal]             = useState(null); // { mode, data }
   const [saving, setSaving]           = useState(false);
   const [pickerOpen, setPickerOpen]   = useState(false);
+  // Stable drag ids per item object (not saved with the template)
+  const dndIds = useRef(new WeakMap());
+  const dndSeq = useRef(0);
+  function dndIdOf(item) {
+    if (!dndIds.current.has(item)) dndIds.current.set(item, `item-${++dndSeq.current}`);
+    return dndIds.current.get(item);
+  }
   const [aiOpen, setAiOpen]           = useState(false);
   const [aiDesc, setAiDesc]           = useState('');
   const [aiLoading, setAiLoading]     = useState(false);
@@ -255,15 +273,25 @@ export default function FormTemplatesTab({ tenant }) {
     setModal(m => ({ ...m, data: { ...m.data, items: m.data.items.filter((_, i) => i !== idx) } }));
   }
 
-  function moveItem(idx, dir) {
+  // Move an item from any position to any other and renumber sort_order
+  function reorderItems(from, to) {
     setModal(m => {
       const items = [...(m.data.items || [])];
-      const target = idx + dir;
-      if (target < 0 || target >= items.length) return m;
-      [items[idx], items[target]] = [items[target], items[idx]];
+      if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return m;
+      const [moved] = items.splice(from, 1);
+      items.splice(to, 0, moved);
       items.forEach((it, i) => { it.sort_order = i; });
       return { ...m, data: { ...m.data, items } };
     });
+  }
+
+  function moveItem(idx, dir) {
+    reorderItems(idx, idx + dir);
+  }
+
+  function onItemDragEnd(result) {
+    if (!result.destination) return;
+    reorderItems(result.source.index, result.destination.index);
   }
 
   async function generateWithAi() {
@@ -617,20 +645,50 @@ Only include items whose ids exist in the library list above. Return valid JSON 
                     No fields added yet. Use the button below to add from your field library.
                   </div>
                 )}
-                {(modal.data.items || []).map((item, idx) => (
-                  <ItemRow
-                    key={idx}
-                    item={item}
-                    index={idx}
-                    onRemove={removeItem}
-                    onMoveUp={() => moveItem(idx, -1)}
-                    onMoveDown={() => moveItem(idx, 1)}
-                    isFirst={idx === 0}
-                    isLast={idx === (modal.data.items?.length || 0) - 1}
-                    tenant={tenant}
-                    onWorkflowChange={(i, v) => setModal(m => ({ ...m, data: { ...m.data, items: m.data.items.map((it, j) => (j === i ? { ...it, ...v } : it)) } }))}
-                  />
-                ))}
+                <DragDropContext onDragEnd={onItemDragEnd}>
+                  <Droppable
+                    droppableId="form-items"
+                    // The dialog is CSS-transformed; render the dragged row on <body> so it stays under the cursor
+                    renderClone={(provided, snapshot, rubric) => (
+                      <div ref={provided.innerRef} {...provided.draggableProps}>
+                        <ItemRow
+                          item={modal.data.items[rubric.source.index]}
+                          index={rubric.source.index}
+                          onRemove={() => {}}
+                          isFirst isLast
+                          dragHandleProps={provided.dragHandleProps}
+                          isDragging
+                        />
+                      </div>
+                    )}
+                  >
+                    {(dropProvided) => (
+                      <div ref={dropProvided.innerRef} {...dropProvided.droppableProps} className="space-y-2">
+                        {(modal.data.items || []).map((item, idx) => (
+                          <Draggable key={dndIdOf(item)} draggableId={dndIdOf(item)} index={idx}>
+                            {(provided) => (
+                              <div ref={provided.innerRef} {...provided.draggableProps}>
+                                <ItemRow
+                                  item={item}
+                                  index={idx}
+                                  onRemove={removeItem}
+                                  onMoveUp={() => moveItem(idx, -1)}
+                                  onMoveDown={() => moveItem(idx, 1)}
+                                  isFirst={idx === 0}
+                                  isLast={idx === (modal.data.items?.length || 0) - 1}
+                                  tenant={tenant}
+                                  dragHandleProps={provided.dragHandleProps}
+                                  onWorkflowChange={(i, v) => setModal(m => ({ ...m, data: { ...m.data, items: m.data.items.map((it, j) => (j === i ? { ...it, ...v } : it)) } }))}
+                                />
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {dropProvided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
+                </DragDropContext>
                 <Button type="button" variant="outline" size="sm" className="text-xs gap-1.5 w-full"
                   onClick={() => setPickerOpen(true)}>
                   <Plus className="w-3.5 h-3.5" /> Add from Library
