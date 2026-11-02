@@ -57,7 +57,7 @@ function Fact({ label, value }) {
  * Step 2 for organisation clients when Didit KYB is on: business verification (registry, company documents, company AML)
  * and identity verification of each UBO / director. Replaces the person ID step for ORG only.
  */
-export default function KybStep({ kycCase, client, currentUser, tenant, onStepComplete }) {
+export default function KybStep({ kycCase, client, currentUser, tenant, onStepComplete, onCaseUpdate }) {
   const qc = useQueryClient();
   const tenantId = kycCase?.tenant_id || client?.tenant_id;
   const key = ['kyb-step', client?.id];
@@ -114,7 +114,10 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
       if (!silent) toast({ title: `Business verification: ${res?.data?.status || 'no result yet'}` });
       refresh();
       // Refresh the Profile Verification suggestions so new registry data shows up for review (as the NP pipeline does).
-      if (kycCase?.id) base44.functions.invoke('buildProfileSuggestions', { case_id: kycCase.id, client_id: client.id, client_type: 'ORG' }).catch(() => {});
+      // The pipeline keeps the analyst's earlier decisions; hand its result to the workspace so step 1 shows it.
+      if (kycCase?.id) base44.functions.invoke('buildProfileSuggestions', { case_id: kycCase.id, client_id: client.id, client_type: 'ORG' })
+        .then((r) => { const sug = (r?.data ?? r)?.suggestion; if (sug) onCaseUpdate?.((prev) => (prev ? { ...prev, profile_suggestions: sug } : prev)); })
+        .catch(() => {});
     } catch (e) {
       if (silent) console.warn('KYB auto-sync failed:', e?.message);
       else toast({ title: 'Sync failed', description: e?.response?.data?.error || e.message, variant: 'destructive' });

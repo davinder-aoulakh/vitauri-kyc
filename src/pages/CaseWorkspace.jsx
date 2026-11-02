@@ -713,6 +713,7 @@ export default function CaseWorkspace() {
                         client={client}
                         currentUser={currentUser}
                         tenant={tenant}
+                        onCaseUpdate={setKycCase}
                         onStepComplete={() => updateStepStatus('step_2_status', 'complete')}
                       />
                     )}
