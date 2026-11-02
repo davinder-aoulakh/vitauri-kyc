@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import StringListEditor from '@/components/tenantconfig/fiu/StringListEditor';
 import { METHOD_LABELS } from '@/lib/fiuProfile';
+import GoamlSettings from '@/components/tenantconfig/fiu/GoamlSettings';
 
 function Field({ label, children }) {
   return <div className="space-y-1"><Label className="text-xs">{label}</Label>{children}</div>;
@@ -39,6 +40,7 @@ export default function ProfileFields({ draft, set, disabled }) {
         <Field label="Didit template ID: objective report"><Input disabled={disabled} className="h-8 text-xs font-mono" value={draft.didit_template_ids.unusual_objective} onChange={(e) => set({ didit_template_ids: { ...draft.didit_template_ids, unusual_objective: e.target.value } })} /></Field>
         <Field label="Didit template ID: subjective report"><Input disabled={disabled} className="h-8 text-xs font-mono" value={draft.didit_template_ids.unusual_subjective} onChange={(e) => set({ didit_template_ids: { ...draft.didit_template_ids, unusual_subjective: e.target.value } })} /></Field>
       </div>
+      <div className="rounded-lg border border-border p-3"><GoamlSettings draft={draft} set={set} disabled={disabled} /></div>
       <Field label="Holiday calendar"><StringListEditor type="date" disabled={disabled} items={draft.holiday_calendar} onChange={(v) => set({ holiday_calendar: v })} /></Field>
       <Field label="Mandatory fields (goAML paths)"><StringListEditor disabled={disabled} placeholder="e.g. t_person.first_name" items={draft.mandatory_fields} onChange={(v) => set({ mandatory_fields: v })} /></Field>
       <Field label="Notes"><Textarea disabled={disabled} className="text-xs min-h-16" value={draft.notes} onChange={(e) => set({ notes: e.target.value })} /></Field>
