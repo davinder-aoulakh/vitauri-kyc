@@ -100,9 +100,16 @@ export default function RelatedPartySuggestionRow({ rp, rpIndex, onAccept, onRej
           {diffKeys.map((k) => (
             <div key={k} className="flex flex-wrap items-center gap-1.5">
               <span className="text-muted-foreground w-28 capitalize">{label(k)}</span>
-              <span className="line-through text-muted-foreground">{diffs[k].recorded ?? 'not recorded'}</span>
-              <span>→</span>
-              <span className="font-medium">{diffs[k].registry}</span>
+              {diffs[k].adds?.length ? (
+                // Roles are added to the recorded ones, never replaced
+                <span>{diffs[k].recorded || 'none'} <span className="font-medium text-emerald-700">+ {diffs[k].adds.join(', ')}</span></span>
+              ) : (
+                <>
+                  <span className="line-through text-muted-foreground">{diffs[k].recorded ?? 'not recorded'}</span>
+                  <span>→</span>
+                  <span className="font-medium">{diffs[k].registry}</span>
+                </>
+              )}
             </div>
           ))}
         </div>
