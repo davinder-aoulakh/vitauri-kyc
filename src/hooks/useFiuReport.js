@@ -72,6 +72,31 @@ export function useFiuAct(tenantId, id) {
 }
 
 /** Opens a private file through a short-lived signed link. */
+/** Download a read-only preview: kind 'xml' (goAML XML as it would be generated now) or 'pdf' (DRAFT watermark before approval). */
+export async function downloadPreview(id, kind, toast) {
+  try {
+    const res = (await base44.functions.invoke('fiuReportAction', { action: kind === 'pdf' ? 'preview_pdf' : 'preview_xml', report_id: id }))?.data || {};
+    let blob;
+    if (kind === 'pdf') {
+      const bin = atob(res.pdf_base64 || '');
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      blob = new Blob([bytes], { type: 'application/pdf' });
+    } else {
+      blob = new Blob([res.xml || ''], { type: 'application/xml' });
+      const v = res.validation;
+      if (v && !v.ok) toast({ title: `goAML preview has ${v.errors.length} validation error(s)`, description: v.errors.slice(0, 3).map((e) => e.message).join(' · '), variant: 'destructive' });
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = res.file_name || `report.${kind}`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (e) {
+    toast({ title: 'Could not build the preview', description: errorMessage(e), variant: 'destructive' });
+  }
+}
+
 export async function openFile(id, kind, toast) {
   try {
     const res = await base44.functions.invoke('fiuReportAction', { action: 'signed_url', report_id: id, kind });
