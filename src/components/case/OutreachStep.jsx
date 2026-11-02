@@ -121,6 +121,8 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
   const [emailSubject, setEmailSubject] = useState('');
   const [channel, setChannel]     = useState('Email');
   const [deadline, setDeadline]   = useState(format(addDays(new Date(), 14), 'yyyy-MM-dd'));
+  // Show the data we hold in KYC-linked questions so the client checks / corrects it (changes go to Profile Verification)
+  const [showPrefill, setShowPrefill] = useState(true);
   const [creating, setCreating]   = useState(false);
   const [sending, setSending]     = useState(false);
   const [verifyingItemId, setVerifyingItemId] = useState(null); // "reqId:itemIndex"
@@ -312,7 +314,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
     const items = selectedItems.map((id, idx) => {
       const item = libraryItems.find(d => d.id === id) || { id };
       const choice = workflowChoice[id];
-      return buildRequestItem(item, idx, { defaultFieldType: 'file_upload', overrides: choice?.idv_workflow_id ? choice : {} });
+      return buildRequestItem(item, idx, { defaultFieldType: 'file_upload', overrides: choice?.idv_workflow_id ? choice : {}, client, showPrefill });
     });
 
     await base44.entities.OutreachRequest.create({
@@ -1235,6 +1237,17 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                 <Input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} className="h-9 text-sm" />
               </div>
             </div>
+
+            {/* Prefill KYC-linked questions with the data we hold */}
+            {selectedItems.some(id => libraryItems.find(d => d.id === id)?.profile_field) && (
+              <label className="flex items-start gap-2 text-xs cursor-pointer">
+                <input type="checkbox" className="mt-0.5 accent-primary" checked={showPrefill} onChange={e => setShowPrefill(e.target.checked)} />
+                <span>
+                  <span className="font-medium">Show the data we hold and ask the client to check it</span>
+                  <span className="block text-muted-foreground">Questions linked to a KYC field (name, phone, address…) open with the current value. Changes come back for review in Profile Verification.</span>
+                </span>
+              </label>
+            )}
 
             {/* Covering message */}
             <div>
