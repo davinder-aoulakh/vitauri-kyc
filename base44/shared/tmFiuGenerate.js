@@ -4,6 +4,7 @@ import { writeAudit } from './tmAudit.js';
 import { createDiditCase, createFiuReport, getFiuReport, downloadBinary } from './diditTm.js';
 import { loadRefs } from './tmFiuChecks.js';
 import { safeFileArtefacts } from './tmFiuArtefacts.js';
+import { normaliseType } from './fiuTypes.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pick = (r, keys) => {
@@ -40,7 +41,8 @@ async function ensureDiditCase(ctx, tmCase, client) {
 }
 
 async function runGeneration(ctx, report, fiu, client, tmCase) {
-  const template = fiu.didit_template_ids?.[report.type] || fiu.didit_template_ids?.[report.type === 'unusual_objective' ? 'objective' : 'subjective'];
+  const t = fiu.didit_template_ids || {};
+  const template = t[report.type] || t[normaliseType(report.type)] || (/^unusual_/.test(report.type || '') ? t[report.type === 'unusual_objective' ? 'objective' : 'subjective'] : null);
   if (!template) throw { detail: `No Didit template is configured for ${report.type} in the ${fiu.code} FIU profile` };
   const caseId = await ensureDiditCase(ctx, tmCase, client);
   let res = await createFiuReport(ctx.tenant, {
