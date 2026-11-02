@@ -489,7 +489,7 @@ function nestedVal(obj: any, path: string) {
   const [a, b] = path.split('.');
   return obj?.[a]?.[b];
 }
-export function preserveFieldDecisions(fields: Record<string, any>, prevFields: Record<string, any> = {}, client: any = {}) {
+function preserveFieldDecisions(fields: Record<string, any>, prevFields: Record<string, any> = {}, client: any = {}) {
   const out: Record<string, any> = {};
   for (const [key, n] of Object.entries(fields)) {
     const prev = prevFields?.[key];
@@ -514,7 +514,7 @@ export function preserveFieldDecisions(fields: Record<string, any>, prevFields: 
   return out;
 }
 const rpKey = (r: any) => `${normName(r?.full_name)}|${String(r?.date_of_birth || '').slice(0, 10)}`;
-export function preserveRelatedPartyDecisions(rps: any[], prevRps: any[] = []) {
+function preserveRelatedPartyDecisions(rps: any[], prevRps: any[] = []) {
   const prev = new Map((prevRps || []).map((r: any) => [rpKey(r), r]));
   return rps.map((r) => {
     const p: any = prev.get(rpKey(r));
