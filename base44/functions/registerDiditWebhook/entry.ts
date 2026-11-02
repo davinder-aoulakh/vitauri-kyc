@@ -22,10 +22,6 @@ export default async function(req) {
 
     const { tenant_id, action = 'register' } = await req.json();
     if (!tenant_id) return Response.json({ error: 'tenant_id is required' });
-    // Only Vitauri Ops, or a Tenant Admin of this tenant, may register / test the tenant's Didit webhook
-    const role = user.app_role || user.data?.app_role;
-    const ownTenant = (user.tenant_id || user.data?.tenant_id) === tenant_id;
-    if (!(role === 'Vitauri Ops' || (role === 'Tenant Admin' && ownTenant))) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
     const tenants = await base44.asServiceRole.entities.Tenant.filter({ id: tenant_id });
     const tenant  = await withDiditCredentials(base44, tenants?.[0]);
