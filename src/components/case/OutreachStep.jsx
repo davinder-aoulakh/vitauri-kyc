@@ -468,7 +468,11 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
     }
   }
 
-  const isTrackerVisible = (item) => item.field_type === 'id_verification' || !(item.profile_field || isFieldMappedLabel(item.label, fieldLabels));
+  // A question linked to a KYC field shown in the Profile Verification grid is verified there, not in this tracker
+  const inProfileGrid = (item) => (item.profile_field
+    ? Object.keys(fieldLabels).some(k => k === item.profile_field || k.startsWith(`${item.profile_field}.`))
+    : isFieldMappedLabel(item.label, fieldLabels));
+  const isTrackerVisible = (item) => item.field_type === 'id_verification' || !inProfileGrid(item);
 
   async function confirmBulkVerify(indices) {
     if (!bulkReq) return;
@@ -699,7 +703,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                 {req.items?.length > 0 && (
                   <div className="divide-y divide-border/50 mt-2">
                     {req.items.map((item, i) => {
-                      if (item.field_type !== 'id_verification' && (item.profile_field || isFieldMappedLabel(item.label, fieldLabels))) return null;
+                      if (item.field_type !== 'id_verification' && inProfileGrid(item)) return null;
                       const itemOverdue = isOverdue && item.status === 'Requested';
                       return (
                         <div key={i} className={cn('flex items-center justify-between px-4 py-2.5', itemOverdue && 'bg-amber-50/40')}>
