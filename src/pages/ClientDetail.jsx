@@ -72,8 +72,9 @@ export default function ClientDetail() {
 
   useEffect(() => { loadAll(); }, [id]);
 
-  async function loadAll() {
-    setLoading(true);
+  // silent: refresh in the background (after an upload, review or AI check) without the full-page loading screen
+  async function loadAll({ silent = false } = {}) {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const [clientData, casesData, linksData, docsData, auditData, outreachData] = await Promise.race([
@@ -104,11 +105,13 @@ export default function ClientDetail() {
       }
     } catch (err) {
       console.error('ClientDetail loadAll error:', err);
-      setError(err?.message || 'Failed to load client data');
+      if (silent) toast({ variant: 'destructive', title: 'Could not refresh', description: err?.message || 'Please try again.' });
+      else setError(err?.message || 'Failed to load client data');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
+  const refreshSilently = () => loadAll({ silent: true });
 
   async function handleDelete() {
     if (deleteConfirm !== 'DELETE') return;
