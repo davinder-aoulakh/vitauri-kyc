@@ -35,7 +35,7 @@ export default function NewFiuReportDialog({ open, onOpenChange, tenantId, profi
   useEffect(() => {
     if (!open) return;
     setClientId(defaultClientId || ''); setType(defaultType || ''); setSelected(new Set(defaultTransactionIds)); setCode('');
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const client = clients.find((c) => c.id === clientId);
   const effectiveCode = code || (client ? profileFor(client) : profiles[0]?.code || '');
