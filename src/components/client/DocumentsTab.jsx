@@ -364,6 +364,12 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
                                   🪪 Didit
                                 </span>
                               )}
+                              {doc?.source === 'didit_kyb' && (
+                                <span className="ml-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium"
+                                  title={doc.review_status === 'Approved' && !doc.reviewed_by_user_id ? 'Approved by Didit KYB (document checks passed)' : 'Company document from Didit KYB'}>
+                                  🏢 Didit KYB
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-muted-foreground mt-0.5">
                               {doc.is_ai_generated && <span className="text-purple-600 mr-1">AI Generated · </span>}
