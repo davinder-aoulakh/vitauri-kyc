@@ -65,13 +65,32 @@ function addTransactions(add, { client, accounts, txns, counterparties, cur }) {
   });
 }
 
-export function buildFields({ tenant, officer, reportType, indicatorCodes, client, accounts, txns, counterparties, parties, cur, reason, idv }) {
+export function buildFields({ tenant, officer, reportType, reportCode, fiu, indicatorCodes, client, accounts, txns, counterparties, parties, cur, reason, idv }) {
   const out = [];
   const add = (path, label, value, source, by = 'system') => { const v = s(value); if (v) out.push({ path, label, value: v, source, by }); };
+  const rp = fiu?.reporting_person || {};
+  const loc = fiu?.location || {};
 
   add('reporting_entity.id', 'Reporting entity', tenant.name, 'tenant');
   add('reporting_entity.reporting_person', 'Reporting officer', officer?.full_name || officer?.email, 'Didit template');
   add('report.type', 'Report type', reportType, 'TM scenario');
+  // goAML report header (from the FIU profile). The XML builder reads these paths.
+  add('report.rentity_id', 'Reporting entity ID (goAML)', fiu?.rentity_id, 'FIU profile');
+  add('report.rentity_branch', 'Reporting entity branch', fiu?.rentity_branch, 'FIU profile');
+  add('report.submission_code', 'Submission code', fiu?.submission_code || 'E', 'FIU profile');
+  add('report.report_code', 'goAML report code', reportCode || reportType, 'FIU profile');
+  add('report.currency_code_local', 'Local currency', fiu?.currency_code_local || cur, 'FIU profile');
+  add('reporting_person.first_name', 'Reporting person: first name', rp.first_name || s(officer?.full_name).split(' ')[0], rp.first_name ? 'FIU profile' : 'User');
+  add('reporting_person.last_name', 'Reporting person: last name', rp.last_name || s(officer?.full_name).split(' ').slice(1).join(' '), rp.last_name ? 'FIU profile' : 'User');
+  add('reporting_person.title', 'Reporting person: title', rp.title, 'FIU profile');
+  add('reporting_person.email', 'Reporting person: email', rp.email || officer?.email, rp.email ? 'FIU profile' : 'User');
+  add('reporting_person.phone', 'Reporting person: phone', rp.phone, 'FIU profile');
+  add('reporting_person.occupation', 'Reporting person: occupation', rp.occupation || 'Compliance Officer', 'FIU profile');
+  add('location.address_type', 'Location: address type', loc.address_type || 'B', 'FIU profile');
+  add('location.address', 'Location: address', loc.address, 'FIU profile');
+  add('location.city', 'Location: city', loc.city, 'FIU profile');
+  add('location.zip', 'Location: postcode', loc.zip, 'FIU profile');
+  add('location.country_code', 'Location: country', loc.country_code || fiu?.country_code || fiu?.code, 'FIU profile');
   add('report.indicator', 'Indicators', indicatorCodes.join(', '), 'FIU profile', 'agent');
   add('report.reason', 'Reason for reporting', reason, 'TmNarrative', 'agent');
 
