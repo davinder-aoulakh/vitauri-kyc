@@ -279,7 +279,12 @@ Return the item IDs you recommend requesting, with a short reason for each, and 
           status:           'Draft',
           access_token:     token,
           token_expires_at: tokenExpiry.toISOString(),
-          items,
+          // KYC-linked questions open with this client's current data for them to check (reviewed in Profile Verification)
+          items: selectedItems.map((id, idx) => {
+            const item = libraryItems.find(d => d.id === id) || { id };
+            const choice = workflowChoice[id];
+            return buildRequestItem(item, idx, { defaultFieldType: 'textarea', overrides: choice?.idv_workflow_id ? choice : {}, client, showPrefill: true });
+          }),
         });
 
         let finalStatus = 'Sent';
