@@ -14,6 +14,7 @@ import EvidenceItem from '@/components/tm/case/EvidenceItem';
 import { CASE_STATUS_LABEL } from '@/lib/tmCase';
 import { toClient, toTmCase, toReport } from '@/lib/routes';
 import ReviewPeriodSection from '@/components/case/tm/ReviewPeriodSection';
+import ClientTmCountsChip from '@/components/client/overview/ClientTmCountsChip';
 
 const scoreCls = (s) => (s >= 70 ? 'bg-red-100 text-red-700' : s >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-muted text-muted-foreground');
 const noop = () => {};
@@ -80,6 +81,7 @@ export default function TmContextCard({ kycCase, client }) {
         </span>
         {tm && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted">{CASE_STATUS_LABEL[tm.status] || tm.status}</span>}
       </button>
+      {clientId && <div className="px-4 pb-3 -mt-1"><ClientTmCountsChip clientId={clientId} /></div>}
       {open && (
         <div className="px-4 pb-4 space-y-4 border-t border-border pt-3">
           {data.tipping_off_locked && (
