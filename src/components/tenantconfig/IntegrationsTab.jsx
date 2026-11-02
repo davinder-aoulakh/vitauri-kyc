@@ -6,6 +6,8 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, ExternalLink, CheckCircle, Circle, Loader2, ListOrdered } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { useTenant } from '@/lib/tenantContext';
+import DiditConnectionCard from '@/components/tenantconfig/DiditConnectionCard';
 
 const INTEGRATIONS = [
   {
@@ -51,6 +53,8 @@ const INTEGRATIONS = [
 ];
 
 export default function IntegrationsTab({ tenant }) {
+  const { currentUser } = useTenant();
+  const canManageDidit = ['Tenant Admin', 'Vitauri Ops'].includes(currentUser?.app_role);
   const [values, setValues]   = useState({});
   const [enabled, setEnabled] = useState({ kvk: true });
   const [fixing, setFixing]   = useState(false);
@@ -93,6 +97,8 @@ export default function IntegrationsTab({ tenant }) {
         <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
         <span className="text-xs text-amber-700">Integration credentials are stored securely. Never share API keys. Changes are effective immediately for new operations.</span>
       </div>
+
+      {canManageDidit && tenant?.id && <DiditConnectionCard tenant={tenant} />}
 
       <div className="bg-card border border-border rounded-xl p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
