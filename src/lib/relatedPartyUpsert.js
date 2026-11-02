@@ -28,7 +28,20 @@ const PARTY_FIELDS = ['nationality', 'date_of_birth', 'registration_number', 'ro
  * acceptFields: for an existing party, the keys to take from the candidate (default: all differing ones the caller passes).
  * Returns { rp, created, updatedFields }.
  */
-export async function upsertRelatedParty({ tenant, tenantId, clientId, caseId, currentUser, candidate, matchRpId, acceptFields }) {
+// Adds already running per client + person. A second call for the same person (double click, two Add buttons,
+// parallel accepts) waits for the first and then finds it linked, instead of creating a duplicate.
+const inFlight = new Map();
+
+export function upsertRelatedParty(args) {
+  const key = `${args.clientId}|${normName(args.candidate?.full_name)}`;
+  const prev = inFlight.get(key) || Promise.resolve();
+  const run = prev.catch(() => {}).then(() => doUpsert(args));
+  inFlight.set(key, run);
+  run.finally(() => { if (inFlight.get(key) === run) inFlight.delete(key); }).catch(() => {});
+  return run;
+}
+
+async function doUpsert({ tenant, tenantId, clientId, caseId, currentUser, candidate, matchRpId, acceptFields }) {
   const linked = await loadLinkedParties(tenantId, clientId);
   const match = (matchRpId && linked.find((x) => x.rp.id === matchRpId)) || findLinkedMatch(linked, candidate);
   const fromDidit = candidate.source_type === 'didit';
