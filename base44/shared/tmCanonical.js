@@ -78,7 +78,12 @@ export async function toCanonical(raw, channel, context = {}) {
     amount = Math.abs(amount);
   }
 
-  const currency = raw.currency ? String(raw.currency).toUpperCase().trim() : '';
+  // Fiat: ISO 4217 (upper case). Crypto: Didit's "chain:ticker" (e.g. ethereum:ETH, tron:USDT) — chain lower case.
+  const rawCcy = raw.currency ? String(raw.currency).trim() : '';
+  const isCrypto = raw.currency_kind === 'crypto' || /^[a-z0-9_-]+:[a-z0-9]+$/i.test(rawCcy);
+  const currency = !rawCcy ? '' : isCrypto && rawCcy.includes(':')
+    ? `${rawCcy.split(':')[0].toLowerCase()}:${rawCcy.split(':')[1].toUpperCase()}`
+    : rawCcy.toUpperCase();
   if (!currency) errors.push('currency is missing');
 
   if (direction !== 'inbound' && direction !== 'outbound') errors.push('direction must be inbound or outbound');
@@ -96,8 +101,10 @@ export async function toCanonical(raw, channel, context = {}) {
     direction,
     amount,
     currency,
-    currency_kind: raw.currency_kind || 'fiat',
+    currency_kind: isCrypto ? 'crypto' : (raw.currency_kind || 'fiat'),
     lifecycle: raw.lifecycle || 'booked',
+    transaction_category: raw.transaction_category || undefined,
+    counterparty_method_type: raw.counterparty_method_type || undefined,
     executed_at: execDate.toISOString(),
     received_at: new Date().toISOString(),
     source_type,
