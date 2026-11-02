@@ -4,6 +4,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { authenticate, errorResponse, httpError, loadTenant, asList } from '../../shared/tmAuth.js';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { writeAudit } from '../../shared/tmAudit.js';
+import { FIU_TYPE_CODES } from '../../shared/fiuTypes.js';
 
 const ROLES = ['Tenant Admin', 'Compliance Admin'];
 const METHODS = ['portal_upload', 'xml_upload', 'm2m'];
@@ -17,6 +18,58 @@ const num = (v, label) => {
   return n;
 };
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+// goAML settings, report types and thresholds. Only keys present in the payload are written (older clients keep the stored values).
+function cleanGoaml(p) {
+  const out = {};
+  const has = (k) => Object.prototype.hasOwnProperty.call(p, k);
+  if (has('country_code')) {
+    const c = str(p.country_code).toUpperCase();
+    if (c && !/^[A-Z]{2}$/.test(c)) throw httpError(400, 'Country code must be 2 letters (ISO 3166-1)');
+    out.country_code = c;
+  }
+  if (has('currency_code_local')) {
+    const c = str(p.currency_code_local).toUpperCase();
+    if (c && !/^[A-Z]{3}$/.test(c)) throw httpError(400, 'Local currency must be a 3-letter ISO 4217 code');
+    out.currency_code_local = c;
+  }
+  if (has('rentity_id')) out.rentity_id = str(p.rentity_id);
+  if (has('rentity_branch')) out.rentity_branch = str(p.rentity_branch);
+  if (has('submission_code')) {
+    if (!['E', 'M'].includes(p.submission_code)) throw httpError(400, 'Submission code must be E or M');
+    out.submission_code = p.submission_code;
+  }
+  if (has('reporting_person')) {
+    const r = p.reporting_person || {};
+    const email = str(r.email);
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw httpError(400, 'Reporting person email is not valid');
+    out.reporting_person = { title: str(r.title), first_name: str(r.first_name), last_name: str(r.last_name), email, phone: str(r.phone), occupation: str(r.occupation) };
+  }
+  if (has('location')) {
+    const l = p.location || {};
+    out.location = { address_type: str(l.address_type), address: str(l.address), city: str(l.city), zip: str(l.zip), country_code: str(l.country_code).toUpperCase() };
+  }
+  if (has('enabled_report_types')) {
+    const list = [...new Set((p.enabled_report_types || []).map(str))];
+    const bad = list.filter((t) => !FIU_TYPE_CODES.includes(t));
+    if (bad.length) throw httpError(400, `Unknown report type(s): ${bad.join(', ')}`);
+    out.enabled_report_types = FIU_TYPE_CODES.filter((t) => list.includes(t));
+  }
+  if (has('report_codes')) {
+    const rc = p.report_codes || {};
+    out.report_codes = Object.fromEntries(FIU_TYPE_CODES.map((t) => [t, str(rc[t])]).filter(([, v]) => v));
+  }
+  if (has('thresholds')) {
+    const t = p.thresholds || {};
+    out.thresholds = {};
+    for (const [k, label] of [['ctr_cash', 'CTR cash threshold'], ['ttr', 'TTR threshold'], ['ift', 'IFT threshold'], ['cbr', 'CBR threshold']]) {
+      const v = num(t[k], label);
+      if (v !== undefined) out.thresholds[k] = v;
+    }
+  }
+  if (has('tf_report_deadline_hours')) out.tf_report_deadline_hours = num(p.tf_report_deadline_hours, 'TFR deadline');
+  return out;
+}
 
 function cleanProfile(p) {
   const codes = [];
@@ -41,12 +94,16 @@ function cleanProfile(p) {
     report_deadline_hours: num(p.report_deadline_hours, 'Report deadline'),
     report_without_delay: !!p.report_without_delay,
     submission_method: p.submission_method,
-    didit_template_ids: { unusual_objective: str(ids.unusual_objective), unusual_subjective: str(ids.unusual_subjective) },
+    didit_template_ids: {
+      unusual_objective: str(ids.unusual_objective), unusual_subjective: str(ids.unusual_subjective),
+      ...Object.fromEntries(FIU_TYPE_CODES.map((t) => [t, str(ids[t])]).filter(([, v]) => v)),
+    },
     holiday_calendar: holidays.sort(),
     notes: str(p.notes),
     mandatory_fields: [...new Set((p.mandatory_fields || []).map(str).filter(Boolean))],
     indicator_codes: codes,
   };
+  Object.assign(out, cleanGoaml(p));
   for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
   return out;
 }
