@@ -163,7 +163,7 @@ export async function prepareReport(ctx, opts) {
     origin: origin || existing?.origin || (caseLess ? 'manual' : kycCaseId ? 'kyc_case' : tmCaseId ? 'tm_case' : 'alert'),
     priority: urgent ? 'without_delay' : 'normal', freeze_advised: type === 'TFR' ? (freezeAdvised ?? true) : false,
     ...(proposal || existing?.proposal ? { proposal: proposal || existing.proposal } : {}),
-    indicators: indicatorCodes, status: urgent ? 'draft' : status, fields, missing_fields: missing, transactions_mapped: mappedTxnCount(d.txns),
+    indicators: indicatorCodes, status, fields, missing_fields: missing, transactions_mapped: mappedTxnCount(d.txns),
     didit_template_code: templateCode, narrative: { text: narrative.text, citations: narrative.citations }, clock,
     prepared_by_user_id: auth.actorUserId, snapshot,
     ...(kycCaseId ? { kyc_case_id: kycCaseId } : {}),
@@ -189,7 +189,8 @@ export async function prepareReport(ctx, opts) {
     }
   }
 
-  const locked = isLockingStatus(body.status) ? await lockClient(base44, { tenantId, clientId: d.client.id, reason: report.report_ref, fiuReportId: report.id, actor: auth }) : false;
+  // A TFR locks customer communications from the first draft (no tipping-off while it is prepared without delay).
+  const locked = isLockingStatus(body.status) || type === 'TFR' ? await lockClient(base44, { tenantId, clientId: d.client.id, reason: report.report_ref, fiuReportId: report.id, actor: auth }) : false;
   await writeAudit(base44, auth, {
     tenantId, clientId: d.client.id, eventType: existing ? 'fiu_report_refreshed' : 'fiu_report_prepared',
     before: existing ? { status: existing.status, missing_fields: existing.missing_fields, version: existing.version } : {},
@@ -200,5 +201,5 @@ export async function prepareReport(ctx, opts) {
     const entry = { at: new Date().toISOString(), kind: 'fiu_report', by: auth.actorName, text: `FIU report ${report.report_ref} (${type}) ${existing ? 'refreshed' : 'prepared'} as ${body.status}.${missing.length ? ` Missing: ${missing.join(', ')}.` : ''}` };
     await E.TmCase.update(tmCase.id, { timeline: [...(tmCase.timeline || []), entry] });
   }
-  return summary({ ...report, status: body.status }, tmCase, { locked: locked || (!!d.client.tipping_off_lock && isLockingStatus(body.status)) });
+  return summary({ ...report, status: body.status }, tmCase, { locked: locked || (!!d.client.tipping_off_lock && (isLockingStatus(body.status) || type === 'TFR')) });
 }
