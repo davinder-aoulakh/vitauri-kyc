@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { hasPermission } from '@/lib/permissions';
+import { toast } from '@/components/ui/use-toast';
 import AppShell from '@/components/layout/AppShell';
 import RiskBadge from '@/components/shared/RiskBadge';
 import { Button } from '@/components/ui/button';
@@ -165,7 +166,7 @@ export default function ClientDetail() {
             <span className="text-destructive text-lg">!</span>
           </div>
           <p className="text-sm text-muted-foreground">{error}</p>
-          <Button size="sm" variant="outline" onClick={loadAll}>Retry</Button>
+          <Button size="sm" variant="outline" onClick={() => loadAll()}>Retry</Button>
         </div>
       </div>
     </AppShell>
@@ -194,7 +195,7 @@ export default function ClientDetail() {
     <AppShell>
       <div className="p-6 max-w-screen-xl mx-auto space-y-5">
 
-        <TippingOffBanner client={client} userRole={userRole} onChanged={loadAll} />
+        <TippingOffBanner client={client} userRole={userRole} onChanged={refreshSilently} />
 
         {/* ── Header Card ── */}
         <div className="bg-card border border-border rounded-xl p-5">
@@ -317,7 +318,7 @@ export default function ClientDetail() {
               client={client}
               relatedParties={relatedParties}
               links={rpLinks}
-              onRefresh={loadAll}
+              onRefresh={refreshSilently}
             />
           </TabsContent>
 
@@ -326,7 +327,7 @@ export default function ClientDetail() {
               client={client}
               cases={cases}
               users={users}
-              onRefresh={loadAll}
+              onRefresh={refreshSilently}
             />
           </TabsContent>
 
@@ -334,7 +335,7 @@ export default function ClientDetail() {
             <DocumentsTab
               client={client}
               documents={documents}
-              onRefresh={loadAll}
+              onRefresh={refreshSilently}
               onOcrExtracted={fields => {
                 setPendingOcr(fields);
                 setActiveTab('profile');
