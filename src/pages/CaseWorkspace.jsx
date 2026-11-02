@@ -219,6 +219,11 @@ export default function CaseWorkspace() {
 
   async function updateStepStatus(stepKey, status) {
     if (updatingStepKey) return; // prevent double-fire while a previous click is still in flight
+    // Sign-off needs the consolidated risk classification, which only the Risk Assessment "Proceed" saves
+    if (stepKey === 'step_6_status' && status === 'complete' && !kycCase?.risk_classification) {
+      toast({ variant: 'destructive', title: 'Risk classification missing', description: 'Finish the risk assessment in the Consolidated View and press Proceed.' });
+      return;
+    }
     setUpdatingStepKey(stepKey);
     // Optimistic local update — UI reflects the click immediately even if the
     // network call is slow or times out; reconciled below once we hear back.
@@ -716,7 +721,7 @@ export default function CaseWorkspace() {
                     {activeStep === 7 && <ControlMeasuresStep kycCase={kycCase} currentUser={currentUser} />}
                     {activeStep === 8 && (
                       <div className="space-y-8">
-                        <SignOffStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} onRefresh={refreshCaseData} refreshing={isRefreshing} />
+                        <SignOffStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} onRefresh={refreshCaseData} refreshing={isRefreshing} onNavigateToStep={setActiveStep} />
                         <div className="border-t border-border pt-6">
                           <KycReportStep kycCase={kycCase} client={client} currentUser={currentUser} onRefresh={refreshCaseData} refreshing={isRefreshing} />
                         </div>
