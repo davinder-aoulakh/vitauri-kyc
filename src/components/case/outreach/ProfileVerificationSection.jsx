@@ -3,7 +3,8 @@
  * Wraps useProfileSuggestions; renders pipeline controls, metadata bar, the per-field
  * green/amber/red grid, and (for ORG clients) the related-party suggestion sub-grid.
  */
-import React from 'react';
+import React, { useState } from 'react';
+import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { useProfileSuggestions } from '@/hooks/useProfileSuggestions';
 import ProfileFieldRow from '@/components/case/profile/ProfileFieldRow';
@@ -23,6 +24,20 @@ export default function ProfileVerificationSection({
     runPipeline, acceptField, rejectField, handleManualEdit, markInfoRequested, reopenField,
     acceptAllHighConfidence, acceptRelatedParty, rejectRelatedParty, reapplyField,
   } = profile;
+
+  // One related-party add at a time: the buttons stay disabled until the save is done (prevents duplicates)
+  const [acceptingRp, setAcceptingRp] = useState(null);
+  async function handleAcceptRelatedParty(rpIndex, rp, acceptFields) {
+    if (acceptingRp !== null) return;
+    setAcceptingRp(rpIndex);
+    try {
+      await acceptRelatedParty(rpIndex, rp, acceptFields);
+    } catch (e) {
+      toast({ title: 'Could not add related party', description: e?.message, variant: 'destructive' });
+    } finally {
+      setAcceptingRp(null);
+    }
+  }
 
   async function handleRequestInfo(fieldKey, mode) {
     const fieldLabel = fieldLabels[fieldKey];
@@ -163,9 +178,9 @@ export default function ProfileVerificationSection({
                       key={i}
                       rp={rp}
                       rpIndex={i}
-                      onAccept={acceptRelatedParty}
+                      onAccept={handleAcceptRelatedParty}
                       onReject={rejectRelatedParty}
-                      accepting={false}
+                      accepting={acceptingRp !== null}
                     />
                   ))
                 )}
