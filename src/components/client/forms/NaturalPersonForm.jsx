@@ -2,7 +2,7 @@ import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { COUNTRIES } from '@/lib/countries';
+import CountrySelect from '@/components/shared/CountrySelect';
 import AddressFields from '@/components/client/forms/AddressFields';
 import ContactEntriesTable from '@/components/client/forms/ContactEntriesTable';
 
@@ -24,6 +24,16 @@ function Field({ label, value, onChange, type = 'text', placeholder, required })
     <div>
       <Label className="text-xs font-medium mb-1.5 block">{label}{required && ' *'}</Label>
       <Input type={type} value={value || ''} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="h-9 text-sm" />
+    </div>
+  );
+}
+
+// Country picker with flags (value = country name)
+function CountryField({ label, value, onChange, required }) {
+  return (
+    <div>
+      <Label className="text-xs font-medium mb-1.5 block">{label}{required && ' *'}</Label>
+      <CountrySelect value={value || ''} onChange={onChange} placeholder={`Select ${label}`} />
     </div>
   );
 }
@@ -56,7 +66,7 @@ export function NaturalPersonStep2A({ form, set }) {
         <Field label="Preferred Name" value={form.preferred_name} onChange={v => set('preferred_name', v)} placeholder="Optional" />
         <SelectField label="Gender" value={form.gender} onChange={v => set('gender', v)} options={GENDERS} />
         <SelectField label="Category" value={form.category} onChange={v => set('category', v)} options={CATEGORIES} />
-        <SelectField label="Nationality" value={form.nationality} onChange={v => set('nationality', v)} options={COUNTRIES} />
+        <CountryField label="Nationality" value={form.nationality} onChange={v => set('nationality', v)} />
         <Field label="External ID" value={form.external_id} onChange={v => set('external_id', v)} placeholder="Optional — CRM reference" />
         <div>
           <Label className="text-xs font-medium mb-1.5 block">Date of Birth</Label>
@@ -66,10 +76,10 @@ export function NaturalPersonStep2A({ form, set }) {
           <Label className="text-xs font-medium mb-1.5 block">Decease Date</Label>
           <Input type="date" value={form.decease_date || ''} onChange={e => set('decease_date', e.target.value)} className="h-9 text-sm" />
         </div>
-        <SelectField label="Country of Birth" value={form.country_of_birth} onChange={v => set('country_of_birth', v)} options={COUNTRIES} />
+        <CountryField label="Country of Birth" value={form.country_of_birth} onChange={v => set('country_of_birth', v)} />
         <Field label="Place of Birth" value={form.place_of_birth} onChange={v => set('place_of_birth', v)} placeholder="City of birth" />
       </div>
-      <SelectField label="Country of Residence" value={form.country_of_residence} onChange={v => set('country_of_residence', v)} options={COUNTRIES} />
+      <CountryField label="Country of Residence" value={form.country_of_residence} onChange={v => set('country_of_residence', v)} />
       <div className="grid grid-cols-2 gap-4">
         <Field label="Occupation" value={form.occupation} onChange={v => set('occupation', v)} placeholder="Optional" />
         <Field label="Employer" value={form.employer_name} onChange={v => set('employer_name', v)} placeholder="Optional" />
@@ -117,7 +127,7 @@ export function NaturalPersonStep2B({ form, set }) {
       <div className="border-t border-border pt-4">
         <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Tax Compliance (FATCA/CRS)</div>
         <div className="grid grid-cols-2 gap-4">
-          <SelectField label="Tax Residency" value={form.tax_residency} onChange={v => set('tax_residency', v)} options={COUNTRIES} />
+          <CountryField label="Tax Residency" value={form.tax_residency} onChange={v => set('tax_residency', v)} />
           <Field label="TIN" value={form.tin} onChange={v => set('tin', v)} placeholder="Tax Identification Number" />
         </div>
         <div className="mt-2 text-xs text-muted-foreground bg-muted/40 rounded-lg p-2.5">
