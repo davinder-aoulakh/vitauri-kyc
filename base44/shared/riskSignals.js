@@ -16,7 +16,7 @@ const LABELS = {
 };
 const SKIP_TYPES = new Set(['file_upload', 'signature', 'checkbox', 'id_verification', 'kyb_verification']);
 const ANSWERED = new Set(['Received', 'Verified']);
-const CLEARED_HIT = new Set(['Discounted', 'False_Positive', 'Dismissed', 'Closed_No_Match']);
+const CLEARED_HIT = new Set(['Discounted']);
 
 const SECTOR_TERMS = [
   [/crypto|bitcoin|virtual asset|digital asset|cryptovaluta/i, 'crypto'],
@@ -122,7 +122,8 @@ export function collectSignals({ client, kycCase, outreach = [], hits = [], rela
       add(key, 'didit_aml', `Didit AML alert (${state}): ${d.aml_hits ?? '?'} hit(s), Didit status ${d.aml_status || 'unknown'}`, 'Screening', { aml_status: d.aml_status, aml_hits: Number(d.aml_hits) || 0, confirmed });
       continue;
     }
-    const kind = h.source === 'PEP_List' ? 'screening_pep' : h.source === 'Adverse_Media' ? 'screening_adverse' : 'screening_sanctions';
+    const kind = h.source === 'PEP_List' ? 'screening_pep' : h.source === 'Adverse_Media' ? 'screening_adverse'
+      : /^Sanctions/.test(h.source || '') ? 'screening_sanctions' : 'screening_other';
     add(key, kind, `${state} ${String(h.source || '').replace(/_/g, ' ')} hit "${clip(h.hit_name, 80)}"${h.confidence_score != null ? ` (${h.confidence_score}%)` : ''}`, 'Screening', { confirmed });
   }
 
