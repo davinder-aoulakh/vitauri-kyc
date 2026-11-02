@@ -2,7 +2,8 @@
 // transaction_at, counterparty country, expected-profile custom_properties). Our transaction_id is stable across retries.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { postTransaction, buildTransactionBody, diditTxnUuid, normaliseTxnStatus } from '../../shared/diditTm.js';
-import { afterTransactionUpdate } from '../../shared/diditTxnActions.js';
+import { waitUntil } from 'base44:runtime';
+import { applyTxnDecision, TM_ALERT_STATUSES } from '../../shared/tmTxnDecision.js';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
 import { sha256Hex } from '../../shared/tmCanonical.js';
 import { isTmEnabled } from '../../shared/tmGuards.js';
