@@ -24,6 +24,8 @@ export const NP_FIELD_LABELS = {
   'residential_address.number':  'Residential Address — Number',
   'residential_address.zipcode': 'Residential Address — Zipcode',
   'residential_address.city':    'Residential Address — City',
+  primary_contact_email: 'Email Address',
+  primary_contact_phone: 'Phone Number',
 };
 export const ORG_FIELD_LABELS = {
   full_name:           'Legal Entity Name',
@@ -35,6 +37,8 @@ export const ORG_FIELD_LABELS = {
   lei_code:            'LEI Code',
   business_activity:   'Business Activity',
   nature_of_business_code: 'Nature of Business Code',
+  primary_contact_email: 'Email Address',
+  primary_contact_phone: 'Phone Number',
 };
 
 /**
