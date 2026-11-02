@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { toAlert } from '@/lib/routes';
 import { format } from 'date-fns';
@@ -82,6 +82,7 @@ export default function TmTransactionList({ tenantId, clients, version, onSelect
   if (submission === 'blocked') query.blocked = true;
   else if (submission !== 'all') query.didit_submission_status = submission;
 
+  const qc = useQueryClient();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['tmTxList', tenantId, status, source, lifecycle, client, risk, submission, limit, version],
     enabled: !!tenantId,
@@ -110,6 +111,7 @@ export default function TmTransactionList({ tenantId, clients, version, onSelect
       if (d.error) throw new Error(d.error);
       toast({ title: d.skipped ? `Not sent: ${String(d.reason || '').replace(/_/g, ' ')}` : d.submitted ? 'Sent to Didit' : 'Didit did not accept it — see the transaction' });
       refetch();
+      qc.invalidateQueries({ queryKey: ['client-tm-counts'] });
     } catch (e) {
       toast({ variant: 'destructive', title: 'Could not send to Didit', description: e?.response?.data?.error || e?.message });
     } finally {
