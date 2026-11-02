@@ -468,10 +468,10 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
                           >
                             <Download className="w-3 h-3" />
                           </Button>
-                          {idx === 0 && (
+                          {isLatest && (
                             <Button
                               variant="outline" size="sm" className="h-7 text-xs"
-                              onClick={() => setReviewOpen(doc)}
+                              onClick={() => setReviewOpen({ doc })}
                             >
                               Review
                             </Button>
@@ -488,7 +488,7 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
                           )}
                         </div>
                       </div>
-                    ))}
+                    ); })}
                   </div>
                 )}
               </div>
@@ -591,7 +591,8 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
       />
 
       <ReviewDialog
-        doc={reviewOpen}
+        doc={reviewOpen?.doc || null}
+        preset={reviewOpen?.preset}
         onClose={() => setReviewOpen(null)}
         currentUser={currentUser}
         onSaved={onRefresh}
@@ -609,17 +610,19 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
   );
 }
 
-function ReviewDialog({ doc, onClose, currentUser, onSaved }) {
+function ReviewDialog({ doc, preset, onClose, currentUser, onSaved }) {
   const [status, setStatus]   = useState('');
   const [notes, setNotes]     = useState('');
   const [saving, setSaving]   = useState(false);
 
   React.useEffect(() => {
     if (doc) {
-      setStatus(doc.review_status || 'Pending_Review');
-      setNotes(doc.review_notes || '');
+      setStatus(preset || doc.review_status || 'Pending_Review');
+      // Start with empty notes when changing a decision made by Didit or someone else
+      setNotes(preset && preset !== doc.review_status ? '' : (doc.review_notes || ''));
     }
-  }, [doc]);
+  }, [doc, preset]);
+  const overridesDidit = doc?.source === 'didit_kyb' && doc?.review_status === 'Approved' && !doc?.reviewed_by_user_id;
 
   // Approving a document the AI Document Checker rated high risk needs a justification
   const aiHighRisk = doc?.ai_check?.status === 'done' && doc.ai_check.verdict === 'high_risk';
@@ -642,7 +645,9 @@ function ReviewDialog({ doc, onClose, currentUser, onSaved }) {
       actor_name: currentUser?.full_name,
       actor_type: 'User',
       event_type: 'document_reviewed',
-      ...(doc.ai_check?.verdict ? { after_state: { review_status: status, ai_verdict: doc.ai_check.verdict }, is_override: status === 'Approved' && aiHighRisk } : {}),
+      before_state: { review_status: doc.review_status || 'Pending_Review', reviewed_by: doc.reviewed_by_user_id ? 'user' : (doc.source === 'didit_kyb' ? 'Didit KYB' : null) },
+      after_state: { review_status: status, ...(doc.ai_check?.verdict ? { ai_verdict: doc.ai_check.verdict } : {}) },
+      is_override: (status === 'Approved' && aiHighRisk) || (overridesDidit && status !== 'Approved'),
       notes: `Document "${doc.file_name}" marked as ${status}${status === 'Approved' && aiHighRisk ? ' despite a high-risk AI check' : ''}${notes ? `: ${notes}` : ''}`,
     });
     setSaving(false);
@@ -659,6 +664,11 @@ function ReviewDialog({ doc, onClose, currentUser, onSaved }) {
             <div className="font-medium truncate">{doc?.file_name}</div>
             <div className="text-xs text-muted-foreground mt-0.5">{doc?.doc_type?.replace(/_/g,' ')} · v{doc?.version || 1}</div>
           </div>
+          {overridesDidit && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              Approved by Didit KYB (document checks passed). Your decision will replace it and is recorded in the audit trail.
+            </div>
+          )}
           {doc?.ai_check?.status === 'done' && (
             <div className={cn('rounded-lg border px-3 py-2 text-xs', (VERDICT[doc.ai_check.verdict] || VERDICT.needs_attention).cls)}>
               <div className="font-semibold">{(VERDICT[doc.ai_check.verdict] || VERDICT.needs_attention).label}</div>
