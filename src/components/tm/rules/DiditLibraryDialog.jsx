@@ -44,7 +44,7 @@ export default function DiditLibraryDialog({ open, onOpenChange, tenantId, scena
           <DialogTitle>Didit rule library</DialogTitle>
           <DialogDescription>
             Didit's preset rules. "Use as draft" copies a rule into Vitauri as an inactive draft. It runs only after a second person approves it.
-            {!canManage && ' Only a Compliance Admin or Compliance Officer can import a library rule.'}
+            {!canManage && ' Only a Compliance Admin, Compliance Officer or Tenant Admin can import a library rule.'}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col sm:flex-row gap-2">

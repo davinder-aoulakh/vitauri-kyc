@@ -2,7 +2,9 @@
 // Stored definitions are Didit-native, so what we validate is exactly what we push.
 import { httpError } from './tmAuth.js';
 
-export const MANAGE_ROLES = ['Compliance Admin', 'Compliance Officer']; // tmManageRules
+// Tenant Admin may manage rules too (tenants where every user is a Tenant Admin); four-eyes still applies:
+// approveRule refuses the user who created or requested the rule.
+export const MANAGE_ROLES = ['Compliance Admin', 'Compliance Officer', 'Tenant Admin']; // tmManageRules
 export const APPROVE_ROLES = ['Compliance Officer', 'Compliance Admin', 'Tenant Admin']; // tmApproveRules
 
 // Vitauri-friendly aliases -> Didit field names.

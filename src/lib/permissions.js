@@ -35,7 +35,7 @@ export const PERMISSIONS = {
   tmWorkCase:           ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager'],
   tmFourEyes:           ['QC Reviewer', 'Compliance Officer', 'Manager', 'Director'],
   tmApproveFiuReport:   ['Compliance Officer'],
-  tmManageRules:        ['Compliance Admin', 'Compliance Officer'],
+  tmManageRules:        ['Compliance Admin', 'Compliance Officer', 'Tenant Admin'],
   tmApproveRules:       ['Compliance Officer', 'Compliance Admin', 'Tenant Admin'],
   tmManageIngest:       ['Tenant Admin', 'Compliance Admin'],
   tmQuality:            ['QC Reviewer', 'Compliance Officer', 'Director'],
