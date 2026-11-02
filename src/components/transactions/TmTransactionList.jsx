@@ -8,7 +8,23 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import EmptyState from '@/components/shared/EmptyState';
 import InlineError from '@/components/shared/InlineError';
-import { Activity, Loader2 } from 'lucide-react';
+import { Activity, Loader2, RotateCcw, Ban } from 'lucide-react';
+import Flag from '@/components/shared/Flag';
+import { toast } from '@/components/ui/use-toast';
+
+// Didit's decision on the transaction (status) and whether Vitauri could send it (submission)
+const STATUS_TONE = {
+  APPROVED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  IN_REVIEW: 'bg-amber-50 text-amber-800 border-amber-200',
+  AWAITING_USER: 'bg-sky-50 text-sky-700 border-sky-200',
+  DECLINED: 'bg-red-50 text-red-700 border-red-200',
+  PENDING: 'bg-secondary text-muted-foreground border-border',
+};
+function DiditStatus({ tx }) {
+  if (tx.blocked) return <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium bg-red-600 text-white border-red-600" title={tx.blocked_reason || 'Declined by Didit'}><Ban className="w-3 h-3" /> Blocked</span>;
+  const s = tx.status || 'PENDING';
+  return <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${STATUS_TONE[s] || STATUS_TONE.PENDING}`}>{s === 'PENDING' ? 'Pending' : label(s).toLowerCase().replace(/^./, (c) => c.toUpperCase())}</span>;
+}
 
 const SOURCES = ['manual', 'api', 'psd2', 'upload_csv', 'upload_xlsx', 'upload_mt940', 'upload_camt', 'upload_pdf'];
 const LIFECYCLES = ['intended', 'declined', 'booked', 'reversed', 'corrected'];
@@ -32,7 +48,6 @@ function DiditRisk({ tx }) {
   );
 }
 const label = (v) => String(v || '').replace(/_/g, ' ');
-const flag = (cc) => (/^[A-Za-z]{2}$/.test(cc || '') ? String.fromCodePoint(...[...cc.toUpperCase()].map((c) => 127397 + c.charCodeAt(0))) : '');
 
 function Filter({ value, onChange, all, items, render = label, width = 'w-40' }) {
   return (
@@ -55,6 +70,8 @@ export default function TmTransactionList({ tenantId, clients, version, onSelect
   const [client, setClient] = useState(fixedClientId || 'all');
   const [searchParams] = useSearchParams();
   const [risk, setRisk] = useState(searchParams.get('risk') === 'didit_high' ? 'didit_high' : 'all');
+  const [submission, setSubmission] = useState('all');
+  const [retrying, setRetrying] = useState(null);
   const [limit, setLimit] = useState(PAGE);
   const query = { tenant_id: tenantId };
   if (status !== 'all') query.status = status;
@@ -62,9 +79,11 @@ export default function TmTransactionList({ tenantId, clients, version, onSelect
   if (lifecycle !== 'all') query.lifecycle = lifecycle;
   if (client !== 'all') query.client_id = client;
   if (risk === 'didit_high') query.risk_level = { $in: DIDIT_HIGH };
+  if (submission === 'blocked') query.blocked = true;
+  else if (submission !== 'all') query.didit_submission_status = submission;
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['tmTxList', tenantId, status, source, lifecycle, client, risk, limit, version],
+    queryKey: ['tmTxList', tenantId, status, source, lifecycle, client, risk, submission, limit, version],
     enabled: !!tenantId,
     queryFn: async () => {
       const page = await base44.entities.Transaction.filter(query, { sort: '-created_date', limit });
@@ -82,6 +101,36 @@ export default function TmTransactionList({ tenantId, clients, version, onSelect
   const clientName = (id) => clients.find((c) => c.id === id)?.full_name || '—';
   const date = (iso) => (iso ? format(new Date(iso), 'd MMM yyyy HH:mm') : '—');
 
+  // Send one transaction (again) to Didit: failed or not yet submitted
+  async function resend(tx) {
+    setRetrying(tx.id);
+    try {
+      const res = await base44.functions.invoke('submitToDidit', { tenant_id: tenantId, transaction_ids: [tx.id] });
+      const d = res?.data || {};
+      if (d.error) throw new Error(d.error);
+      toast({ title: d.skipped ? `Not sent: ${String(d.reason || '').replace(/_/g, ' ')}` : d.submitted ? 'Sent to Didit' : 'Didit did not accept it — see the transaction' });
+      refetch();
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'Could not send to Didit', description: e?.response?.data?.error || e?.message });
+    } finally {
+      setRetrying(null);
+    }
+  }
+  const Submission = ({ tx }) => {
+    const s = tx.didit_submission_status || 'not_submitted';
+    if (s === 'submitted') return <span className="text-emerald-700">Sent</span>;
+    if (s === 'skipped') return <span className="text-muted-foreground" title={tx.didit_submission_note}>Not sent</span>;
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <span className={s === 'failed' ? 'text-red-700' : 'text-muted-foreground'} title={tx.didit_submission_error || tx.didit_submission_note}>{s === 'failed' ? 'Failed' : 'Not sent'}</span>
+        <button type="button" className="text-primary hover:underline inline-flex items-center gap-0.5" disabled={retrying === tx.id}
+          onClick={(e) => { e.stopPropagation(); resend(tx); }}>
+          {retrying === tx.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />} {s === 'failed' ? 'Retry' : 'Send'}
+        </button>
+      </span>
+    );
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap justify-end gap-2">
@@ -90,6 +139,7 @@ export default function TmTransactionList({ tenantId, clients, version, onSelect
         <Filter value={lifecycle} onChange={reset(setLifecycle)} all="All lifecycles" items={LIFECYCLES} />
         <Filter value={status} onChange={reset(setStatus)} all="All statuses" items={['PENDING', 'APPROVED', 'IN_REVIEW', 'AWAITING_USER', 'DECLINED']} />
         <Filter value={risk} onChange={reset(setRisk)} all="Any Didit risk" items={[{ id: 'didit_high', name: 'Didit High or Critical' }]} width="w-44" />
+        <Filter value={submission} onChange={reset(setSubmission)} all="Any submission" items={[{ id: 'blocked', name: 'Blocked (declined)' }, { id: 'failed', name: 'Submission failed' }, { id: 'not_submitted', name: 'Not sent yet' }, { id: 'skipped', name: 'Not sent (skipped)' }, { id: 'submitted', name: 'Sent to Didit' }]} width="w-44" />
       </div>
       {error && <InlineError message="Couldn't load transactions." onRetry={() => refetch()} />}
       <div className="bg-card border border-border rounded-xl overflow-x-auto">
@@ -101,7 +151,7 @@ export default function TmTransactionList({ tenantId, clients, version, onSelect
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-muted/40 border-b border-border text-xs text-muted-foreground uppercase tracking-wide">
-                {[...(fixedClientId ? [] : ['Client']), 'Executed', 'Amount', 'Lifecycle', 'Source', 'Category', 'Counterparty', 'Didit risk', 'Alert'].map((h) => <th key={h} className="text-left px-4 py-3 whitespace-nowrap">{h}</th>)}
+                {[...(fixedClientId ? [] : ['Client']), 'Executed', 'Amount', 'Lifecycle', 'Source', 'Category', 'Counterparty', 'Didit status', 'Didit risk', 'Submission', 'Alert'].map((h) => <th key={h} className="text-left px-4 py-3 whitespace-nowrap">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -111,12 +161,14 @@ export default function TmTransactionList({ tenantId, clients, version, onSelect
                   <tr key={tx.id} className="hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => onSelect(tx)}>
                     {!fixedClientId && <td className="px-4 py-3 font-medium text-xs">{clientName(tx.client_id)}</td>}
                     <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{date(tx.executed_at)}</td>
-                    <td className="px-4 py-3 text-xs whitespace-nowrap">{tx.direction === 'outbound' ? '−' : '+'}{tx.amount} {tx.currency}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap">{tx.direction === 'outbound' ? '−' : '+'}{tx.amount} {tx.currency}{tx.currency_kind === 'crypto' && <span className="ml-1.5 rounded border border-violet-200 bg-violet-50 px-1 text-[10px] text-violet-700" title={tx.counterparty_method_type === 'unhosted_wallet' ? 'Self-custody wallet' : 'Crypto wallet'}>crypto</span>}</td>
                     <td className="px-4 py-3 text-xs capitalize">{tx.lifecycle || '—'}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{label(tx.source_type) || '—'}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{label(tx.category) || '—'}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{tx.counterparty_name || '—'}{tx.counterparty_country && <span className="ml-1.5">{flag(tx.counterparty_country)} {tx.counterparty_country}</span>}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{tx.counterparty_name || '—'}{tx.counterparty_country && <span className="ml-1.5 inline-flex items-center gap-1"><Flag iso2={tx.counterparty_country} className="w-4 h-3" /> {tx.counterparty_country}</span>}</td>
+                    <td className="px-4 py-3 text-xs"><DiditStatus tx={tx} /></td>
                     <td className="px-4 py-3 text-xs"><DiditRisk tx={tx} /></td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap"><Submission tx={tx} /></td>
                     <td className="px-4 py-3 text-xs" onClick={(e) => e.stopPropagation()}>
                       {alert ? <Link className="text-primary hover:underline" to={toAlert(alert.id)} title={alert.title}>{label(alert.status)}</Link> : '—'}
                     </td>
