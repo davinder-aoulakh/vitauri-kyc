@@ -66,10 +66,6 @@ export default async function (req) {
       try {
         const res = await postTransaction(tenant, diditBody);
         const status = normaliseTxnStatus(res?.status);
-        if (res?.action_required) {
-          await afterTransactionUpdate(base44, tenant, { ...t, our_transaction_id: ourId }, t.status, status, res)
-            .catch((e) => console.warn('submitToDidit: action_required follow-up failed', e?.message));
-        }
         return {
           id: t.id, our_transaction_id: ourId,
           didit_transaction_id: diditTxnUuid(res) || undefined,
@@ -94,6 +90,17 @@ export default async function (req) {
       return r;
     });
     for (const g of chunk(rows, 100)) await E.Transaction.bulkUpdate(g);
+
+    // Didit's answer in the POST response counts at once: IN_REVIEW / AWAITING_USER / DECLINED raise the alert (and
+    // DECLINED blocks) now, not only when the webhook arrives. The webhook later finds the alert and extends it.
+    const byId = new Map(todo.map((t) => [t.id, t]));
+    for (const r of rows) {
+      if (r.didit_submission_status !== 'submitted') continue;
+      if (!TM_ALERT_STATUSES.includes(r.status) && !r.decision_raw?.action_required) continue;
+      const orig = byId.get(r.id) || {};
+      await applyTxnDecision(base44, tenant, { ...orig, ...r, status: orig.status || 'PENDING' }, r.decision_raw || {}, { actorName: 'Didit (submission)', waitUntilFn: waitUntil })
+        .catch((e) => console.warn('submitToDidit: immediate decision failed', e?.message));
+    }
     const submitted = rows.filter((r) => r.didit_submission_status === 'submitted').length;
     const failed = rows.length - submitted + results.filter((r) => !r.ok).length;
 
