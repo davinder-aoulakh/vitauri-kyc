@@ -17,7 +17,7 @@ export async function loadRefs(ctx, report) {
   const [fiu, client, tmCase] = await Promise.all([
     one(E.FiuProfile.filter({ tenant_id: tenantId, code: report.fiu_profile_code })),
     one(E.Client.filter({ tenant_id: tenantId, id: report.client_id })),
-    one(E.TmCase.filter({ tenant_id: tenantId, id: report.tm_case_id })),
+    report.tm_case_id ? one(E.TmCase.filter({ tenant_id: tenantId, id: report.tm_case_id })) : Promise.resolve(null),
   ]);
   if (!client) throw httpError(404, 'Client not found');
   return { fiu, client, tmCase };
@@ -27,8 +27,9 @@ async function loadEvidence(ctx, report) {
   const { E, tenantId } = ctx;
   const alertIds = report.alert_ids || [];
   const alerts = alertIds.length ? asList(await E.TmAlert.filter({ tenant_id: tenantId, id: { $in: alertIds } }, undefined, 100)) : [];
-  const txnIds = distinct(alerts.flatMap((a) => a.transaction_ids || [])).slice(0, 200);
-  const txns = txnIds.length ? asList(await E.Transaction.filter({ tenant_id: tenantId, id: { $in: txnIds } }, undefined, 200)) : [];
+  const txnIds = distinct([...alerts.flatMap((a) => a.transaction_ids || []), ...(report.transaction_ids || [])]).slice(0, 200);
+  let txns = txnIds.length ? asList(await E.Transaction.filter({ tenant_id: tenantId, id: { $in: txnIds } }, undefined, 200)) : [];
+  if (!report.tm_case_id) txns = txns.filter((t) => t.client_id === report.client_id); // same rule as tmFiuGather
   return { alerts, txnIds, txns };
 }
 
