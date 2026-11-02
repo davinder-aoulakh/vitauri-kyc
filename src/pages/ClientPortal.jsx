@@ -11,6 +11,10 @@ import IdVerificationField from '@/components/portal/IdVerificationField';
 import KybVerificationField from '@/components/portal/KybVerificationField';
 import DiditCallbackScreen from '@/components/portal/DiditCallbackScreen';
 import SignaturePad from '@/components/portal/SignaturePad';
+import PortalAddressInput, { isAddressComplete } from '@/components/portal/PortalAddressInput';
+import PhoneInput from '@/components/shared/PhoneInput';
+import CountrySelect from '@/components/shared/CountrySelect';
+import { responseText } from '@/lib/profileFieldMap';
 import { format, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -285,8 +289,16 @@ export default function ClientPortal() {
     visibleReqs.forEach(req => {
       map[req.id] = {};
       (req.items || []).forEach(item => {
+        // KYC-linked question with data we hold (prefill_value): starts filled in; the client confirms or corrects it
+        const ftInit = item.field_type || '';
+        const answered = item.response_value != null || !!item.response_text;
+        const prefilled = item.prefill_value != null && !answered;
+        const value = item.response_value ?? (prefilled ? item.prefill_value : null);
         map[req.id][item.item_id] = {
-          text: item.response_text || '',
+          text: item.response_text || (prefilled ? responseText(ftInit, item.prefill_value) : ''),
+          value,
+          prefilled,
+          confirmed: !!item.confirmed_unchanged,
           fileUrl: item.file_url || '',
           uploading: false,
           done: item.status === 'Received' || item.status === 'Verified',
@@ -353,8 +365,23 @@ export default function ClientPortal() {
   }
 
   function setItemText(outreachId, itemId, text) {
-    setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], text } } }));
-    scheduleAutoSave(outreachId, itemId, { response_text: text });
+    setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], text, prefilled: false, confirmed: false } } }));
+    scheduleAutoSave(outreachId, itemId, { response_text: text, confirmed_unchanged: false });
+  }
+
+  // Structured answers (phone, address, country): value + readable text
+  function setItemValue(outreachId, itemId, ft, value) {
+    const text = responseText(ft, value);
+    setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], value, text, prefilled: false, confirmed: false } } }));
+    scheduleAutoSave(outreachId, itemId, { response_value: value, response_text: text, confirmed_unchanged: false });
+  }
+
+  // "This is correct": the client confirms the data we hold without changing it
+  function confirmPrefill(outreachId, item) {
+    const ft = item.field_type || '';
+    const text = responseText(ft, item.prefill_value);
+    setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [item.item_id]: { ...s[outreachId]?.[item.item_id], value: item.prefill_value, text, confirmed: true } } }));
+    scheduleAutoSave(outreachId, item.item_id, { response_value: item.prefill_value, response_text: text, confirmed_unchanged: true });
   }
 
   function setItemSelected(outreachId, itemId, selected) {
@@ -368,6 +395,9 @@ export default function ClientPortal() {
     if (!s) return false;
     if (s.done) return true;
     const ft = item.field_type || (item.item_type === 'document' ? 'file_upload' : 'textarea');
+    // Prefilled data counts once the client has confirmed it or changed it
+    if (s.prefilled && !s.confirmed) return false;
+    if (ft === 'address') return isAddressComplete(s.value);
     if (ft === 'file_upload') return !!s.fileUrl;
     if (ft === 'section_header') return true;
     if (ft === 'multi_select') return (s.selected || []).length > 0;
@@ -470,12 +500,17 @@ export default function ClientPortal() {
         };
       }
 
-      let responseText = s.text || item.response_text || '';
-      if (ft === 'multi_select' || ft === 'checkbox') responseText = (s.selected || []).join(', ');
+      let responseTextValue = s.text || item.response_text || '';
+      if (ft === 'multi_select' || ft === 'checkbox') responseTextValue = (s.selected || []).join(', ');
       const isDone = isItemCompleted(item, s) || ft === 'section_header';
+      // KYC-linked / structured answers keep their structure for Profile Verification
+      const structured = (item.profile_field || ['phone', 'address', 'country'].includes(ft))
+        ? { response_value: ft === 'address' ? (s.value || null) : (s.value ?? (responseTextValue || null)), confirmed_unchanged: !!s.confirmed }
+        : {};
       return {
         ...item,
-        response_text: responseText,
+        ...structured,
+        response_text: responseTextValue,
         file_url: s.fileUrl || item.file_url || '',
         status: isDone ? 'Received' : (item.status || 'Requested'),
       };
