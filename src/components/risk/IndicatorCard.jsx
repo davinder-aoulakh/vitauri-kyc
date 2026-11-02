@@ -122,6 +122,11 @@ export default function IndicatorCard({ indicator, entities, selections, onToggl
             <span className="text-xs text-purple-700 leading-relaxed">
               <span className="font-medium">{entity.label}: </span>
               {badge.reason}
+              {badge.evidence && (
+                <span className="block text-purple-600/80 mt-0.5">
+                  {badge.origin === 'rule' ? 'Rule' : 'Based on'}: {badge.evidence}
+                </span>
+              )}
             </span>
           </div>
         );
