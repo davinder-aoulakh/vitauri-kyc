@@ -89,7 +89,10 @@ export function countryByName(value) {
   return COUNTRY_META.find((c) => norm(c.name) === n) || null;
 }
 
-/** Countries sharing the longest dial prefix of a number like "+31647978701". */
+// Country shown for a dial code several countries share (+1, +7, +44, +599)
+const DIAL_DEFAULT = { '+1': 'US', '+7': 'RU', '+44': 'GB', '+599': 'CW' };
+
+/** The country with the longest dial prefix of a number like "+31647978701". */
 export function countryByDial(phone) {
   const digits = String(phone || '').replace(/[^\d+]/g, '');
   if (!digits.startsWith('+')) return null;
@@ -97,6 +100,7 @@ export function countryByDial(phone) {
   for (const c of COUNTRY_META) {
     if (digits.startsWith(c.dial) && (!best || c.dial.length > best.dial.length)) best = c;
   }
+  if (best && DIAL_DEFAULT[best.dial]) best = COUNTRY_META.find((c) => c.iso2 === DIAL_DEFAULT[best.dial]) || best;
   return best;
 }
 
