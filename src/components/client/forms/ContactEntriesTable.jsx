@@ -4,11 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2 } from 'lucide-react';
 import { setPreferredEntry } from '@/lib/clientNameUtils';
+import PhoneInput from '@/components/shared/PhoneInput';
 
 const TYPES = ['email', 'phone', 'mobile'];
 
-// entries: [{ type, value, is_preferred }]
-export default function ContactEntriesTable({ entries, onChange }) {
+// entries: [{ type, value, is_preferred }] — phone/mobile values are stored as "+31 647978701"
+// defaultCountry: country used for the code of a new phone number (client's country of residence)
+export default function ContactEntriesTable({ entries, onChange, defaultCountry }) {
   const list = entries || [];
 
   function addRow() {
@@ -37,12 +39,16 @@ export default function ContactEntriesTable({ entries, onChange }) {
             <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>{TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
           </Select>
-          <Input
-            value={entry.value || ''}
-            onChange={e => updateRow(idx, 'value', e.target.value)}
-            placeholder={entry.type === 'email' ? 'name@example.com' : '+31 6 12345678'}
-            className="h-9 text-sm"
-          />
+          {entry.type === 'email' ? (
+            <Input
+              value={entry.value || ''}
+              onChange={e => updateRow(idx, 'value', e.target.value)}
+              placeholder="name@example.com"
+              className="h-9 text-sm"
+            />
+          ) : (
+            <PhoneInput value={entry.value || ''} onChange={v => updateRow(idx, 'value', v)} defaultCountry={defaultCountry} />
+          )}
           <div className="flex justify-center">
             <input
               type="checkbox"
