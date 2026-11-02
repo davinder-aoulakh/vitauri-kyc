@@ -42,7 +42,10 @@ function toNormaliseItem(t) {
   return {
     external_id: t.external_id, client_id: t.client_id, iban_or_number: t.account, lifecycle,
     intended_at: intendedAt, executed_at: executedAt, direction: t.direction, amount: t.amount, currency: t.currency,
-    description_raw: t.description, counterparty_name: cp.name, counterparty_account_id: cp.account,
+    // Crypto (KYT wallet screening): currency "chain:ticker", counterparty wallet in counterparty.account
+    currency_kind: t.currency_kind, transaction_category: t.transaction_category,
+    counterparty_method_type: cp.method_type || cp.payment_method,
+    description_raw: t.description, counterparty_name: cp.name, counterparty_account_id: cp.account || cp.wallet_address,
     counterparty_country: cp.country, historical,
   };
 }
