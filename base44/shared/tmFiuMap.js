@@ -62,6 +62,8 @@ function addTransactions(add, { client, accounts, txns, counterparties, cur }) {
     add(`${p}.from_account`, `${n}: from account`, inbound ? t.counterparty_account_id : ownAccount, inbound ? 'Entity resolution' : 'Ledger');
     add(`${p}.to_account`, `${n}: to account`, inbound ? ownAccount : t.counterparty_account_id, inbound ? 'Ledger' : 'Entity resolution');
     add(`${p}.counterparty_country`, `${n}: counterparty country`, t.counterparty_country || cp?.country, 'Entity resolution');
+    add(`${p}.category`, `${n}: category`, t.category, 'Ledger');
+    add(`${p}.internal_ref_number`, `${n}: internal reference`, t.our_transaction_id || t.external_id || t.id, 'Ledger');
   });
 }
 
@@ -98,7 +100,13 @@ export function buildFields({ tenant, officer, reportType, reportCode, fiu, indi
     add('t_entity.name', 'Entity name', client.full_name, 'KYC file');
     add('t_entity.incorporation_number', 'Registration number', client.registration_number, 'KYC file');
     add('t_entity.incorporation_country_code', 'Registered country', client.registered_country, 'KYC file');
-    add('t_entity.address', 'Registered address', client.registered_address, 'KYC file');
+    const reg = client.registered_address;
+    add('t_entity.address', 'Registered address', typeof reg === 'object' ? addr(reg) : reg, 'KYC file');
+    if (reg && typeof reg === 'object') {
+      add('t_entity.addresses.address.city', 'Registered city', reg.city, 'KYC file');
+      add('t_entity.addresses.address.zip', 'Registered postcode', reg.zipcode, 'KYC file');
+    }
+    add('t_entity.addresses.address.country_code', 'Registered country (address)', (reg && typeof reg === 'object' && reg.country) || client.registered_country, 'KYC file');
     add('t_entity.incorporation_legal_form', 'Legal form', client.legal_form, 'KYC file');
     add('t_entity.business', 'Business', client.business_activity || client.sector, 'KYC file');
     add('t_entity.nature_of_business_code', 'Nature of business code', client.nature_of_business_code, 'KYC file');
@@ -135,6 +143,9 @@ export function buildFields({ tenant, officer, reportType, reportCode, fiu, indi
     add('t_person.occupation', 'Occupation', client.occupation, 'KYC file');
     add('t_person.employer_name', 'Employer', client.employer_name, 'KYC file');
     add('t_person.addresses.address.address', 'Address', addr(client.residential_address), 'KYC file');
+    add('t_person.addresses.address.city', 'City', client.residential_address?.city, 'KYC file');
+    add('t_person.addresses.address.zip', 'Postcode', client.residential_address?.zipcode, 'KYC file');
+    add('t_person.addresses.address.country_code', 'Country of residence', client.residential_address?.country || client.country_of_residence, 'KYC file');
   }
 
   const acc = accounts[0];
