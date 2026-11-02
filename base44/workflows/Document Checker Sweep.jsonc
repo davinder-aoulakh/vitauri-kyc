@@ -1,0 +1,43 @@
+{
+  "name": "Document Checker Sweep",
+  "description": "Every 15 minutes: the AI Document Checker Agent checks new client-uploaded documents (portal / analyst uploads, not Didit copies) for authenticity and notifies the case analyst when something needs attention. Max 20 documents per run.",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "*/15 * * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "document_checker_sweep",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "checkDocumentAuthenticity",
+            "args": {
+              "sweep": true
+            }
+          },
+          "then": "end"
+        }
+      }
+    ]
+  }
+}
