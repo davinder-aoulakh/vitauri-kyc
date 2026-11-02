@@ -22,7 +22,8 @@
         "TmTriage",
         "TmEvidence",
         "TmNarrative",
-        "TmRuleDraft"
+        "TmRuleDraft",
+        "DocumentCheck"
       ],
       "type": "string"
     },
