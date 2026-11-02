@@ -220,7 +220,7 @@ export default function ProfileTab({ client, onClientUpdated, pendingOcr, onOcrA
               <SelectContent>{LANGUAGES.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <ContactEntriesTable entries={form.contact_entries} onChange={v => set('contact_entries', v)} />
+          <ContactEntriesTable entries={form.contact_entries} onChange={v => set('contact_entries', v)} defaultCountry={form.residential_address?.country || form.country_of_residence || form.registered_country} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

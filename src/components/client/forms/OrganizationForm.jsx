@@ -92,7 +92,7 @@ export function OrganizationStep2B({ form, set }) {
             </Select>
           </div>
         </div>
-        <ContactEntriesTable entries={form.contact_entries} onChange={v => set('contact_entries', v)} />
+        <ContactEntriesTable entries={form.contact_entries} onChange={v => set('contact_entries', v)} defaultCountry={form.residential_address?.country || form.country_of_residence || form.registered_country} />
       </div>
 
       <AddressFields title="Residential Address" value={form.residential_address} onChange={v => set('residential_address', v)} />
