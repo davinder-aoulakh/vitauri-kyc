@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { OPEN_STATUSES } from '@/lib/tmAlerts';
-import { toClient } from '@/lib/routes';
+import { toClientView } from '@/lib/routes';
 import { Activity, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -32,16 +32,15 @@ export default function ClientTmCountsChip({ clientId, className }) {
   const { data } = useClientTmCounts(clientId);
   if (!data) return null;
   const { openAlerts, blocked } = data;
-  const base = `${toClient(clientId)}?tab=overview`;
   return (
     <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium',
       blocked > 0 ? 'border-red-200 bg-red-50 text-red-800' : openAlerts > 0 ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-border bg-muted text-muted-foreground',
       className)}>
       <Activity className="h-3 w-3" aria-hidden="true" />
       <span>TM:</span>
-      <Link to={`${base}&view=work`} className="hover:underline">{openAlerts} open alert{openAlerts === 1 ? '' : 's'}</Link>
+      <Link to={toClientView(clientId, 'work')} className="hover:underline">{openAlerts} open alert{openAlerts === 1 ? '' : 's'}</Link>
       <span aria-hidden="true">·</span>
-      <Link to={`${base}&view=transactions`} className="inline-flex items-center gap-1 hover:underline">
+      <Link to={toClientView(clientId, 'transactions')} className="inline-flex items-center gap-1 hover:underline">
         {blocked > 0 && <Ban className="h-3 w-3" aria-hidden="true" />}{blocked} blocked
       </Link>
     </span>
