@@ -101,7 +101,7 @@ function buildEmailHtml(tenant, client, req, portalUrl) {
   `;
 }
 
-export default function OutreachStep({ kycCase, client, currentUser, tenant, onNavigateToStep, onOutreachAllVerified }) {
+export default function OutreachStep({ kycCase, client, currentUser, tenant, onNavigateToStep, onOutreachAllVerified, onCaseUpdate, onClientUpdate }) {
   const [requests, setRequests]   = useState([]);
   const [loading, setLoading]     = useState(true);
   const [loadError, setLoadError] = useState(null);
@@ -580,11 +580,13 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
           kycCase={kycCase}
           currentUser={currentUser}
           onAccepted={load}
+          onCaseUpdate={onCaseUpdate}
+          onClientUpdate={onClientUpdate}
         />
       )}
 
       {client?.client_type === 'ORG' && (
-        <SuggestedKybUpdatesCard client={client} kycCase={kycCase} currentUser={currentUser} onAccepted={load} />
+        <SuggestedKybUpdatesCard client={client} kycCase={kycCase} currentUser={currentUser} onAccepted={load} onCaseUpdate={onCaseUpdate} onClientUpdate={onClientUpdate} />
       )}
 
       {diditPanelItem?.didit_session_id && (

@@ -6,6 +6,7 @@
  */
 import React, { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
+import { patchSuggestions } from '@/lib/profileSuggestionsStore';
 import { Button } from '@/components/ui/button';
 import { Loader2, UserCheck } from 'lucide-react';
 import { getNestedValue, buildFieldUpdatePayload, computeFullName } from '@/lib/clientNameUtils';
@@ -75,7 +76,9 @@ function buildRowsForItem(item, client) {
   return [fullNameRow, dobRow, nationalityRow, genderRow, issuingCountryRow, addressRow].filter(Boolean);
 }
 
-export default function SuggestedProfileUpdatesCard({ diditSummary, requests, client, kycCase, currentUser, onAccepted }) {
+export default function SuggestedProfileUpdatesCard({ diditSummary, requests, client, kycCase, currentUser, onAccepted, onCaseUpdate, onClientUpdate }) {
+  // The latest client record: nested payloads (residential_address.*) must not be built on a stale copy
+  const freshClient = async () => (await base44.entities.Client.filter({ id: client.id }))?.[0] || client;
   const groups = useMemo(() => {
     if (!diditSummary?.items?.length) return [];
     return diditSummary.items
@@ -120,12 +123,13 @@ export default function SuggestedProfileUpdatesCard({ diditSummary, requests, cl
           const last = row.item.idv_extracted_last_name || '';
           clientUpdates = { ...clientUpdates, first_names: first, last_name: last, full_name: computeFullName(first, last) };
         } else if (row.fieldKey === 'residential_address.street') {
-          clientUpdates = { ...clientUpdates, ...buildFieldUpdatePayload({ ...client, ...clientUpdates }, row.fieldKey, row.diditValue) };
+          clientUpdates = { ...clientUpdates, ...buildFieldUpdatePayload({ ...(await freshClient()), ...clientUpdates }, row.fieldKey, row.diditValue) };
         } else {
           clientUpdates = { ...clientUpdates, [row.fieldKey]: row.diditValue };
         }
       }
       await base44.entities.Client.update(client.id, clientUpdates);
+      onClientUpdate?.(clientUpdates);
 
       // 2. Mark applied on each source outreach item (dedup, append-only)
       const fieldsByRequestItem = {}; // reqId -> { itemId -> Set(fieldKey) }
@@ -151,8 +155,7 @@ export default function SuggestedProfileUpdatesCard({ diditSummary, requests, cl
 
       // 3. Sync KycCase.profile_suggestions so the Profile Verification grid shows confirmed
       //    without needing a pipeline re-run.
-      const currentSuggestions = kycCase?.profile_suggestions || {};
-      const fieldUpdates = { ...(currentSuggestions.client_fields || {}) };
+      const fieldUpdates = {};
       for (const row of toAccept) {
         fieldUpdates[row.fieldKey] = {
           value: row.diditValue,
@@ -166,9 +169,9 @@ export default function SuggestedProfileUpdatesCard({ diditSummary, requests, cl
           source_item_id: row.item.item_id,
         };
       }
-      await base44.entities.KycCase.update(kycCase.id, {
-        profile_suggestions: { ...currentSuggestions, client_fields: fieldUpdates },
-      });
+      // Field-level merge into the latest saved suggestions (never a stale copy)
+      const profile_suggestions = await patchSuggestions(kycCase.id, { fields: fieldUpdates });
+      onCaseUpdate?.((prev) => (prev ? { ...prev, profile_suggestions } : prev));
 
       // 4. Audit trail — one event per accepted field
       for (const row of toAccept) {

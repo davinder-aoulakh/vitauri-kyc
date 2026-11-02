@@ -15,9 +15,9 @@ import { format } from 'date-fns';
 import { getNestedValue } from '@/lib/clientNameUtils';
 
 export default function ProfileVerificationSection({
-  kycCase, client, currentUser, onFieldVerified, onRequestInfoEmail, onAddNote, onCaseUpdate, tenant,
+  kycCase, client, currentUser, onFieldVerified, onRequestInfoEmail, onAddNote, onCaseUpdate, onClientUpdate, tenant,
 }) {
-  const profile = useProfileSuggestions({ kycCase, client, currentUser, onFieldVerified, onCaseUpdate, tenant });
+  const profile = useProfileSuggestions({ kycCase, client, currentUser, onFieldVerified, onCaseUpdate, onClientUpdate, tenant });
   const {
     isOrg, fieldLabels, fieldKeys, clientFields, suggestions, pipelineRunning, acceptingField,
     confirmed, conflicts, highConfPending,

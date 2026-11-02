@@ -7,6 +7,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { patchSuggestions } from '@/lib/profileSuggestionsStore';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, Building2, Loader2 } from 'lucide-react';
 
@@ -25,7 +26,7 @@ const INACTIVE = /dissolv|struck|strike|liquidat|inactive|closed|cancel|deregist
 const asList = (r) => (Array.isArray(r) ? r : r?.items || []);
 const text = (v) => (v == null ? '' : String(v).trim());
 
-export default function SuggestedKybUpdatesCard({ client, kycCase, currentUser, onAccepted, onCaseUpdate }) {
+export default function SuggestedKybUpdatesCard({ client, kycCase, currentUser, onAccepted, onCaseUpdate, onClientUpdate }) {
   const { data: kyb, refetch } = useQuery({
     queryKey: ['kyb-latest', client?.id],
     enabled: client?.client_type === 'ORG' && !!client?.id,
@@ -67,6 +68,7 @@ export default function SuggestedKybUpdatesCard({ client, kycCase, currentUser, 
       const updates = Object.fromEntries(toAccept.map((r) => [r.key, r.diditValue]));
       const before = Object.fromEntries(toAccept.map((r) => [r.key, r.currentValue || null]));
       await base44.entities.Client.update(client.id, updates);
+      onClientUpdate?.(updates);
 
       // Mark applied on the KYB outreach item: the grid then shows these as Didit · confirmed and stops re-offering them.
       if (request && item) {
@@ -76,11 +78,10 @@ export default function SuggestedKybUpdatesCard({ client, kycCase, currentUser, 
         await base44.entities.OutreachRequest.update(request.id, { items });
       }
       // Keep the Profile Verification grid in step without waiting for a pipeline re-run.
-      if (kycCase?.profile_suggestions?.client_fields) {
-        const cf = { ...kycCase.profile_suggestions.client_fields };
-        for (const r of toAccept) cf[r.key] = { ...(cf[r.key] || {}), value: r.diditValue, confidence: 95, source_type: 'didit', source_ref: 'Didit KYB registry', status: 'confirmed', conflict_note: null, applied: true };
-        const profile_suggestions = { ...kycCase.profile_suggestions, client_fields: cf };
-        await base44.entities.KycCase.update(kycCase.id, { profile_suggestions });
+      // Field-level merge into the latest saved suggestions (never the copy this card was rendered with)
+      if (kycCase?.id) {
+        const fields = Object.fromEntries(toAccept.map((r) => [r.key, { value: r.diditValue, confidence: 95, source_type: 'didit', source_ref: 'Didit KYB registry', status: 'confirmed', conflict_note: null, applied: true }]));
+        const profile_suggestions = await patchSuggestions(kycCase.id, { fields });
         onCaseUpdate?.((prev) => (prev ? { ...prev, profile_suggestions } : prev));
       }
       await base44.entities.AuditEvent.create({
