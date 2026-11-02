@@ -4,6 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import RiskGauge from '@/components/client/monitoring/RiskGauge';
 import StatusPills from '@/components/client/monitoring/StatusPills';
+import ClientTmCountsChip from '@/components/client/overview/ClientTmCountsChip';
 
 /** Header summary next to the client name: small risk gauge + status pills. Shares the Monitoring query cache. */
 export default function ClientTmHeader({ client }) {
@@ -15,11 +16,11 @@ export default function ClientTmHeader({ client }) {
       return res?.data ?? res;
     },
   });
-  if (!data) return null;
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <RiskGauge size="sm" risk={data.risk} />
-      {data.pills && <StatusPills pills={data.pills} clientType={client.client_type} />}
+      {data && <RiskGauge size="sm" risk={data.risk} />}
+      {data?.pills && <StatusPills pills={data.pills} clientType={client.client_type} />}
+      <ClientTmCountsChip clientId={client.id} />
     </div>
   );
 }
