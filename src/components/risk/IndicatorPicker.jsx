@@ -35,9 +35,10 @@ const SCOPE_FILTERS = [
   { key: 'ORG_Related_Party', label: 'ORG Related Party' },
 ];
 
-export default function IndicatorPicker({ client, relatedParties, selections, onChange, onConfirm, allScores }) {
+export default function IndicatorPicker({ client, relatedParties, selections, onChange, onConfirm, allScores, caseId }) {
   const { tenant } = useTenant();
-  const { byCategory, loading, error, reload } = useRiskIndicators(tenant?.id);
+  const { indicators, byCategory, loading, error, reload } = useRiskIndicators(tenant?.id);
+  const [signalsUsed, setSignalsUsed] = useState(null);
 
   const [search, setSearch] = useState('');
   const [scopeFilter, setScopeFilter] = useState('All');
@@ -113,59 +114,30 @@ export default function IndicatorPicker({ client, relatedParties, selections, on
     setAiBadges({});
 
     try {
-      const entitySummaries = entities.map(e => {
-        const d = e.data;
-        return `${e.key}|${e.label} (${e.type}): ${d?.sector || d?.nationality || ''} ${d?.country_of_residence || d?.registered_country || ''}`.trim();
-      }).join('\n');
+      if (!caseId) throw new Error('Case not loaded yet — please try again.');
+      // The tenant's active indicators, keyed by the canonical id the picker uses
+      const indicatorList = (indicators?.length ? indicators : ALL_INDICATORS.map(i => ({ ...i, indicator_id: i.id })))
+        .map(i => ({ id: i.indicator_id, name: i.name, description: i.description || '', applies: i.applies || [] }));
 
-      const result = await Promise.race([
-        base44.integrations.Core.InvokeLLM({
-          prompt: `You are a KYC compliance expert. Based on the following client and related party data, recommend which risk indicators apply and briefly explain why.
-
-ENTITIES (format: key|name type: details):
-${entitySummaries}
-
-AVAILABLE INDICATORS:
-${ALL_INDICATORS.map(i => `${i.id}: ${i.name} — ${i.description}`).join('\n')}
-
-For each entity, return the indicator IDs that apply with a one-sentence reason.
-Use the exact entity key (before the | separator) in entity_key.
-Return JSON only.`,
-          response_json_schema: {
-            type: 'object',
-            properties: {
-              suggestions: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    entity_key:   { type: 'string' },
-                    indicator_id: { type: 'string' },
-                    reason:       { type: 'string' },
-                  }
-                }
-              }
-            }
-          }
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('AI Suggest timed out — please try again.')), 30000)),
+      // Reads outreach answers, screening, stored Didit AML, SoF and OSINT server-side, applies fixed rules, then AI
+      const res = await Promise.race([
+        base44.functions.invoke('suggestRiskIndicators', { case_id: caseId, indicators: indicatorList }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('AI Suggest timed out — please try again.')), 90000)),
       ]);
-
-      if (!result?.suggestions?.length) throw new Error('AI did not return any suggestions — please try again.');
+      const result = res?.data;
+      if (!result?.ok) throw new Error(result?.error || 'AI Suggest failed — please try again.');
+      setSignalsUsed({ ...(result.signals_used || {}), ai_failed: !!result.ai_failed, count: result.suggestions?.length || 0 });
+      if (!result.suggestions?.length) return;
 
       const newBadges = {};
       const newSelections = { ...selections };
 
       result.suggestions.forEach(s => {
-        const matchedEntity = entities.find(e =>
-          e.key === s.entity_key ||
-          e.label.toLowerCase().includes((s.entity_key || '').toLowerCase())
-        ) || entities[0];
-
+        const matchedEntity = entities.find(e => e.key === s.entity_key);
         if (!matchedEntity || !s.indicator_id) return;
 
         if (!newBadges[s.indicator_id]) newBadges[s.indicator_id] = {};
-        newBadges[s.indicator_id][matchedEntity.key] = { reason: s.reason, dismissed: false };
+        newBadges[s.indicator_id][matchedEntity.key] = { reason: s.reason, evidence: s.evidence, origin: s.origin, dismissed: false };
 
         const current = newSelections[matchedEntity.key] || [];
         if (!current.includes(s.indicator_id)) {
@@ -177,7 +149,7 @@ Return JSON only.`,
       onChange(newSelections);
     } catch (err) {
       console.error('suggestIndicators error:', err);
-      setSuggestError(err?.message || 'AI Suggest failed — please try again.');
+      setSuggestError(err?.response?.data?.error || err?.message || 'AI Suggest failed — please try again.');
     } finally {
       setSuggesting(false);
     }
@@ -241,6 +213,15 @@ Return JSON only.`,
 
         {suggestError && (
           <InlineError message={suggestError} onRetry={suggestIndicators} />
+        )}
+
+        {signalsUsed && !suggesting && (
+          <div className="text-xs text-muted-foreground px-1">
+            {signalsUsed.count > 0 ? `${signalsUsed.count} suggestion(s). ` : 'No indicators are supported by the case data. '}
+            Considered: {signalsUsed.outreach_answers || 0} outreach answer(s) · {signalsUsed.screening_hits || 0} screening hit(s)
+            {signalsUsed.didit_aml ? ' · Didit AML' : ''}{signalsUsed.sof ? ' · SoF/SoW' : ''}{signalsUsed.osint ? ' · OSINT' : ''}
+            {signalsUsed.ai_failed && <span className="text-amber-600"> · AI unavailable, fixed rules only</span>}
+          </div>
         )}
       </div>
 
