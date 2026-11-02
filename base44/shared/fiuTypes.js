@@ -15,6 +15,9 @@ export const FIU_TYPE_CODES = Object.keys(FIU_TYPES);
 
 /** Legacy rows (unusual_objective / unusual_subjective) read as UTR. */
 export const normaliseType = (t) => (FIU_TYPES[t] ? t : 'UTR');
+const LEGACY_SUFFIX = { unusual_objective: ' (objective)', unusual_subjective: ' (subjective)' };
+/** "Cash Transaction Report", "Unusual Transaction Report (objective)" for legacy rows. */
+export const typeLabelOf = (t) => `${FIU_TYPES[normaliseType(t)].label}${LEGACY_SUFFIX[t] || ''}`;
 
 /** Types the profile allows; all types when the profile has no list yet. */
 export const enabledTypes = (fiu) => {
