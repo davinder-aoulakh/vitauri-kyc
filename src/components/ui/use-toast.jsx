@@ -1,8 +1,12 @@
 // Inspired by react-hot-toast library
 import { useState, useEffect } from "react";
 
-const TOAST_LIMIT = 20;
-const TOAST_REMOVE_DELAY = 1000000;
+const TOAST_LIMIT = 5;
+// Dismissed toasts are hidden at once and removed from memory shortly after
+const TOAST_REMOVE_DELAY = 1000;
+// Auto-dismiss: 5 s, errors 8 s; pass duration: Infinity to keep a toast until it is closed
+const DEFAULT_DURATION = 5000;
+const DESTRUCTIVE_DURATION = 8000;
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -133,6 +137,9 @@ function toast({ ...props }) {
       },
     },
   });
+
+  const duration = props.duration ?? (props.variant === 'destructive' ? DESTRUCTIVE_DURATION : DEFAULT_DURATION);
+  if (Number.isFinite(duration) && duration > 0) setTimeout(dismiss, duration);
 
   return {
     id,
