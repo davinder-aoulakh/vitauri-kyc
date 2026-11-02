@@ -85,7 +85,9 @@ export async function submitForApproval(ctx, report) {
 
 export async function approve(ctx, report, { lateness_reason, rationale }) {
   if (report.status !== 'in_review') throw httpError(409, 'Only a report in review can be approved');
-  if (ctx.auth.actorUserId && ctx.auth.actorUserId === report.prepared_by_user_id) throw httpError(403, 'The approver must differ from the person who prepared the report');
+  if (ctx.auth.actorUserId && (ctx.auth.actorUserId === report.prepared_by_user_id || ctx.auth.actorUserId === report.submitted_for_approval_by)) {
+    throw httpError(403, 'The approver must differ from the person who prepared or submitted the report');
+  }
   const res = await runChecks(ctx, report, { latenessReason: lateness_reason });
   const failed = res.checks.filter((c) => !c.ok);
   if (failed.length) throw httpError(422, `Cannot approve: ${failed.map((c) => c.label).join('; ')}`);
