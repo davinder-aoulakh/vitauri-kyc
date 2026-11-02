@@ -98,8 +98,8 @@ export function collectSignals({ client, kycCase, outreach = [], hits = [], rela
   for (const a of answers) {
     const kind = kindOf(a.label);
     const source = `Outreach${a.date ? ` ${a.date}` : ''}: ${a.label}`;
-    if (kind === 'pep') add('client', 'pep_declared', `${a.label} = "${a.text}"`, source, { pep_yes: isPepYes(a.text) });
-    else add('client', kind === 'other' ? 'declaration' : kind, `${a.label} = "${a.text}"`, source);
+    if (kind === 'pep') add('client', 'pep_declared', `"${a.text}"`, source, { pep_yes: isPepYes(a.text) });
+    else add('client', kind === 'other' ? 'declaration' : kind, `"${a.text}"`, source);
   }
 
   // Stored Didit AML results (outreach ID&V items)
