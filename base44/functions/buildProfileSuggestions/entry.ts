@@ -182,6 +182,30 @@ function extractFromOutreach(outreaches: any[], isOrg: boolean): Record<string, 
       const val = item.response_text;
       if (!val || item.status === 'Requested') continue;
       const ref = `Outreach: ${item.label}`;
+      const extra = item.confirmed_unchanged ? { confirmed_by_client: true } : {};
+
+      // Question linked to a KYC field (OutreachTemplate.profile_field): exact mapping, no label guessing
+      if (item.profile_field) {
+        const pf = String(item.profile_field);
+        const structured = item.response_value;
+        if (pf === 'residential_address' || pf === 'postal_address' || pf === 'registered_address') {
+          const a = structured && typeof structured === 'object' ? structured : null;
+          if (pf === 'registered_address') {
+            push('registered_address', val, ref, 90, 'outreach', extra);
+            if (a?.country) push('registered_country', a.country, ref, 85, 'outreach', extra);
+          } else if (a && pf === 'residential_address') {
+            for (const k of ['street', 'number', 'zipcode', 'city', 'country']) {
+              if (a[k]) push(`residential_address.${k}`, a[k], ref, 90, 'outreach', extra);
+            }
+          }
+        } else {
+          push(pf, structured != null && typeof structured !== 'object' ? String(structured) : val, ref, 90, 'outreach', extra);
+        }
+        continue;
+      }
+
+      if (label.includes('e-mail') || label.includes('email')) push('primary_contact_email', val, ref, 80);
+      if (/phone|mobile|telefoon/.test(label)) push('primary_contact_phone', val, ref, 80);
 
       if (!isOrg) {
         if (label.includes('full name') || label.includes('legal name')) push('full_name', val, ref, 80);
