@@ -3,6 +3,7 @@
 // only the fields the analyst accepted are written. Every change is audited.
 import { base44 } from '@/api/base44Client';
 import { reportEdrChange } from '@/lib/edrChange';
+import { parseRoles, joinRoles, mergeRoles, linkRoles } from '@/lib/partyRoles';
 
 const asList = (r) => (Array.isArray(r) ? r : r?.items || []);
 export const normName = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -51,17 +52,21 @@ async function doUpsert({ tenant, tenantId, clientId, caseId, currentUser, candi
   const actor = { actor_user_id: currentUser?.id, actor_name: currentUser?.full_name, actor_type: 'User' };
 
   if (match) {
-    const keys = (acceptFields || PARTY_FIELDS).filter((k) => value(k) !== undefined);
-    const rpPatch = Object.fromEntries(keys.filter((k) => PARTY_FIELDS.includes(k)).map((k) => [k, value(k)]));
+    const recordedRoles = linkRoles(match.link, match.rp);
+    // A role from a source adds to the roles already recorded (Director + Shareholder + UBO); it never replaces them
+    const mergedRoles = mergeRoles(recordedRoles, value('role_in_relationship'));
+    const keys = (acceptFields || PARTY_FIELDS).filter((k) => value(k) !== undefined)
+      .filter((k) => k !== 'role_in_relationship' || mergedRoles.length > recordedRoles.length);
+    const rpPatch = Object.fromEntries(keys.filter((k) => PARTY_FIELDS.includes(k)).map((k) => [k, k === 'role_in_relationship' ? joinRoles(mergedRoles) : value(k)]));
     const linkPatch = {};
-    if (keys.includes('role_in_relationship')) linkPatch.role = value('role_in_relationship');
+    if (keys.includes('role_in_relationship')) { linkPatch.role = joinRoles(mergedRoles); linkPatch.roles = mergedRoles; }
     if (keys.includes('ownership_percentage')) linkPatch.ownership_percentage = ownership;
     if (fromDidit && keys.length) rpPatch.didit_applied_fields = [...new Set([...(match.rp.didit_applied_fields || []), ...keys])];
     if (Object.keys(rpPatch).length) await base44.entities.RelatedParty.update(match.rp.id, rpPatch);
     if (Object.keys(linkPatch).length) await base44.entities.ClientRelatedPartyLink.update(match.link.id, linkPatch);
     if (keys.length) {
       const before = Object.fromEntries(keys.map((k) => [k, LINK_FIELDS.includes(k) ? (k === 'role_in_relationship' ? match.link.role ?? match.rp.role_in_relationship : match.link.ownership_percentage ?? match.rp.ownership_percentage) ?? null : match.rp[k] ?? null]));
-      const after = Object.fromEntries(keys.map((k) => [k, value(k) ?? null]));
+      const after = Object.fromEntries(keys.map((k) => [k, k === 'role_in_relationship' ? joinRoles(mergedRoles) : value(k) ?? null]));
       await base44.entities.AuditEvent.create({
         tenant_id: tenantId, client_id: clientId, case_id: caseId || undefined, ...actor, event_type: 'related_party_updated_from_source',
         before_state: { related_party_id: match.rp.id, ...before }, after_state: { related_party_id: match.rp.id, ...after },
@@ -72,7 +77,8 @@ async function doUpsert({ tenant, tenantId, clientId, caseId, currentUser, candi
     return { rp: { ...match.rp, ...rpPatch }, created: false, updatedFields: keys };
   }
 
-  const role = candidate.role_in_relationship || 'Unknown';
+  const roles = parseRoles(candidate.role_in_relationship);
+  const role = roles.length ? joinRoles(roles) : 'Unknown';
   const rp = await base44.entities.RelatedParty.create({
     tenant_id: tenantId, party_type: candidate.party_type || 'NP', full_name: candidate.full_name,
     nationality: candidate.nationality || undefined, date_of_birth: candidate.date_of_birth || undefined,
@@ -81,7 +87,7 @@ async function doUpsert({ tenant, tenantId, clientId, caseId, currentUser, candi
     ...(fromDidit ? { didit_applied_fields: PARTY_FIELDS.filter((k) => value(k) !== undefined) } : {}),
   });
   await base44.entities.ClientRelatedPartyLink.create({
-    tenant_id: tenantId, client_id: clientId, related_party_id: rp.id, role, ownership_percentage: ownership, added_by_user_id: currentUser?.id,
+    tenant_id: tenantId, client_id: clientId, related_party_id: rp.id, role, roles, ownership_percentage: ownership, added_by_user_id: currentUser?.id,
   });
   await base44.entities.AuditEvent.create({
     tenant_id: tenantId, client_id: clientId, case_id: caseId || undefined, ...actor, event_type: 'related_party_created_and_linked',
