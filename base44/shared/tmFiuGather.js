@@ -22,17 +22,23 @@ function latestIdv(requests) {
   } : null;
 }
 
-export async function gatherReportData(ctx, tmCase) {
+/**
+ * tmCase: the TM case behind the report, or null for a report without a case (threshold / TF proposals, manual selection).
+ * extra: { clientId, alertIds, txnIds } — used when there is no case, and added to the case's alerts / transactions otherwise.
+ */
+export async function gatherReportData(ctx, tmCase, extra = {}) {
   const { E, tenantId } = ctx;
-  const clientId = tmCase.primary_client_id;
-  const alerts = asList(await E.TmAlert.filter({ tenant_id: tenantId, id: { $in: tmCase.alert_ids || [] } }, undefined, 100));
-  const txnIds = distinct(alerts.flatMap((a) => a.transaction_ids || [])).slice(0, 1000);
+  const clientId = tmCase?.primary_client_id || extra.clientId;
+  if (!clientId) throw httpError(400, 'A client is required');
+  const alertIds = distinct([...(tmCase?.alert_ids || []), ...(extra.alertIds || [])]);
+  const alerts = alertIds.length ? asList(await E.TmAlert.filter({ tenant_id: tenantId, id: { $in: alertIds } }, undefined, 100)) : [];
+  const txnIds = distinct([...alerts.flatMap((a) => a.transaction_ids || []), ...(extra.txnIds || [])]).slice(0, 1000);
   const scope = { tenant_id: tenantId, client_id: clientId };
 
   const [scenarios, client, txns, accounts, approved, links] = await Promise.all([
     byIds(E, 'TmScenario', tenantId, distinct(alerts.map((a) => a.scenario_id)), 100),
     E.Client.filter({ tenant_id: tenantId, id: clientId }).then((r) => asList(r)[0]),
-    loadTxns(E, tenantId, txnIds),
+    loadTxns(E, tenantId, txnIds).then((rows) => rows.filter((t) => t.client_id === clientId)),
     E.BankAccount.filter(scope, undefined, 50).then(asList),
     E.ExpectedProfile.filter({ ...scope, status: 'approved' }, '-version', 1).then((r) => asList(r)[0] || null),
     E.ClientRelatedPartyLink.filter(scope, undefined, 100).then(asList),
