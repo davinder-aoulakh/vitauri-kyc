@@ -17,12 +17,21 @@ export const rank = (report) => STATUS_RANK[report?.status] ?? 0;
 export const REPORT_TYPE_LABEL = {
   unusual_objective: 'Unusual transaction report · objective',
   unusual_subjective: 'Unusual transaction report · subjective',
+  SAR: 'Suspicious Activity Report', STR: 'Suspicious Transaction Report', UTR: 'Unusual Transaction Report',
+  CTR: 'Cash Transaction Report', TTR: 'Threshold Transaction Report', IFT: 'International Funds Transfer Report',
+  CBR: 'Cross-Border Report', TFR: 'Terrorist Financing Report',
 };
 
 // Readable labels for goAML paths (mandatory fields); anything else is humanised from the path.
 const FIELD_LABEL = {
   'reporting_entity.id': 'Reporting entity ID',
   'report.type': 'Report type',
+  'report.rentity_id': 'Reporting entity ID (goAML)',
+  'report.report_code': 'goAML report code',
+  'report.submission_code': 'Submission code',
+  'report.currency_code_local': 'Local currency',
+  'reporting_person.last_name': 'Reporting person last name',
+  'location.address': 'Reporting location address',
   'report.indicator': 'Indicator code',
   'report.reason': 'Reason for reporting',
   't_person.first_name': 'Subject first name',
