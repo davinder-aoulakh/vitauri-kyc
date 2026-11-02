@@ -1,16 +1,45 @@
 {
   "name": "Notification",
-  "type": "object",
   "properties": {
+    "body": {
+      "type": "string"
+    },
+    "dedupe_key": {
+      "description": "user:item:kind - used to avoid duplicate deadline notifications within 12h",
+      "type": "string"
+    },
+    "is_read": {
+      "default": false,
+      "type": "boolean"
+    },
+    "link_alert_id": {
+      "description": "TmAlert this notification is about",
+      "type": "string"
+    },
+    "link_case_id": {
+      "type": "string"
+    },
+    "link_client_id": {
+      "type": "string"
+    },
+    "link_fiu_report_id": {
+      "description": "FiuReport this notification is about",
+      "type": "string"
+    },
+    "link_kyc_case_id": {
+      "type": "string"
+    },
+    "link_tm_case_id": {
+      "description": "TmCase this notification is about",
+      "type": "string"
+    },
     "tenant_id": {
       "type": "string"
     },
-    "user_id": {
-      "type": "string",
-      "description": "Recipient user FK"
+    "title": {
+      "type": "string"
     },
     "type": {
-      "type": "string",
       "enum": [
         "case_assigned",
         "sign_off_request",
@@ -28,42 +57,13 @@
         "tm_rule_drift",
         "tm_quality_finding",
         "tm_retention_digest",
-        "edr_trigger"
-      ]
-    },
-    "title": {
+        "edr_trigger",
+        "document_check"
+      ],
       "type": "string"
     },
-    "body": {
-      "type": "string"
-    },
-    "link_case_id": {
-      "type": "string"
-    },
-    "link_client_id": {
-      "type": "string"
-    },
-    "is_read": {
-      "type": "boolean",
-      "default": false
-    },
-    "link_alert_id": {
-      "type": "string",
-      "description": "TmAlert this notification is about"
-    },
-    "link_tm_case_id": {
-      "type": "string",
-      "description": "TmCase this notification is about"
-    },
-    "dedupe_key": {
-      "type": "string",
-      "description": "user:item:kind - used to avoid duplicate deadline notifications within 12h"
-    },
-    "link_fiu_report_id": {
-      "type": "string",
-      "description": "FiuReport this notification is about"
-    },
-    "link_kyc_case_id": {
+    "user_id": {
+      "description": "Recipient user FK",
       "type": "string"
     }
   },
@@ -73,6 +73,7 @@
     "type",
     "title"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "$or": [
