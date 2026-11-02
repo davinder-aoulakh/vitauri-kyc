@@ -19,6 +19,8 @@ import { cn } from '@/lib/utils';
 import OcrResultPanel from '@/components/client/OcrResultPanel';
 import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
 import { getSignedUrl } from '@/lib/securityUtils';
+import { AiCheckChip, AiCheckPanel, AiCheckSummary, VERDICT, isCheckableDoc } from '@/components/documents/AiDocCheck';
+import { toast } from '@/components/ui/use-toast';
 
 // Private files (e.g. Didit images and KYB documents) hold a file_uri; open them through a short-lived signed URL.
 async function resolveFileUrl(fileUrl) {
@@ -64,6 +66,29 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
   const [deletedExpanded, setDeletedExpanded] = useState(false);
   const [actionLoading, setActionLoading] = useState(null); // doc id
   const [diditPanelOpen, setDiditPanelOpen] = useState(false);
+  // AI Document Checker Agent
+  const [aiRunning, setAiRunning] = useState(() => new Set());
+  const [aiOpen, setAiOpen] = useState({});
+  const [aiFilter, setAiFilter] = useState(false);
+
+  async function runAiCheck(docs) {
+    const ids = docs.map(d => d.id);
+    setAiRunning(prev => new Set([...prev, ...ids]));
+    try {
+      const body = ids.length === 1 ? { document_id: ids[0] } : { client_id: client.id, all_unchecked: true };
+      const res = await base44.functions.invoke('checkDocumentAuthenticity', body);
+      if (res?.data?.error) throw new Error(res.data.error);
+      const results = res?.data?.results || [];
+      const flagged = results.filter(r => r.verdict && r.verdict !== 'authentic').length;
+      toast({ title: `AI Document Checker: ${results.length} document(s) checked`, description: flagged ? `${flagged} need a closer look.` : 'No concerns found.' });
+      if (ids.length === 1) setAiOpen(o => ({ ...o, [ids[0]]: true }));
+      onRefresh?.();
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'AI check failed', description: e?.response?.data?.error || e?.message });
+    } finally {
+      setAiRunning(prev => { const n = new Set(prev); ids.forEach(id => n.delete(id)); return n; });
+    }
+  }
 
   useEffect(() => {
     if (!client?.id) return;
@@ -177,7 +202,8 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
   const filtered = activeDocuments.filter(doc => {
     const typeMatch   = filterType === 'all' || doc.doc_type === filterType;
     const statusMatch = filterStatus === 'all' || (doc.review_status || 'Pending_Review') === filterStatus;
-    return typeMatch && statusMatch;
+    const aiMatch = !aiFilter || (doc.ai_check?.status === 'done' && doc.ai_check.verdict !== 'authentic' && (doc.review_status || 'Pending_Review') === 'Pending_Review');
+    return typeMatch && statusMatch && aiMatch;
   });
 
   // Group by doc_type
@@ -189,8 +215,9 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
   }, {});
   Object.values(grouped).forEach(docs => docs.sort((a, b) => (b.version || 1) - (a.version || 1)));
 
-  const hasFilters = filterType !== 'all' || filterStatus !== 'all';
+  const hasFilters = filterType !== 'all' || filterStatus !== 'all' || aiFilter;
   const totalActive = activeDocuments.length;
+  const uncheckedDocs = activeDocuments.filter(d => isCheckableDoc(d) && (!d.ai_check || d.ai_check.status === 'error'));
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -220,8 +247,16 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
             </SelectContent>
           </Select>
           {hasFilters && (
-            <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => { setFilterType('all'); setFilterStatus('all'); }}>
+            <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => { setFilterType('all'); setFilterStatus('all'); setAiFilter(false); }}>
               <X className="w-3 h-3 mr-1" /> Clear
+            </Button>
+          )}
+          {uncheckedDocs.length > 0 && (
+            <Button variant="outline" size="sm" className="h-7 gap-1 text-xs border-violet-200 text-violet-700 hover:bg-violet-50"
+              disabled={uncheckedDocs.some(d => aiRunning.has(d.id))}
+              onClick={() => runAiCheck(uncheckedDocs)} title="Check the client's uploaded documents for authenticity">
+              {uncheckedDocs.some(d => aiRunning.has(d.id)) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              Check {uncheckedDocs.length} with AI
             </Button>
           )}
           <Button size="sm" className="h-7 gap-1 text-xs" onClick={() => setUploadOpen(true)}>
@@ -229,6 +264,8 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
           </Button>
         </div>
       </div>
+
+      <AiCheckSummary documents={activeDocuments} onShow={() => { setAiFilter(true); setFilterStatus('all'); setFilterType('all'); }} />
 
       {diditResult && (
         <div className={cn(
@@ -364,6 +401,8 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
                                   🪪 Didit
                                 </span>
                               )}
+                              <AiCheckChip doc={doc} running={aiRunning.has(doc.id)} onCheck={() => runAiCheck([doc])}
+                                onToggle={() => setAiOpen(o => ({ ...o, [doc.id]: !o[doc.id] }))} />
                               {doc?.source === 'didit_kyb' && (
                                 <span className="ml-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium"
                                   title={doc.review_status === 'Approved' && !doc.reviewed_by_user_id ? 'Approved by Didit KYB (document checks passed)' : 'Company document from Didit KYB'}>
@@ -376,6 +415,9 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
                               {doc.created_date ? format(new Date(doc.created_date), 'd MMM yyyy HH:mm') : '—'}
                               {doc.review_notes && <span className="ml-2 italic">"{doc.review_notes}"</span>}
                             </div>
+                            {aiOpen[doc.id] && (
+                              <AiCheckPanel doc={doc} client={client} running={aiRunning.has(doc.id)} onRecheck={() => runAiCheck([doc])} />
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0 ml-2">
@@ -550,6 +592,10 @@ function ReviewDialog({ doc, onClose, currentUser, onSaved }) {
     }
   }, [doc]);
 
+  // Approving a document the AI Document Checker rated high risk needs a justification
+  const aiHighRisk = doc?.ai_check?.status === 'done' && doc.ai_check.verdict === 'high_risk';
+  const needsJustification = status === 'Rejected' || (status === 'Approved' && aiHighRisk);
+
   async function handleSave() {
     if (!status) return;
     setSaving(true);
@@ -567,7 +613,8 @@ function ReviewDialog({ doc, onClose, currentUser, onSaved }) {
       actor_name: currentUser?.full_name,
       actor_type: 'User',
       event_type: 'document_reviewed',
-      notes: `Document "${doc.file_name}" marked as ${status}${notes ? `: ${notes}` : ''}`,
+      ...(doc.ai_check?.verdict ? { after_state: { review_status: status, ai_verdict: doc.ai_check.verdict }, is_override: status === 'Approved' && aiHighRisk } : {}),
+      notes: `Document "${doc.file_name}" marked as ${status}${status === 'Approved' && aiHighRisk ? ' despite a high-risk AI check' : ''}${notes ? `: ${notes}` : ''}`,
     });
     setSaving(false);
     onSaved?.();
@@ -583,6 +630,15 @@ function ReviewDialog({ doc, onClose, currentUser, onSaved }) {
             <div className="font-medium truncate">{doc?.file_name}</div>
             <div className="text-xs text-muted-foreground mt-0.5">{doc?.doc_type?.replace(/_/g,' ')} · v{doc?.version || 1}</div>
           </div>
+          {doc?.ai_check?.status === 'done' && (
+            <div className={cn('rounded-lg border px-3 py-2 text-xs', (VERDICT[doc.ai_check.verdict] || VERDICT.needs_attention).cls)}>
+              <div className="font-semibold">{(VERDICT[doc.ai_check.verdict] || VERDICT.needs_attention).label}</div>
+              <div className="mt-0.5">{doc.ai_check.summary}</div>
+              {(doc.ai_check.checks || []).filter(c => c.result === 'fail' || c.result === 'warn').slice(0, 4).map((c, i) => (
+                <div key={i} className="mt-0.5">• {c.label}: {c.detail}</div>
+              ))}
+            </div>
+          )}
           <div>
             <Label className="text-xs font-medium mb-1.5 block">Decision *</Label>
             <Select value={status} onValueChange={setStatus}>
@@ -595,11 +651,11 @@ function ReviewDialog({ doc, onClose, currentUser, onSaved }) {
             </Select>
           </div>
           <div>
-            <Label className="text-xs font-medium mb-1.5 block">Notes {status === 'Rejected' && '(required)'}</Label>
+            <Label className="text-xs font-medium mb-1.5 block">Notes {needsJustification && '(required)'}</Label>
             <Textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              placeholder={status === 'Rejected' ? 'Reason for rejection…' : 'Optional notes…'}
+              placeholder={status === 'Rejected' ? 'Reason for rejection…' : needsJustification ? 'Why you approve despite the high-risk AI check…' : 'Optional notes…'}
               className="text-sm min-h-16"
             />
           </div>
@@ -607,7 +663,7 @@ function ReviewDialog({ doc, onClose, currentUser, onSaved }) {
             <Button variant="outline" onClick={onClose}>Cancel</Button>
             <Button
               onClick={handleSave}
-              disabled={saving || !status || (status === 'Rejected' && !notes.trim())}
+              disabled={saving || !status || (needsJustification && !notes.trim())}
               className={cn(
                 status === 'Approved' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' :
                 status === 'Rejected' ? 'bg-red-600 hover:bg-red-700 text-white' : ''
