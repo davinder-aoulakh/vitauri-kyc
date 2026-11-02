@@ -1,7 +1,8 @@
 // goAML XML builder (UNODC goAML "report" schema, element order as in the goAML XSD). Pure: no I/O.
 // Built from the report's reviewed fields[] (the same values the four-eyes reviewers saw), plus the report record and FIU profile.
 // Transaction types (STR, UTR, CTR, TTR, IFT, CBR) emit <transaction> elements; activity types (SAR, TFR) emit <activity>.
-// Lookup codes (transmode / funds) are FIU lookup tables: defaults below, overridable per FIU via fiu.report_codes.lookups.
+// Lookup codes (transmode / funds) come from each FIU's goAML lookup tables. Vitauri writes readable defaults (CASH, TRANSFER,
+// CARD, CRYPTO, EWALLET, OTHER); confirm them against the FIU's tables before go-live (fiu.report_codes.lookups can override).
 import { toIso2 } from './countryCodes.js';
 import { FIU_TYPES, normaliseType, reportCodeFor, isCash } from './fiuTypes.js';
 
