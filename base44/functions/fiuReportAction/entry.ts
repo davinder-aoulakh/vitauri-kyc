@@ -13,6 +13,7 @@ import { buildFields, missingFields, mappedTxnCount } from '../../shared/tmFiuMa
 import { normaliseType, reportCodeFor } from '../../shared/fiuTypes.js';
 import { loadReport, updateField, toggleAttachment, submitForApproval, approve, reject } from '../../shared/tmFiuActions.js';
 import { runChecks, loadRefs } from '../../shared/tmFiuChecks.js';
+import { goamlFor, pdfFor } from '../../shared/tmFiuGenerate.js';
 import { uploadGenerated } from '../../shared/tmFiuUpload.js';
 import { latestEndpointCheck, isMissingInCheck } from '../../shared/diditEndpointStatus.js';
 
@@ -74,7 +75,19 @@ export default async function (req) {
       result = action === 'approve' ? await approve(ctx, report, body) : await reject(ctx, report, body);
     } else if (action === 'checks') {
       const r = await runChecks(ctx, report, { latenessReason: body.lateness_reason });
-      result = { checks: r.checks, ok: r.ok, past_due: r.past_due };
+      result = { checks: r.checks, ok: r.ok, past_due: r.past_due, goaml: r.goaml };
+    } else if (action === 'preview_xml' || action === 'preview_pdf') {
+      // Read-only previews: the goAML XML as it would be generated now, or the PDF (DRAFT watermark until approved).
+      const refs = await loadRefs(ctx, report);
+      const g = goamlFor(ctx, report, refs);
+      if (action === 'preview_xml') result = { xml: g.xml, validation: g.validation, file_name: `${report.report_ref}${['approved', 'draft', 'in_review'].includes(report.status) ? '.preview' : ''}.xml` };
+      else {
+        const draft = ['draft', 'in_review'].includes(report.status);
+        const bytes = await pdfFor(ctx, report, refs, { xmlHash: report.generated?.file_hash, validation: g.validation, draft });
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        result = { pdf_base64: btoa(bin), file_name: `${report.report_ref}${draft ? '.draft' : ''}.pdf` };
+      }
     } else if (action === 'signed_url') {
       const uri = FILE_KEYS[body.kind]?.(report);
       if (!uri) throw httpError(404, 'File not available');
