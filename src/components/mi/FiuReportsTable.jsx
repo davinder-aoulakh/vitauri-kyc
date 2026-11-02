@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { reportPill } from '@/lib/tmMi';
+import { typeCode } from '@/lib/fiuTypes';
 
 const fmt = (iso) => (iso ? format(new Date(iso), 'd MMM yyyy HH:mm') : '—');
 
@@ -23,7 +24,7 @@ export default function FiuReportsTable({ reports }) {
               <tr key={r.id} className="hover:bg-muted/20">
                 <td className="px-4 py-2.5 text-xs font-medium"><Link className="text-primary hover:underline" to={`/tm/report/${r.id}`}>{r.report_ref}</Link></td>
                 <td className="px-4 py-2.5 text-xs">{r.fiu_profile_code}</td>
-                <td className="px-4 py-2.5 text-xs capitalize">{(r.type || '').replace('unusual_', '')}</td>
+                <td className="px-4 py-2.5 text-xs font-mono">{r.type ? typeCode(r.type) : '—'}</td>
                 <td className="px-4 py-2.5"><span className={cn('text-xs px-2 py-0.5 rounded-full border font-medium whitespace-nowrap', pill.tone)}>{pill.label}</span></td>
                 <td className="px-4 py-2.5 text-xs text-muted-foreground tabular-nums">{fmt(r.clock?.due_at)}</td>
               </tr>
