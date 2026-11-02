@@ -97,6 +97,11 @@
       ],
       "type": "string"
     },
+    "freeze_advised": {
+      "default": false,
+      "description": "TFR: an asset freeze is advised (never applied automatically)",
+      "type": "boolean"
+    },
     "generated": {
       "properties": {
         "at": {
@@ -130,6 +135,10 @@
       "description": "Last goAML generation failed because a Didit endpoint answered 404/405",
       "type": "boolean"
     },
+    "goaml_report_code": {
+      "description": "report_code written to the goAML XML (FIU profile code for this type, default the type)",
+      "type": "string"
+    },
     "indicators": {
       "items": {
         "type": "string"
@@ -162,8 +171,31 @@
       },
       "type": "object"
     },
+    "origin": {
+      "enum": [
+        "tm_case",
+        "alert",
+        "kyc_case",
+        "manual",
+        "auto_threshold",
+        "auto_tf"
+      ],
+      "type": "string"
+    },
     "prepared_by_user_id": {
       "type": "string"
+    },
+    "priority": {
+      "default": "normal",
+      "enum": [
+        "normal",
+        "without_delay"
+      ],
+      "type": "string"
+    },
+    "proposal": {
+      "description": "Why the report was proposed automatically: rule, threshold, total, date, source ids",
+      "type": "object"
     },
     "received": {
       "properties": {
@@ -233,13 +265,29 @@
     "tm_case_id": {
       "type": "string"
     },
+    "transaction_ids": {
+      "description": "Transactions reported directly (threshold reports, manual selection), in addition to alert transactions",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "transactions_mapped": {
       "type": "number"
     },
     "type": {
+      "description": "goAML report type. unusual_objective/unusual_subjective are legacy rows and read as UTR.",
       "enum": [
         "unusual_objective",
-        "unusual_subjective"
+        "unusual_subjective",
+        "SAR",
+        "STR",
+        "CTR",
+        "TTR",
+        "UTR",
+        "IFT",
+        "CBR",
+        "TFR"
       ],
       "type": "string"
     },
