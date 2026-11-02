@@ -147,6 +147,7 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
             initialRefs={tmSignals ? tmSignals.refs : savedTmSignalRefs}
           />
           <IndicatorPicker
+            caseId={kycCase?.id}
             client={client}
             relatedParties={relatedParties}
             selections={selections}
