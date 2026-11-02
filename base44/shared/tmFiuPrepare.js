@@ -159,7 +159,8 @@ export async function prepareReport(ctx, opts) {
   const urgent = type === 'TFR' || priority === 'without_delay';
   const body = {
     fiu_profile_code: code, tm_case_id: tmCase?.id, client_id: d.client.id, alert_ids: d.alerts.map((a) => a.id), type: storedType,
-    goaml_report_code: reportCodeFor(fiu, type), transaction_ids: distinct([...transactionIds, ...(existing?.transaction_ids || [])]),
+    goaml_report_code: reportCodeFor(fiu, type),
+    transaction_ids: (() => { const want = new Set([...transactionIds, ...(existing?.transaction_ids || [])]); return d.txns.map((t) => t.id).filter((id) => want.has(id)); })(),
     origin: origin || existing?.origin || (caseLess ? 'manual' : kycCaseId ? 'kyc_case' : tmCaseId ? 'tm_case' : 'alert'),
     priority: urgent ? 'without_delay' : 'normal', freeze_advised: type === 'TFR' ? (freezeAdvised ?? true) : false,
     ...(proposal || existing?.proposal ? { proposal: proposal || existing.proposal } : {}),
