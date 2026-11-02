@@ -1057,6 +1057,25 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                   {/* Input area — only if not already done */}
                   {!s.done && (
                     <div style={{ marginTop: 4 }}>
+                      {/* Data we hold for this KYC field: the client checks it and confirms or corrects it */}
+                      {item.prefill_value != null && (
+                        s.confirmed ? (
+                          <div className="mb-2 text-xs rounded-xl px-3 py-2" style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', color: '#065F46' }}>
+                            {lang === 'nl' ? '✓ Bevestigd als juist' : '✓ Confirmed as correct'}
+                          </div>
+                        ) : s.prefilled ? (
+                          <div className="mb-2 flex flex-wrap items-center gap-2 text-xs rounded-xl px-3 py-2" style={{ background: '#F8FAFC', border: '1px solid rgba(38,105,88,.2)', color: '#335a52' }}>
+                            <span className="flex-1">{lang === 'nl' ? 'Dit hebben we van u geregistreerd. Controleer het en pas het aan als het niet meer klopt.' : 'This is what we have on file. Please check it and update it if it has changed.'}</span>
+                            <button type="button" onClick={() => confirmPrefill(outreach.id, item)}
+                              className="rounded-lg px-2.5 py-1 font-semibold text-white cursor-pointer" style={{ backgroundColor: branding.primary }}>
+                              {lang === 'nl' ? 'Dit klopt' : 'This is correct'}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="mb-2 text-xs opacity-70">{lang === 'nl' ? 'Aangepast — wij controleren de wijziging.' : 'Updated — we will review the change.'}</div>
+                        )
+                      )}
+
                       {/* id_verification */}
                       {ft === 'id_verification' && (() => {
                         return (
@@ -1150,6 +1169,24 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
                       {ft === 'date' && (
                         <Input type="date" value={s.text || ''} onChange={e => setItemText(outreach.id, item.item_id, e.target.value)}
                           className="text-sm rounded-xl" style={{ borderColor: 'rgba(38,105,88,.25)' }} />
+                      )}
+
+                      {/* phone: country code (flag) + number */}
+                      {ft === 'phone' && (
+                        <PhoneInput value={s.value ?? s.text ?? ''} onChange={v => setItemValue(outreach.id, item.item_id, ft, v)}
+                          defaultCountry={client?.residential_address?.country || client?.country_of_residence || client?.registered_country} />
+                      )}
+
+                      {/* address: country, street + number, postcode + city */}
+                      {ft === 'address' && (
+                        <PortalAddressInput value={s.value && typeof s.value === 'object' ? s.value : {}} language={lang} borderColor="rgba(38,105,88,.25)"
+                          onChange={v => setItemValue(outreach.id, item.item_id, ft, v)} />
+                      )}
+
+                      {/* country (with flags) */}
+                      {ft === 'country' && (
+                        <CountrySelect value={s.value ?? s.text ?? ''} onChange={v => setItemValue(outreach.id, item.item_id, ft, v)}
+                          className="rounded-xl" includeOther={false} placeholder={lang === 'nl' ? 'Kies een land' : 'Select a country'} />
                       )}
 
                       {/* dropdown */}
