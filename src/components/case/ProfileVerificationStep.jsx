@@ -17,7 +17,9 @@ export default function ProfileVerificationStep({ kycCase, client, currentUser, 
     for (const req of (reqs || [])) {
       let changed = false;
       const updatedItems = (req.items || []).map(item => {
-        if (item.status !== 'Verified' && isFieldMappedLabel(item.label, { [fieldKey]: fieldLabel })) {
+        // Linked questions (profile_field) match their field exactly; older ones by label
+        const linked = item.profile_field && (item.profile_field === fieldKey || fieldKey.startsWith(`${item.profile_field}.`));
+        if (item.status !== 'Verified' && (linked || (!item.profile_field && isFieldMappedLabel(item.label, { [fieldKey]: fieldLabel })))) {
           changed = true;
           return { ...item, status: 'Verified' };
         }
