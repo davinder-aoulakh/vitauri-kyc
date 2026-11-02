@@ -1,0 +1,41 @@
+{
+  "name": "Daily FIU Report Proposals",
+  "description": "Runs daily at 04:20 UTC: proposes draft CTR/TTR/IFT/CBR reports from FIU profile thresholds and TFR reports from terrorist-financing signals (drafts only, four-eyes applies).",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "20 4 * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "daily_fiu_report_proposals",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "scanFiuProposals",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  }
+}
