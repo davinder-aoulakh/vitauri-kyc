@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FIU_TYPES, FIU_TYPE_CODES } from '@/lib/fiuTypes';
+import { useTenant } from '@/lib/tenantContext';
 
 function Field({ label, hint, children }) {
   return (
@@ -23,7 +24,9 @@ const THRESHOLDS = [
 ];
 
 /** goAML report header, enabled report types with their FIU codes, and the threshold-report limits. */
-export default function GoamlSettings({ draft, set, disabled, reportingCurrency }) {
+export default function GoamlSettings({ draft, set, disabled }) {
+  const { tenant } = useTenant();
+  const reportingCurrency = tenant?.tm_reporting_currency;
   const txt = (key, label, opts = {}) => (
     <Field label={label} hint={opts.hint}>
       <Input disabled={disabled} className={`h-8 text-xs ${opts.mono ? 'font-mono' : ''}`} value={draft[key] ?? ''} maxLength={opts.max}
