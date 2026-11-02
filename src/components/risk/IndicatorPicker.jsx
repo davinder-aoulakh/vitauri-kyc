@@ -116,8 +116,8 @@ export default function IndicatorPicker({ client, relatedParties, selections, on
     try {
       if (!caseId) throw new Error('Case not loaded yet — please try again.');
       // The tenant's active indicators, keyed by the canonical id the picker uses
-      const indicatorList = (indicators?.length ? indicators : ALL_INDICATORS.map(i => ({ ...i, indicator_id: i.id })))
-        .map(i => ({ id: i.indicator_id, name: i.name, description: i.description || '', applies: i.applies || [] }));
+      const indicatorList = [...new Map((indicators?.length ? indicators : ALL_INDICATORS.map(i => ({ ...i, indicator_id: i.id })))
+        .map(i => [i.indicator_id, { id: i.indicator_id, name: i.name, description: i.description || '', applies: i.applies || [] }])).values()];
 
       // Reads outreach answers, screening, stored Didit AML, SoF and OSINT server-side, applies fixed rules, then AI
       const res = await Promise.race([
