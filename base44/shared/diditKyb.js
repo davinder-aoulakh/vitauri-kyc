@@ -69,22 +69,59 @@ function keyPeopleFrom(company, keyPeopleChecks) {
   return out.slice(0, 100);
 }
 
-async function storeDocument(base44, ctx, kyb, item) {
+// Didit's verdict on a company document, as the Document review fields. Didit (not a person) reviewed it, so
+// reviewed_by_user_id stays empty; an analyst's own decision is never overwritten (see syncDocumentStatus).
+export function reviewFromDidit(diditStatus, reason) {
+  if (diditStatus === 'Approved') return { review_status: 'Approved', review_notes: 'Verified by Didit KYB (document checks passed)' };
+  if (diditStatus === 'Declined') return { review_status: 'Rejected', review_notes: `Declined by Didit KYB${reason ? `: ${String(reason).slice(0, 200)}` : ''}` };
+  return { review_status: 'Pending_Review', review_notes: diditStatus ? `Didit KYB: ${diditStatus}` : undefined };
+}
+
+async function sha256(buf) {
+  const h = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Downloads and re-stores one Didit document. The same file verified under two Didit groups (e.g. ownership and
+// legal presence) is stored once: byHash maps a content hash to the Document already created.
+async function storeDocument(base44, ctx, kyb, item, byHash) {
   const url = String(item.file_url || '');
-  if (!/^https:\/\//i.test(url)) return null;
+  if (!/^https:\/\//i.test(url)) return { id: null, hash: null };
   const res = await fetch(url);
   if (!res.ok) throw new Error(`document download ${res.status}`);
   const buf = new Uint8Array(await res.arrayBuffer());
   if (buf.byteLength > MAX_DOC_BYTES) throw new Error('document too large');
+  const hash = await sha256(buf);
+  if (byHash.has(hash)) return { id: byHash.get(hash), hash, reused: true };
   const name = String(item.original_filename || `${item.document_subtype || 'kyb-document'}-${item.uuid}`).slice(0, 180);
   const type = res.headers.get('content-type') || 'application/octet-stream';
   const up = await base44.asServiceRole.integrations.Core.UploadPrivateFile({ file: new File([buf], name, { type }) });
   if (!up?.file_uri) throw new Error('upload failed');
-  const doc = await ctx.E.Document.create({
+  const review = reviewFromDidit(item.status, item.decline_reason || item.reason);
+  const doc = await ctx.E.Document.create(clean({
     tenant_id: ctx.tenantId, client_id: kyb.client_id, case_id: kyb.kyc_case_id || undefined,
     doc_type: docTypeFor(item), file_name: name, file_url: up.file_uri, source: 'didit_kyb', didit_session_id: kyb.didit_session_id,
+    ...review, reviewed_at: review.review_status !== 'Pending_Review' ? new Date().toISOString() : undefined,
+  }));
+  byHash.set(hash, doc.id);
+  return { id: doc.id, hash, created: true };
+}
+
+// Keeps a stored Document in step with Didit's later verdict. Leaves documents an analyst has reviewed alone.
+export async function syncDocumentStatus(ctx, kyb, documentId, diditStatus, reason) {
+  const doc = asList(await ctx.E.Document.filter({ id: documentId }))[0];
+  if (!doc || doc.reviewed_by_user_id || doc.is_deleted) return false;
+  const review = reviewFromDidit(diditStatus, reason);
+  if (doc.review_status === review.review_status) return false;
+  await ctx.E.Document.update(doc.id, clean({ ...review, reviewed_at: review.review_status !== 'Pending_Review' ? new Date().toISOString() : undefined }));
+  await ctx.E.AuditEvent.create({
+    tenant_id: ctx.tenantId, client_id: kyb.client_id, case_id: kyb.kyc_case_id || undefined,
+    actor_name: 'Didit KYB', actor_type: 'System', event_type: 'kyb_document_status_synced',
+    before_state: { document_id: doc.id, review_status: doc.review_status || 'Pending_Review' },
+    after_state: { document_id: doc.id, review_status: review.review_status, didit_status: diditStatus || null },
+    notes: `${doc.file_name || 'Company document'}: ${review.review_notes}`,
   });
-  return doc.id;
+  return true;
 }
 
 /**
@@ -122,19 +159,29 @@ export async function applyKybDecision(ctx, kyb, decision, { eventId } = {}) {
 
   // Company documents: download and re-store privately (dedupe by Didit document uuid).
   const known = new Map((kyb.documents || []).map((d) => [d.didit_uuid, d]));
+  const byHash = new Map((kyb.documents || []).filter((d) => d.sha256 && d.document_id).map((d) => [d.sha256, d.document_id]));
   const docs = [];
   for (const dv of Array.isArray(decision?.document_verifications) ? decision.document_verifications : []) {
     for (const it of dv?.items || []) {
       if (!it?.uuid || it.is_requested) continue;
       const prev = known.get(it.uuid);
       let documentId = prev?.document_id || null;
+      let hash = prev?.sha256 || null;
       let error = null;
+      let created = false;
       if (!documentId && it.file_url) {
-        try { documentId = await storeDocument(base44, ctx, kyb, it); } catch (e) { error = String(e?.message || e).slice(0, 120); }
+        try {
+          const r = await storeDocument(base44, ctx, kyb, it, byHash);
+          documentId = r.id; hash = r.hash; created = !!r.created;
+        } catch (e) { error = String(e?.message || e).slice(0, 120); }
+      }
+      // Didit's verdict on the document follows onto the stored copy (also when it changes later)
+      if (documentId && !created) {
+        try { await syncDocumentStatus(ctx, kyb, documentId, it.status, it.decline_reason || it.reason); } catch (e) { console.warn('KYB document status sync failed:', e?.message); }
       }
       docs.push(clean({
         didit_uuid: it.uuid, document_group: it.document_group || it.document_type, document_subtype: it.document_subtype,
-        status: it.status, original_filename: it.original_filename, document_id: documentId,
+        status: it.status, original_filename: it.original_filename, document_id: documentId, sha256: hash || undefined,
         is_tampered: it.document_metadata?.is_tampered ?? undefined, store_error: documentId ? undefined : error,
       }));
     }
