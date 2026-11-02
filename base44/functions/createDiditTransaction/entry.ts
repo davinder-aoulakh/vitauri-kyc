@@ -9,6 +9,10 @@ import { withDiditCredentials } from '../../shared/diditCredentials.js';
 import { postTransaction, buildTransactionBody, diditTxnUuid, normaliseTxnStatus } from '../../shared/diditTm.js';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { afterTransactionUpdate } from '../../shared/diditTxnActions.js';
+import { applyTxnDecision, TM_ALERT_STATUSES } from '../../shared/tmTxnDecision.js';
+
+// Case workers only (createRunCase in src/lib/permissions.js)
+const WORKER_ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'];
 
 const CATEGORIES = ['finance', 'kyc', 'travel_rule', 'user_event', 'audit_trail_event', 'gambling_bet', 'gambling_limit_change', 'gambling_bonus_change'];
 
@@ -17,6 +21,7 @@ export default async function(req) {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!WORKER_ROLES.includes(user.app_role || user.data?.app_role)) return Response.json({ error: 'You do not have permission to submit transactions' }, { status: 403 });
 
     const tenantId = user.tenant_id;
     if (!tenantId) return Response.json({ error: 'No tenant associated with this user' }, { status: 400 });
@@ -77,7 +82,11 @@ export default async function(req) {
       risk_score: txn?.score ?? txn?.risk_score ?? null, risk_level: txn?.severity ?? txn?.risk_level ?? null,
       decision_raw: txn, didit_submission_status: 'submitted', didit_submission_error: '',
     });
-    if (txn?.action_required && isTmEnabled(tenant, 'tm_core')) {
+    // Didit's answer counts at once: IN_REVIEW / AWAITING_USER / DECLINED raise the alert now (DECLINED also blocks).
+    if (isTmEnabled(tenant, 'tm_core') && (TM_ALERT_STATUSES.includes(status) || txn?.action_required)) {
+      await applyTxnDecision(base44, tenant, { ...record, ...(updated || {}), status: 'PENDING', didit_transaction_id: diditTxnUuid(txn) || record.didit_transaction_id }, txn || {}, { actorName: user.full_name || 'Didit (submission)' })
+        .catch((e) => console.warn('createDiditTransaction: immediate decision failed', e?.message));
+    } else if (txn?.action_required) {
       await afterTransactionUpdate(base44, tenant, { ...record, didit_transaction_id: diditTxnUuid(txn) }, 'PENDING', status, txn)
         .catch((e) => console.warn('createDiditTransaction: action_required follow-up failed', e?.message));
     }
