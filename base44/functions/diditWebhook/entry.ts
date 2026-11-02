@@ -16,10 +16,8 @@ import { fetchDiditDecision, primaryCheck } from '../../shared/diditDecision.js'
 import { rehostDiditImage } from '../../shared/diditMedia.js';
 import { verifyDiditSignature, isEventFresh } from '../../shared/diditWebhookVerify.js';
 import { isTmEnabled } from '../../shared/tmGuards.js';
-import { getTransaction as getDiditTmTransaction, normaliseTxnStatus } from '../../shared/diditTm.js';
-import { afterTransactionUpdate } from '../../shared/diditTxnActions.js';
+import { getTransaction as getDiditTmTransaction } from '../../shared/diditTm.js';
 import { applyTxnDecision } from '../../shared/tmTxnDecision.js';
-import { safeRecompute } from '../../shared/tmRisk.js';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
 import { handleKybEvent } from '../../shared/diditKyb.js';
 import { applyRelatedPartyIdv, handleRelatedPartyMonitoring } from '../../shared/kybRelatedParty.js';
