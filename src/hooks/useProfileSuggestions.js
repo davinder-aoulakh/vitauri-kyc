@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { getNestedValue, buildFieldUpdatePayload } from '@/lib/clientNameUtils';
 import { upsertRelatedParty } from '@/lib/relatedPartyUpsert';
+import { loadSuggestions, patchSuggestions } from '@/lib/profileSuggestionsStore';
 
 export const CONFIDENCE_THRESHOLD = 70;
 
@@ -41,11 +42,21 @@ export const ORG_FIELD_LABELS = {
   primary_contact_phone: 'Phone Number',
 };
 
+const partyKey = (r) => `${String(r?.full_name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${String(r?.date_of_birth || '').slice(0, 10)}`;
+// Updates one related-party row in the latest suggestions: by person (name + DOB), else by position.
+function markParty(latest, rp, rpIndex, patch) {
+  const list = [...(latest.related_parties || [])];
+  let i = rp ? list.findIndex((r) => partyKey(r) === partyKey(rp)) : -1;
+  if (i < 0) i = rpIndex;
+  if (list[i]) list[i] = { ...list[i], ...patch };
+  return { ...latest, related_parties: list };
+}
+
 /**
  * Shared pipeline logic for the Structured Profile Fields grid.
  * Used by OutreachStep (Step 1 — unified verification grid).
  */
-export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVerified, onCaseUpdate, tenant }) {
+export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVerified, onCaseUpdate, onClientUpdate, tenant }) {
   const isOrg = client?.client_type === 'ORG';
   const fieldLabels = isOrg ? ORG_FIELD_LABELS : NP_FIELD_LABELS;
 
@@ -54,10 +65,37 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
   const [acceptingField, setAcceptingField] = useState(null);
   const loaded = useRef(false);
 
+  // Show the copy we were given at once, then the database copy: the prop can be stale (other cards, the
+  // server pipeline and other steps change profile_suggestions too).
   useEffect(() => {
     if (kycCase?.profile_suggestions) setSuggestions(kycCase.profile_suggestions);
     loaded.current = true;
-  }, [kycCase?.id]);
+    let alive = true;
+    loadSuggestions(kycCase?.id).then((fresh) => {
+      if (!alive || !fresh) return;
+      setSuggestions(fresh);
+      onCaseUpdate?.(prev => (prev ? { ...prev, profile_suggestions: fresh } : prev));
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [kycCase?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The client as last written by this hook. Payloads for nested fields (residential_address.*) are built from it,
+  // so accepting the street and then the city keeps both (the prop can lag behind our own writes).
+  const liveClient = useRef(client);
+  useEffect(() => { liveClient.current = client; }, [client]);
+  async function writeClient(patch) {
+    await base44.entities.Client.update(client.id, patch);
+    liveClient.current = { ...(liveClient.current || {}), ...patch };
+    onClientUpdate?.(patch);
+  }
+
+  // Field-level change on the latest saved suggestions (never a whole stale copy)
+  async function applyPatch(change) {
+    const next = await patchSuggestions(kycCase.id, change);
+    setSuggestions(next);
+    onCaseUpdate?.(prev => (prev ? { ...prev, profile_suggestions: next } : prev));
+    return next;
+  }
 
   async function runPipeline(forceOsint = false) {
     setPipelineRunning(true);
@@ -69,7 +107,10 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
         force_osint_refresh: forceOsint,
       });
       const data = res?.data ?? res;
-      if (data?.suggestion) setSuggestions(data.suggestion);
+      if (data?.suggestion) {
+        setSuggestions(data.suggestion);
+        onCaseUpdate?.(prev => (prev ? { ...prev, profile_suggestions: data.suggestion } : prev));
+      }
     } catch (err) {
       console.error('Pipeline error:', err);
     } finally {
@@ -77,14 +118,6 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
     }
   }
 
-  async function saveSuggestions(updated) {
-    setSuggestions(updated);
-    await base44.entities.KycCase.update(kycCase.id, { profile_suggestions: updated });
-    // Keep the parent's kycCase in sync — otherwise re-mounting this step (e.g. switching
-    // tabs and back) re-initialises from a stale kycCase.profile_suggestions and the run
-    // appears to have been lost.
-    onCaseUpdate?.(prev => (prev ? { ...prev, profile_suggestions: updated } : prev));
-  }
 
   // Marks a field key as applied on the source outreach item that produced it, so the
   // pipeline emits it as 'confirmed' (instead of re-prompting) on the next re-run.
@@ -109,20 +142,13 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
 
   async function acceptField(fieldKey, suggestion) {
     setAcceptingField(fieldKey);
-    const before = { [fieldKey]: getNestedValue(client, fieldKey) || null };
+    const before = { [fieldKey]: getNestedValue(liveClient.current, fieldKey) || null };
     const after  = { [fieldKey]: suggestion.value };
 
-    await base44.entities.Client.update(client.id, buildFieldUpdatePayload(client, fieldKey, suggestion.value));
+    await writeClient(buildFieldUpdatePayload(liveClient.current, fieldKey, suggestion.value));
     await markFieldApplied(fieldKey, suggestion);
 
-    const updated = {
-      ...suggestions,
-      client_fields: {
-        ...suggestions.client_fields,
-        [fieldKey]: { ...suggestion, status: 'confirmed' },
-      },
-    };
-    await saveSuggestions(updated);
+    await applyPatch({ fields: { [fieldKey]: { ...suggestion, status: 'confirmed' } } });
 
     await base44.entities.AuditEvent.create({
       tenant_id:      kycCase.tenant_id,
@@ -141,14 +167,7 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
   }
 
   async function rejectField(fieldKey) {
-    const updated = {
-      ...suggestions,
-      client_fields: {
-        ...suggestions.client_fields,
-        [fieldKey]: { ...(suggestions.client_fields[fieldKey] || {}), status: 'rejected' },
-      },
-    };
-    await saveSuggestions(updated);
+    await applyPatch({ fields: { [fieldKey]: { status: 'rejected' } } });
 
     await base44.entities.AuditEvent.create({
       tenant_id:     kycCase.tenant_id,
@@ -164,19 +183,12 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
   }
 
   async function handleManualEdit(fieldKey, value) {
-    const before = { [fieldKey]: getNestedValue(client, fieldKey) || null };
+    const before = { [fieldKey]: getNestedValue(liveClient.current, fieldKey) || null };
     const after  = { [fieldKey]: value };
     const existingSuggestion = suggestions?.client_fields?.[fieldKey];
-    await base44.entities.Client.update(client.id, buildFieldUpdatePayload(client, fieldKey, value));
+    await writeClient(buildFieldUpdatePayload(liveClient.current, fieldKey, value));
     await markFieldApplied(fieldKey, existingSuggestion);
-    const updated = {
-      ...suggestions,
-      client_fields: {
-        ...(suggestions?.client_fields || {}),
-        [fieldKey]: { value, confidence: 100, source_type: 'manual', source_ref: 'Analyst manual entry', status: 'confirmed', conflict_note: null },
-      },
-    };
-    await saveSuggestions(updated);
+    await applyPatch({ fields: { [fieldKey]: { value, confidence: 100, source_type: 'manual', source_ref: 'Analyst manual entry', status: 'confirmed', conflict_note: null } } });
     await base44.entities.AuditEvent.create({
       tenant_id:     kycCase.tenant_id,
       case_id:       kycCase.id,
@@ -194,14 +206,7 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
 
   // ── Amber — Request Info ────────────────────────────────────────────────────
   async function markInfoRequested(fieldKey) {
-    const updated = {
-      ...suggestions,
-      client_fields: {
-        ...(suggestions?.client_fields || {}),
-        [fieldKey]: { ...(suggestions.client_fields[fieldKey] || {}), status: 'info_requested' },
-      },
-    };
-    await saveSuggestions(updated);
+    await applyPatch({ fields: { [fieldKey]: { status: 'info_requested' } } });
     await base44.entities.AuditEvent.create({
       tenant_id:     kycCase.tenant_id,
       case_id:       kycCase.id,
@@ -215,14 +220,7 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
   }
 
   async function reopenField(fieldKey) {
-    const updated = {
-      ...suggestions,
-      client_fields: {
-        ...suggestions.client_fields,
-        [fieldKey]: { ...(suggestions.client_fields[fieldKey] || {}), status: 'suggested' },
-      },
-    };
-    await saveSuggestions(updated);
+    await applyPatch({ fields: { [fieldKey]: { status: 'suggested' } } });
   }
 
   async function acceptAllHighConfidence() {
@@ -233,16 +231,16 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
     if (toAccept.length === 0) return;
 
     let clientUpdates = {};
-    const fieldUpdates = { ...suggestions.client_fields };
+    const fieldUpdates = {};
+    const beforeValues = Object.fromEntries(toAccept.map(([fieldKey]) => [fieldKey, getNestedValue(liveClient.current, fieldKey) || null]));
 
     for (const [fieldKey, s] of toAccept) {
-      clientUpdates = { ...clientUpdates, ...buildFieldUpdatePayload({ ...client, ...clientUpdates }, fieldKey, s.value) };
+      clientUpdates = { ...clientUpdates, ...buildFieldUpdatePayload({ ...liveClient.current, ...clientUpdates }, fieldKey, s.value) };
       fieldUpdates[fieldKey] = { ...s, status: 'confirmed' };
     }
 
-    await base44.entities.Client.update(client.id, clientUpdates);
-    const updated = { ...suggestions, client_fields: fieldUpdates };
-    await saveSuggestions(updated);
+    await writeClient(clientUpdates);
+    await applyPatch({ fields: fieldUpdates });
 
     for (const [fieldKey, s] of toAccept) {
       await markFieldApplied(fieldKey, s);
@@ -254,7 +252,7 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
         actor_name:    currentUser?.full_name,
         actor_type:    'User',
         event_type:    'profile_field_confirmed',
-        before_state:  { [fieldKey]: getNestedValue(client, fieldKey) || null },
+        before_state:  { [fieldKey]: beforeValues[fieldKey] },
         after_state:   { [fieldKey]: s.value },
         notes:         `field=${fieldKey} source=${s.source_type}:${s.source_ref} confidence=${s.confidence}% (batch accept)`,
       });
@@ -267,8 +265,8 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
   async function reapplyField(fieldKey) {
     const suggestion = suggestions?.client_fields?.[fieldKey];
     if (!suggestion?.value) return;
-    const before = { [fieldKey]: getNestedValue(client, fieldKey) || null };
-    await base44.entities.Client.update(client.id, buildFieldUpdatePayload(client, fieldKey, suggestion.value));
+    const before = { [fieldKey]: getNestedValue(liveClient.current, fieldKey) || null };
+    await writeClient(buildFieldUpdatePayload(liveClient.current, fieldKey, suggestion.value));
     await markFieldApplied(fieldKey, suggestion);
     await base44.entities.AuditEvent.create({
       tenant_id:     kycCase.tenant_id,
@@ -294,11 +292,7 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
       acceptFields: acceptFields || (rp.diffs && Object.keys(rp.diffs).length ? Object.keys(rp.diffs) : undefined),
     });
 
-    const updatedRps = (suggestions.related_parties || []).map((r, i) =>
-      i === rpIndex ? { ...r, status: 'confirmed', rp_id: rpRecord.id, match_rp_id: rpRecord.id, match_status: 'matched', diffs: {} } : r
-    );
-    const updated = { ...suggestions, related_parties: updatedRps };
-    await saveSuggestions(updated);
+    await applyPatch({ merge: (latest) => markParty(latest, rp, rpIndex, { status: 'confirmed', rp_id: rpRecord.id, match_rp_id: rpRecord.id, match_status: 'matched', diffs: {} }) });
 
     await base44.entities.AuditEvent.create({
       tenant_id:     kycCase.tenant_id,
@@ -314,11 +308,8 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
   }
 
   async function rejectRelatedParty(rpIndex) {
-    const updatedRps = (suggestions.related_parties || []).map((r, i) =>
-      i === rpIndex ? { ...r, status: 'rejected' } : r
-    );
-    const updated = { ...suggestions, related_parties: updatedRps };
-    await saveSuggestions(updated);
+    const rp = suggestions?.related_parties?.[rpIndex];
+    await applyPatch({ merge: (latest) => markParty(latest, rp, rpIndex, { status: 'rejected' }) });
   }
 
   const clientFields = suggestions?.client_fields || {};
