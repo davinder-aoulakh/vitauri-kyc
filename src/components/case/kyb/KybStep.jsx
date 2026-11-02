@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { hasPermission } from '@/lib/permissions';
 import { openChecks, acceptReadiness, PENDING_STATUSES } from '@/lib/kybReview';
+import { linkRoles, parseRoles, joinRoles } from '@/lib/partyRoles';
 import { upsertRelatedParty, findLinkedMatch } from '@/lib/relatedPartyUpsert';
 import { CheckCircle, Clock, FileText, Loader2, RefreshCw, ShieldAlert, UserPlus, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -36,8 +37,10 @@ function registryDiffs(c, { rp, link }) {
   if (c.ownership_percentage != null && (recOwn == null || Math.abs(Number(recOwn) - c.ownership_percentage) >= 0.01)) d.ownership_percentage = { recorded: recOwn ?? null, registry: c.ownership_percentage };
   if (c.nationality && norm(rp.nationality) !== norm(c.nationality)) d.nationality = { recorded: rp.nationality || null, registry: c.nationality };
   if (c.date_of_birth && !rp.date_of_birth) d.date_of_birth = { recorded: null, registry: c.date_of_birth };
-  const recRole = link?.role || rp.role_in_relationship;
-  if (c.role_in_relationship && recRole && norm(recRole) !== norm(c.role_in_relationship)) d.role_in_relationship = { recorded: recRole, registry: c.role_in_relationship };
+  // Roles add up (Director + Shareholder + UBO): only a role not recorded yet is a difference
+  const recRoles = linkRoles(link, rp);
+  const adds = parseRoles(c.role_in_relationship).filter((r) => !recRoles.includes(r));
+  if (adds.length) d.role_in_relationship = { recorded: recRoles.join(', ') || null, registry: joinRoles([...recRoles, ...adds]), adds };
   return d;
 }
 
@@ -87,9 +90,11 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
     return data.links.map((l) => {
       const p = byId.get(l.related_party_id);
       if (!p) return null;
-      const role = l.role || p.role_in_relationship;
+      const roles = linkRoles(l, p);
+      const role = joinRoles(roles) || l.role || p.role_in_relationship;
       const kind = keyRoleKind(role);
-      return kind ? { ...p, role, kind, ownership_percentage: l.ownership_percentage ?? p.ownership_percentage } : null;
+      // kind = all roles shown on the key-people row (e.g. "UBO, Director, Shareholder")
+      return kind ? { ...p, role, kind: role, ownership_percentage: l.ownership_percentage ?? p.ownership_percentage } : null;
     }).filter(Boolean);
   }, [data]);
   const linked = useMemo(() => (data ? data.links.map((link) => ({ link, rp: data.parties.find((p) => p.id === link.related_party_id) })).filter((x) => x.rp) : []), [data]);
@@ -304,7 +309,9 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
                       <div className="text-amber-800 font-medium">Recorded, but the registry differs:</div>
                       {diffKeys.map((k) => (
                         <div key={k} className="text-muted-foreground">
-                          <span className="capitalize">{k.replace(/_/g, ' ')}</span>: <span className="line-through">{p.diffs[k].recorded ?? 'not recorded'}</span> → <span className="font-medium text-foreground">{p.diffs[k].registry}</span>
+                          <span className="capitalize">{k.replace(/_/g, ' ')}</span>: {p.diffs[k].adds?.length
+                            ? <>{p.diffs[k].recorded || 'none'} <span className="font-medium text-emerald-700">+ {p.diffs[k].adds.join(', ')}</span></>
+                            : <><span className="line-through">{p.diffs[k].recorded ?? 'not recorded'}</span> → <span className="font-medium text-foreground">{p.diffs[k].registry}</span></>}
                         </div>
                       ))}
                     </div>
