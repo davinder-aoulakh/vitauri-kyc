@@ -1,6 +1,9 @@
 // Pre-approval checks for an FIU report + the evidence snapshot stored at approval. All queries are tenant-scoped.
 import { asList, httpError } from './tmAuth.js';
 import { missingFields, distinct } from './tmFiuMap.js';
+import { buildGoamlXml } from './goamlXml.js';
+import { validateGoamlXml } from './goamlValidate.js';
+import { normaliseType } from './fiuTypes.js';
 
 const round = (n) => Math.round(n * 100) / 100;
 const sumBy = (rows) => {
@@ -77,7 +80,15 @@ export async function runChecks(ctx, report, { latenessReason } = {}) {
   add('coverage', 'Data gaps are stated in the narrative', !gaps.length || disclosed,
     gaps.length ? `${gaps.length} day(s) without data in the period (${gaps[0].date} to ${gaps[gaps.length - 1].date}).${disclosed ? '' : ' Add a sentence starting "Coverage gap:" to the narrative.'}` : 'No coverage gaps in the period.');
 
-  return { checks, ok: checks.every((c) => c.ok), past_due: pastDue, data: { fiu, client, tmCase, ...ev } };
+  // goAML structure: the XML that generation will produce must pass validation (errors block approval).
+  const built = buildGoamlXml({ report, fiu, tenant: ctx.tenant, client });
+  const v = validateGoamlXml(built.xml, { type: normaliseType(report.type) });
+  const goamlDetail = v.ok
+    ? (v.warnings.length ? `Passed with ${v.warnings.length} warning(s): ${v.warnings.slice(0, 3).map((w) => w.message).join('; ')}` : 'Passed.')
+    : `${v.errors.length} error(s): ${v.errors.slice(0, 4).map((e) => e.message).join('; ')}${v.errors.length > 4 ? ' …' : ''}`;
+  add('goaml', 'The goAML XML passes the structural checks', v.ok, goamlDetail);
+
+  return { checks, ok: checks.every((c) => c.ok), past_due: pastDue, goaml: { ...v, issues: built.issues }, data: { fiu, client, tmCase, ...ev } };
 }
 
 /** Evidence snapshot stored at approval. */
