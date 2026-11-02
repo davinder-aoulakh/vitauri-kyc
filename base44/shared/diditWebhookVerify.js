@@ -54,7 +54,19 @@ export async function verifyDiditSignature(rawBody, signature, secret) {
 
 /** Timestamp freshness check — rejects deliveries older/newer than 300s. */
 export function isTimestampFresh(timestampHeader, toleranceSeconds = 300) {
-  const ts = Number(timestampHeader);
+  let ts = Number(timestampHeader);
   if (!ts || Number.isNaN(ts)) return false;
+  if (ts > 1e12) ts = ts / 1000; // milliseconds
   return Math.abs(Date.now() / 1000 - ts) <= toleranceSeconds;
+}
+
+/**
+ * Freshness on the SIGNED body field `timestamp` (Didit's guide): the X-Timestamp header is not covered by the
+ * HMAC, so a captured body + signature could be replayed with a fresh header. The header is only used for an
+ * event that carries no timestamp in its body.
+ */
+export function isEventFresh(parsedBody, timestampHeader, toleranceSeconds = 300) {
+  const signed = parsedBody?.timestamp;
+  if (signed !== undefined && signed !== null && signed !== '') return isTimestampFresh(signed, toleranceSeconds);
+  return isTimestampFresh(timestampHeader, toleranceSeconds);
 }
