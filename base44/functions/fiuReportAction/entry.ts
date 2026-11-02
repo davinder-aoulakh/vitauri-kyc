@@ -10,6 +10,7 @@ import { CO_ROLES, roleOf, loadCase, tenantUsers } from '../../shared/tmCaseComm
 import { writeAudit } from '../../shared/tmAudit.js';
 import { gatherReportData } from '../../shared/tmFiuGather.js';
 import { buildFields, missingFields, mappedTxnCount } from '../../shared/tmFiuMap.js';
+import { normaliseType, reportCodeFor } from '../../shared/fiuTypes.js';
 import { loadReport, updateField, toggleAttachment, submitForApproval, approve, reject } from '../../shared/tmFiuActions.js';
 import { runChecks, loadRefs } from '../../shared/tmFiuChecks.js';
 import { uploadGenerated } from '../../shared/tmFiuUpload.js';
@@ -18,13 +19,13 @@ import { latestEndpointCheck, isMissingInCheck } from '../../shared/diditEndpoin
 async function refreshFields(ctx, report) {
   if (!['draft', 'in_review'].includes(report.status)) throw httpError(409, 'Fields can be refreshed only on a draft or in-review report');
   const { E, tenantId, tenant, auth } = ctx;
-  const tmCase = await loadCase(E, tenantId, report.tm_case_id);
-  const d = await gatherReportData(ctx, tmCase);
+  const tmCase = report.tm_case_id ? await loadCase(E, tenantId, report.tm_case_id) : null;
+  const d = await gatherReportData(ctx, tmCase, { clientId: report.client_id, alertIds: report.alert_ids || [], txnIds: report.transaction_ids || [] });
   const { fiu } = await loadRefs(ctx, report);
   const users = await tenantUsers(E, tenantId);
   const officer = users.find((u) => u.id === auth.actorUserId && CO_ROLES.includes(roleOf(u))) || users.find((u) => CO_ROLES.includes(roleOf(u)));
   const mapped = buildFields({
-    tenant, officer, reportType: report.type, indicatorCodes: report.indicators || [], client: d.client, accounts: d.accounts, txns: d.txns,
+    tenant, officer, reportType: normaliseType(report.type), reportCode: reportCodeFor(fiu, report.type), fiu, indicatorCodes: report.indicators || [], client: d.client, accounts: d.accounts, txns: d.txns,
     counterparties: d.counterparties, parties: d.parties, cur: tenant.tm_reporting_currency || 'USD', reason: report.narrative?.text || '', idv: d.idv,
   });
   const userFields = (report.fields || []).filter((f) => f.by === 'user');
