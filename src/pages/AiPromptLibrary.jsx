@@ -11,6 +11,13 @@ import { cn } from '@/lib/utils';
 
 const AGENTS = [
   {
+    key: 'DocumentCheck',
+    label: 'AI Document Checker',
+    description: 'Checks documents the client uploads (portal / analyst uploads) for authenticity, fit with the request and consistency with the client file. Advisory only.',
+    // Same text as DEFAULT_PROMPT in base44/shared/docCheckAgent.js
+    default_prompt: `You are a KYC document examiner. Judge whether the attached document is an authentic, unaltered and fitting document for what was requested, for this client. Be factual: only report what you can see. Look for: document type vs. what was requested; issuer and date; name / address / registration number vs. the client's KYC data; validity (proof of address usually <= 3 months old, registry extract <= 6 months, ID not expired); signs of editing (inconsistent fonts, misaligned text, pasted or blurred areas, altered numbers, mismatching backgrounds), missing pages or cut-off content, a screenshot or photo of a screen where an original was expected. Consider the file forensics given. Never invent issues; if the document looks normal say so.`,
+  },
+  {
     key: 'OrgChart',
     label: 'Org Chart Agent',
     description: 'Analyses client ownership structures and suggests UBOs and related parties.',
