@@ -21,6 +21,21 @@ import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
 import { getSignedUrl } from '@/lib/securityUtils';
 import { AiCheckChip, AiCheckPanel, AiCheckSummary, VERDICT, isCheckableDoc } from '@/components/documents/AiDocCheck';
 import { toast } from '@/components/ui/use-toast';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+
+// Versions are documents of the same type with the same name; different documents are never "older versions"
+const versionKey = (doc) => String(doc.file_name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+function latestIds(docs) {
+  const best = new Map();
+  for (const d of docs) {
+    const k = versionKey(d);
+    const cur = best.get(k);
+    const newer = !cur || (d.version || 1) > (cur.version || 1)
+      || ((d.version || 1) === (cur.version || 1) && String(d.created_date || '') > String(cur.created_date || ''));
+    if (newer) best.set(k, d);
+  }
+  return new Set([...best.values()].map((d) => d.id));
+}
 
 // Private files (e.g. Didit images and KYB documents) hold a file_uri; open them through a short-lived signed URL.
 async function resolveFileUrl(fileUrl) {
@@ -357,7 +372,8 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
         <div className="divide-y divide-border">
           {Object.entries(grouped).map(([docType, docs]) => {
             const isOpen = expanded[docType] !== false;
-            const hasVersions = docs.length > 1;
+            const latest = latestIds(docs);
+            const nameCount = docs.reduce((m, d) => m.set(versionKey(d), (m.get(versionKey(d)) || 0) + 1), new Map());
             return (
               <div key={docType}>
                 <button
@@ -374,12 +390,12 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
 
                 {isOpen && (
                   <div className="divide-y divide-border/50">
-                    {docs.map((doc, idx) => (
+                    {docs.map((doc) => { const isLatest = latest.has(doc.id); return (
                       <div
                         key={doc.id}
                         className={cn(
                           'flex items-center justify-between px-4 py-2.5 hover:bg-muted/20 ml-6 pl-6 border-l-2 border-border/30',
-                          idx > 0 ? 'opacity-70' : ''
+                          !isLatest ? 'opacity-70' : ''
                         )}
                       >
                         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -388,14 +404,27 @@ export default function DocumentsTab({ client, documents, onRefresh, onOcrExtrac
                               <span className="text-sm text-foreground truncate">{doc.file_name}</span>
                               <span className={cn(
                                 'text-xs px-1.5 py-0.5 rounded-full font-mono flex-shrink-0',
-                                idx === 0 ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                                isLatest ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
                               )}>
                                 v{doc.version || 1}
                               </span>
-                              {idx === 0 && hasVersions && (
+                              {isLatest && nameCount.get(versionKey(doc)) > 1 && (
                                 <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">Latest</span>
                               )}
-                              <ReviewStatusBadge status={doc.review_status || 'Pending_Review'} />
+                              {/* Status menu: set Approved / Rejected / Pending (opens the review dialog with that decision) */}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button type="button" title="Change review status" className="inline-flex items-center gap-0.5 rounded-full focus:outline-none focus:ring-2 focus:ring-ring">
+                                    <ReviewStatusBadge status={doc.review_status || 'Pending_Review'} />
+                                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                  <DropdownMenuItem onClick={() => setReviewOpen({ doc, preset: 'Approved' })}>✓ Approve</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => setReviewOpen({ doc, preset: 'Rejected' })}>✗ Reject</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => setReviewOpen({ doc, preset: 'Pending_Review' })}>○ Back to Pending Review</DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                               {doc?.source === 'didit' && (
                                 <span className="ml-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium">
                                   🪪 Didit
