@@ -14,8 +14,26 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Plus, Search as SearchIcon, Network, Loader2, CheckCircle2, Clock, XCircle, ShieldQuestion, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { ROLES, parseRoles, joinRoles, mergeRoles, linkRoles } from '@/lib/partyRoles';
 
-const ROLES = ['UBO','Director','Shareholder','Beneficiary','Insured','Authorized Signatory','Other'];
+// A party can hold several roles for one client (e.g. Director + Shareholder + UBO): toggle chips, stored joined
+function RoleChips({ value, onChange }) {
+  const selected = parseRoles(value);
+  const toggle = (r) => onChange(joinRoles(selected.includes(r) ? selected.filter((x) => x !== r) : [...selected, r]));
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {ROLES.map((r) => (
+        <button key={r} type="button" onClick={() => toggle(r)}
+          className={cn('text-xs px-2 py-1 rounded-full border transition-colors',
+            selected.includes(r) ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:bg-muted/50')}>
+          {r}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const needsOwnership = (roles, pct) => parseRoles(roles).some((r) => r === 'Shareholder' || r === 'UBO') && (pct === '' || pct == null);
 const COUNTRIES = ['Netherlands (NL)','Belgium (BE)','Germany (DE)','France (FR)','United Kingdom (GB)','United States (US)','Luxembourg (LU)','Switzerland (CH)','Other'];
 const ID_TYPES = ['Passport','National ID Card','Drivers Licence','Residence Permit','Other'];
 const LEGAL_FORMS = ['BV','NV','Ltd','SA','GmbH','LLC','Inc','PLC','SRL','AG','SARL','Other'];
@@ -87,7 +105,13 @@ export default function RelatedPartiesTab({ client, relatedParties, links, onRef
                         {rp.party_type}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{link?.role || rp.role_in_relationship || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      <div className="flex flex-wrap gap-1">
+                        {linkRoles(link, rp).length
+                          ? linkRoles(link, rp).map((r) => <span key={r} className="px-1.5 py-0.5 rounded bg-muted text-foreground/80">{r}</span>)
+                          : '—'}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums">
                       {link?.ownership_percentage != null ? `${link.ownership_percentage}%` : rp.ownership_percentage != null ? `${rp.ownership_percentage}%` : '—'}
                     </td>
@@ -179,7 +203,16 @@ function EditRelatedPartyDialog({ rp, client, currentUser, onClose, onSaved }) {
 
   async function save() {
     setSaving(true);
-    await base44.entities.RelatedParty.update(rp.id, form);
+    const roles = parseRoles(form.role_in_relationship);
+    await base44.entities.RelatedParty.update(rp.id, { ...form, role_in_relationship: joinRoles(roles) || form.role_in_relationship });
+    // Roles and ownership also live on this client's link
+    const link = (await base44.entities.ClientRelatedPartyLink.filter({ tenant_id: client.tenant_id, client_id: client.id, related_party_id: rp.id }))?.[0];
+    if (link) {
+      await base44.entities.ClientRelatedPartyLink.update(link.id, {
+        role: joinRoles(roles) || link.role, roles,
+        ...(form.ownership_percentage != null && form.ownership_percentage !== '' ? { ownership_percentage: Number(form.ownership_percentage) } : {}),
+      });
+    }
     await base44.entities.AuditEvent.create({
       tenant_id: client.tenant_id,
       client_id: client.id,
@@ -208,14 +241,14 @@ function EditRelatedPartyDialog({ rp, client, currentUser, onClose, onSaved }) {
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Full Name *" value={form.full_name} onChange={v => set('full_name', v)} />
             <div>
-              <Label className="text-xs mb-1 block">Role</Label>
-              <Select value={form.role_in_relationship || ''} onValueChange={v => set('role_in_relationship', v)}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
-                <SelectContent>{ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-              </Select>
+              <FormField label="Ownership %" value={form.ownership_percentage?.toString() || ''} onChange={v => set('ownership_percentage', parseFloat(v) || undefined)} type="number" />
             </div>
           </div>
-          <FormField label="Ownership %" value={form.ownership_percentage?.toString() || ''} onChange={v => set('ownership_percentage', parseFloat(v) || undefined)} type="number" />
+          <div>
+            <Label className="text-xs mb-1 block">Roles (select all that apply)</Label>
+            <RoleChips value={form.role_in_relationship} onChange={v => set('role_in_relationship', v)} />
+            {needsOwnership(form.role_in_relationship, form.ownership_percentage) && <p className="text-xs text-amber-700 mt-1">Add the ownership % for a shareholder / UBO.</p>}
+          </div>
 
           {!isOrg && <>
             <div className="border-t border-border pt-3">
@@ -415,13 +448,24 @@ function AddRelatedPartyDialog({ open, onClose, client, currentUser, onAdded }) 
   async function linkExisting() {
     if (!selectedRP) return;
     setSaving(true);
-    await base44.entities.ClientRelatedPartyLink.create({
-      tenant_id: client.tenant_id, client_id: client.id,
-      related_party_id: selectedRP.id,
-      role: role || selectedRP.role_in_relationship,
-      ownership_percentage: ownership ? parseFloat(ownership) : undefined,
-      added_by_user_id: currentUser.id,
-    });
+    const roles = parseRoles(role || selectedRP.role_in_relationship);
+    // Already linked to this client: add the roles to that link instead of linking the person twice
+    const existing = (await base44.entities.ClientRelatedPartyLink.filter({ tenant_id: client.tenant_id, client_id: client.id, related_party_id: selectedRP.id }))?.[0];
+    if (existing) {
+      const merged = mergeRoles(linkRoles(existing, selectedRP), roles);
+      await base44.entities.ClientRelatedPartyLink.update(existing.id, {
+        role: joinRoles(merged), roles: merged,
+        ...(ownership ? { ownership_percentage: parseFloat(ownership) } : {}),
+      });
+    } else {
+      await base44.entities.ClientRelatedPartyLink.create({
+        tenant_id: client.tenant_id, client_id: client.id,
+        related_party_id: selectedRP.id,
+        role: joinRoles(roles) || selectedRP.role_in_relationship, roles,
+        ownership_percentage: ownership ? parseFloat(ownership) : undefined,
+        added_by_user_id: currentUser.id,
+      });
+    }
     await base44.entities.AuditEvent.create({
       tenant_id: client.tenant_id, client_id: client.id,
       actor_user_id: currentUser.id, actor_name: currentUser.full_name, actor_type: 'User',
@@ -436,14 +480,15 @@ function AddRelatedPartyDialog({ open, onClose, client, currentUser, onAdded }) 
   async function createAndLink() {
     if (!newRP.full_name) return;
     setSaving(true);
+    const roles = parseRoles(newRP.role_in_relationship);
     const rp = await base44.entities.RelatedParty.create({
-      ...newRP, tenant_id: client.tenant_id,
+      ...newRP, tenant_id: client.tenant_id, role_in_relationship: joinRoles(roles) || undefined,
       ownership_percentage: newRP.ownership_percentage ? parseFloat(newRP.ownership_percentage) : undefined,
       verification_status: 'Unverified',
     });
     await base44.entities.ClientRelatedPartyLink.create({
       tenant_id: client.tenant_id, client_id: client.id,
-      related_party_id: rp.id, role: newRP.role_in_relationship,
+      related_party_id: rp.id, role: joinRoles(roles) || undefined, roles,
       ownership_percentage: newRP.ownership_percentage ? parseFloat(newRP.ownership_percentage) : undefined,
       added_by_user_id: currentUser.id,
     });
@@ -502,15 +547,12 @@ function AddRelatedPartyDialog({ open, onClose, client, currentUser, onAdded }) 
                 <div className="text-xs font-medium text-muted-foreground">Link details for "{selectedRP.full_name}"</div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label className="text-xs mb-1 block">Role</Label>
-                    <Select value={role} onValueChange={setRole}>
-                      <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select role" /></SelectTrigger>
-                      <SelectContent>{ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <div>
                     <Label className="text-xs mb-1 block">Ownership %</Label>
                     <Input type="number" value={ownership} onChange={e => setOwnership(e.target.value)} placeholder="e.g. 25" className="h-8 text-sm" min="0" max="100" />
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-xs mb-1 block">Roles (select all that apply)</Label>
+                    <RoleChips value={role} onChange={setRole} />
                   </div>
                 </div>
               </div>
@@ -536,14 +578,12 @@ function AddRelatedPartyDialog({ open, onClose, client, currentUser, onAdded }) 
                 </Select>
               </div>
               <FormField label="Full Name *" value={newRP.full_name} onChange={v => setNewRP(p => ({ ...p, full_name: v }))} />
-              <div>
-                <Label className="text-xs mb-1 block">Role</Label>
-                <Select value={newRP.role_in_relationship} onValueChange={v => setNewRP(p => ({ ...p, role_in_relationship: v }))}>
-                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>{ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
               <FormField label="Ownership %" value={newRP.ownership_percentage} onChange={v => setNewRP(p => ({ ...p, ownership_percentage: v }))} type="number" />
+              <div className="col-span-2">
+                <Label className="text-xs mb-1 block">Roles (select all that apply)</Label>
+                <RoleChips value={newRP.role_in_relationship} onChange={v => setNewRP(p => ({ ...p, role_in_relationship: v }))} />
+                {needsOwnership(newRP.role_in_relationship, newRP.ownership_percentage) && <p className="text-xs text-amber-700 mt-1">Add the ownership % for a shareholder / UBO.</p>}
+              </div>
             </div>
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="outline" onClick={onClose}>Cancel</Button>
