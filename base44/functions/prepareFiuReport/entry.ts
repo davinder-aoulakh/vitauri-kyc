@@ -1,4 +1,5 @@
-// prepareFiuReport — one-click FIU report preparation from a TM case or alert.
+// prepareFiuReport — one-click FIU report preparation from a TM case, alert or KYC case, or (with client_id + report_type +
+// transaction_ids) a report without a TM case. report_type: SAR | STR | CTR | TTR | UTR | IFT | CBR | TFR (default: legacy UTR).
 // Auth: signed-in user with tmWorkCase (tenant from the user), OR the internal auto-draft call { auto: true, alert_id }
 // from the "Auto-draft FIU Report" workflow, where the tenant comes from the alert record itself and the tenant must have
 // tm_settings.auto_draft_objective_reports = true and the alert must be objective. Requires tm_core + tm_fiu.
@@ -39,6 +40,10 @@ export default async function (req) {
     const ctx = { base44, E, auth, tenantId, tenant };
     const result = await prepareReport(ctx, {
       tmCaseId: body.tm_case_id, alertId: body.alert_id, kycCaseId: body.kyc_case_id, profileCode: body.fiu_profile_code, refresh: !auto,
+      reportType: auto ? undefined : body.report_type || undefined,
+      clientId: auto ? undefined : body.client_id || undefined,
+      transactionIds: !auto && Array.isArray(body.transaction_ids) ? body.transaction_ids.map(String).slice(0, 500) : [],
+      existingReportId: !auto ? body.report_id || undefined : undefined,
     });
     return Response.json({ ok: true, ...result });
   } catch (error) {
