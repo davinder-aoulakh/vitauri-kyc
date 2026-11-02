@@ -131,6 +131,10 @@ export default function CaseWorkspace() {
     if (activeStep === 8) refreshCaseData(true);
   }, [activeStep]);
 
+  // Steps that write the client (Profile Verification, the Didit suggestion cards) report what they wrote, so every
+  // other step, the header and the report see the current data without a reload.
+  const mergeClient = useCallback((patch) => setClient(prev => (prev ? { ...prev, ...patch } : prev)), []);
+
   async function refreshCaseData(silent = false) {
     if (!silent) setLoading(true);
     else setIsRefreshing(true);
@@ -702,7 +706,7 @@ export default function CaseWorkspace() {
                   </div>
                 ) : (
                   <>
-                    {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} onNavigateToStep={setActiveStep} />}
+                    {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} onNavigateToStep={setActiveStep} onCaseUpdate={setKycCase} onClientUpdate={mergeClient} />}
                     {activeStep === 2 && client?.client_type === 'ORG' && isFeatureEnabled(tenant, 'didit_kyb') && (
                       <KybStep
                         kycCase={kycCase}
@@ -749,6 +753,7 @@ export default function CaseWorkspace() {
                   client={client}
                   currentUser={currentUser}
                   onCaseUpdate={setKycCase}
+                  onClientUpdate={mergeClient}
                   onNavigateToStep={setActiveStep}
                   onAddNote={addNote}
                   tenant={tenant}
