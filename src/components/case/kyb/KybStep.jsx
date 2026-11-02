@@ -1,10 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { hasPermission } from '@/lib/permissions';
+import { openChecks, acceptReadiness, PENDING_STATUSES } from '@/lib/kybReview';
 import { upsertRelatedParty, findLinkedMatch } from '@/lib/relatedPartyUpsert';
-import { CheckCircle, FileText, Loader2, RefreshCw, ShieldAlert, UserPlus, Building2 } from 'lucide-react';
+import { CheckCircle, Clock, FileText, Loader2, RefreshCw, ShieldAlert, UserPlus, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import KeyPeopleVerification, { keyRoleKind } from './KeyPeopleVerification';
 
@@ -57,6 +60,9 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
   const key = ['kyb-step', client?.id];
   const [syncing, setSyncing] = useState(false);
   const [adding, setAdding] = useState(null);
+  const [acceptReason, setAcceptReason] = useState('');
+  const [accepting, setAccepting] = useState(false);
+  const autoSynced = useRef(false);
 
   const { data, isLoading } = useQuery({
     queryKey: key,
@@ -94,20 +100,45 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
     return { ...p, candidate, match, diffs: match ? registryDiffs(candidate, match) : {} };
   });
 
-  const sync = async () => {
+  const sync = async (silent = false) => {
     if (!kyb) return;
     setSyncing(true);
     try {
       const res = await base44.functions.invoke('getDiditKybResult', { kyb_verification_id: kyb.id });
       if (res?.data?.error) throw new Error(res.data.error);
-      toast({ title: `Business verification: ${res?.data?.status || 'no result yet'}` });
+      if (!silent) toast({ title: `Business verification: ${res?.data?.status || 'no result yet'}` });
       refresh();
       // Refresh the Profile Verification suggestions so new registry data shows up for review (as the NP pipeline does).
       if (kycCase?.id) base44.functions.invoke('buildProfileSuggestions', { case_id: kycCase.id, client_id: client.id, client_type: 'ORG' }).catch(() => {});
     } catch (e) {
-      toast({ title: 'Sync failed', description: e?.response?.data?.error || e.message, variant: 'destructive' });
+      if (silent) console.warn('KYB auto-sync failed:', e?.message);
+      else toast({ title: 'Sync failed', description: e?.response?.data?.error || e.message, variant: 'destructive' });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // While Didit is still deciding, refresh once on opening when the last check is more than 5 minutes old
+  useEffect(() => {
+    if (!kyb || autoSynced.current || !PENDING_STATUSES.includes(kyb.status)) return;
+    const age = kyb.checked_at ? Date.now() - new Date(kyb.checked_at).getTime() : Infinity;
+    if (age < 5 * 60 * 1000) return;
+    autoSynced.current = true;
+    sync(true);
+  }, [kyb?.id, kyb?.status, kyb?.checked_at]);
+
+  const acceptInVitauri = async () => {
+    setAccepting(true);
+    try {
+      const res = await base44.functions.invoke('acceptKybReview', { kyb_verification_id: kyb.id, reason: acceptReason.trim() });
+      if (res?.data?.error) throw new Error(res.data.error);
+      toast({ title: 'Business verification accepted in Vitauri' });
+      setAcceptReason('');
+      refresh();
+    } catch (e) {
+      toast({ title: 'Could not accept', description: e?.response?.data?.error || e.message, variant: 'destructive' });
+    } finally {
+      setAccepting(false);
     }
   };
 
@@ -132,7 +163,15 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
 
   const reg = kyb?.registry || {};
   const allVerified = people.length > 0 && people.every((p) => p.verification_status === 'Verified');
-  const canComplete = kyb?.status === 'Approved' && allVerified;
+  const accepted = kyb?.vitauri_review?.decision === 'accepted';
+  const acceptedStillValid = accepted && kyb?.status === 'In Review';
+  const declinedAfterAccept = accepted && ['Declined', 'Expired', 'Abandoned', 'Kyc Expired'].includes(kyb?.status);
+  const canComplete = (kyb?.status === 'Approved' || acceptedStillValid) && allVerified;
+  const pending = kyb && PENDING_STATUSES.includes(kyb.status);
+  const open = openChecks(kyb);
+  const readiness = acceptReadiness(kyb, people);
+  const canAccept = hasPermission(currentUser?.app_role, 'approveMedium');
+  const fmt = (v) => (v ? new Date(v).toLocaleString() : '—');
   const stepDone = kycCase?.step_2_status === 'complete';
 
   return (
@@ -142,8 +181,9 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
           <Building2 className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-semibold">Business verification (Didit KYB)</h3>
           {kyb && <span className={cn('text-[11px] px-2 py-0.5 rounded-full border', STATUS_CLS[kyb.status] || 'bg-muted text-muted-foreground border-border')}>{kyb.status}</span>}
+          {acceptedStillValid && <span className="text-[11px] px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">Accepted (Vitauri)</span>}
           {kyb && (
-            <Button size="sm" variant="outline" className="ml-auto h-7 gap-1.5 text-xs" onClick={sync} disabled={syncing}>
+            <Button size="sm" variant="outline" className="ml-auto h-7 gap-1.5 text-xs" onClick={() => sync(false)} disabled={syncing}>
               {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Sync from Didit
             </Button>
           )}
@@ -181,6 +221,63 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
           </>
         )}
       </div>
+
+      {declinedAfterAccept && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+          Didit reported <strong>{kyb.status}</strong> after this verification was accepted in Vitauri by {kyb.vitauri_review.by_name} on {fmt(kyb.vitauri_review.at)}. Review the Didit result before continuing.
+        </div>
+      )}
+
+      {pending && !acceptedStillValid && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+            <Clock className="w-4 h-4" /> Waiting on Didit
+          </div>
+          {open.length > 0 ? (
+            <ul className="space-y-1 text-xs text-amber-900">
+              {open.map((c, i) => (
+                <li key={`${c.group}-${i}`}><strong>{c.label}</strong> — {c.status}{c.hint ? `: ${c.hint}` : ''}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-amber-900">Didit has not finished the session yet{kyb.status === 'Awaiting User' ? ' — the company representative still has to complete a step in the portal' : ''}.</p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Last Didit update: {fmt(kyb.decided_at)} · Last checked: {fmt(kyb.checked_at)}.
+            {kyb.status === 'In Review' && ' Approve or decline it in the Didit console and Vitauri updates automatically.'}
+          </p>
+
+          {kyb.status === 'In Review' && canAccept && (
+            <div className="mt-2 rounded-lg border border-border bg-card p-3 space-y-2">
+              <div className="text-xs font-semibold">Accept in Vitauri</div>
+              <p className="text-xs text-muted-foreground">
+                Possible when Didit only waits on its key people check and every UBO and director is Verified below. Didit's own status does not change; a later Didit decision still comes in.
+              </p>
+              {!readiness.ok && (
+                <ul className="list-disc pl-4 text-xs text-muted-foreground">
+                  {readiness.reasons.map((r) => <li key={r}>{r}</li>)}
+                </ul>
+              )}
+              <Textarea
+                value={acceptReason}
+                onChange={(e) => setAcceptReason(e.target.value)}
+                placeholder="Reason (e.g. director verified via Didit ID&V in Vitauri; registry, documents and AML approved)"
+                className="text-xs min-h-16"
+                disabled={!readiness.ok}
+              />
+              <Button size="sm" className="gap-1.5" disabled={!readiness.ok || acceptReason.trim().length < 10 || accepting} onClick={acceptInVitauri}>
+                {accepting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />} Accept business verification
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {acceptedStillValid && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+          Accepted in Vitauri by {kyb.vitauri_review.by_name} on {fmt(kyb.vitauri_review.at)} — Didit is still In Review ({(kyb.vitauri_review.open_checks || []).join(', ')}). Reason: {kyb.vitauri_review.reason}
+        </div>
+      )}
 
       {registryPeople.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-4 space-y-2">
@@ -223,7 +320,7 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
 
       <div className="flex flex-wrap items-center justify-end gap-3">
         {!stepDone && !canComplete && (
-          <span className="text-xs text-muted-foreground">Complete when the business verification is Approved and every UBO and director is Verified.</span>
+          <span className="text-xs text-muted-foreground">Complete when the business verification is Approved (by Didit, or accepted in Vitauri) and every UBO and director is Verified.</span>
         )}
         <Button size="sm" disabled={stepDone || !canComplete} onClick={() => onStepComplete?.()} className="gap-1.5">
           <CheckCircle className="w-4 h-4" /> {stepDone ? 'Step complete' : 'Mark step complete'}
