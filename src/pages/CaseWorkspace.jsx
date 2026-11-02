@@ -224,6 +224,15 @@ export default function CaseWorkspace() {
       toast({ variant: 'destructive', title: 'Risk classification missing', description: 'Finish the risk assessment in the Consolidated View and press Proceed.' });
       return;
     }
+    // AI Document Checker: a high-risk document must be reviewed (approved with a reason, or rejected) first
+    if (stepKey === 'step_1_status' && status === 'complete') {
+      const docs = await base44.entities.Document.filter({ case_id: id }).catch(() => []);
+      const open = (docs || []).filter(d => !d.is_deleted && d.ai_check?.verdict === 'high_risk' && (d.review_status || 'Pending_Review') === 'Pending_Review');
+      if (open.length) {
+        toast({ variant: 'destructive', title: 'Document needs review', description: `The AI Document Checker rated ${open.map(d => `"${d.file_name}"`).join(', ')} high risk. Approve (with a reason) or reject it in the client's Documents tab first.` });
+        return;
+      }
+    }
     setUpdatingStepKey(stepKey);
     // Optimistic local update — UI reflects the click immediately even if the
     // network call is slow or times out; reconciled below once we hear back.
