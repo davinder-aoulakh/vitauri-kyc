@@ -1,69 +1,53 @@
 {
   "name": "Transaction",
-  "type": "object",
   "properties": {
-    "tenant_id": {
-      "type": "string"
-    },
-    "client_id": {
-      "type": "string",
-      "description": "FK to Client \u2014 sent to Didit as subject.vendor_data"
-    },
-    "case_id": {
-      "type": "string",
-      "description": "nullable \u2014 FK to KycCase if linked"
-    },
-    "our_transaction_id": {
-      "type": "string",
-      "description": "Our unique ID (<=128 chars) sent to Didit as transaction_id"
-    },
-    "didit_transaction_id": {
-      "type": "string",
-      "description": "Didit's returned transaction ID"
-    },
-    "transaction_category": {
-      "type": "string",
-      "enum": [
-        "finance",
-        "kyc",
-        "travel_rule",
-        "user_event",
-        "audit_trail_event",
-        "gambling_bet",
-        "gambling_limit_change",
-        "gambling_bonus_change"
-      ]
-    },
-    "direction": {
-      "type": "string",
-      "enum": [
-        "inbound",
-        "outbound"
-      ]
-    },
     "amount": {
       "type": "number"
     },
-    "currency": {
-      "type": "string",
-      "description": "ISO 4217 for fiat, chain:ticker for crypto (e.g. bitcoin:BTC)"
+    "bank_account_id": {
+      "type": "string"
     },
-    "currency_kind": {
-      "type": "string",
-      "enum": [
-        "fiat",
-        "crypto"
-      ]
+    "blocked": {
+      "default": false,
+      "description": "Didit DECLINED: blocked in Vitauri (the core system holds/stops the payment)",
+      "type": "boolean"
     },
-    "counterparty_name": {
+    "blocked_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "blocked_reason": {
+      "type": "string"
+    },
+    "case_id": {
+      "description": "nullable \u2014 FK to KycCase if linked",
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "category_confidence": {
+      "type": "number"
+    },
+    "client_id": {
+      "description": "FK to Client \u2014 sent to Didit as subject.vendor_data",
       "type": "string"
     },
     "counterparty_account_id": {
-      "type": "string",
-      "description": "IBAN / account number / wallet address"
+      "description": "IBAN / account number / wallet address",
+      "type": "string"
+    },
+    "counterparty_country": {
+      "description": "ISO 3166-1 alpha-2",
+      "type": "string"
+    },
+    "counterparty_id": {
+      "type": "string"
+    },
+    "counterparty_match_confidence": {
+      "type": "number"
     },
     "counterparty_method_type": {
-      "type": "string",
       "enum": [
         "bank_card",
         "bank_account",
@@ -71,69 +55,111 @@
         "unhosted_wallet",
         "ewallet",
         "other"
-      ]
-    },
-    "subject_entity_type": {
-      "type": "string",
-      "enum": [
-        "person",
-        "company"
       ],
-      "default": "person"
-    },
-    "subject_full_name": {
       "type": "string"
     },
-    "status": {
-      "type": "string",
+    "counterparty_name": {
+      "type": "string"
+    },
+    "coverage_date": {
+      "format": "date",
+      "type": "string"
+    },
+    "currency": {
+      "description": "ISO 4217 for fiat, chain:ticker for crypto (e.g. bitcoin:BTC)",
+      "type": "string"
+    },
+    "currency_kind": {
       "enum": [
-        "PENDING",
-        "APPROVED",
-        "IN_REVIEW",
-        "DECLINED",
-        "AWAITING_USER"
+        "fiat",
+        "crypto"
       ],
-      "default": "PENDING"
-    },
-    "risk_score": {
-      "type": "number",
-      "description": "nullable"
-    },
-    "risk_level": {
-      "type": "string",
-      "description": "nullable"
+      "type": "string"
     },
     "decision_raw": {
-      "type": "object",
-      "description": "Full Didit response for audit"
+      "description": "Full Didit response for audit",
+      "type": "object"
     },
-    "submitted_by_user_id": {
+    "dedupe_key": {
       "type": "string"
     },
-    "reviewed_by_user_id": {
-      "type": "string",
-      "description": "nullable"
+    "description_raw": {
+      "type": "string"
     },
-    "reviewed_at": {
-      "type": "string",
-      "format": "date-time",
-      "description": "nullable"
+    "didit_last_event_id": {
+      "type": "string"
     },
-    "review_decision": {
-      "type": "string",
+    "didit_rule_runs": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "didit_submission_error": {
+      "type": "string"
+    },
+    "didit_submission_note": {
+      "description": "Why the transaction was not sent to Didit (skipped) or the last submission error",
+      "type": "string"
+    },
+    "didit_submission_status": {
+      "default": "not_submitted",
       "enum": [
-        "Approved",
-        "Blocked",
-        "Escalated"
+        "not_submitted",
+        "submitted",
+        "failed",
+        "skipped"
       ],
-      "description": "nullable"
+      "type": "string"
     },
-    "review_notes": {
-      "type": "string",
-      "description": "nullable"
+    "didit_transaction_id": {
+      "description": "Didit's returned transaction ID",
+      "type": "string"
+    },
+    "direction": {
+      "enum": [
+        "inbound",
+        "outbound"
+      ],
+      "type": "string"
+    },
+    "executed_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "external_id": {
+      "type": "string"
+    },
+    "fx": {
+      "properties": {
+        "amount_reporting": {
+          "type": "number"
+        },
+        "rate": {
+          "type": "number"
+        },
+        "rate_date": {
+          "type": "string"
+        },
+        "reporting_currency": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "historical": {
+      "default": false,
+      "type": "boolean"
+    },
+    "ingest_batch_id": {
+      "type": "string"
+    },
+    "intended_at": {
+      "format": "date-time",
+      "type": "string"
     },
     "lifecycle": {
-      "type": "string",
+      "default": "booked",
       "enum": [
         "intended",
         "declined",
@@ -141,26 +167,60 @@
         "reversed",
         "corrected"
       ],
-      "default": "booked"
+      "type": "string"
     },
-    "related_to": {
-      "type": "string",
-      "description": "Transaction id of the original booking for a reversal/correction"
+    "our_transaction_id": {
+      "description": "Our unique ID (<=128 chars) sent to Didit as transaction_id",
+      "type": "string"
     },
-    "intended_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "executed_at": {
-      "type": "string",
-      "format": "date-time"
+    "own_transfer": {
+      "default": false,
+      "type": "boolean"
     },
     "received_at": {
-      "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "type": "string"
+    },
+    "related_to": {
+      "description": "Transaction id of the original booking for a reversal/correction",
+      "type": "string"
+    },
+    "review_decision": {
+      "description": "nullable",
+      "enum": [
+        "Approved",
+        "Blocked",
+        "Escalated"
+      ],
+      "type": "string"
+    },
+    "review_notes": {
+      "description": "nullable",
+      "type": "string"
+    },
+    "reviewed_at": {
+      "description": "nullable",
+      "format": "date-time",
+      "type": "string"
+    },
+    "reviewed_by_user_id": {
+      "description": "nullable",
+      "type": "string"
+    },
+    "risk_level": {
+      "description": "nullable",
+      "type": "string"
+    },
+    "risk_score": {
+      "description": "nullable",
+      "type": "number"
+    },
+    "source_file_id": {
+      "description": "StatementUpload id",
+      "type": "string"
     },
     "source_type": {
-      "type": "string",
+      "default": "manual",
       "enum": [
         "manual",
         "api",
@@ -171,98 +231,55 @@
         "upload_camt",
         "upload_pdf"
       ],
-      "default": "manual"
-    },
-    "source_file_id": {
-      "type": "string",
-      "description": "StatementUpload id"
-    },
-    "ingest_batch_id": {
       "type": "string"
     },
-    "dedupe_key": {
-      "type": "string"
-    },
-    "external_id": {
-      "type": "string"
-    },
-    "coverage_date": {
-      "type": "string",
-      "format": "date"
-    },
-    "bank_account_id": {
-      "type": "string"
-    },
-    "own_transfer": {
-      "type": "boolean",
-      "default": false
-    },
-    "fx": {
-      "type": "object",
-      "properties": {
-        "rate": {
-          "type": "number"
-        },
-        "rate_date": {
-          "type": "string"
-        },
-        "reporting_currency": {
-          "type": "string"
-        },
-        "amount_reporting": {
-          "type": "number"
-        }
-      }
-    },
-    "description_raw": {
-      "type": "string"
-    },
-    "counterparty_id": {
-      "type": "string"
-    },
-    "counterparty_country": {
-      "type": "string",
-      "description": "ISO 3166-1 alpha-2"
-    },
-    "counterparty_match_confidence": {
-      "type": "number"
-    },
-    "category": {
-      "type": "string"
-    },
-    "category_confidence": {
-      "type": "number"
-    },
-    "didit_last_event_id": {
-      "type": "string"
-    },
-    "didit_rule_runs": {
-      "type": "array",
-      "items": {
-        "type": "object"
-      }
-    },
-    "didit_submission_status": {
-      "type": "string",
+    "status": {
+      "default": "PENDING",
       "enum": [
-        "not_submitted",
-        "submitted",
-        "failed"
+        "PENDING",
+        "APPROVED",
+        "IN_REVIEW",
+        "DECLINED",
+        "AWAITING_USER"
       ],
-      "default": "not_submitted"
-    },
-    "didit_submission_error": {
       "type": "string"
     },
-    "historical": {
-      "type": "boolean",
-      "default": false
+    "subject_entity_type": {
+      "default": "person",
+      "enum": [
+        "person",
+        "company"
+      ],
+      "type": "string"
+    },
+    "subject_full_name": {
+      "type": "string"
+    },
+    "submitted_by_user_id": {
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "transaction_category": {
+      "enum": [
+        "finance",
+        "kyc",
+        "travel_rule",
+        "user_event",
+        "audit_trail_event",
+        "gambling_bet",
+        "gambling_limit_change",
+        "gambling_bonus_change"
+      ],
+      "type": "string"
     }
   },
   "required": [
     "tenant_id",
     "client_id"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "$or": [
