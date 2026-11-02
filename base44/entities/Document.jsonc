@@ -1,19 +1,29 @@
 {
   "name": "Document",
-  "type": "object",
   "properties": {
-    "tenant_id": {
+    "ai_check": {
+      "description": "AI Document Checker result (advisory): { status: 'running'|'done'|'error', verdict: authentic|needs_attention|high_risk, score, summary, checks[], document_type_detected, matches_request, extracted, run_at, model, version, error }",
+      "type": "object"
+    },
+    "case_id": {
+      "description": "nullable",
       "type": "string"
     },
     "client_id": {
       "type": "string"
     },
-    "case_id": {
-      "type": "string",
-      "description": "nullable"
+    "deleted_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "deleted_by_user_id": {
+      "type": "string"
+    },
+    "didit_session_id": {
+      "description": "Didit session UUID \u2014 used for per-session deduplication",
+      "type": "string"
     },
     "doc_type": {
-      "type": "string",
       "enum": [
         "Passport",
         "ID_Card",
@@ -27,68 +37,65 @@
         "Salary_Slip",
         "Registry_Extract",
         "Other"
-      ]
+      ],
+      "type": "string"
     },
     "file_name": {
+      "type": "string"
+    },
+    "file_sha256": {
+      "description": "SHA-256 of the file content \u2014 detects the same file uploaded for several clients",
       "type": "string"
     },
     "file_url": {
       "type": "string"
     },
-    "version": {
-      "type": "number",
-      "default": 1
-    },
-    "uploaded_by_user_id": {
-      "type": "string"
-    },
     "is_ai_generated": {
-      "type": "boolean",
-      "default": false
+      "default": false,
+      "type": "boolean"
+    },
+    "is_deleted": {
+      "default": false,
+      "type": "boolean"
     },
     "related_party_id": {
-      "type": "string",
-      "description": "nullable \u2014 if doc belongs to a related party"
+      "description": "nullable \u2014 if doc belongs to a related party",
+      "type": "string"
+    },
+    "review_notes": {
+      "description": "Rejection reason or approval notes",
+      "type": "string"
     },
     "review_status": {
-      "type": "string",
+      "default": "Pending_Review",
+      "description": "Analyst approval status",
       "enum": [
         "Pending_Review",
         "Approved",
         "Rejected"
       ],
-      "default": "Pending_Review",
-      "description": "Analyst approval status"
+      "type": "string"
     },
-    "review_notes": {
-      "type": "string",
-      "description": "Rejection reason or approval notes"
+    "reviewed_at": {
+      "format": "date-time",
+      "type": "string"
     },
     "reviewed_by_user_id": {
       "type": "string"
     },
-    "reviewed_at": {
-      "type": "string",
-      "format": "date-time"
-    },
     "source": {
-      "type": "string",
-      "description": "e.g. didit, portal, manual"
-    },
-    "didit_session_id": {
-      "type": "string",
-      "description": "Didit session UUID \u2014 used for per-session deduplication"
-    },
-    "is_deleted": {
-      "type": "boolean",
-      "default": false
-    },
-    "deleted_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "deleted_by_user_id": {
+      "description": "e.g. didit, portal, manual",
       "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "uploaded_by_user_id": {
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "type": "number"
     }
   },
   "required": [
@@ -97,5 +104,6 @@
     "doc_type",
     "file_name",
     "file_url"
-  ]
+  ],
+  "type": "object"
 }
