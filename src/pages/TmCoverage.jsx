@@ -40,41 +40,43 @@ export default function TmCoverage() {
 
   return (
     <AppShell>
-      <PageHeader
-        title="Is all transaction data in and reviewed?"
-        subtitle="Coverage per bank account and day, connection health and review backlog."
-        actions={
-          <>
-            <Select value={month} onValueChange={setMonth}>
-              <SelectTrigger className="h-9 w-44 text-sm" aria-label="Month"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {months.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {canUpload && (
-              <Button size="sm" className="gap-1.5 text-xs" onClick={() => setShowUpload(true)}>
-                <Upload className="w-3.5 h-3.5" /> Upload statement
-              </Button>
-            )}
-          </>
-        }
-      />
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
+        <PageHeader
+          title="Is all transaction data in and reviewed?"
+          subtitle="Coverage per bank account and day, connection health and review backlog."
+          actions={
+            <>
+              <Select value={month} onValueChange={setMonth}>
+                <SelectTrigger className="h-9 w-44 text-sm" aria-label="Month"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {months.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {canUpload && (
+                <Button size="sm" className="gap-1.5 text-xs" onClick={() => setShowUpload(true)}>
+                  <Upload className="w-3.5 h-3.5" /> Upload statement
+                </Button>
+              )}
+            </>
+          }
+        />
 
-      {error && <InlineError message="Couldn't load coverage data." onRetry={() => refetch()} />}
-      {isLoading && (
-        <div className="flex justify-center py-16" role="status"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-      )}
-      {data && (
-        <div className={isFetching ? 'space-y-5 opacity-70 transition-opacity' : 'space-y-5 transition-opacity'}>
-          <CoverageKpis kpis={data.kpis} monthLabel={monthLabel} lifecycle={data.lifecycle} />
-          <AccountsCoverageTable rows={data.accountRows} start={data.start} end={data.end} />
-          <ConnectionsTable rows={data.accountRows} />
-        </div>
-      )}
+        {error && <InlineError message="Couldn't load coverage data." onRetry={() => refetch()} />}
+        {isLoading && (
+          <div className="flex justify-center py-16" role="status"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+        )}
+        {data && (
+          <div className={isFetching ? 'space-y-5 opacity-70 transition-opacity' : 'space-y-5 transition-opacity'}>
+            <CoverageKpis kpis={data.kpis} monthLabel={monthLabel} lifecycle={data.lifecycle} />
+            <AccountsCoverageTable rows={data.accountRows} start={data.start} end={data.end} />
+            <ConnectionsTable rows={data.accountRows} />
+          </div>
+        )}
 
-      {canUpload && (
-        <StatementUploadDrawer open={showUpload} onOpenChange={setShowUpload} clients={clients || []} onCommitted={() => refetch()} />
-      )}
+        {canUpload && (
+          <StatementUploadDrawer open={showUpload} onOpenChange={setShowUpload} clients={clients || []} onCommitted={() => refetch()} />
+        )}
+      </div>
     </AppShell>
   );
 }

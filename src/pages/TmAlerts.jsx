@@ -126,69 +126,71 @@ export default function TmAlerts() {
 
   return (
     <AppShell>
-      <PageHeader
-        title="Alerts"
-        subtitle={`${count.data ?? '…'} open · sorted by risk and deadline`}
-        actions={
-          <>
-            {canWork && selected.size > 0 && (
-              <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setCaseIds([...selected])}>
-                <FolderPlus className="w-3.5 h-3.5" /> Create case from {selected.size}
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
+        <PageHeader
+          title="Alerts"
+          subtitle={`${count.data ?? '…'} open · sorted by risk and deadline`}
+          actions={
+            <>
+              {canWork && selected.size > 0 && (
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setCaseIds([...selected])}>
+                  <FolderPlus className="w-3.5 h-3.5" /> Create case from {selected.size}
+                </Button>
+              )}
+              {canWork && selected.size > 0 && (
+                <Button
+                  size="sm" variant="outline" className="gap-1.5 text-xs" disabled={bulkCloseBlocked}
+                  title={bulkCloseBlocked ? 'Bulk closing is only released for some alert types. Close these one by one, or select only released types.' : undefined}
+                  onClick={() => setCloseIds([...selected])}
+                >
+                  <XCircle className="w-3.5 h-3.5" /> Close {selected.size} selected
+                </Button>
+              )}
+              <Button size="sm" className="gap-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white" onClick={runTriage} disabled={triaging}>
+                {triaging ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} Run AI triage on new alerts
               </Button>
-            )}
-            {canWork && selected.size > 0 && (
-              <Button
-                size="sm" variant="outline" className="gap-1.5 text-xs" disabled={bulkCloseBlocked}
-                title={bulkCloseBlocked ? 'Bulk closing is only released for some alert types. Close these one by one, or select only released types.' : undefined}
-                onClick={() => setCloseIds([...selected])}
-              >
-                <XCircle className="w-3.5 h-3.5" /> Close {selected.size} selected
-              </Button>
-            )}
-            <Button size="sm" className="gap-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white" onClick={runTriage} disabled={triaging}>
-              {triaging ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} Run AI triage on new alerts
+            </>
+          }
+        />
+        <AlertFilters value={filter} onChange={(f) => { setFilter(f); setSelected(new Set()); }} />
+
+        {list.error && <InlineError message="Couldn't load alerts." onRetry={() => list.refetch()} />}
+        {list.isLoading && <div className="flex justify-center py-16" role="status"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>}
+        {!list.isLoading && !list.error && alerts.length === 0 && (
+          <EmptyState icon={Inbox} title={filter === 'all' ? 'No open alerts' : 'No alerts match this filter'} description={EMPTY_COPY[filter]} />
+        )}
+        {alerts.length > 0 && (
+          <AlertsTable
+            alerts={alerts} clientsById={clientsById} scenarios={scenarios} rulesByDiditId={rulesByDiditId} now={now}
+            selected={selected} onToggle={toggle} onOpen={(a) => setOpenId(a.id)} canSelect={canWork}
+          />
+        )}
+        {alerts.length >= limit && (
+          <div className="flex justify-center mt-3">
+            <Button size="sm" variant="outline" className="text-xs" onClick={() => setLimit((l) => l + 200)} disabled={list.isFetching}>
+              {list.isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Show more alerts
             </Button>
-          </>
-        }
-      />
-      <AlertFilters value={filter} onChange={(f) => { setFilter(f); setSelected(new Set()); }} />
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground mt-4">
+          AI proposals show reasons, not percentages. Bulk closing is only possible for alert types released after measurement.
+        </p>
 
-      {list.error && <InlineError message="Couldn't load alerts." onRetry={() => list.refetch()} />}
-      {list.isLoading && <div className="flex justify-center py-16" role="status"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>}
-      {!list.isLoading && !list.error && alerts.length === 0 && (
-        <EmptyState icon={Inbox} title={filter === 'all' ? 'No open alerts' : 'No alerts match this filter'} description={EMPTY_COPY[filter]} />
-      )}
-      {alerts.length > 0 && (
-        <AlertsTable
-          alerts={alerts} clientsById={clientsById} scenarios={scenarios} rulesByDiditId={rulesByDiditId} now={now}
-          selected={selected} onToggle={toggle} onOpen={(a) => setOpenId(a.id)} canSelect={canWork}
+        <AlertSidePanel
+          alert={openAlert} client={openAlert ? clientsById.get(openAlert.client_id) : null} tenantId={tenantId} userId={userId}
+          canWork={canWork} now={now} onClose={() => setOpenId(null)} onChanged={refresh} onCloseAlert={setCloseIds}
         />
-      )}
-      {alerts.length >= limit && (
-        <div className="flex justify-center mt-3">
-          <Button size="sm" variant="outline" className="text-xs" onClick={() => setLimit((l) => l + 200)} disabled={list.isFetching}>
-            {list.isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Show more alerts
-          </Button>
-        </div>
-      )}
-      <p className="text-xs text-muted-foreground mt-4">
-        AI proposals show reasons, not percentages. Bulk closing is only possible for alert types released after measurement.
-      </p>
-
-      <AlertSidePanel
-        alert={openAlert} client={openAlert ? clientsById.get(openAlert.client_id) : null} tenantId={tenantId} userId={userId}
-        canWork={canWork} now={now} onClose={() => setOpenId(null)} onChanged={refresh} onCloseAlert={setCloseIds}
-      />
-      {caseIds && (
-        <CreateCaseDialog
-          open alertIds={caseIds} defaultTitle={alerts.find((a) => a.id === caseIds[0])?.title}
-          onOpenChange={(v) => !v && setCaseIds(null)} onCreated={() => { setOpenId(null); refresh(); }}
+        {caseIds && (
+          <CreateCaseDialog
+            open alertIds={caseIds} defaultTitle={alerts.find((a) => a.id === caseIds[0])?.title}
+            onOpenChange={(v) => !v && setCaseIds(null)} onCreated={() => { setOpenId(null); refresh(); }}
+          />
+        )}
+        <CloseAlertDialog
+          alertIds={closeIds || []} open={!!closeIds} onOpenChange={(v) => !v && setCloseIds(null)}
+          onClosed={() => { setOpenId(null); refresh(); }}
         />
-      )}
-      <CloseAlertDialog
-        alertIds={closeIds || []} open={!!closeIds} onOpenChange={(v) => !v && setCloseIds(null)}
-        onClosed={() => { setOpenId(null); refresh(); }}
-      />
+      </div>
     </AppShell>
   );
 }
