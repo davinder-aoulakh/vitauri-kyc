@@ -71,7 +71,6 @@ export function useFiuAct(tenantId, id) {
   return { act, busy };
 }
 
-/** Opens a private file through a short-lived signed link. */
 /** Download a read-only preview: kind 'xml' (goAML XML as it would be generated now) or 'pdf' (DRAFT watermark before approval). */
 export async function downloadPreview(id, kind, toast) {
   try {
@@ -97,6 +96,7 @@ export async function downloadPreview(id, kind, toast) {
   }
 }
 
+/** Opens a private file through a short-lived signed link. */
 export async function openFile(id, kind, toast) {
   try {
     const res = await base44.functions.invoke('fiuReportAction', { action: 'signed_url', report_id: id, kind });
