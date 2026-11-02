@@ -19,9 +19,10 @@ const NP_FIELDS = [
   'id_type','id_number',
   'residential_address.country','residential_address.street','residential_address.number',
   'residential_address.zipcode','residential_address.city',
+  'primary_contact_email','primary_contact_phone',
 ];
 // ORG fields we can extract from sources
-const ORG_FIELDS = ['full_name','legal_form','registration_number','registered_country','registered_address','sector','lei_code','business_activity','nature_of_business_code'];
+const ORG_FIELDS = ['full_name','legal_form','registration_number','registered_country','registered_address','sector','lei_code','business_activity','nature_of_business_code','primary_contact_email','primary_contact_phone'];
 
 // Registry statuses that mean the company is not (fully) active — surfaced as a red flag in the grid.
 const INACTIVE_REGISTRY = /dissolv|struck|strike|liquidat|inactive|closed|cancel|deregist|bankrupt|insolv|ceased/i;
