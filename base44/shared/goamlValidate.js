@@ -11,7 +11,8 @@ const ISO2 = /^[A-Z]{2}$/;
 const CUR = /^[A-Z]{3}$/;
 const ARRAYS = new Set(['transaction', 'indicator', 'director_id', 'report_party', 'phone', 'address', 'signatory']);
 const arr = (v) => (v === undefined || v === null ? [] : Array.isArray(v) ? v : [v]);
-const txt = (v) => (v === undefined || v === null ? '' : typeof v === 'object' ? '' : String(v).trim());
+// <address> is both a text element (location/address) and a group (addresses/address): read the first text value.
+const txt = (v) => (v === undefined || v === null ? '' : Array.isArray(v) ? txt(v[0]) : typeof v === 'object' ? '' : String(v).trim());
 
 /** Returns { ok, errors: [{ path, message }], warnings: [{ path, message }] }. */
 export function validateGoamlXml(xml, { type } = {}) {
