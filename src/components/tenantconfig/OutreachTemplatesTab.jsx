@@ -11,6 +11,7 @@ import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { cn } from '@/lib/utils';
 import FieldTypePicker, { FIELD_TYPES, KYB_FIELD_TYPE } from './outreach/FieldTypePicker';
+import { PROFILE_FIELDS, profileFieldByKey, suggestProfileField } from '@/lib/profileFieldMap';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import FieldTypeConfig from './outreach/FieldTypeConfig';
 import PortalPreviewModal from './outreach/PortalPreviewModal';
@@ -310,9 +311,16 @@ export default function OutreachTemplatesTab({ tenant }) {
                                   <div className="text-xs text-muted-foreground mt-0.5">Workflow: {tmpl.idv_workflow_name || `tenant default KYB${kybDefault ? ` (${kybDefault.name})` : ''}`}</div>
                                 </div>
                               ) : (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                                  {getFieldTypeLabel(tmpl.field_type || (tmpl.item_type === 'document' ? 'file_upload' : 'textarea'))}
-                                </span>
+                                <div>
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                    {getFieldTypeLabel(tmpl.field_type || (tmpl.item_type === 'document' ? 'file_upload' : 'textarea'))}
+                                  </span>
+                                  {tmpl.profile_field && (
+                                    <div className="text-xs text-emerald-700 mt-0.5" title="Answers go to Profile Verification; existing data can be shown to the client">
+                                      → KYC: {profileFieldByKey(tmpl.profile_field)?.label || tmpl.profile_field}
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </td>
                             <td className="px-4 py-3">
@@ -398,6 +406,38 @@ export default function OutreachTemplatesTab({ tenant }) {
                   setModal(m => ({ ...m, data: { ...m.data, field_type: v, item_type: v === 'file_upload' ? 'document' : 'data_point', ...extra } }));
                 }}
               />
+
+              {/* Link to a KYC field: the answer fills that field (after analyst review) and existing data can be prefilled */}
+              {!['id_verification', 'kyb_verification', 'file_upload', 'signature', 'section_header'].includes(modal.data.field_type || 'file_upload') && (() => {
+                const types = modal.data.client_types?.length ? modal.data.client_types : ['NP', 'ORG'];
+                const options = PROFILE_FIELDS.filter(f => types.some(t => f.clients.includes(t)));
+                const suggested = !modal.data.profile_field ? suggestProfileField(modal.data.label, types) : null;
+                const pick = (key) => {
+                  const f = profileFieldByKey(key);
+                  setModal(m => ({ ...m, data: { ...m.data, profile_field: key || '', ...(f && ['phone', 'address', 'country'].includes(f.type) ? { field_type: f.type, item_type: 'data_point' } : {}) } }));
+                };
+                return (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium block">Fills KYC field</label>
+                    <select
+                      value={modal.data.profile_field || ''}
+                      onChange={e => pick(e.target.value)}
+                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                    >
+                      <option value="">— Not linked (free answer) —</option>
+                      {options.map(f => <option key={f.key} value={f.key}>{f.label}{f.clients.length === 1 ? ` (${f.clients[0]})` : ''}</option>)}
+                    </select>
+                    {suggested && (
+                      <button type="button" className="text-xs text-primary underline" onClick={() => pick(suggested.key)}>
+                        Link to “{suggested.label}”?
+                      </button>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Linked answers appear in Profile Verification for review, and the data you already hold can be shown to the client to check.
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* KYB-specific config (Didit business verification) */}
               {modal.data.field_type === 'kyb_verification' && (
