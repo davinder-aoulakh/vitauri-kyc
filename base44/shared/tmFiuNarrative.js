@@ -15,22 +15,23 @@ const SCHEMA = {
   required: ['text', 'sentences', 'profile_comparison', 'data_gaps_statement', 'insufficient_evidence', 'missing'],
 };
 
-const PROMPT = `You write the narrative of an unusual-transaction report for a financial intelligence unit.
+const PROMPT = `You write the narrative of a report (report_type: SAR, STR, UTR, CTR, TTR, IFT, CBR or TFR) for a financial intelligence unit.
 Rules: state only facts supported by the input; every sentence must cite source_refs; compare the observed activity with the approved expected profile (name its version) in profile_comparison, or say plainly that no approved profile exists; list every data gap in data_gaps_statement; never speculate about intent and never conclude guilt.`;
 
 /** Returns { text, citations, ai_run_id, gaps, error }. text is empty when the narrative could not be produced with citations. */
-export async function writeNarrative(ctx, { tmCase, alerts, txns, approved, client, cur }) {
+export async function writeNarrative(ctx, { tmCase, alerts, txns, approved, client, cur, reportType }) {
   const gaps = [];
   if (!approved) gaps.push('No approved expected profile.');
-  if (!txns.length) gaps.push('No transactions are linked to the alerts.');
+  if (!txns.length && !['SAR', 'TFR'].includes(reportType)) gaps.push('No transactions are linked to the report.');
   const topTxns = txns.slice(0, 100);
-  const evidence = (tmCase.evidence || []).map((e) => ({ ref: `evidence:${e.id}`, kind: e.kind, text: e.text, accepted: e.accepted !== false }));
+  const evidence = (tmCase?.evidence || []).map((e) => ({ ref: `evidence:${e.id}`, kind: e.kind, text: e.text, accepted: e.accepted !== false }));
   const sources = [
     ...evidence.map((e) => e.ref), ...topTxns.map((t) => `txn:${t.id}`), ...alerts.map((a) => `alert:${a.id}`),
     ...(approved ? [`profile:${approved.id}`] : []),
   ];
   const input = {
     reporting_currency: cur,
+    report_type: reportType || 'UTR',
     client: { name: client.full_name, type: client.client_type, country: client.country_of_residence || client.registered_country },
     evidence,
     alerts: alerts.map((a) => ({ ref: `alert:${a.id}`, title: a.title, indicator_type: a.indicator_type, reasons: a.ai_reasons })),
@@ -41,7 +42,7 @@ export async function writeNarrative(ctx, { tmCase, alerts, txns, approved, clie
   };
   try {
     const { output, ai_run_id } = await runTmAgent(ctx.base44, {
-      tenantId: ctx.tenantId, agent: 'TmNarrative', tmCaseId: tmCase.id, alertId: alerts[0]?.id, input, sources, schema: SCHEMA, systemPrompt: PROMPT,
+      tenantId: ctx.tenantId, agent: 'TmNarrative', tmCaseId: tmCase?.id, alertId: alerts[0]?.id, input, sources, schema: SCHEMA, systemPrompt: PROMPT,
     });
     const sentences = output.sentences || [];
     if (!sentences.length) return { text: '', citations: [], ai_run_id, gaps, error: 'The narrative had no cited sentences.' };
