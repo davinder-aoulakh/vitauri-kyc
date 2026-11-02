@@ -1,8 +1,7 @@
 import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { COUNTRIES } from '@/lib/countries';
+import CountrySelect from '@/components/shared/CountrySelect';
 
 // Structured address editor — country, street+number, zipcode+city, area.
 // value: { country, street, number, zipcode, city, area } | undefined
@@ -18,10 +17,7 @@ export default function AddressFields({ title, value, onChange, optionalNote }) 
       </div>
       <div>
         <Label className="text-xs font-medium mb-1.5 block">Country</Label>
-        <Select value={addr.country || ''} onValueChange={v => set('country', v)}>
-          <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select country" /></SelectTrigger>
-          <SelectContent>{COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-        </Select>
+        <CountrySelect value={addr.country || ''} onChange={v => set('country', v)} />
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div className="col-span-2">
