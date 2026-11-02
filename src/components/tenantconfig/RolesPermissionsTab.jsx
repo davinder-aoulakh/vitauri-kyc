@@ -49,8 +49,8 @@ export default function RolesPermissionsTab({ tenant, currentUser }) {
   useEffect(() => { loadUsers(); }, [tenant]);
 
   async function loadUsers() {
-    const data = await base44.entities.User.list();
-    setUsers(data || []);
+    const res = await base44.functions.invoke('listTenantUsers', {});
+    setUsers(res?.data?.users || []);
   }
 
   function toggle(role, perm) {

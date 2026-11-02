@@ -58,6 +58,11 @@ function cleanGoaml(p) {
   if (has('report_codes')) {
     const rc = p.report_codes || {};
     out.report_codes = Object.fromEntries(FIU_TYPE_CODES.map((t) => [t, str(rc[t])]).filter(([, v]) => v));
+    // Optional goAML lookup overrides { transmode: {...}, funds: {...} } (string values only).
+    if (rc.lookups && typeof rc.lookups === 'object') {
+      const clean = (o) => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [str(k), str(v)]).filter(([k, v]) => k && v));
+      out.report_codes.lookups = { transmode: clean(rc.lookups.transmode), funds: clean(rc.lookups.funds) };
+    }
   }
   if (has('thresholds')) {
     const t = p.thresholds || {};
