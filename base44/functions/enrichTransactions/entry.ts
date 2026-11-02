@@ -5,7 +5,7 @@ import { categoriseByRules, CATEGORIES, CATEGORY_SCHEMA, CATEGORY_SYSTEM_PROMPT 
 import { resolveAndStore } from '../../shared/tmResolve.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import {
-  authenticate, errorResponse, httpError, invokeNext, loadTenant, chunk, asList, INGEST_ROLES, WORK_ROLES,
+  authenticate, errorResponse, httpError, invokeNext, loadTenant, chunk, asList, mapLimit, INGEST_ROLES, WORK_ROLES,
 } from '../../shared/tmAuth.js';
 
 const MAX_IDS = 50;
