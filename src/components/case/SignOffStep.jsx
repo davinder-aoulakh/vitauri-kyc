@@ -5,7 +5,9 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertTriangle, CheckCircle, Clock, FileText, Loader2, X, MessageSquare, RefreshCw } from 'lucide-react';
-import { canApproveRisk } from '@/lib/permissions';
+import { canApproveRisk, hasPermission, PERMISSIONS } from '@/lib/permissions';
+import { isStepComplete } from '@/lib/caseUtils';
+import { fetchTenantUsers } from '@/hooks/useTenantData';
 import { RISK_COLORS } from '@/lib/riskColors';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -16,16 +18,23 @@ import SignOffTmOutcome from '@/components/case/SignOffTmOutcome';
 import SignOffProfilePanel from '@/components/case/tm/SignOffProfilePanel';
 import { canDecideProfile } from '@/lib/profileApproval';
 
+// Roles that may approve each risk level (from permissions.js); Low is self-sign-off
+const APPROVER_ROLES = {
+  Medium:       PERMISSIONS.approveMedium,
+  High:         PERMISSIONS.approveHighUnacceptable,
+  Unacceptable: PERMISSIONS.approveHighUnacceptable,
+};
+
 const SIGN_OFF_MATRIX = {
-  Low:          'Analyst (self-sign-off)',
-  Medium:       'Manager approval required',
-  High:         'Director / Senior Management approval required',
-  Unacceptable: 'Director / Senior Management approval required + Compliance Advisory',
+  Low:          'Self-sign-off',
+  Medium:       `Approval required: ${APPROVER_ROLES.Medium.join(' / ')}`,
+  High:         `Approval required: ${APPROVER_ROLES.High.join(' / ')}`,
+  Unacceptable: `Approval required: ${APPROVER_ROLES.Unacceptable.join(' / ')} + Compliance Advisory`,
 };
 
 const COMPLIANCE_RISKS = ['Medium', 'High', 'Unacceptable'];
 
-export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate, onRefresh, refreshing }) {
+export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate, onRefresh, refreshing, onNavigateToStep }) {
   const { tenant } = useTenant();
   const [approvalNote, setApprovalNote]       = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
@@ -50,15 +59,21 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
   const userRole   = currentUser?.app_role;
   const risk       = kycCase?.risk_classification;
   const canApprove = canApproveRisk(userRole, risk);
-  const isAnalyst  = userRole === 'Analyst';
+  const canSubmit  = hasPermission(userRole, 'createRunCase');
   const isCompliance = userRole === 'Compliance Officer';
   const isPending  = kycCase?.status === 'Sign_Off_Pending';
   const isApproved = kycCase?.status === 'Approved';
-  const requiredApprover = SIGN_OFF_MATRIX[risk] || 'Analyst (self-sign-off)';
+  const requiredApprover = SIGN_OFF_MATRIX[risk] || 'Risk classification required';
+  const isLow = risk === 'Low';
+  // Four-eyes: from Medium up, the submitter cannot approve their own case
+  const isOwnSubmission = !!kycCase?.sign_off_submitted_by && kycCase.sign_off_submitted_by === currentUser?.id;
+  const blockedByFourEyes = !isLow && isOwnSubmission;
+  const incompleteSteps = [1, 2, 3, 4, 5, 6, 7].filter(id => !isStepComplete(kycCase, id));
 
   useEffect(() => {
-    base44.entities.User.list().then(u => setUsers(u || [])).catch(() => setUsers([]));
-  }, []);
+    if (!kycCase?.tenant_id) return;
+    fetchTenantUsers(kycCase.tenant_id).then(u => setUsers(u || [])).catch(() => setUsers([]));
+  }, [kycCase?.tenant_id]);
 
   const submittedByUser = users.find(u => u.id === kycCase?.sign_off_submitted_by);
   const approvedByUser  = users.find(u => u.id === kycCase?.sign_off_approved_by);
@@ -77,9 +92,9 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
       actor_type: 'User', event_type: 'sign_off_submitted',
       notes: `Submitted for ${requiredApprover}`,
     });
-    // Notify managers/directors
-    const approverRoles = risk === 'Medium' ? ['Manager','Director'] : ['Director'];
-    const approvers = users.filter(u => approverRoles.includes(u.app_role));
+    // Notify the users who may approve this risk level (not the submitter)
+    const approverRoles = APPROVER_ROLES[risk] || [];
+    const approvers = users.filter(u => approverRoles.includes(u.app_role) && u.id !== currentUser?.id && u.is_active !== false);
     await Promise.all(approvers.map(u =>
       base44.entities.Notification.create({
         tenant_id: kycCase.tenant_id, user_id: u.id,
@@ -89,8 +104,14 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
         link_case_id: kycCase.id,
       })
     ));
-    onCaseUpdate?.(prev => ({ ...prev, status: 'Sign_Off_Pending', step_8_status: 'in_progress' }));
+    onCaseUpdate?.(prev => ({ ...prev, status: 'Sign_Off_Pending', step_8_status: 'in_progress', sign_off_submitted_by: currentUser?.id, sign_off_submitted_at: new Date().toISOString() }));
     setSubmitting(false);
+  }
+
+  // Low risk: submit and self-approve in one go (both audit events are written)
+  async function submitAndSelfApprove() {
+    await submitForSignOff();
+    await approve();
   }
 
   // TM: record the sign-off as a Decision and sync EDR outcome to the TM case. Never blocks or undoes sign-off.
@@ -344,16 +365,44 @@ export default function SignOffStep({ kycCase, client, currentUser, onCaseUpdate
         </div>
       </div>
 
-      {/* Analyst: Submit action */}
-      {!isPending && !isApproved && isAnalyst && (
-        <Button onClick={submitForSignOff} disabled={submitting} className="w-full gap-2">
-          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-          Submit for Sign-Off
-        </Button>
+      {/* Submit action — any case worker */}
+      {!isPending && !isApproved && canSubmit && (
+        <div className="space-y-2">
+          {!risk && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 flex items-center justify-between gap-3">
+              <span>Risk classification missing. Finish the risk assessment: open the Consolidated View and press Proceed.</span>
+              {onNavigateToStep && (
+                <Button size="sm" variant="outline" className="text-xs h-7 flex-shrink-0" onClick={() => onNavigateToStep(6)}>
+                  Go to Risk Assessment
+                </Button>
+              )}
+            </div>
+          )}
+          {incompleteSteps.length > 0 && (
+            <div className="text-xs text-muted-foreground">
+              Complete step{incompleteSteps.length > 1 ? 's' : ''} {incompleteSteps.join(', ')} before submitting.
+            </div>
+          )}
+          <Button
+            onClick={isLow ? submitAndSelfApprove : submitForSignOff}
+            disabled={submitting || !risk || incompleteSteps.length > 0}
+            className="w-full gap-2"
+          >
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+            {isLow ? 'Submit & Approve (self-sign-off)' : 'Submit for Sign-Off'}
+          </Button>
+        </div>
+      )}
+
+      {/* Four-eyes: the submitter waits for another approver */}
+      {isPending && blockedByFourEyes && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+          You submitted this case. Approval must come from another user with authority: {(APPROVER_ROLES[risk] || []).join(' / ')}.
+        </div>
       )}
 
       {/* Approver: Approve / Reject */}
-      {isPending && canApprove && !isApproved && (
+      {isPending && canApprove && !isApproved && !blockedByFourEyes && (
         <div className="space-y-3">
           <Textarea
             value={approvalNote}
