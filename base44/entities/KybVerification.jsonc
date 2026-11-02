@@ -1,24 +1,23 @@
 {
   "name": "KybVerification",
-  "type": "object",
   "properties": {
-    "tenant_id": {
+    "aml": {
+      "description": "Company AML summary {status, total_hits, screening_hit_ids}",
+      "type": "object"
+    },
+    "business_session_id": {
+      "type": "string"
+    },
+    "checked_at": {
+      "format": "date-time",
       "type": "string"
     },
     "client_id": {
-      "type": "string",
-      "description": "Organisation client (Didit vendor_data for the business)"
-    },
-    "outreach_id": {
+      "description": "Organisation client (Didit vendor_data for the business)",
       "type": "string"
     },
-    "item_id": {
-      "type": "string"
-    },
-    "kyc_case_id": {
-      "type": "string"
-    },
-    "workflow_id": {
+    "decided_at": {
+      "format": "date-time",
       "type": "string"
     },
     "didit_session_id": {
@@ -27,14 +26,49 @@
     "didit_session_url": {
       "type": "string"
     },
-    "business_session_id": {
+    "documents": {
+      "description": "document_verifications items: {didit_uuid, document_group, document_subtype, status, original_filename, document_id, is_tampered}",
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "feature_statuses": {
+      "description": "Per-feature status by node_id",
+      "type": "object"
+    },
+    "item_id": {
       "type": "string"
     },
-    "vendor_business_id": {
+    "key_people_found": {
+      "description": "Officers and beneficial owners reported by the registry / key_people_checks",
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "kyc_case_id": {
       "type": "string"
+    },
+    "last_event_id": {
+      "type": "string"
+    },
+    "outreach_id": {
+      "type": "string"
+    },
+    "registry": {
+      "description": "Latest registry_checks[].company (no media URLs)",
+      "type": "object"
+    },
+    "registry_status": {
+      "type": "string"
+    },
+    "resubmit_info": {
+      "type": "object"
     },
     "status": {
-      "type": "string",
+      "default": "Not Started",
+      "description": "Exact Didit session status literal",
       "enum": [
         "Not Started",
         "In Progress",
@@ -47,50 +81,19 @@
         "Expired",
         "Kyc Expired"
       ],
-      "default": "Not Started",
-      "description": "Exact Didit session status literal"
-    },
-    "registry": {
-      "type": "object",
-      "description": "Latest registry_checks[].company (no media URLs)"
-    },
-    "registry_status": {
       "type": "string"
     },
-    "documents": {
-      "type": "array",
-      "items": {
-        "type": "object"
-      },
-      "description": "document_verifications items: {didit_uuid, document_group, document_subtype, status, original_filename, document_id, is_tampered}"
+    "tenant_id": {
+      "type": "string"
     },
-    "aml": {
-      "type": "object",
-      "description": "Company AML summary {status, total_hits, screening_hit_ids}"
+    "vendor_business_id": {
+      "type": "string"
     },
-    "key_people_found": {
-      "type": "array",
-      "items": {
-        "type": "object"
-      },
-      "description": "Officers and beneficial owners reported by the registry / key_people_checks"
-    },
-    "resubmit_info": {
+    "vitauri_review": {
+      "description": "Reviewer acceptance in Vitauri while Didit is In Review only on key-people checks: {decision:'accepted', reason, by_user_id, by_name, at, didit_status_at_decision, open_checks:[]}. Didit's status is not changed.",
       "type": "object"
     },
-    "feature_statuses": {
-      "type": "object",
-      "description": "Per-feature status by node_id"
-    },
-    "checked_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "decided_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "last_event_id": {
+    "workflow_id": {
       "type": "string"
     }
   },
@@ -98,6 +101,7 @@
     "tenant_id",
     "client_id"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "$or": [
