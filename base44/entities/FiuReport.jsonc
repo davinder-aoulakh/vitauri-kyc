@@ -107,18 +107,30 @@
         "at": {
           "type": "string"
         },
+        "didit_file_hash": {
+          "type": "string"
+        },
+        "didit_file_url": {
+          "type": "string"
+        },
         "file_hash": {
           "type": "string"
         },
         "file_url": {
           "type": "string"
         },
+        "pdf_hash": {
+          "type": "string"
+        },
         "pdf_url": {
           "type": "string"
         },
         "source": {
-          "description": "manual_upload when the XML was generated in the Didit console and uploaded",
+          "description": "vitauri (built and validated in Vitauri), manual_upload (generated in the Didit console and uploaded)",
           "type": "string"
+        },
+        "validation_warnings": {
+          "type": "number"
         }
       },
       "type": "object"
