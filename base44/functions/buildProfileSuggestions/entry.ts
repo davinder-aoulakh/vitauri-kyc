@@ -309,7 +309,15 @@ function extractFromKyb(kybs: any[], outreaches: any[]): Record<string, any[]> {
 // UBOs / directors reported by the Didit KYB registry, matched against the related parties already linked to the client.
 // status: 'new' (not linked yet), 'matched' (linked, registry agrees), 'differs' (linked, registry differs on some fields).
 function kybRelatedPartyCandidates(kyb: any, linked: Array<{ rp: any; link: any }>): any[] {
-  const people = (kyb?.key_people_found || []).filter((p: any) => p?.name && p.is_active !== false);
+  // One row per person: the registry can list the same officer more than once (e.g. officer + key-people check)
+  const seen = new Set<string>();
+  const people = (kyb?.key_people_found || []).filter((p: any) => {
+    if (!p?.name || p.is_active === false) return false;
+    const k = `${normName(p.name)}|${String(p.date_of_birth || '').slice(0, 10)}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
   const out: any[] = [];
   const ref = 'Didit KYB registry';
   const f = (value: any) => (value == null || value === '' ? null : { value: String(value), confidence: 95, source_type: 'didit', source_ref: ref, status: 'suggested', conflict_note: null });
