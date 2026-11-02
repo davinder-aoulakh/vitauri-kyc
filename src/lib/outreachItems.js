@@ -1,5 +1,6 @@
 // Outreach request items and Didit workflow helpers shared by every place that builds a request
 // (case outreach step, standalone outreach, form templates). Mirrors base44/shared/diditWorkflows.js.
+import { prefillFromClient } from '@/lib/profileFieldMap';
 
 export const VERIFICATION_TYPES = ['id_verification', 'kyb_verification'];
 export const isVerificationItem = (item) => VERIFICATION_TYPES.includes(item?.field_type);
@@ -45,10 +46,15 @@ export function effectiveWorkflow(tenant, item) {
 /**
  * A request item built from a library item (OutreachTemplate). Copies every setting the portal needs,
  * including the Didit workflow. `overrides` (e.g. a workflow chosen for this request) win.
+ * With `client` and `showPrefill`, a question linked to a KYC field (profile_field) carries what we hold
+ * (prefill_value) so the client can check and correct it in the portal.
  */
-export function buildRequestItem(item, idx, { defaultFieldType = 'file_upload', overrides = {} } = {}) {
+export function buildRequestItem(item, idx, { defaultFieldType = 'file_upload', overrides = {}, client = null, showPrefill = false } = {}) {
   const fieldType = item?.field_type || defaultFieldType;
+  const prefill = showPrefill && item?.profile_field ? prefillFromClient(item.profile_field, client) : null;
   return {
+    ...(item?.profile_field ? { profile_field: item.profile_field } : {}),
+    ...(prefill != null ? { prefill_value: prefill } : {}),
     item_id: item?.id,
     label: item?.label || item?.id,
     description: item?.description || '',
