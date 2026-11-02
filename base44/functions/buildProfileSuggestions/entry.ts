@@ -306,9 +306,50 @@ function extractFromKyb(kybs: any[], outreaches: any[]): Record<string, any[]> {
   return candidates;
 }
 
+// A related party can hold several roles for one client (Director + Shareholder + UBO). Same rules as src/lib/partyRoles.js.
+const ROLE_ORDER = ['UBO', 'Director', 'Shareholder', 'Beneficiary', 'Insured', 'Authorized Signatory', 'Other'];
+const ROLE_SYNONYMS: Array<[RegExp, string]> = [
+  [/^(ubo|beneficial owner|ultimate beneficial owner|uiteindelijk belanghebbende|beneficial_owner)$/i, 'UBO'],
+  [/^(director|board member|managing director|bestuurder|statutair bestuurder|officer|ceo)$/i, 'Director'],
+  [/^(shareholder|aandeelhouder|owner|enig aandeelhouder|sole shareholder)$/i, 'Shareholder'],
+  [/^(authori[sz]ed signatory|signatory|gevolmachtigde|procuratiehouder)$/i, 'Authorized Signatory'],
+];
+function parseRoles(x: any): string[] {
+  const parts = Array.isArray(x) ? x : String(x || '').split(/\s*(?:,|\/|&|;|\+|\band\b|\ben\b)\s*/i);
+  const out: string[] = [];
+  for (const p of parts) {
+    const t = String(p || '').trim();
+    if (!t || /^unknown$/i.test(t)) continue;
+    const c = ROLE_SYNONYMS.find(([re]) => re.test(t))?.[1] || ROLE_ORDER.find((r) => r.toLowerCase() === t.toLowerCase()) || t;
+    if (!out.includes(c)) out.push(c);
+  }
+  const ord = (r: string) => { const i = ROLE_ORDER.indexOf(r); return i < 0 ? ROLE_ORDER.length : i; };
+  return out.sort((a, b) => ord(a) - ord(b));
+}
+const joinRoles = (r: any) => parseRoles(r).join(', ');
+const recordedRolesOf = (m: any) => parseRoles(m?.link?.roles?.length ? m.link.roles : (m?.link?.role || m?.rp?.role_in_relationship));
+
+// Document-extracted people grouped per person: all roles they hold, the highest ownership, every source.
+function groupDocPeople(cands: any[]): Map<string, any> {
+  const map = new Map<string, any>();
+  for (const c of cands) {
+    const k = normName(c.full_name);
+    if (!k) continue;
+    const g = map.get(k) || { full_name: c.full_name, roles: [] as string[], ownership_percentage: null as number | null, source_refs: [] as string[], confidence: 0 };
+    g.roles = parseRoles([...g.roles, ...parseRoles(c.role_in_relationship)]);
+    const own = c.ownership_percentage != null && Number.isFinite(Number(c.ownership_percentage)) ? Number(c.ownership_percentage) : null;
+    if (own != null && (g.ownership_percentage == null || own > g.ownership_percentage)) g.ownership_percentage = own;
+    if (c.source_ref && !g.source_refs.includes(c.source_ref)) g.source_refs.push(c.source_ref);
+    g.confidence = Math.max(g.confidence, Number(c.confidence) || 0);
+    map.set(k, g);
+  }
+  return map;
+}
+
 // UBOs / directors reported by the Didit KYB registry, matched against the related parties already linked to the client.
+// Roles and ownership found for the same person in documents are folded into the registry row (one row per person).
 // status: 'new' (not linked yet), 'matched' (linked, registry agrees), 'differs' (linked, registry differs on some fields).
-function kybRelatedPartyCandidates(kyb: any, linked: Array<{ rp: any; link: any }>): any[] {
+function kybRelatedPartyCandidates(kyb: any, linked: Array<{ rp: any; link: any }>, docPeople: Map<string, any> = new Map()): any[] {
   // One row per person: the registry can list the same officer more than once (e.g. officer + key-people check)
   const seen = new Set<string>();
   const people = (kyb?.key_people_found || []).filter((p: any) => {
@@ -322,8 +363,11 @@ function kybRelatedPartyCandidates(kyb: any, linked: Array<{ rp: any; link: any 
   const ref = 'Didit KYB registry';
   const f = (value: any) => (value == null || value === '' ? null : { value: String(value), confidence: 95, source_type: 'didit', source_ref: ref, status: 'suggested', conflict_note: null });
   for (const p of people) {
-    const role = p.source === 'beneficial_owner' ? 'UBO' : (p.designation || p.role || 'Director');
-    const ownership = p.ownership_percent != null && Number.isFinite(Number(p.ownership_percent)) ? Number(p.ownership_percent) : null;
+    const doc = docPeople.get(normName(p.name));
+    if (doc) docPeople.delete(normName(p.name));
+    const role = joinRoles([p.source === 'beneficial_owner' ? 'UBO' : (p.designation || p.role || 'Director'), ...(doc?.roles || [])]);
+    const regOwn = p.ownership_percent != null && Number.isFinite(Number(p.ownership_percent)) ? Number(p.ownership_percent) : null;
+    const ownership = regOwn ?? doc?.ownership_percentage ?? null;
     const match = linked.find(({ rp }) => normName(rp.full_name) === normName(p.name)
       && (!p.date_of_birth || !rp.date_of_birth || String(rp.date_of_birth).slice(0, 10) === String(p.date_of_birth).slice(0, 10)));
     const diffs: Record<string, any> = {};
@@ -333,11 +377,14 @@ function kybRelatedPartyCandidates(kyb: any, linked: Array<{ rp: any; link: any 
       if (p.nationality && match.rp.nationality && normName(match.rp.nationality) !== normName(p.nationality)) diffs.nationality = { recorded: match.rp.nationality, registry: p.nationality };
       if (p.nationality && !match.rp.nationality) diffs.nationality = { recorded: null, registry: p.nationality };
       if (p.date_of_birth && !match.rp.date_of_birth) diffs.date_of_birth = { recorded: null, registry: p.date_of_birth };
-      const recRole = match.link?.role || match.rp.role_in_relationship;
-      if (role && recRole && normName(recRole) !== normName(role)) diffs.role_in_relationship = { recorded: recRole, registry: role };
+      // Only roles not recorded yet; accepting adds them (never removes a role)
+      const recRoles = recordedRolesOf(match);
+      const toAdd = parseRoles(role).filter((r) => !recRoles.includes(r));
+      if (toAdd.length) diffs.role_in_relationship = { recorded: recRoles.join(', ') || null, registry: joinRoles([...recRoles, ...toAdd]), adds: toAdd };
     }
     out.push({
       full_name: p.name,
+      ...(doc ? { extra_sources: doc.source_refs } : {}),
       party_type: p.entity_type === 'company' ? 'ORG' : 'NP',
       role_in_relationship: role,
       ownership_percentage: ownership,
@@ -519,20 +566,25 @@ Deno.serve(async (req) => {
   // ── 5. Deduplicate related party candidates ───────────────────────────────────
   // KYB registry people come first (structured, matched to linked parties); document candidates follow, deduped by name.
   let kybRps: any[] = [];
+  const docPeople = groupDocPeople(relatedPartyCandidates);
   if (isOrg && kybWithRegistry) {
     const links = (await base44.asServiceRole.entities.ClientRelatedPartyLink.filter({ tenant_id: tenantId, client_id })) || [];
     const ids = [...new Set(links.map((l: any) => l.related_party_id).filter(Boolean))];
     const parties = ids.length ? ((await base44.asServiceRole.entities.RelatedParty.filter({ tenant_id: tenantId, id: { $in: ids } })) || []) : [];
     const linked = links.map((l: any) => ({ link: l, rp: parties.find((p: any) => p.id === l.related_party_id) })).filter((x: any) => x.rp);
-    kybRps = kybRelatedPartyCandidates(kybWithRegistry, linked);
+    kybRps = kybRelatedPartyCandidates(kybWithRegistry, linked, docPeople);
   }
+  // People only found in documents: one row per person with all their roles (folded ones were removed above)
   const seenRp = new Set<string>(kybRps.map((r) => normName(r.full_name)));
-  const uniqueRps = relatedPartyCandidates.filter(rp => {
-    const key = normName(rp.full_name);
-    if (seenRp.has(key)) return false;
-    seenRp.add(key);
-    return true;
-  }).map(rp => ({
+  const uniqueRps = [...docPeople.values()].filter((g) => !seenRp.has(normName(g.full_name))).map((g) => ({
+    full_name: g.full_name,
+    party_type: 'NP',
+    role_in_relationship: g.roles.length ? joinRoles(g.roles) : 'Unknown',
+    ownership_percentage: g.ownership_percentage,
+    source_ref: g.source_refs[0] || null,
+    extra_sources: g.source_refs.slice(1),
+    confidence: g.confidence || 75,
+  })).map(rp => ({
     ...rp,
     fields: {
       full_name: { value: rp.full_name, confidence: rp.confidence, source_type: 'document', source_ref: rp.source_ref, status: rp.confidence >= CONFIDENCE_THRESHOLD ? 'suggested' : 'low_confidence', conflict_note: null },
