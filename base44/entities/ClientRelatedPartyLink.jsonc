@@ -1,26 +1,32 @@
 {
   "name": "ClientRelatedPartyLink",
-  "type": "object",
   "properties": {
-    "tenant_id": {
+    "added_by_user_id": {
       "type": "string"
     },
     "client_id": {
-      "type": "string",
-      "description": "FK to Client"
-    },
-    "related_party_id": {
-      "type": "string",
-      "description": "FK to RelatedParty"
-    },
-    "role": {
-      "type": "string",
-      "description": "UBO, Director, Shareholder etc"
+      "description": "FK to Client",
+      "type": "string"
     },
     "ownership_percentage": {
       "type": "number"
     },
-    "added_by_user_id": {
+    "related_party_id": {
+      "description": "FK to RelatedParty",
+      "type": "string"
+    },
+    "role": {
+      "description": "UBO, Director, Shareholder etc. Several roles are joined: 'Director, Shareholder, UBO' (see roles)",
+      "type": "string"
+    },
+    "roles": {
+      "description": "All roles of this party for the client, e.g. ['Director','Shareholder','UBO']",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "tenant_id": {
       "type": "string"
     }
   },
@@ -29,6 +35,7 @@
     "client_id",
     "related_party_id"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "$or": [
