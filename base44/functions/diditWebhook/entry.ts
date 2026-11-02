@@ -14,7 +14,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { waitUntil } from 'base44:runtime';
 import { fetchDiditDecision, primaryCheck } from '../../shared/diditDecision.js';
 import { rehostDiditImage } from '../../shared/diditMedia.js';
-import { verifyDiditSignature, isTimestampFresh } from '../../shared/diditWebhookVerify.js';
+import { verifyDiditSignature, isEventFresh } from '../../shared/diditWebhookVerify.js';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { getTransaction as getDiditTmTransaction, normaliseTxnStatus } from '../../shared/diditTm.js';
 import { afterTransactionUpdate } from '../../shared/diditTxnActions.js';
@@ -49,7 +49,9 @@ export default async function(req) {
     const tsHeader  = req.headers.get('x-timestamp');
 
     // 1. Freshness — reject anything older/newer than 300s (replay protection).
-    if (!isTimestampFresh(tsHeader)) {
+    //    Uses the SIGNED body field event.timestamp (the header is not covered by the signature); the body itself
+    //    is verified against X-Signature-V2 below, so a changed timestamp fails the signature check.
+    if (!isEventFresh(parsed, tsHeader)) {
       return Response.json({ error: 'stale or missing timestamp' }, { status: 401 });
     }
 
@@ -489,12 +491,14 @@ async function handleTransactionEvent(base44, tenantId, body) {
     return;
   }
 
+  // Only this tenant's transactions (the tenant was resolved and its secret verified the signature)
+  const scope = tenantId ? { tenant_id: tenantId } : {};
   let txList = [];
   if (diditTransactionId) {
-    txList = await base44.asServiceRole.entities.Transaction.filter({ didit_transaction_id: diditTransactionId });
+    txList = await base44.asServiceRole.entities.Transaction.filter({ ...scope, didit_transaction_id: diditTransactionId });
   }
   if ((!txList || txList.length === 0) && ourTransactionId) {
-    txList = await base44.asServiceRole.entities.Transaction.filter({ our_transaction_id: ourTransactionId });
+    txList = await base44.asServiceRole.entities.Transaction.filter({ ...scope, our_transaction_id: ourTransactionId });
   }
   const txn = txList?.[0];
   if (!txn) {
@@ -512,6 +516,10 @@ async function handleTransactionEvent(base44, tenantId, body) {
 
 // Original behaviour, unchanged — used when tm_core is not enabled for the tenant.
 async function legacyHandleTransactionEvent(base44, tenantId, body, txn, diditTransactionId, ourTransactionId) {
+  if (tenantId && txn.tenant_id !== tenantId) {
+    console.warn('diditWebhook: transaction tenant mismatch (legacy) — ignoring', { txnId: txn.id });
+    return;
+  }
   const status    = body.status;
   const riskScore = body.risk_score ?? body.decision?.risk_score ?? txn.risk_score;
   const riskLevel = body.risk_level ?? body.decision?.risk_level ?? txn.risk_level;
