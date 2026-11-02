@@ -38,7 +38,8 @@ export async function gatherReportData(ctx, tmCase, extra = {}) {
   const [scenarios, client, txns, accounts, approved, links] = await Promise.all([
     byIds(E, 'TmScenario', tenantId, distinct(alerts.map((a) => a.scenario_id)), 100),
     E.Client.filter({ tenant_id: tenantId, id: clientId }).then((r) => asList(r)[0]),
-    loadTxns(E, tenantId, txnIds).then((rows) => rows.filter((t) => t.client_id === clientId)),
+    // Without a case only the subject's own transactions can be reported; a case keeps its (possibly multi-client) alert set.
+    loadTxns(E, tenantId, txnIds).then((rows) => (tmCase ? rows : rows.filter((t) => t.client_id === clientId))),
     E.BankAccount.filter(scope, undefined, 50).then(asList),
     E.ExpectedProfile.filter({ ...scope, status: 'approved' }, '-version', 1).then((r) => asList(r)[0] || null),
     E.ClientRelatedPartyLink.filter(scope, undefined, 100).then(asList),
