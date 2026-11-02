@@ -43,6 +43,17 @@ export function getNestedValue(obj, path) {
 
 // Build a Client.update payload for a field key that may be a "parent.child" dot path.
 export function buildFieldUpdatePayload(client, fieldKey, value) {
+  // Phone / email also update the preferred entry in contact_entries (the editable contact list)
+  if (fieldKey === 'primary_contact_phone' || fieldKey === 'primary_contact_email') {
+    const isPhone = fieldKey === 'primary_contact_phone';
+    const matches = (e) => (isPhone ? e.type === 'phone' || e.type === 'mobile' : e.type === 'email');
+    const entries = [...(client?.contact_entries || [])];
+    const idx = entries.findIndex((e) => matches(e) && e.is_preferred);
+    const at = idx >= 0 ? idx : entries.findIndex(matches);
+    if (at >= 0) entries[at] = { ...entries[at], value };
+    else entries.push({ type: isPhone ? 'phone' : 'email', value, is_preferred: true });
+    return { [fieldKey]: value, contact_entries: entries };
+  }
   if (!fieldKey?.includes('.')) return { [fieldKey]: value };
   const [parent, child] = fieldKey.split('.');
   return { [parent]: { ...(client?.[parent] || {}), [child]: value } };
