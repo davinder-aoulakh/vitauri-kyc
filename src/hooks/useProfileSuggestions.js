@@ -77,7 +77,7 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
       onCaseUpdate?.(prev => (prev ? { ...prev, profile_suggestions: fresh } : prev));
     }).catch(() => {});
     return () => { alive = false; };
-  }, [kycCase?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [kycCase?.id]);
 
   // The client as last written by this hook. Payloads for nested fields (residential_address.*) are built from it,
   // so accepting the street and then the city keeps both (the prop can lag behind our own writes).
