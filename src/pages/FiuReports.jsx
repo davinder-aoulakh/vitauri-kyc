@@ -15,7 +15,12 @@ import DeadlineCell from '@/components/tm/alerts/DeadlineCell';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { Download, Loader2, Lock, FileText } from 'lucide-react';
+import { hasPermission } from '@/lib/permissions';
+import { toast } from '@/components/ui/use-toast';
+import { errorMessage } from '@/lib/tmAlerts';
+import { FIU_TYPE_CODES, FIU_TYPES, normaliseType, typeCode, typeLabel, ORIGIN_LABEL } from '@/lib/fiuTypes';
+import NewFiuReportDialog from '@/components/tm/report/NewFiuReportDialog';
+import { Download, Loader2, Lock, FileText, Plus, ScanSearch, AlertTriangle } from 'lucide-react';
 
 // Roles that may read FiuArtefact (entity RLS read list).
 const FIU_READERS = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'];
@@ -31,7 +36,6 @@ const TONE = {
   accepted: 'bg-emerald-50 text-emerald-700 border-emerald-200', rejected: 'bg-red-50 text-red-700 border-red-200',
 };
 const PRE_SUBMISSION = ['draft', 'in_review', 'approved', 'generated'];
-const TYPE_LABEL = { unusual_objective: 'Objective', unusual_subjective: 'Subjective' };
 const list = (res) => (Array.isArray(res) ? res : res?.items || []);
 const statusText = (r) => (r.status === 'received' && r.received?.fiu_reference ? `Received · ${r.received.fiu_reference}` : BASE_LABEL[r.status] || r.status);
 const csvCell = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -47,6 +51,12 @@ export default function FiuReports() {
   const initialStatus = searchParams.get('status');
   const [status, setStatus] = useState(STATUSES.includes(initialStatus) ? initialStatus : 'all');
   const [fiuCode, setFiuCode] = useState('all');
+  const initialType = searchParams.get('type');
+  const [typeFilter, setTypeFilter] = useState(FIU_TYPE_CODES.includes(initialType) ? initialType : 'all');
+  const [newOpen, setNewOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const canCreate = hasPermission(currentUser?.app_role, 'tmWorkCase');
+  const canScan = canCreate || ['Compliance Admin', 'Tenant Admin'].includes(currentUser?.app_role);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t); }, []);
 
@@ -79,12 +89,33 @@ export default function FiuReports() {
 
   const all = reportsQ.data || [];
   const codes = [...new Set(all.map((r) => r.fiu_profile_code).filter(Boolean))];
-  const rows = all.filter((r) => (status === 'all' || r.status === status) && (fiuCode === 'all' || r.fiu_profile_code === fiuCode));
+  const rows = all.filter((r) => (status === 'all' || r.status === status) && (fiuCode === 'all' || r.fiu_profile_code === fiuCode)
+    && (typeFilter === 'all' || normaliseType(r.type) === typeFilter));
+  const urgentOpen = all.filter((r) => r.priority === 'without_delay' && PRE_SUBMISSION.includes(r.status));
+
+  const scan = async () => {
+    setScanning(true);
+    try {
+      const res = (await base44.functions.invoke('scanFiuProposals', { days: 7 }))?.data || {};
+      const mine = (res.results || [])[0] || {};
+      if (mine.error) throw new Error(mine.error);
+      const n = (mine.created || []).length;
+      toast({
+        title: n ? `${n} report proposal${n === 1 ? '' : 's'} created` : 'No new reports to propose',
+        description: mine.skipped || (mine.transactions_without_reporting_amount ? `${mine.transactions_without_reporting_amount} transaction(s) had no amount in the reporting currency and were not checked.` : 'Last 7 days checked against the FIU profile thresholds and TF signals.'),
+      });
+      qc.invalidateQueries({ queryKey: ['fiuReportsList', tenantId] });
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'Scan failed', description: errorMessage(e) });
+    } finally {
+      setScanning(false);
+    }
+  };
 
   const exportCsv = () => {
     const head = ['Report ref', 'FIU', 'Type', 'Status', 'FIU reference', 'Deadline', 'Customer', 'TM case id', 'KYC case id'];
     const lines = rows.map((r) => [
-      r.report_ref, fiuName(r.fiu_profile_code), TYPE_LABEL[r.type] || r.type, statusText(r), r.received?.fiu_reference || '',
+      r.report_ref, fiuName(r.fiu_profile_code), typeCode(r.type), statusText(r), r.received?.fiu_reference || '',
       r.clock?.due_at || '', clientsById.get(r.client_id)?.full_name || r.client_id || '', r.tm_case_id || '', r.kyc_case_id || '',
     ].map(csvCell).join(','));
     download(`fiu-reports_${format(new Date(), 'yyyy-MM-dd')}.csv`, [head.join(','), ...lines].join('\n'), 'text/csv');
@@ -95,9 +126,28 @@ export default function FiuReports() {
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
         <PageHeader
           title="FIU Reports"
-          subtitle="Unusual transaction reports to the Financial Intelligence Unit"
-          actions={<Button variant="outline" size="sm" className="gap-1.5" disabled={!rows.length} onClick={exportCsv}><Download className="w-3.5 h-3.5" /> Export CSV</Button>}
+          subtitle="SAR, STR, UTR, CTR, TTR, IFT, CBR and TFR reports to the Financial Intelligence Unit"
+          actions={(
+            <div className="flex flex-wrap gap-2">
+              {canScan && (
+                <Button variant="outline" size="sm" className="gap-1.5" disabled={scanning} onClick={scan} title="Check the last 7 days against the CTR/TTR/IFT/CBR thresholds and terrorist-financing signals">
+                  {scanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanSearch className="w-3.5 h-3.5" />} Scan for reports
+                </Button>
+              )}
+              <Button variant="outline" size="sm" className="gap-1.5" disabled={!rows.length} onClick={exportCsv}><Download className="w-3.5 h-3.5" /> Export CSV</Button>
+              {canCreate && <Button size="sm" className="gap-1.5" onClick={() => setNewOpen(true)}><Plus className="w-3.5 h-3.5" /> New report</Button>}
+            </div>
+          )}
         />
+        {urgentOpen.length > 0 && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <span>
+              <strong>{urgentOpen.length} report{urgentOpen.length === 1 ? '' : 's'} to file without delay</strong> ({urgentOpen.map((r) => r.report_ref).join(', ')}).
+              {urgentOpen.some((r) => r.freeze_advised) && ' Assess an asset freeze; Vitauri does not freeze assets automatically.'}
+            </span>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2 mb-4">
           <Select value={status} onValueChange={setStatus}>
             <SelectTrigger className="h-8 w-56 text-xs"><SelectValue /></SelectTrigger>
@@ -111,6 +161,13 @@ export default function FiuReports() {
             <SelectContent>
               <SelectItem value="all" className="text-xs">All FIUs</SelectItem>
               {codes.map((c) => <SelectItem key={c} value={c} className="text-xs">{fiuName(c)}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="h-8 w-64 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">All report types</SelectItem>
+              {FIU_TYPE_CODES.map((t) => <SelectItem key={t} value={t} className="text-xs">{t} · {FIU_TYPES[t].label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -130,7 +187,13 @@ export default function FiuReports() {
                     <tr key={r.id} className="hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/tm/report/${r.id}`)}>
                       <td className="px-3 py-2.5 font-medium">{r.report_ref || '—'}</td>
                       <td className="px-3 py-2.5 text-xs">{fiuName(r.fiu_profile_code)}</td>
-                      <td className="px-3 py-2.5 text-xs">{TYPE_LABEL[r.type] || r.type || '—'}</td>
+                      <td className="px-3 py-2.5 text-xs" title={typeLabel(r.type)}>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="font-mono font-medium">{typeCode(r.type)}</span>
+                          {r.priority === 'without_delay' && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-800">Without delay</span>}
+                          {['auto_threshold', 'auto_tf'].includes(r.origin) && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{ORIGIN_LABEL[r.origin]}</span>}
+                        </div>
+                      </td>
                       <td className="px-3 py-2.5"><span className={cn('text-[11px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap', TONE[r.status] || TONE.draft)}>{statusText(r)}</span></td>
                       <td className="px-3 py-2.5">
                         {PRE_SUBMISSION.includes(r.status) ? <DeadlineCell alert={{ due_at: r.clock?.due_at }} now={now} />
@@ -151,6 +214,9 @@ export default function FiuReports() {
             </div>
           )}
       </div>
+      {canCreate && (
+        <NewFiuReportDialog open={newOpen} onOpenChange={setNewOpen} tenantId={tenantId} profiles={profiles} clients={clients || []} />
+      )}
     </AppShell>
   );
 }
