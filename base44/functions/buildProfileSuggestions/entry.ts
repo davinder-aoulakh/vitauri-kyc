@@ -476,6 +476,55 @@ function extractFromOsint(osintResults: any, isOrg: boolean): Record<string, any
   return candidates;
 }
 
+
+// ── Keep the analyst's earlier decisions when the pipeline re-runs ────────────────
+// A re-run rebuilds every field from its sources. Without this, manual entries, "keep existing" rejections,
+// info requests and accepts from documents / outreach / OSINT would go back to "suggested" every time the
+// pipeline runs (it also runs after a Didit KYB sync). A decision stays unless a source now gives a different
+// value; a value already in the client file is shown as confirmed.
+const sameVal = (a: any, b: any) => String(a ?? '').toLowerCase().replace(/\s+/g, ' ').trim() === String(b ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+const KEPT = ['confirmed', 'rejected', 'info_requested'];
+function nestedVal(obj: any, path: string) {
+  if (!path.includes('.')) return obj?.[path];
+  const [a, b] = path.split('.');
+  return obj?.[a]?.[b];
+}
+export function preserveFieldDecisions(fields: Record<string, any>, prevFields: Record<string, any> = {}, client: any = {}) {
+  const out: Record<string, any> = {};
+  for (const [key, n] of Object.entries(fields)) {
+    const prev = prevFields?.[key];
+    let next = n;
+    if (prev && KEPT.includes(prev.status) && n?.status !== 'confirmed') {
+      if (!n?.value || n.status === 'missing' || sameVal(n.value, prev.value)) {
+        next = prev; // nothing new: the decision stands
+      } else {
+        next = { ...n, status: 'suggested', conflict_note: { previous_decision: prev.source_type === 'manual' ? 'manual' : prev.status, previous_value: prev.value ?? null } };
+      }
+    }
+    const current = nestedVal(client, key);
+    if (next?.value && current && next.status !== 'confirmed' && next.status !== 'rejected' && sameVal(current, next.value)) {
+      next = { ...next, status: 'confirmed', conflict_note: null };
+    }
+    out[key] = next;
+  }
+  // Manual entries for fields no source offers any more are kept as well
+  for (const [key, prev] of Object.entries(prevFields || {})) {
+    if (!out[key] && prev?.source_type === 'manual') out[key] = prev;
+  }
+  return out;
+}
+const rpKey = (r: any) => `${normName(r?.full_name)}|${String(r?.date_of_birth || '').slice(0, 10)}`;
+export function preserveRelatedPartyDecisions(rps: any[], prevRps: any[] = []) {
+  const prev = new Map((prevRps || []).map((r: any) => [rpKey(r), r]));
+  return rps.map((r) => {
+    const p: any = prev.get(rpKey(r));
+    if (!p || r.status === 'confirmed') return r;
+    if (p.status === 'rejected') return { ...r, status: 'rejected' };
+    if (p.status === 'confirmed' && !(r.diffs && Object.keys(r.diffs).length)) return { ...r, status: 'confirmed', rp_id: r.rp_id || p.rp_id || null, match_rp_id: r.match_rp_id || p.match_rp_id || null };
+    return r;
+  });
+}
+
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
   const user = await base44.auth.me();
@@ -637,9 +686,10 @@ Deno.serve(async (req) => {
     kyb_key_people: kybRps.length,
   };
 
+  const prevSuggestion = kycCase?.profile_suggestions || {};
   const suggestion = {
-    client_fields: clientFields,
-    related_parties: allRps,
+    client_fields: preserveFieldDecisions(clientFields, prevSuggestion.client_fields || {}, clientRecord || {}),
+    related_parties: preserveRelatedPartyDecisions(allRps, prevSuggestion.related_parties || []),
     flags,
     run_at: new Date().toISOString(),
     sources_summary: sourcesSummary,
