@@ -71,7 +71,8 @@ export function resolveRoute(caseLike, tenantOrConfig) {
     why.push(`tenant override ${existing || 'New'} → ${proposed}`);
   }
   if (effective === 'Unacceptable') level = 'senior'; // never below Senior Management
-  if (caseLike?.previously_declined) { needsAdvice = cfg.compliance_advice_enabled || true; if (level === 'analyst') level = 'manager'; why.push('the client was previously declined'); }
+  // Spec §9: a previously declined client always needs Compliance review (even when the tenant switched advice off) and never self sign-off.
+  if (caseLike?.previously_declined) { needsAdvice = true; if (level === 'analyst') level = 'manager'; why.push('the client was previously declined'); }
 
   const isDowngrade = !!existing && RANK[existing] > RANK[proposed];
   const selfSignOff = level === 'analyst';
