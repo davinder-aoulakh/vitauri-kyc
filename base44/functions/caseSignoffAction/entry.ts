@@ -45,12 +45,25 @@ export default async function (req) {
       event_type, notes: clip(notes, 1000), before_state: before, after_state: after,
     }).catch((e) => console.warn('audit failed', e?.message));
 
+    // ---- Existing classification: snapshot once, from the client's latest approved earlier case (null for a new client) ----
+    if (kycCase.existing_classification === undefined || kycCase.existing_classification === null) {
+      if (!kycCase.route?.existing_checked) {
+        const prior = asList(await E.KycCase.filter({ tenant_id: tenantId, client_id: kycCase.client_id, status: 'Approved' }, '-sign_off_approved_at', 10))
+          .filter((c) => c.id !== kycCase.id && String(c.created_date || '') < String(kycCase.created_date || '9999'))[0];
+        const existing = prior?.risk_classification || null;
+        const snap = { existing_classification: existing || undefined, signoff_flow: 2, route: { ...(kycCase.route || {}), existing_checked: true } };
+        await E.KycCase.update(kycCase.id, snap);
+        Object.assign(kycCase, snap);
+        if (existing) await audit('route.existing_snapshot', `Existing classification ${existing} taken from the approved case ${String(prior.id).slice(-6)}.`);
+      }
+    }
+
     // ---- Route (always recomputed; class changes are logged and may outdate the advice) ----
     let route = resolveRoute(kycCase, cfg);
     const stored = kycCase.route || {};
     const routePatch = {};
-    if (route.effective && (stored.level !== route.level || stored.needsAdvice !== route.needsAdvice || stored.effective !== route.effective || stored.proposed !== route.proposed)) {
-      routePatch.route = { ...route, computed_at: new Date().toISOString() };
+    if (route.effective && (!stored.level || stored.level !== route.level || stored.needsAdvice !== route.needsAdvice || stored.effective !== route.effective || stored.proposed !== route.proposed)) {
+      routePatch.route = { ...route, existing_checked: true, computed_at: new Date().toISOString() };
       routePatch.effective_classification = route.effective;
       if (stored.level) await audit('route.recalculated', `Route recalculated: ${route.reason}`, { level: route.level, needs_advice: route.needsAdvice, effective: route.effective }, { level: stored.level, needs_advice: stored.needsAdvice, effective: stored.effective });
     }
