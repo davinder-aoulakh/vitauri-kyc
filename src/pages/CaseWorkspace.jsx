@@ -4,7 +4,11 @@ import { markCaseOpen } from '@/lib/perfTrace';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { hasPermission } from '@/lib/permissions';
-import { getStepStatus, isStepNotRequired, isStepComplete } from '@/lib/caseUtils';
+import { getStepStatus, isStepNotRequired, isStepComplete, caseFlowVersion } from '@/lib/caseUtils';
+import DraftReportQcStep    from '@/components/case/signoff/DraftReportQcStep';
+import ComplianceAdviceStep from '@/components/case/signoff/ComplianceAdviceStep';
+import FinalSignOffStep     from '@/components/case/signoff/FinalSignOffStep';
+import { ClassChip } from '@/components/case/signoff/SignoffBits';
 import AppShell from '@/components/layout/AppShell';
 import RiskBadge from '@/components/shared/RiskBadge';
 import StatusBadge from '@/components/shared/StatusBadge';
@@ -40,13 +44,27 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ChevronLeft, CheckCircle, Circle, AlertTriangle, Clock,
   MessageSquare, User, Shield, BarChart3, ClipboardCheck,
-  FileText, Loader2, Trash2
+  FileText, Loader2, Trash2, FileCheck2, Scale, Lock
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 
-function getSteps(clientType) {
+// Sign-off steps of the new flow (ids keep stored data stable; order comes from the array):
+// 10 Draft Report & QC · 11 Compliance Advice (hidden when the tenant switched advice off) · 8 Final Report & Sign-off.
+const SIGNOFF_STEP_IDS = [10, 11, 8];
+function getSteps(clientType, flow = 2, showAdvice = true) {
   const isORG = clientType === 'ORG';
+  const core = getCoreSteps(isORG);
+  if (flow !== 2) return [...core, { id: 8, label: 'Sign-Off & Report', icon: CheckCircle, stepKey: 'step_8_status' }];
+  return [
+    ...core,
+    { id: 10, label: 'Draft Report & QC', icon: FileCheck2, stepKey: 'step_10_status' },
+    ...(showAdvice ? [{ id: 11, label: 'Compliance Advice', icon: Scale, stepKey: 'step_11_status' }] : []),
+    { id: 8, label: 'Final Report & Sign-off', icon: CheckCircle, stepKey: 'step_8_status' },
+  ];
+}
+
+function getCoreSteps(isORG) {
   return [
     { id: 1, label: 'Outreach & Documents',                             icon: MessageSquare,  stepKey: 'step_1_status' },
     { id: 2, label: isORG ? 'Entity Verification' : 'Identity Verification', icon: User,      stepKey: 'step_2_status' },
@@ -55,7 +73,6 @@ function getSteps(clientType) {
     { id: 5, label: 'Source of Funds/Wealth',                            icon: FileText,       stepKey: 'step_5_status' },
     { id: 6, label: 'Risk Assessment',                                   icon: BarChart3,      stepKey: 'step_6_status' },
     { id: 7, label: 'Control Measures',                                  icon: ClipboardCheck, stepKey: 'step_7_status' },
-    { id: 8, label: 'Sign-Off & Report',                                 icon: CheckCircle,    stepKey: 'step_8_status' },
   ];
 }
 
@@ -86,10 +103,10 @@ export default function CaseWorkspace() {
   const [loading, setLoading] = useState(() => !seeded);
   const [error, setError] = useState(null);
   const [searchParams] = useSearchParams();
-  // Deep link: /case/:id?step=N opens that step (1-8).
+  // Deep link: /case/:id?step=N opens that step (1-8, 10 Draft Report & QC, 11 Compliance Advice).
   const [activeStep, setActiveStep] = useState(() => {
     const s = Number(searchParams.get('step'));
-    return Number.isInteger(s) && s >= 1 && s <= 8 ? s : 1;
+    return Number.isInteger(s) && ((s >= 1 && s <= 8) || s === 10 || s === 11) ? s : 1;
   });
   const [mainTab, setMainTab] = useState('workspace'); // 'workspace' | 'audit'
   const [aiCollapsed, setAiCollapsed] = useState(false);
@@ -126,9 +143,9 @@ export default function CaseWorkspace() {
     }
   }, [id]);
 
-  // Fires on navigation to step 8 — silent reload, no full-screen spinner
+  // Fires on navigation to the sign-off steps — silent reload, no full-screen spinner
   useEffect(() => {
-    if (activeStep === 8) refreshCaseData(true);
+    if ([8, 10, 11].includes(activeStep)) refreshCaseData(true);
   }, [activeStep]);
 
   // Steps that write the client (Profile Verification, the Didit suggestion cards) report what they wrote, so every
@@ -331,14 +348,17 @@ export default function CaseWorkspace() {
     if (fresh?.[0]) setKycCase(fresh[0]);
   }
 
-  const STEPS = React.useMemo(() => getSteps(client?.client_type), [client?.client_type]);
+  const flow = caseFlowVersion(kycCase);
+  const showAdviceStep = tenant?.sign_off_matrix?.compliance_advice_enabled !== false || !!kycCase?.previously_declined;
+  const STEPS = React.useMemo(() => getSteps(client?.client_type, flow, showAdviceStep), [client?.client_type, flow, showAdviceStep]);
 
   // Stable identity — passing a fresh inline function here would retrigger
   // ClientProfileStep's registration effect every render, which calls back
   // into this state setter and causes an infinite render loop.
   const handleRegisterOsintAdd = useCallback((cb) => setOsintAddCallback(() => cb), []);
 
-  const canReopen = kycCase?.status === 'Approved' && (userRole === 'Director' || userRole === 'Compliance Admin');
+  // New flow: reopening is a decision in Final Report & Sign-off (with reason and scope); the header link is for legacy cases.
+  const canReopen = flow !== 2 && kycCase?.status === 'Approved' && (userRole === 'Director' || userRole === 'Compliance Admin');
 
   if (loading) return (
     <AppShell>
@@ -368,8 +388,12 @@ export default function CaseWorkspace() {
 
   const daysOpen = kycCase.created_date ? differenceInDays(new Date(), new Date(kycCase.created_date)) : 0;
   const analysts = users.filter(u => u.app_role === 'Analyst');
-  const activeStepData = STEPS[activeStep - 1];  // STEPS is memoised above early returns
+  const activeStepData = STEPS.find((s) => s.id === activeStep) || STEPS[0];  // ids are not positions (10, 11, 8)
   const stepStatus = getStepStatus(kycCase, activeStep);
+  const isSignoffStep = flow === 2 && SIGNOFF_STEP_IDS.includes(activeStep);
+  const isClosed = ['Approved', 'Rejected', 'Closed'].includes(kycCase.status);
+  const cycleDays = isClosed && kycCase.created_date && (kycCase.closed_at || kycCase.completed_at || kycCase.sign_off_approved_at)
+    ? differenceInDays(new Date(kycCase.closed_at || kycCase.completed_at || kycCase.sign_off_approved_at), new Date(kycCase.created_date)) : null;
 
   return (
     <AppShell>
@@ -401,7 +425,9 @@ export default function CaseWorkspace() {
                 {kycCase.case_type?.replace(/_/g,' ')}
               </span>
               <StatusBadge status={kycCase.status} />
-              <RiskBadge risk={kycCase.risk_classification} />
+              {flow === 2 && kycCase.existing_classification && kycCase.existing_classification !== kycCase.risk_classification
+                ? <ClassChip existing={kycCase.existing_classification} proposed={kycCase.risk_classification} />
+                : <RiskBadge risk={kycCase.risk_classification} />}
               {/* TM: dynamic monitoring risk next to the KYC rating (the KYC rating stays the legal classification). */}
               {isFeatureEnabled(tenant, 'tm_core') && client?.customer_risk_score != null && (
                 <span
@@ -421,10 +447,16 @@ export default function CaseWorkspace() {
                 analysts={analysts}
                 onAssigned={(newId, newName) => setKycCase(prev => ({ ...prev, assigned_analyst_id: newId }))}
               />
-              <span>Due: <strong className={cn('', kycCase.due_date && new Date() > new Date(kycCase.due_date) ? 'text-red-600' : 'text-foreground')}>
-                {kycCase.due_date ? format(new Date(kycCase.due_date), 'd MMM') : '—'}
-              </strong></span>
-              <span className="text-muted-foreground">{daysOpen}d open</span>
+              {isClosed ? (
+                <span>Closed {format(new Date(kycCase.closed_at || kycCase.completed_at || kycCase.sign_off_approved_at || kycCase.updated_date), 'd MMM yyyy')}{cycleDays != null ? ` · cycle time ${cycleDays}d` : ''}</span>
+              ) : (
+                <>
+                  <span>Due: <strong className={cn('', kycCase.due_date && new Date() > new Date(kycCase.due_date) ? 'text-red-600' : 'text-foreground')}>
+                    {kycCase.due_date ? format(new Date(kycCase.due_date), 'd MMM') : '—'}
+                  </strong></span>
+                  <span className="text-muted-foreground">{daysOpen}d open</span>
+                </>
+              )}
               {canReopen && (
                 <button
                   className="text-xs text-amber-600 font-medium hover:text-amber-700"
@@ -558,7 +590,7 @@ export default function CaseWorkspace() {
                 {/* Sign-off readiness */}
                 {(() => {
                   const incomplete = STEPS
-                    .filter(s => s.id !== 8)
+                    .filter(s => ![8, 10, 11].includes(s.id))
                     .filter(s => !isStepComplete(kycCase, s.id))
                     .map(s => s.label);
                   if (incomplete.length === 0) return (
@@ -576,6 +608,10 @@ export default function CaseWorkspace() {
                 {STEPS.map(step => {
                   const s = getStepStatus(kycCase, step.id);
                   const canToggle = [5, 7].includes(step.id);
+                  // New flow: Final Report & Sign-off is locked until the case is submitted (and advice is valid where needed).
+                  const locked = flow === 2 && step.id === 8 && !['with_approver', 'approved', 'declined', 'terminated'].includes(kycCase.signoff_status);
+                  const adviceTag = flow === 2 && step.id === 11 && s !== 'not_required'
+                    ? ({ requested: 'Requested', info_needed: 'Info needed', received: 'Received', outdated: 'Outdated' }[kycCase.advice_state] || 'Not requested') : null;
                   return (
                     <div key={step.id} className="relative group/step">
                       <button
@@ -589,8 +625,9 @@ export default function CaseWorkspace() {
                               : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                         )}
                       >
-                        <StepIcon status={s} />
+                        {locked ? <Lock className="w-4 h-4 text-muted-foreground/50 flex-shrink-0" /> : <StepIcon status={s} />}
                         <span className="leading-tight truncate">{step.label}</span>
+                        {adviceTag && <span className={cn('ml-auto rounded px-1 text-[9px] font-semibold', adviceTag === 'Outdated' ? 'bg-red-100 text-red-700' : adviceTag === 'Received' ? 'bg-emerald-100 text-emerald-700' : 'bg-muted text-muted-foreground')}>{adviceTag}</span>}
                       </button>
                       {canToggle && (
                         <button
@@ -635,7 +672,7 @@ export default function CaseWorkspace() {
                     <h2 className="text-lg font-semibold text-foreground">{activeStepData?.label}</h2>
                   </div>
                   <div className="flex items-center gap-2">
-                    {stepStatus === 'not_required' ? (
+                    {isSignoffStep ? null : stepStatus === 'not_required' ? (
                       <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-md">Not Required</span>
                     ) : (
                       <>
@@ -685,7 +722,13 @@ export default function CaseWorkspace() {
                 <TmContextCard kycCase={kycCase} client={client} />
 
                 {/* Step content */}
-                {isStepNotRequired(kycCase, activeStep) ? (
+                {isSignoffStep ? (
+                  <>
+                    {activeStep === 10 && <DraftReportQcStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} onNavigateToStep={setActiveStep} />}
+                    {activeStep === 11 && <ComplianceAdviceStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} onNavigateToStep={setActiveStep} />}
+                    {activeStep === 8 && <FinalSignOffStep kycCase={kycCase} client={client} currentUser={currentUser} onCaseUpdate={setKycCase} onNavigateToStep={setActiveStep} />}
+                  </>
+                ) : isStepNotRequired(kycCase, activeStep) ? (
                   <div className="flex items-center justify-center p-8">
                     <div className="text-center max-w-sm">
                       <div className="text-4xl mb-4">
