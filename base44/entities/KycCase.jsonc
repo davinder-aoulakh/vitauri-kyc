@@ -1,6 +1,17 @@
 {
   "name": "KycCase",
   "properties": {
+    "advice_state": {
+      "default": "none",
+      "enum": [
+        "none",
+        "requested",
+        "info_needed",
+        "received",
+        "outdated"
+      ],
+      "type": "string"
+    },
     "ai_outputs": {
       "description": "Persisted AI assistant outputs keyed by step number.",
       "type": "object"
@@ -32,6 +43,10 @@
       "description": "FK to Client",
       "type": "string"
     },
+    "closed_at": {
+      "format": "date-time",
+      "type": "string"
+    },
     "completed_at": {
       "format": "date-time",
       "type": "string"
@@ -42,8 +57,33 @@
     "created_by_user_id": {
       "type": "string"
     },
+    "current_report_version": {
+      "type": "number"
+    },
+    "downgrade_motivation": {
+      "type": "string"
+    },
     "due_date": {
       "format": "date",
+      "type": "string"
+    },
+    "effective_classification": {
+      "enum": [
+        "Low",
+        "Medium",
+        "High",
+        "Unacceptable"
+      ],
+      "type": "string"
+    },
+    "existing_classification": {
+      "description": "Client classification snapshot at case start (null for new clients)",
+      "enum": [
+        "Low",
+        "Medium",
+        "High",
+        "Unacceptable"
+      ],
       "type": "string"
     },
     "expected_transaction_behavior": {
@@ -62,6 +102,10 @@
     "previous_case_id": {
       "type": "string"
     },
+    "previously_declined": {
+      "default": false,
+      "type": "boolean"
+    },
     "profile_proposal_id": {
       "type": "string"
     },
@@ -70,6 +114,28 @@
       "type": "object"
     },
     "purpose_nature_text": {
+      "type": "string"
+    },
+    "qc_state": {
+      "default": "not_run",
+      "enum": [
+        "not_run",
+        "running",
+        "paused",
+        "waiting_client",
+        "passed",
+        "failed",
+        "legacy"
+      ],
+      "type": "string"
+    },
+    "reopen_scope": {
+      "type": "string"
+    },
+    "reopened_reason": {
+      "type": "string"
+    },
+    "returned_reason": {
       "type": "string"
     },
     "risk_assessment_meta": {
@@ -84,6 +150,10 @@
         "Unacceptable"
       ],
       "type": "string"
+    },
+    "route": {
+      "description": "resolveRoute result: level, needsAdvice, reason, isDowngrade, computed_at",
+      "type": "object"
     },
     "sign_off_approved_at": {
       "format": "date-time",
@@ -100,6 +170,22 @@
       "type": "string"
     },
     "sign_off_submitted_by": {
+      "type": "string"
+    },
+    "signoff_flow": {
+      "description": "2 = Draft Report & QC / Compliance Advice / Final Report & Sign-off flow; absent = legacy 8-step case",
+      "type": "number"
+    },
+    "signoff_status": {
+      "enum": [
+        "draft",
+        "with_compliance",
+        "info_needed",
+        "with_approver",
+        "approved",
+        "declined",
+        "terminated"
+      ],
       "type": "string"
     },
     "sof_narrative": {
@@ -123,6 +209,32 @@
         "Approved",
         "Rejected",
         "Closed"
+      ],
+      "type": "string"
+    },
+    "step_10_status": {
+      "default": "not_started",
+      "description": "Draft Report & QC",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
+      ],
+      "type": "string"
+    },
+    "step_11_not_required": {
+      "default": false,
+      "type": "boolean"
+    },
+    "step_11_status": {
+      "default": "not_started",
+      "description": "Compliance Advice",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "complete",
+        "flagged"
       ],
       "type": "string"
     },
@@ -213,6 +325,7 @@
     },
     "step_8_status": {
       "default": "not_started",
+      "description": "Final Report & Sign-off",
       "enum": [
         "not_started",
         "in_progress",
@@ -230,6 +343,9 @@
         "complete",
         "flagged"
       ],
+      "type": "string"
+    },
+    "submitted_note": {
       "type": "string"
     },
     "tenant_id": {
