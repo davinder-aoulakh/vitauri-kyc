@@ -24,13 +24,14 @@ export async function anthropicStatus(base44, tenantId) {
 export async function saveAnthropicKey(base44, tenantId, key, actor) {
   const E = base44.asServiceRole.entities;
   const existing = await findSecret(base44, tenantId);
+  const wasConfigured = !!existing?.anthropic_api_key;
   const patch = { anthropic_api_key: key || '', anthropic_rotated_at: new Date().toISOString(), anthropic_updated_by_user_id: actor?.actorUserId || undefined };
   if (existing) await E.TenantSecret.update(existing.id, patch);
   else await E.TenantSecret.create({ tenant_id: tenantId, ...patch });
   await E.AuditEvent.create({
     tenant_id: tenantId, actor_user_id: actor?.actorUserId, actor_name: actor?.actorName || 'System', actor_type: actor?.actorType || 'User',
     event_type: key ? 'anthropic_key_saved' : 'anthropic_key_removed',
-    before_state: { configured: !!existing?.anthropic_api_key }, after_state: { configured: !!key, last4: key ? key.slice(-4) : null },
+    before_state: { configured: wasConfigured }, after_state: { configured: !!key, last4: key ? key.slice(-4) : null },
     notes: key ? 'Anthropic (Claude) API key stored securely for the KYC Screener.' : 'Anthropic (Claude) API key removed.',
   }).catch((e) => console.warn('anthropicCredentials: audit failed', e?.message));
 }
