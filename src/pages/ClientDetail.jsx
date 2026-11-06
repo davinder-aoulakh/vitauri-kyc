@@ -28,6 +28,7 @@ import { deleteCase } from '@/lib/caseDelete';
 import TippingOffBanner from '@/components/shared/TippingOffBanner';
 import ClientTmHeader from '@/components/client/overview/ClientTmHeader';
 import { useCustomerFile } from '@/components/client/overview/useCustomerFile';
+import KycScreenerPanel from '@/components/client/KycScreenerPanel';
 
 export default function ClientDetail() {
   const { id } = useParams();
@@ -257,6 +258,7 @@ export default function ClientDetail() {
                   <Trash2 className="w-3.5 h-3.5" /> Delete Client
                 </Button>
               )}
+              {hasPermission(userRole, 'createRunCase') && <KycScreenerPanel client={client} />}
               {client.client_type === 'ORG' && (
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => navigate(`/entity-map/${id}`)}>
                   <GitFork className="w-3.5 h-3.5" /> Org Chart Viewer
