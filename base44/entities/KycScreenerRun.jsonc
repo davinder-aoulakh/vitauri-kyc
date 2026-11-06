@@ -1,0 +1,121 @@
+{
+  "name": "KycScreenerRun",
+  "properties": {
+    "client_id": {
+      "type": "string"
+    },
+    "comparison": {
+      "description": "Didit vs Claude rows and totals, plus risk comparison",
+      "type": "object"
+    },
+    "disposition": {
+      "type": "string"
+    },
+    "doc_record": {
+      "description": "kyc-doc-parse record from the doc-reader stage",
+      "type": "object"
+    },
+    "documents_used": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "error": {
+      "type": "string"
+    },
+    "finished_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "kyc_case_id": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "pdf_hash": {
+      "type": "string"
+    },
+    "pdf_url": {
+      "type": "string"
+    },
+    "ran_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "risk_rating": {
+      "type": "string"
+    },
+    "rules": {
+      "description": "kyc-rules disposition: risk_rating, factors, rule_outcomes, disposition, gaps",
+      "type": "object"
+    },
+    "run_by_name": {
+      "type": "string"
+    },
+    "run_by_user_id": {
+      "type": "string"
+    },
+    "screening": {
+      "description": "Claude screening per party (sanctions / PEP / adverse media)",
+      "type": "object"
+    },
+    "stage": {
+      "description": "doc_reader | screening | rules | export | done",
+      "type": "string"
+    },
+    "status": {
+      "default": "running",
+      "enum": [
+        "running",
+        "completed",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "tokens_input": {
+      "type": "number"
+    },
+    "tokens_output": {
+      "type": "number"
+    },
+    "xlsx_hash": {
+      "type": "string"
+    },
+    "xlsx_url": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "client_id"
+  ],
+  "rls": {
+    "create": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "delete": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "data.tenant_id": "{{user.data.tenant_id}}"
+    }
+  },
+  "type": "object"
+}
