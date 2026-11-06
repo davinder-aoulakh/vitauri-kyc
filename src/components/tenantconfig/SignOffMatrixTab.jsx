@@ -5,6 +5,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Save, Loader2, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import SignOffRoutingSettings from '@/components/tenantconfig/SignOffRoutingSettings';
 
 const RISK_LEVELS = ['Low', 'Medium', 'High', 'Unacceptable'];
 const APPROVER_OPTIONS = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin'];
@@ -25,6 +26,8 @@ const DEFAULT_MATRIX = {
 
 export default function SignOffMatrixTab({ tenant, currentUser, setTenant }) {
   const [matrix, setMatrix] = useState(DEFAULT_MATRIX);
+  // Routing settings of the sign-off flow (advice switch, highest-of rule, overrides, QC strictness, template headings).
+  const [routing, setRouting] = useState({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved]   = useState(false);
   const hydrated = useRef(false);
@@ -40,12 +43,16 @@ export default function SignOffMatrixTab({ tenant, currentUser, setTenant }) {
         };
       });
       setMatrix(merged);
+      const { Low, Medium, High, Unacceptable, ...rest } = tenant.sign_off_matrix; // eslint-disable-line no-unused-vars
+      setRouting(rest);
     }
   }, [tenant]);
 
   async function save() {
     setSaving(true);
-    const updated = await base44.entities.Tenant.update(tenant.id, { sign_off_matrix: matrix });
+    const headings = (routing.advice_template_headings || []).map((h) => String(h).trim()).filter(Boolean);
+    const next = { ...routing, ...(headings.length ? { advice_template_headings: headings } : {}), ...matrix };
+    const updated = await base44.entities.Tenant.update(tenant.id, { sign_off_matrix: next });
     setTenant?.(updated);
     await base44.entities.AuditEvent.create({
       tenant_id: currentUser.tenant_id,
@@ -54,7 +61,7 @@ export default function SignOffMatrixTab({ tenant, currentUser, setTenant }) {
       actor_type: 'User',
       event_type: 'sign_off_matrix_updated',
       notes: `Sign-off matrix updated by ${currentUser.full_name}`,
-      after_state: matrix,
+      after_state: next,
     });
     setSaving(false);
     setSaved(true);
@@ -126,6 +133,12 @@ export default function SignOffMatrixTab({ tenant, currentUser, setTenant }) {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div>
+        <h3 className="font-semibold text-sm">Sign-off routing</h3>
+        <p className="text-xs text-muted-foreground mt-0.5 mb-3">Draft Report &amp; QC → Compliance Advice → Final Report &amp; Sign-off. Saved with the button above.</p>
+        <SignOffRoutingSettings value={routing} onChange={setRouting} />
       </div>
     </div>
   );
