@@ -43,8 +43,7 @@ export default function SignOffMatrixTab({ tenant, currentUser, setTenant }) {
         };
       });
       setMatrix(merged);
-      const { Low, Medium, High, Unacceptable, ...rest } = tenant.sign_off_matrix; // eslint-disable-line no-unused-vars
-      setRouting(rest);
+      setRouting(Object.fromEntries(Object.entries(tenant.sign_off_matrix).filter(([k]) => !RISK_LEVELS.includes(k))));
     }
   }, [tenant]);
 
