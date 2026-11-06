@@ -23,7 +23,8 @@
         "TmEvidence",
         "TmNarrative",
         "TmRuleDraft",
-        "DocumentCheck"
+        "DocumentCheck",
+        "KycScreener"
       ],
       "type": "string"
     },
