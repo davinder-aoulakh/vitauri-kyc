@@ -27,7 +27,6 @@ export default function DraftReportQcStep({ kycCase, client, currentUser, onCase
   const incomplete = info.incomplete_steps || [];
   const liveReports = reports.filter((r) => r.status !== 'Superseded');
   const draftReport = liveReports[0] || null;
-  const reportCurrent = !!draftReport && (!kycCase.updated_date || !draftReport.generated_at || new Date(draftReport.generated_at) >= new Date(kycCase.sign_off_rejection_reason ? 0 : 0));
   const caseCheck = incomplete.length === 0;
   const ready = caseCheck && !!draftReport;
   const submitter = users.find((u) => u.id === kycCase.sign_off_submitted_by);
@@ -128,7 +127,6 @@ export default function DraftReportQcStep({ kycCase, client, currentUser, onCase
           onGenerated={() => reload()} onPreview={(r) => setPreview(r)} />
       </section>
       <ReportPreviewPanel open={!!preview} onOpenChange={(v) => !v && setPreview(null)} report={preview} label={ctx.phaseLabel} advice={advice} />
-      {!reportCurrent && null}
     </div>
   );
 }
