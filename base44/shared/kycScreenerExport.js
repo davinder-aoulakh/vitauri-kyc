@@ -87,7 +87,7 @@ export async function buildScreenerPdf({ run, client, tenant }) {
   const clean = (t) => [...s(t).replace(/\r/g, '')].map((ch) => {
     if (ch === '\n') return ch;
     if (!okc.has(ch)) { try { font.widthOfTextAtSize(ch, 10); okc.set(ch, true); } catch { okc.set(ch, false); } }
-    return okc.get(ch) ? ch : ({ '→': '->', '−': '-', '≥': '>=', '≤': '<=' }[ch] || '?');
+    return okc.get(ch) ? ch : ({ '→': '->', '−': '-', '≥': '>=', '≤': '<=', '✓': '+' }[ch] || '?');
   }).join('');
   const pages = []; let page; let y;
   const newPage = () => { page = doc.addPage(A4); pages.push(page); y = A4[1] - M; };
