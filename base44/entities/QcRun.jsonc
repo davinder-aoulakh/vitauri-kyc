@@ -1,0 +1,100 @@
+{
+  "name": "QcRun",
+  "properties": {
+    "case_check_rounds": {
+      "default": 0,
+      "type": "number"
+    },
+    "case_id": {
+      "type": "string"
+    },
+    "certificate_id": {
+      "type": "string"
+    },
+    "finished_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "input_snapshot_hash": {
+      "type": "string"
+    },
+    "model_version": {
+      "type": "string"
+    },
+    "phase": {
+      "enum": [
+        "case_check",
+        "draft_report",
+        "report_check",
+        "ready"
+      ],
+      "type": "string"
+    },
+    "prompt_version": {
+      "type": "string"
+    },
+    "report_check_rounds": {
+      "default": 0,
+      "type": "number"
+    },
+    "report_version": {
+      "type": "number"
+    },
+    "result": {
+      "enum": [
+        "running",
+        "passed",
+        "failed",
+        "paused",
+        "legacy"
+      ],
+      "type": "string"
+    },
+    "rule_set_version": {
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "started_by": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "object"
+    },
+    "tenant_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "case_id"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false,
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    }
+  },
+  "type": "object"
+}

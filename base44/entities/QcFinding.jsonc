@@ -1,0 +1,101 @@
+{
+  "name": "QcFinding",
+  "properties": {
+    "case_id": {
+      "type": "string"
+    },
+    "check": {
+      "enum": [
+        "case",
+        "report"
+      ],
+      "type": "string"
+    },
+    "code": {
+      "type": "string"
+    },
+    "datapoint_ref": {
+      "type": "string"
+    },
+    "owner": {
+      "description": "Agent name or 'Analyst (human)'",
+      "type": "string"
+    },
+    "qc_run_id": {
+      "type": "string"
+    },
+    "resolution_text": {
+      "type": "string"
+    },
+    "resolved_in_round": {
+      "type": "number"
+    },
+    "round": {
+      "type": "number"
+    },
+    "rule_ref": {
+      "type": "string"
+    },
+    "severity": {
+      "enum": [
+        "blocker",
+        "major",
+        "minor"
+      ],
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "open",
+        "returned",
+        "needs_human",
+        "resolved"
+      ],
+      "type": "string"
+    },
+    "step": {
+      "description": "Case step id the finding belongs to",
+      "type": "number"
+    },
+    "step_label": {
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "case_id",
+    "qc_run_id"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false,
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    }
+  },
+  "type": "object"
+}

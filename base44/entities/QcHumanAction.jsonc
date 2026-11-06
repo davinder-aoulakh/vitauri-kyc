@@ -1,0 +1,122 @@
+{
+  "name": "QcHumanAction",
+  "properties": {
+    "ai_followed": {
+      "type": "boolean"
+    },
+    "ai_suggested_choice": {
+      "type": "string"
+    },
+    "ai_suggestion": {
+      "type": "string"
+    },
+    "case_id": {
+      "type": "string"
+    },
+    "choice": {
+      "enum": [
+        "Plausible",
+        "Not plausible",
+        "Cannot decide yet"
+      ],
+      "type": "string"
+    },
+    "comparison": {
+      "description": "[{datapoint, declared, observed, fit}]",
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "decided_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "decided_by": {
+      "type": "string"
+    },
+    "decided_by_name": {
+      "type": "string"
+    },
+    "evidence_confirmed": {
+      "items": {
+        "type": "boolean"
+      },
+      "type": "array"
+    },
+    "evidence_items": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "finding_id": {
+      "type": "string"
+    },
+    "kind": {
+      "description": "e.g. sof_vs_transactions",
+      "type": "string"
+    },
+    "outreach_id": {
+      "type": "string"
+    },
+    "qc_run_id": {
+      "type": "string"
+    },
+    "question": {
+      "type": "string"
+    },
+    "reasons": {
+      "type": "string"
+    },
+    "state": {
+      "default": "open",
+      "enum": [
+        "open",
+        "waiting_for_client",
+        "done"
+      ],
+      "type": "string"
+    },
+    "strictness": {
+      "enum": [
+        "light",
+        "strict"
+      ],
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "case_id"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false,
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    }
+  },
+  "type": "object"
+}

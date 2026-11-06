@@ -1,0 +1,108 @@
+{
+  "name": "DeclinedRecord",
+  "properties": {
+    "case_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "client_type": {
+      "enum": [
+        "NP",
+        "ORG"
+      ],
+      "type": "string"
+    },
+    "decided_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "decided_by": {
+      "type": "string"
+    },
+    "identifiers": {
+      "description": "NP: document_numbers, name, date_of_birth, address, email, phone. ORG: registration_number, name, directors[], ubos[] ({name, date_of_birth})",
+      "type": "object"
+    },
+    "internal_reason": {
+      "type": "string"
+    },
+    "neutral_letter_sent": {
+      "type": "boolean"
+    },
+    "reporting_obligation_assessment": {
+      "type": "string"
+    },
+    "retention_until": {
+      "description": "From the tenant retention setting; empty until Compliance sets it",
+      "format": "date",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "Declined, not onboarded",
+        "Relationship terminated",
+        "Closed, not completed"
+      ],
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "case_id"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false,
+    "read": {
+      "$and": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "$or": [
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Officer"
+              }
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Director"
+              }
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Manager"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    }
+  },
+  "type": "object"
+}
