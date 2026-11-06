@@ -1,0 +1,111 @@
+{
+  "name": "SignOffDecision",
+  "properties": {
+    "acting_as": {
+      "description": "analyst | manager | senior (the route level the person acted at)",
+      "type": "string"
+    },
+    "auto_approved": {
+      "default": false,
+      "type": "boolean"
+    },
+    "case_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "decided_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "decided_by": {
+      "type": "string"
+    },
+    "decided_by_name": {
+      "type": "string"
+    },
+    "deviates_from_advice": {
+      "default": false,
+      "type": "boolean"
+    },
+    "hash": {
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "Approved",
+        "Declined",
+        "Terminated",
+        "Returned",
+        "Escalated"
+      ],
+      "type": "string"
+    },
+    "neutral_letter_sent": {
+      "default": false,
+      "type": "boolean"
+    },
+    "policy_version": {
+      "type": "string"
+    },
+    "rationale": {
+      "type": "string"
+    },
+    "rationale_ai_assisted": {
+      "default": false,
+      "type": "boolean"
+    },
+    "report_version": {
+      "type": "number"
+    },
+    "reporting_obligation_assessment": {
+      "enum": [
+        "no_report_required",
+        "report_filed",
+        "report_to_be_filed"
+      ],
+      "type": "string"
+    },
+    "role": {
+      "type": "string"
+    },
+    "route": {
+      "type": "object"
+    },
+    "tenant_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "case_id",
+    "kind"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false,
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    }
+  },
+  "type": "object"
+}

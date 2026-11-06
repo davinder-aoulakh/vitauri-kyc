@@ -1,0 +1,133 @@
+{
+  "name": "ComplianceAdvice",
+  "properties": {
+    "advice_html": {
+      "type": "string"
+    },
+    "ai_assisted": {
+      "default": false,
+      "type": "boolean"
+    },
+    "analyst_note": {
+      "type": "string"
+    },
+    "attachments": {
+      "description": "[{index: C1, title, description, file_url, file_name, size, sha256}]",
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "case_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "conditions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "confirmed_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "given_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "given_by": {
+      "type": "string"
+    },
+    "given_by_name": {
+      "type": "string"
+    },
+    "outcome": {
+      "enum": [
+        "Supportive",
+        "Supportive with conditions",
+        "Not supportive"
+      ],
+      "type": "string"
+    },
+    "questions": {
+      "description": "[{question, asked_by, asked_at, answer, answered_by, answered_at}]",
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "recommendation": {
+      "enum": [
+        "Approve",
+        "Decline",
+        "Reclassify"
+      ],
+      "type": "string"
+    },
+    "report_version_based_on": {
+      "type": "number"
+    },
+    "requested_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "requested_by": {
+      "type": "string"
+    },
+    "returned_reason": {
+      "type": "string"
+    },
+    "status": {
+      "default": "requested",
+      "enum": [
+        "requested",
+        "info_needed",
+        "received",
+        "outdated",
+        "returned",
+        "superseded"
+      ],
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "valid_for_key": {
+      "description": "existing|proposed classification the advice was given for",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "case_id"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false,
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    }
+  },
+  "type": "object"
+}
