@@ -169,6 +169,17 @@ export default async function (req) {
           conditions: (Array.isArray(body.conditions) ? body.conditions : []).map((c) => clip(c, 500)).filter(Boolean).slice(0, 30), attachments,
           valid_for_key: routeKey(route), given_by: actor.id, given_by_name: actor.name, given_at: now,
         });
+        // Spec: each condition becomes a proposed measure in Control Measures (deduplicated by text).
+        const conds = (Array.isArray(body.conditions) ? body.conditions : []).map((c) => clip(c, 500)).filter(Boolean).slice(0, 30);
+        if (conds.length) {
+          const existingCm = asList(await E.ControlMeasure.filter({ tenant_id: tenantId, case_id: kycCase.id }, undefined, 200));
+          const have = new Set(existingCm.map((m) => String(m.description || '').trim().toLowerCase()));
+          for (const c of conds) {
+            const description = `Compliance condition: ${c}`;
+            if (have.has(description.toLowerCase())) continue;
+            await E.ControlMeasure.create({ tenant_id: tenantId, case_id: kycCase.id, description, status: 'Open', owner_user_id: kycCase.assigned_analyst_id || undefined }).catch((e) => console.warn('control measure', e?.message));
+          }
+        }
         await audit('advice.submitted', `Advice ${body.outcome} · ${body.recommendation}${body.ai_assisted ? ' (AI-assisted draft, edited by the author)' : ''}; ${attachments.length} attachment(s).`, { outcome: body.outcome, recommendation: body.recommendation, ai_assisted: !!body.ai_assisted, attachments: attachments.map((a) => a.index) });
       }
       if (fx === 'advice_confirmed' && advice) await E.ComplianceAdvice.update(advice.id, { status: 'received', valid_for_key: routeKey(route), confirmed_at: now });
