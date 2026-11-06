@@ -80,9 +80,11 @@ export default async function (req) {
 
     const perms = signoffPermissions(user, kycCase, route, advice);
     const action = body.action || 'route';
-    const qcPassed = CORE_STEPS.every((id) => stepDone(kycCase, id)); // Phase 1: QC engine follows in phase 2
+    // Phase 1 QC gate: every step complete (Case Check) and a draft report exists. The QC engine follows in phase 2.
+    const hasDraftReport = asList(await E.KycReport.filter({ tenant_id: tenantId, case_id: kycCase.id }, '-version_number', 5)).some((r) => r.status !== 'Superseded');
+    const qcPassed = CORE_STEPS.every((id) => stepDone(kycCase, id)) && (hasDraftReport || kycCase.qc_state === 'legacy');
     if (action === 'route') {
-      return Response.json({ ok: true, route, perms, advice, qc_passed: qcPassed, incomplete_steps: CORE_STEPS.filter((id) => !stepDone(kycCase, id)), config: { compliance_advice_enabled: cfg.compliance_advice_enabled, low_risk_mode: cfg.low_risk_mode, qc_strictness: cfg.qc_strictness, advice_template_headings: cfg.advice_template_headings } });
+      return Response.json({ ok: true, route, perms, advice, qc_passed: qcPassed, has_draft_report: hasDraftReport, incomplete_steps: CORE_STEPS.filter((id) => !stepDone(kycCase, id)), config: { compliance_advice_enabled: cfg.compliance_advice_enabled, low_risk_mode: cfg.low_risk_mode, qc_strictness: cfg.qc_strictness, advice_template_headings: cfg.advice_template_headings } });
     }
 
     // ---- AI drafts (no state change) ----
