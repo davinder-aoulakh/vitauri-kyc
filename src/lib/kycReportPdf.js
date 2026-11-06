@@ -558,8 +558,8 @@ export function buildReportBody(input) {
     section('8', 'Compliance Advice, Oversight & Decision');
     subheading('Risk classification and route');
     kvGrid([
-      ['Existing classification', r.existing || 'New client'], ['Proposed classification', r.proposed],
-      ['Effective classification', r.effective], ['Sign-off level', { analyst: 'Analyst (self sign-off)', manager: 'Manager', senior: 'Senior Management' }[r.level] || r.level],
+      ['Existing class', r.existing || 'New client'], ['Proposed class', r.proposed],
+      ['Effective class', r.effective], ['Sign-off level', { analyst: 'Analyst (self sign-off)', manager: 'Manager', senior: 'Senior Management' }[r.level] || r.level],
     ]);
     if (kycCase?.downgrade_motivation) kv('Downgrade motivation', kycCase.downgrade_motivation);
     if (kycCase?.submitted_note) kv('Note for the reviewer', kycCase.submitted_note);
