@@ -1,40 +1,55 @@
 {
   "name": "KycReport",
-  "type": "object",
   "properties": {
-    "tenant_id": {
+    "advice_id": {
       "type": "string"
     },
     "case_id": {
-      "type": "string",
-      "description": "FK to KycCase"
+      "type": "string"
     },
-    "version_number": {
-      "type": "number",
-      "description": "Auto-incrementing version for this case"
+    "created_reason": {
+      "type": "string"
+    },
+    "frozen_at": {
+      "format": "date-time",
+      "type": "string"
     },
     "generated_at": {
-      "type": "string",
-      "format": "date-time"
+      "type": "string"
     },
     "generated_by_id": {
-      "type": "string",
-      "description": "FK to User"
+      "type": "string"
     },
-    "report_data_snapshot": {
-      "type": "object",
-      "description": "JSON snapshot of report content at time of generation"
+    "hash": {
+      "description": "SHA-256 of the PDF, set when the version is frozen",
+      "type": "string"
     },
     "pdf_url": {
-      "type": "string",
-      "description": "URL to generated PDF if available"
+      "type": "string"
+    },
+    "report_data_snapshot": {
+      "type": "object"
+    },
+    "status": {
+      "description": "Final / Declined / Terminated versions are immutable; changes create a new version",
+      "enum": [
+        "Draft",
+        "Draft incl. Compliance advice",
+        "Final",
+        "Declined",
+        "Terminated",
+        "Superseded"
+      ],
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "version_number": {
+      "type": "number"
     }
   },
-  "required": [
-    "tenant_id",
-    "case_id",
-    "version_number"
-  ],
+  "type": "object",
   "rls": {
     "create": {
       "$or": [
@@ -93,5 +108,6 @@
         }
       ]
     }
-  }
+  },
+  "required": []
 }
