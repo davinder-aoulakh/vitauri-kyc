@@ -84,7 +84,14 @@ const PREREQUISITE_STEPS = [
 ];
 
 // ── Component ──────────────────────────────────────────────────────────────
-export default function KycReportStep({ kycCase, client, currentUser, onRefresh, refreshing }) {
+// signoff (new sign-off flow): { phaseLabel, route, advice, decision, names, humanActions } adds the Compliance advice / decision
+// chapter and the phase label; the page then shows no Download/Share buttons (download only inside the preview panel).
+const STATUS_OF_LABEL = {
+  DRAFT: 'Draft', 'DRAFT INCL. COMPLIANCE ADVICE': 'Draft incl. Compliance advice',
+  FINAL: 'Final', 'FINAL · DECLINED': 'Declined', 'FINAL · TERMINATED': 'Terminated',
+};
+
+export default function KycReportStep({ kycCase, client, currentUser, onRefresh, refreshing, signoff = null, onGenerated, compact = false }) {
   const [generating, setGenerating] = useState(false);
   const [reports, setReports]       = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -158,6 +165,10 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
     [...(caseDocs || []), ...(clientDocs || [])].forEach(d => {
       if (d.doc_type !== 'KYC_Report' && !d.is_deleted) docMap.set(d.id, d);
     });
+    // Compliance advice attachments (C1, C2…) are part of the version: appended to the annex.
+    (signoff?.advice?.attachments || []).forEach((a) => {
+      docMap.set(`advice-${a.index}`, { id: `advice-${a.index}`, file_url: a.file_url, file_name: `${a.index} · ${a.title}`, doc_type: 'Compliance_Attachment', source: 'compliance', created_date: signoff.advice.given_at });
+    });
     const sourceOrder = { didit: 0, portal: 1, manual: 2 };
     const documents = Array.from(docMap.values()).sort((a, b) => {
       const sa = sourceOrder[a.source] ?? 3, sb = sourceOrder[b.source] ?? 3;
@@ -206,6 +217,7 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
       txnAnalysis,
       tmMonitoring,
       logo,
+      signoff,
     });
     const pdfBlob = new Blob([built.bytes], { type: 'application/pdf' });
 
@@ -225,7 +237,7 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
       },
     };
 
-    await base44.entities.KycReport.create({
+    const created = await base44.entities.KycReport.create({
       tenant_id: kycCase.tenant_id,
       case_id: kycCase.id,
       version_number: nextVersion,
@@ -233,7 +245,14 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
       generated_by_id: currentUser?.id,
       report_data_snapshot: reportSnapshot,
       pdf_url: file_url,
+      ...(signoff ? { status: STATUS_OF_LABEL[signoff.phaseLabel] || 'Draft', created_reason: signoff.reason || `Generated in phase ${signoff.phaseLabel}`, advice_id: signoff.advice?.id || undefined } : {}),
     });
+    // Earlier unfrozen drafts are superseded by this version.
+    if (signoff) {
+      for (const r of reports.filter((x) => !x.frozen_at && x.status !== 'Superseded')) {
+        await base44.entities.KycReport.update(r.id, { status: 'Superseded' }).catch(() => {});
+      }
+    }
 
     await base44.entities.AuditEvent.create({
       tenant_id: kycCase.tenant_id, case_id: kycCase.id,
@@ -243,6 +262,7 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
     });
 
     await loadReports();
+    onGenerated?.(created);
   }
 
   const latestReport = reports[0];
@@ -383,12 +403,14 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
                 onClick={() => setViewerDoc({ url: latestReport.pdf_url, name: `Report_v${latestReport.version_number}` })}>
                 <Eye className="w-3 h-3" /> Preview
               </Button>
-              <a href={latestReport.pdf_url} download target="_blank" rel="noopener noreferrer">
-                <Button size="sm" className="gap-1 text-xs h-7">
-                  <Download className="w-3 h-3" /> Download
-                </Button>
-              </a>
-              {isApproved && (
+              {!signoff && (
+                <a href={latestReport.pdf_url} download target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" className="gap-1 text-xs h-7">
+                    <Download className="w-3 h-3" /> Download
+                  </Button>
+                </a>
+              )}
+              {isApproved && !signoff && (
                 <Button size="sm" variant="outline" className="gap-1 text-xs h-7 text-violet-600 border-violet-200 hover:bg-violet-50"
                   onClick={() => setShareLink(latestReport.pdf_url)}>
                   <Share2 className="w-3 h-3" /> Share
