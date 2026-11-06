@@ -14,6 +14,7 @@ import { runScreenerStages, namedParties, profileFacts, DEFAULT_RULES_GRID } fro
 import { compareScreening, compareRisk } from '../../shared/kycScreenerCompare.js';
 import { buildScreenerXlsx, buildScreenerPdf } from '../../shared/kycScreenerExport.js';
 import { KYC_SOURCE } from '../../shared/kycScreenerPrompts.js';
+import { anthropicKeyFor } from '../../shared/anthropicCredentials.js';
 
 const ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin']; // createRunCase
 const MAX_DOCS = 8;
@@ -76,7 +77,7 @@ async function store(base44, bytes, name, type) {
   return up.file_uri;
 }
 
-async function execute({ base44, E, user, tenant, client, kycCase, runId }) {
+async function execute({ base44, E, user, tenant, client, kycCase, runId, apiKey }) {
   const tenantId = tenant.id;
   const update = (p) => E.KycScreenerRun.update(runId, p).catch(() => {});
   try {
@@ -100,7 +101,7 @@ async function execute({ base44, E, user, tenant, client, kycCase, runId }) {
     }
     const profile = profileFacts({ client, kycCase, parties, outreachAnswers: outreachAnswers(outreach.filter((o) => !o.related_party_id)).answers });
     const model = String(tenant.tm_settings?.claude_model || DEFAULT_CLAUDE_MODEL);
-    const ai = claudeClient();
+    const ai = claudeClient(apiKey);
     const callFn = (req) => callClaude({ ...req, model, client: ai });
 
     const result = await runScreenerStages({ docs, profile, parties, grid: grid.grid, callFn, onStage: (stage) => update({ stage }) });
@@ -180,7 +181,8 @@ export default async function (req) {
     if (!client || client.is_deleted) throw httpError(404, 'Client not found');
     const tenant = asList(await E.Tenant.filter({ id: tenantId }, undefined, 1))[0];
     if (!tenant) throw httpError(404, 'Tenant not found');
-    claudeClient(); // fail fast when the API key is missing
+    const { key: apiKey } = await anthropicKeyFor(base44, tenantId);
+    claudeClient(apiKey); // fail fast (412) when no key is configured for this tenant
     const running = asList(await E.KycScreenerRun.filter({ tenant_id: tenantId, client_id: client.id, status: 'running' }, '-created_date', 1))[0];
     if (running && Date.now() - new Date(running.created_date).getTime() < 15 * 60 * 1000) return Response.json({ ok: true, run_id: running.id, already_running: true });
     const kycCase = body.kyc_case_id
@@ -191,7 +193,7 @@ export default async function (req) {
       tenant_id: tenantId, client_id: client.id, kyc_case_id: kycCase?.id || undefined, status: 'running', stage: 'doc_reader',
       run_by_user_id: user.id, run_by_name: user.full_name || user.email, ran_at: new Date().toISOString(),
     });
-    waitUntil(execute({ base44, E, user, tenant, client, kycCase, runId: run.id }));
+    waitUntil(execute({ base44, E, user, tenant, client, kycCase, runId: run.id, apiKey }));
     return Response.json({ ok: true, run_id: run.id });
   } catch (error) {
     console.error('runKycScreener error:', error?.message);
