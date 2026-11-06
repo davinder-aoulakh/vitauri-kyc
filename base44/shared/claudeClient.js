@@ -1,5 +1,5 @@
-// Claude API client for server-side agents (official Anthropic SDK). The key comes from the Base44 secret ANTHROPIC_API_KEY
-// and is never logged or returned. Forced tool_choice is not supported on Claude Opus 5.5, so JSON stages use structured
+// Claude API client for server-side agents (official Anthropic SDK). The key is the tenant's (Tenant Config → Integrations,
+// stored in TenantSecret; see anthropicCredentials.js) and is never logged or returned. Forced tool_choice is not supported on Claude Opus 5.5, so JSON stages use structured
 // outputs (output_config.format); stages with web search (incompatible with structured outputs) return a fenced JSON block.
 import Anthropic from 'npm:@anthropic-ai/sdk@1.6.0';
 
@@ -10,12 +10,24 @@ export class ClaudeStageError extends Error {
   constructor(message, { status = 502, code = 'claude_error' } = {}) { super(message); this.status = status; this.code = code; }
 }
 
-let cached = null;
-export function claudeClient() {
-  const apiKey = (typeof Deno !== 'undefined' ? Deno.env.get('ANTHROPIC_API_KEY') : process.env.ANTHROPIC_API_KEY) || '';
-  if (!apiKey) throw new ClaudeStageError('The Anthropic API key is not configured (Base44 secret ANTHROPIC_API_KEY).', { status: 412, code: 'no_api_key' });
-  if (!cached) cached = new Anthropic({ apiKey, maxRetries: 2, timeout: 10 * 60 * 1000 });
-  return cached;
+/** One client per call site; apiKey comes from anthropicKeyFor(). */
+export function claudeClient(apiKey) {
+  if (!apiKey) throw new ClaudeStageError('No Anthropic API key is configured. A Tenant Admin can add it in Tenant Config → Integrations → Claude (Anthropic).', { status: 412, code: 'no_api_key' });
+  return new Anthropic({ apiKey, maxRetries: 2, timeout: 10 * 60 * 1000 });
+}
+
+/** Cheap live check of a key + model (Models API). Returns { ok, model, error }. */
+export async function checkClaudeKey(apiKey, model = DEFAULT_CLAUDE_MODEL) {
+  try {
+    const m = await claudeClient(apiKey).models.retrieve(model);
+    return { ok: true, model: m?.id || model, display_name: m?.display_name || null };
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError) return { ok: false, error: 'The key was rejected by Anthropic (invalid or revoked).' };
+    if (e instanceof Anthropic.PermissionDeniedError) return { ok: false, error: 'The key has no access to this model or workspace.' };
+    if (e instanceof Anthropic.NotFoundError) return { ok: false, error: `Model ${model} is not available for this key.` };
+    if (e instanceof Anthropic.APIError) return { ok: false, error: `Anthropic API error ${e.status}.` };
+    return { ok: false, error: e?.code === 'no_api_key' ? e.message : 'Could not reach the Anthropic API.' };
+  }
 }
 
 const textOf = (msg) => (msg.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
