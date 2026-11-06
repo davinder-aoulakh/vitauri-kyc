@@ -8,6 +8,7 @@ import { AlertTriangle, ExternalLink, CheckCircle, Circle, Loader2, ListOrdered 
 import { useToast } from '@/components/ui/use-toast';
 import { useTenant } from '@/lib/tenantContext';
 import DiditConnectionCard from '@/components/tenantconfig/DiditConnectionCard';
+import AnthropicConnectionCard from '@/components/tenantconfig/AnthropicConnectionCard';
 
 const INTEGRATIONS = [
   {
@@ -99,6 +100,7 @@ export default function IntegrationsTab({ tenant }) {
       </div>
 
       {canManageDidit && tenant?.id && <DiditConnectionCard tenant={tenant} />}
+      {canManageDidit && tenant?.id && <AnthropicConnectionCard tenant={tenant} />}
 
       <div className="bg-card border border-border rounded-xl p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
