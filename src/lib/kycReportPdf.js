@@ -137,8 +137,9 @@ export function buildReportBody(input) {
   const {
     kycCase, client, preparedBy, analystName, screeningHits = [], assessments = [], controlMeasures = [],
     auditEvents = [], relatedPartyLinks = [], relatedParties = [], tenant, nextVersion, annexItems = [],
-    txnAnalysis = null, tmMonitoring = null, logo = null, now = new Date(),
+    txnAnalysis = null, tmMonitoring = null, logo = null, now = new Date(), signoff = null,
   } = input;
+  // signoff (new sign-off flow): { phaseLabel, route, advice, decision, names: {userId: name}, humanActions: [] }
   const b = reportBranding(tenant);
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const dateStr = format(now, 'd MMMM yyyy');
@@ -317,6 +318,11 @@ export function buildReportBody(input) {
   text('KYC INVESTIGATION REPORT', MARGIN, 24);
   font('normal', 8.5, light ? MUTED : mix(WHITE, b.primary, 0.25));
   text('CONFIDENTIAL — FOR COMPLIANCE USE ONLY', MARGIN, 32);
+  if (signoff?.phaseLabel) {
+    const final = signoff.phaseLabel.startsWith('FINAL');
+    font('bold', 8.5, final ? [4, 120, 87] : [180, 83, 9]);
+    text(signoff.phaseLabel, MARGIN, 39);
+  }
 
   // Logo: aspect ratio kept inside a 50 x 22 mm box; on a dark header it sits on a white chip so dark logos stay visible.
   let logoDone = false;
@@ -365,7 +371,7 @@ export function buildReportBody(input) {
     ...(txnAnalysis ? [['4A', 'Transaction Analysis (statements)']] : []),
     ...(tmMonitoring ? [['4B', 'Transaction Monitoring & Expected Profile']] : []),
     ['5', 'Risk Indicators & Assessment'], ['6', 'Consolidated Risk Classification'], ['7', 'Control Measures & Mitigants'],
-    ['8', 'Sign-Off Record'], ['9', 'Annex'], ['10', 'Audit Trail Appendix'],
+    ['8', signoff ? 'Compliance Advice, Oversight & Decision' : 'Sign-Off Record'], ['9', 'Annex'], ['10', 'Audit Trail Appendix'],
   ];
   const tocSlots = [];
   toc.forEach(([num, title], i) => {
@@ -545,7 +551,51 @@ export function buildReportBody(input) {
   else table([{ label: 'Description', w: 84 }, { label: 'Owner', w: 36 }, { label: 'Due date', w: 26 }, { label: 'Status', w: 32 }],
     controlMeasures.map((cm) => [cm.description, cm.owner_name, cm.due_date, cm.status]));
 
-  // 8. Sign-off
+  // 8. Sign-off — new flow: risk route, Compliance advice, human oversight & AI use, approval and decision
+  if (signoff) {
+    const nm = (id) => signoff.names?.[id] || (id ? 'Unknown user' : '—');
+    const r = signoff.route || {};
+    section('8', 'Compliance Advice, Oversight & Decision');
+    subheading('Risk classification and route');
+    kvGrid([
+      ['Existing classification', r.existing || 'New client'], ['Proposed classification', r.proposed],
+      ['Effective classification', r.effective], ['Sign-off level', { analyst: 'Analyst (self sign-off)', manager: 'Manager', senior: 'Senior Management' }[r.level] || r.level],
+    ]);
+    if (kycCase?.downgrade_motivation) kv('Downgrade motivation', kycCase.downgrade_motivation);
+    if (kycCase?.submitted_note) kv('Note for the reviewer', kycCase.submitted_note);
+    const a = signoff.advice;
+    subheading('Compliance advice');
+    if (!a || !['received', 'outdated'].includes(a.status)) markdown(r.needsAdvice ? 'Compliance advice has been requested and is not yet available.' : 'Compliance advice was not required for this classification.');
+    else {
+      kvGrid([['Outcome', a.outcome], ['Recommendation', a.recommendation], ['Given by', a.given_by_name || nm(a.given_by)], ['Given at', fmtDate(a.given_at, 'd MMM yyyy HH:mm')]]);
+      if (a.status === 'outdated') kv('Status', 'Outdated: given for an earlier classification');
+      markdown(String(a.advice_html || '').replace(/<h\d[^>]*>/gi, '\n### ').replace(/<li[^>]*>/gi, '\n- ').replace(/<br\s*\/?>|<\/p>|<\/h\d>|<\/li>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&'));
+      if ((a.conditions || []).length) { subheading('Conditions (carried to Control Measures)', 8.5); markdown(a.conditions.map((c) => `- ${c}`).join('\n')); }
+      if ((a.attachments || []).length) { subheading('Attachments (see Annex)', 8.5); table([{ label: 'Ref', w: 14 }, { label: 'Title', w: 70 }, { label: 'Description', w: 94 }], a.attachments.map((x) => [x.index, x.title, x.description])); }
+      if (a.ai_assisted) kv('AI use', 'The advice text started from an AI-assisted draft; the Compliance officer is the author.');
+    }
+    subheading('Human oversight and AI use');
+    const aiRows = [];
+    if (a?.ai_assisted) aiRows.push(['Compliance advice', 'AI-assisted draft, edited and submitted by the Compliance officer']);
+    const d = signoff.decision;
+    if (d?.rationale_ai_assisted) aiRows.push(['Decision rationale', 'AI-assisted draft, edited and confirmed by the approver']);
+    (signoff.humanActions || []).forEach((h) => aiRows.push([h.question || 'Human decision', `${h.choice} by ${h.decided_by_name || '—'}${h.ai_suggestion ? ` · AI suggestion ${h.ai_followed ? 'followed' : 'not followed'}` : ''}`]));
+    if (aiRows.length) table([{ label: 'Item', w: 60 }, { label: 'Human oversight', w: 118 }], aiRows);
+    else markdown('No AI-assisted text was used for the advice or the decision. Every decision in this file was taken by a person.');
+    subheading('Approval and decision');
+    if (!d) markdown('No decision yet. This version is a draft.');
+    else {
+      kvGrid([
+        ['Decision', d.kind], ['Decided by', `${d.decided_by_name || nm(d.decided_by)}${d.role ? ` (${d.role})` : ''}`],
+        ['Decided at', fmtDate(d.decided_at, 'd MMM yyyy HH:mm')], ['Acting as', { analyst: 'Analyst (self sign-off)', manager: 'Manager', senior: 'Senior Management' }[d.acting_as] || d.acting_as],
+      ]);
+      if (d.rationale) kv('Rationale', d.rationale);
+      if (d.deviates_from_advice) kv('Deviation', 'This decision deviates from the Compliance advice; the reason is stated in the rationale.');
+      if (d.reporting_obligation_assessment) kv('Reporting obligation', { no_report_required: 'Assessed: no report required', report_filed: 'Report filed', report_to_be_filed: 'Report still to be filed' }[d.reporting_obligation_assessment]);
+      kv('Integrity', 'The SHA-256 hash of this PDF is recorded with the decision in Vitauri when the version is frozen.');
+    }
+    y += 2;
+  } else {
   section('8', 'Sign-Off Record');
   kvGrid([
     ['Submitted by', kycCase?.sign_off_submitted_by || preparedBy], ['Submitted at', fmtDate(kycCase?.sign_off_submitted_at, 'd MMM yyyy HH:mm')],
@@ -561,6 +611,7 @@ export function buildReportBody(input) {
     text('Date: ____________', bx + 3, y + 20);
   });
   y += 26;
+  }
 
   // 9. Annex manifest (always starts on a new page; the documents follow it)
   doc.addPage(); y = TOP;
