@@ -91,7 +91,7 @@ const STATUS_OF_LABEL = {
   FINAL: 'Final', 'FINAL · DECLINED': 'Declined', 'FINAL · TERMINATED': 'Terminated',
 };
 
-export default function KycReportStep({ kycCase, client, currentUser, onRefresh, refreshing, signoff = null, onGenerated, compact = false }) {
+export default function KycReportStep({ kycCase, client, currentUser, onRefresh, refreshing, signoff = null, onGenerated, onPreview }) {
   const [generating, setGenerating] = useState(false);
   const [reports, setReports]       = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -400,7 +400,7 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
             </div>
             <div className="flex items-center gap-2">
               <Button size="sm" variant="outline" className="gap-1 text-xs h-7"
-                onClick={() => setViewerDoc({ url: latestReport.pdf_url, name: `Report_v${latestReport.version_number}` })}>
+                onClick={() => (onPreview ? onPreview(latestReport) : setViewerDoc({ url: latestReport.pdf_url, name: `Report_v${latestReport.version_number}` }))}>
                 <Eye className="w-3 h-3" /> Preview
               </Button>
               {!signoff && (
@@ -458,7 +458,7 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Button size="sm" variant="ghost" className="h-6 text-xs gap-1"
-                        onClick={() => setViewerDoc({ url: r.pdf_url, name: `Report_v${r.version_number}` })}>
+                        onClick={() => (onPreview ? onPreview(r) : setViewerDoc({ url: r.pdf_url, name: `Report_v${r.version_number}` }))}>
                         <Eye className="w-3 h-3" /> View
                       </Button>
                     </div>
