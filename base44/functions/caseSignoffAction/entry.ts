@@ -188,7 +188,7 @@ export default async function (req) {
           tenant_id: tenantId, case_id: kycCase.id, client_id: client.id, client_type: client.client_type, status: action === 'decline' ? 'Declined, not onboarded' : 'Relationship terminated',
           identifiers, internal_reason: clip(body.rationale, 4000), reporting_obligation_assessment: body.reporting_obligation, neutral_letter_sent: !!body.neutral_letter, decided_by: actor.id, decided_at: now,
         });
-        await E.Client.update(client.id, { status: action === 'decline' ? 'Rejected' : 'Exited' }).catch(() => {});
+        await E.Client.update(client.id, { status: action === 'decline' ? 'Rejected' : 'Former' }).catch(() => {});
       }
       if (fx === 'notify_compliance') await notify(active.filter((u) => COMPLIANCE_ROLES.includes(roleOf(u)) && u.id !== kycCase.sign_off_submitted_by), 'Compliance advice requested', `Case for ${name} (${route.effective}) needs Compliance advice.`, 'advice');
       if (fx === 'notify_approvers') {
