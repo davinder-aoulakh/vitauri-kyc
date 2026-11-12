@@ -650,6 +650,18 @@ function ReviewDialog({ doc, preset, onClose, currentUser, onSaved }) {
       is_override: (status === 'Approved' && aiHighRisk) || (overridesDidit && status !== 'Approved'),
       notes: `Document "${doc.file_name}" marked as ${status}${status === 'Approved' && aiHighRisk ? ' despite a high-risk AI check' : ''}${notes ? `: ${notes}` : ''}`,
     });
+    // Approved here = verified in the case: the outreach item this file answered is set to Verified (no second click).
+    if (status === 'Approved' && doc.case_id && doc.file_url) {
+      try {
+        const reqs = await base44.entities.OutreachRequest.filter({ case_id: doc.case_id });
+        for (const r of reqs || []) {
+          const idx = (r.items || []).findIndex((i) => i.file_url === doc.file_url && i.status === 'Received');
+          if (idx < 0) continue;
+          await base44.entities.OutreachRequest.update(r.id, { items: r.items.map((i, n) => (n === idx ? { ...i, status: 'Verified' } : i)) });
+          break;
+        }
+      } catch (e) { console.warn('outreach item not verified', e?.message); }
+    }
     setSaving(false);
     onSaved?.();
     onClose();
