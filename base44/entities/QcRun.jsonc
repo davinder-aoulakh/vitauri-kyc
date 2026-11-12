@@ -11,6 +11,9 @@
     "certificate_id": {
       "type": "string"
     },
+    "error": {
+      "type": "string"
+    },
     "finished_at": {
       "format": "date-time",
       "type": "string"
@@ -33,9 +36,16 @@
     "prompt_version": {
       "type": "string"
     },
+    "report_check": {
+      "description": "{ status: done|skipped|error, engine, summary, reason, error, usage }",
+      "type": "object"
+    },
     "report_check_rounds": {
       "default": 0,
       "type": "number"
+    },
+    "report_id": {
+      "type": "string"
     },
     "report_version": {
       "type": "number"
@@ -46,9 +56,13 @@
         "passed",
         "failed",
         "paused",
-        "legacy"
+        "legacy",
+        "error"
       ],
       "type": "string"
+    },
+    "round": {
+      "type": "number"
     },
     "rule_set_version": {
       "type": "string"
@@ -58,6 +72,16 @@
       "type": "string"
     },
     "started_by": {
+      "type": "string"
+    },
+    "started_by_name": {
+      "type": "string"
+    },
+    "strictness": {
+      "enum": [
+        "light",
+        "strict"
+      ],
       "type": "string"
     },
     "summary": {
@@ -71,6 +95,7 @@
     "tenant_id",
     "case_id"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "user_condition": {
@@ -95,6 +120,5 @@
         "data.app_role": "__backend_only__"
       }
     }
-  },
-  "type": "object"
+  }
 }
