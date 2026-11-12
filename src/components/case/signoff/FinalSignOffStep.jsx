@@ -81,6 +81,7 @@ export default function FinalSignOffStep({ kycCase, client, currentUser, onCaseU
   return (
     <div className="space-y-5">
       <RouteLine route={route} />
+      <DeclinedMatchBanner caseId={kycCase.id} matches={info.declined_matches || []} canView={!!info.can_view_declined} />
 
       {/* Status card */}
       <section className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4">
