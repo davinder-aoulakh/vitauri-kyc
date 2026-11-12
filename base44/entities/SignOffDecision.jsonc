@@ -2,12 +2,19 @@
   "name": "SignOffDecision",
   "properties": {
     "acting_as": {
-      "description": "analyst | manager | senior (the route level the person acted at)",
+      "description": "analyst | manager | senior | automatic (the route level the person acted at)",
       "type": "string"
     },
     "auto_approved": {
       "default": false,
       "type": "boolean"
+    },
+    "auto_conditions": {
+      "description": "[{label, ok}] for an automatic approval",
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
     },
     "case_id": {
       "type": "string"
@@ -73,6 +80,10 @@
     "route": {
       "type": "object"
     },
+    "sample_review": {
+      "description": "Automatic approval sample review: { selected, status: open|ok|issue|not_selected, reviewer_id, reviewer_name, note, reviewed_at }",
+      "type": "object"
+    },
     "tenant_id": {
       "type": "string"
     }
@@ -82,6 +93,7 @@
     "case_id",
     "kind"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "user_condition": {
@@ -106,6 +118,5 @@
         "data.app_role": "__backend_only__"
       }
     }
-  },
-  "type": "object"
+  }
 }
