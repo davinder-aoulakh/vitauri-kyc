@@ -201,6 +201,17 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
         : Promise.resolve(null),
     ]);
 
+    // Sign-off flow: the latest QC round and its human decisions go into chapter 8.
+    let signoffInput = signoff;
+    if (signoff) {
+      const toList = (r) => (Array.isArray(r) ? r : r?.items || []);
+      const [qcRuns, humanActions] = await Promise.all([
+        base44.entities.QcRun.filter({ case_id: kycCase.id }, '-created_date', 1).then(toList).catch(() => []),
+        base44.entities.QcHumanAction.filter({ case_id: kycCase.id }, '-created_date', 30).then(toList).catch(() => []),
+      ]);
+      signoffInput = { ...signoff, qc: qcRuns[0] || null, humanActions: [...(signoff.humanActions || []), ...humanActions] };
+    }
+
     const built = await buildKycReportPdf({
       kycCase, client,
       preparedBy: currentUser?.full_name,
@@ -217,7 +228,7 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
       txnAnalysis,
       tmMonitoring,
       logo,
-      signoff,
+      signoff: signoffInput,
     });
     const pdfBlob = new Blob([built.bytes], { type: 'application/pdf' });
 
