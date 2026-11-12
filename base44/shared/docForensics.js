@@ -49,7 +49,11 @@ function pdfField(text, key) {
   return xmp ? (xmp[1] || xmp[2] || '').trim() : null;
 }
 
-function pdfChecks(bytes, checks) {
+// Documents that are normally written in a word processor or made by the client itself (a notary's deed, an organisation
+// chart, a declaration): the creating software says nothing about authenticity there.
+const SELF_MADE = /deed|akte|articles|statuten|incorporation|association|oprichting|organi[sz]ation(al)? ?(chart|structure)|organogram|structure|chart|declaration|verklaring|letter|brief|resolution|besluit|agreement|overeenkomst|contract/i;
+
+function pdfChecks(bytes, checks, opts = {}) {
   const text = latin1(bytes);
   const producer = pdfField(text, 'Producer');
   const creator = pdfField(text, 'Creator');
@@ -62,16 +66,26 @@ function pdfChecks(bytes, checks) {
   const pages = (text.match(/\/Type\s*\/Page\b(?!s)/g) || []).length;
 
   if (!tool) checks.push({ id: 'pdf_producer', label: 'Creating software', result: 'info', detail: 'No producer recorded in the file.' });
-  else if (EDITORS.test(tool)) checks.push({ id: 'pdf_producer', label: 'Creating software', result: 'warn', detail: `Made or edited with an editing tool: ${tool}.` });
-  else if (OFFICE.test(tool)) checks.push({ id: 'pdf_producer', label: 'Creating software', result: 'warn', detail: `Created in a word processor (${tool}); official documents are rarely produced this way.` });
+  else if (EDITORS.test(tool)) checks.push({ id: 'pdf_producer', label: 'Creating software', result: 'fail', detail: `Made or edited with an editing tool: ${tool}.` });
+  else if (OFFICE.test(tool)) {
+    const selfMade = SELF_MADE.test(String(opts.label || ''));
+    checks.push(selfMade
+      ? { id: 'pdf_producer', label: 'Creating software', result: 'info', detail: `Created in a word processor (${tool}); normal for this kind of document.` }
+      : { id: 'pdf_producer', label: 'Creating software', result: 'warn', detail: `Created in a word processor (${tool}); documents from an issuer's system are rarely produced this way.` });
+  }
   else checks.push({ id: 'pdf_producer', label: 'Creating software', result: SCANNERS.test(tool) ? 'info' : 'pass', detail: tool });
 
-  if (created && modified && String(created).slice(0, 16) !== String(modified).slice(0, 16)) {
+  const differs = created && modified && String(created).slice(0, 16) !== String(modified).slice(0, 16);
+  const sameDay = differs && String(created).slice(0, 10) === String(modified).slice(0, 10);
+  if (differs && (signed || sameDay)) {
+    // A signing step or a same-day save changes the modification time; that is not an edit of the content.
+    checks.push({ id: 'pdf_dates', label: 'Creation vs modification date', result: 'pass', detail: `Created ${String(created).slice(0, 16)}, last saved ${String(modified).slice(0, 16)}${signed ? ' (digital signature applied)' : ' (same day)'}.` });
+  } else if (differs) {
     checks.push({ id: 'pdf_dates', label: 'Creation vs modification date', result: 'warn', detail: `Created ${String(created).slice(0, 16)}, modified ${String(modified).slice(0, 16)}.` });
   } else if (created) {
     checks.push({ id: 'pdf_dates', label: 'Creation vs modification date', result: 'pass', detail: `Created ${String(created).slice(0, 16)}; not modified afterwards.` });
   }
-  if (eofs > 1 && !signed) checks.push({ id: 'pdf_incremental', label: 'Edited after first save', result: 'warn', detail: `The file was saved ${eofs} times (incremental updates).` });
+  if (eofs > 1 && !signed) checks.push({ id: 'pdf_incremental', label: 'Edited after first save', result: eofs >= 3 || EDITORS.test(tool) ? 'warn' : 'info', detail: `The file was saved ${eofs} times (incremental updates)${eofs >= 3 ? '' : '; a second save is common (e.g. print to PDF, added properties)'}.` });
   else checks.push({ id: 'pdf_incremental', label: 'Edited after first save', result: 'pass', detail: eofs > 1 ? 'Incremental updates belong to the digital signature.' : 'Saved once.' });
   checks.push(signed
     ? { id: 'pdf_signature', label: 'Digital signature', result: 'pass', detail: 'The PDF carries a digital signature.' }
@@ -106,7 +120,7 @@ export function analyseBytes(bytes, opts = {}) {
   else checks.push({ id: 'file_type', label: 'File type', result: 'pass', detail: type.toUpperCase() });
 
   let facts = {};
-  if (type === 'pdf') facts = pdfChecks(bytes, checks);
+  if (type === 'pdf') facts = pdfChecks(bytes, checks, opts);
   else if (type === 'jpg' || type === 'png') {
     imageChecks(bytes, type, checks);
     if (/extract|register|uittreksel|kvk|statement|certificate|articles|statuten/i.test(String(opts.label || ''))) {
@@ -114,22 +128,38 @@ export function analyseBytes(bytes, opts = {}) {
     }
   }
 
-  const others = opts.sameHashOtherClients || [];
-  if (others.length) checks.push({ id: 'file_reuse', label: 'File re-used', result: 'fail', detail: `The identical file was also uploaded for: ${others.slice(0, 3).join(', ')}.` });
-  else if (opts.sameHashSameClient) checks.push({ id: 'file_reuse', label: 'File re-used', result: 'info', detail: 'The same file was uploaded earlier for this client.' });
+  // Re-use of the identical file. opts.reuse = { unrelated: [names], sameSubject: [names], linked: [text], sameClient: n }
+  // Only a file shared with an UNRELATED client is a concern; the same person/company on an earlier file, or a linked
+  // party (a UBO and their company), legitimately shares documents.
+  const reuse = opts.reuse || { unrelated: opts.sameHashOtherClients || [], sameSubject: [], linked: [], sameClient: opts.sameHashSameClient || 0 };
+  if ((reuse.unrelated || []).length) checks.push({ id: 'file_reuse', label: 'File re-used', result: 'warn', detail: `The identical file is also on the file of an unrelated client: ${reuse.unrelated.slice(0, 3).join(', ')}.` });
+  else if ((reuse.linked || []).length) checks.push({ id: 'file_reuse', label: 'File re-used', result: 'info', detail: `Also on the file of a linked party: ${reuse.linked.slice(0, 3).join('; ')}.` });
+  else if ((reuse.sameSubject || []).length) checks.push({ id: 'file_reuse', label: 'File re-used', result: 'info', detail: `The same file is on an earlier file of the same ${opts.isOrg ? 'company' : 'person'} (${reuse.sameSubject.slice(0, 2).join(', ')}).` });
+  else if (reuse.sameClient) checks.push({ id: 'file_reuse', label: 'File re-used', result: 'info', detail: 'The same file was uploaded earlier for this client.' });
   else if (opts.sha256) checks.push({ id: 'file_reuse', label: 'File re-used', result: 'pass', detail: 'Not seen for any other client.' });
 
   return { type, checks, facts };
 }
 
-const RANK = { authentic: 0, needs_attention: 1, high_risk: 2 };
-/** Worst of the forensic checks and the AI verdict. */
+// A fail about the document's age / validity period is a follow-up point (ask for a newer one), not an authenticity concern.
+const SOFT_FAIL = /\bage\b|older|outdated|validity|valid(ity)? (date|period)|expir|recent|document date|date check/i;
+const isSoft = (c) => SOFT_FAIL.test(`${c.id || ''} ${c.label || ''}`.replace(/_/g, ' '));
+
+/**
+ * Verdict from all checks (forensic + AI) and the AI's own verdict.
+ *  high_risk       a strong signal: any hard fail (wrong file type, editing tool, name / registration mismatch, visible
+ *                  tampering, unrelated re-use with a name mismatch) or three or more warnings
+ *  needs_attention one or two warnings, a soft fail (document too old), or the AI is not fully satisfied
+ *  authentic       nothing to report
+ * The AI verdict alone never makes a document high risk: it needs a failed check that says why.
+ */
 export function combineVerdict(checks, aiVerdict) {
-  let v = 'authentic';
-  if ((checks || []).some((c) => c.result === 'warn')) v = 'needs_attention';
-  if ((checks || []).some((c) => c.result === 'fail')) v = 'high_risk';
-  if (aiVerdict && RANK[aiVerdict] > RANK[v]) v = aiVerdict;
-  return v;
+  const list = checks || [];
+  const hardFail = list.some((c) => c.result === 'fail' && !isSoft(c));
+  const warns = list.filter((c) => c.result === 'warn' || (c.result === 'fail' && isSoft(c))).length;
+  if (hardFail || warns >= 3) return 'high_risk';
+  if (warns >= 1 || (aiVerdict && aiVerdict !== 'authentic')) return 'needs_attention';
+  return 'authentic';
 }
 
 /** 0–100 (100 = no concerns). */
