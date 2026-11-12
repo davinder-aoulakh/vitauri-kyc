@@ -18,6 +18,8 @@ import { isFieldMappedLabel } from '@/lib/outreachFieldMatch';
 import SuggestedProfileUpdatesCard from '@/components/case/outreach/SuggestedProfileUpdatesCard';
 import SuggestedKybUpdatesCard from '@/components/case/outreach/SuggestedKybUpdatesCard';
 import BulkVerifyDialog, { bulkVerifyCandidates } from '@/components/case/outreach/BulkVerifyDialog';
+import DocReviewDialog from '@/components/case/outreach/DocReviewDialog';
+import { AiCheckChip } from '@/components/documents/AiDocCheck';
 
 const SITUATION_LABELS = {
   Welcome: 'Welcome',
@@ -128,6 +130,11 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
   const [verifyingItemId, setVerifyingItemId] = useState(null); // "reqId:itemIndex"
   const [bulkReq, setBulkReq] = useState(null); // { req, candidates } of the open "Verify all" dialog
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Documents of this case (the portal stores every uploaded file as a Document): AI check result + review status per file.
+  const [caseDocs, setCaseDocs] = useState([]);
+  const [aiRunning, setAiRunning] = useState(new Set());
+  const [reviewItem, setReviewItem] = useState(null); // { req, index } of the open document-review dialog
+  const [reviewBusy, setReviewBusy] = useState(false);
 
   // Email templates
   const [emailTemplates, setEmailTemplates] = useState([]);
@@ -160,6 +167,7 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
     try {
       const reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
       setRequests(reqs || []);
+      loadCaseDocs();
 
       // Report overall verification status — gates the Profile Verification step
       const allItems = (reqs || []).flatMap(r => r.items || []);
@@ -426,7 +434,91 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
     onOutreachAllVerified?.((reqs || []).length > 0 && allItems.length > 0 && allItems.every(i => i.status === 'Verified'));
   }
 
+  async function loadCaseDocs() {
+    const docs = await base44.entities.Document.filter({ case_id: kycCase.id }).catch(() => []);
+    setCaseDocs((docs || []).filter(d => !d.is_deleted));
+    return docs || [];
+  }
+  /** The Document that holds the file of an outreach item (same file). */
+  const docOf = (item) => (item?.file_url ? caseDocs.find(d => d.file_url === item.file_url) || null : null);
+  const pendingDoc = (d) => !!d && (d.review_status || 'Pending_Review') === 'Pending_Review';
+  /** Flagged by the AI Document Checker and not reviewed yet: needs an individual decision. */
+  const flaggedDoc = (item) => { const d = docOf(item); return pendingDoc(d) && ['high_risk', 'needs_attention'].includes(d.ai_check?.verdict) ? d : null; };
+
+  async function runAiCheck(doc) {
+    setAiRunning(prev => new Set(prev).add(doc.id));
+    try {
+      const res = await base44.functions.invoke('checkDocumentAuthenticity', { document_id: doc.id });
+      if (res?.data?.error) throw new Error(res.data.error);
+      await loadCaseDocs();
+      // The checker may have verified the item itself (tenant setting): pick that up.
+      const reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id }).catch(() => null);
+      if (reqs) { setRequests(reqs); reportAllVerified(reqs); }
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'AI check failed', description: e?.response?.data?.error || e?.message });
+    } finally {
+      setAiRunning(prev => { const n = new Set(prev); n.delete(doc.id); return n; });
+    }
+  }
+
+  /** Verify = review: approving the outreach item also approves its document in the client file (one decision, one audit trail). */
+  async function approveDocs(items, { reason = '', bulk = false } = {}) {
+    const now = new Date().toISOString();
+    for (const item of items) {
+      const d = docOf(item);
+      if (!pendingDoc(d)) continue;
+      const high = d.ai_check?.verdict === 'high_risk';
+      const notes = reason || 'Verified in Outreach & Documents';
+      try {
+        await base44.entities.Document.update(d.id, { review_status: 'Approved', review_notes: notes, reviewed_by_user_id: currentUser?.id, reviewed_at: now });
+        await base44.entities.AuditEvent.create({
+          tenant_id: d.tenant_id, client_id: d.client_id, case_id: kycCase.id, actor_user_id: currentUser?.id, actor_name: currentUser?.full_name, actor_type: 'User',
+          event_type: 'document_reviewed', before_state: { review_status: d.review_status || 'Pending_Review' },
+          after_state: { review_status: 'Approved', via: 'outreach_step', ...(d.ai_check?.verdict ? { ai_verdict: d.ai_check.verdict } : {}) },
+          is_override: high,
+          notes: `Document "${d.file_name}" marked as Approved${bulk ? ' (bulk verify)' : ''}${high ? ' despite a high-risk AI check' : ''}: ${notes}`,
+        });
+      } catch (e) {
+        console.warn('document approve failed', e?.message);
+        toast({ variant: 'destructive', title: 'Document not approved', description: `"${d.file_name}" is verified here but still needs approval in the Documents tab.` });
+      }
+    }
+    await loadCaseDocs();
+  }
+
+  async function confirmReview(reason) {
+    if (!reviewItem) return;
+    setReviewBusy(true);
+    const item = reviewItem.req.items[reviewItem.index];
+    const ok = await verifyItems(reviewItem.req, [reviewItem.index], false, reason);
+    setReviewBusy(false);
+    if (ok) { setReviewItem(null); toast({ title: `Verified and approved: ${item.label}` }); }
+  }
+  async function rejectReview(reason) {
+    if (!reviewItem) return;
+    const item = reviewItem.req.items[reviewItem.index];
+    const d = docOf(item);
+    if (!d) return;
+    setReviewBusy(true);
+    try {
+      await base44.entities.Document.update(d.id, { review_status: 'Rejected', review_notes: reason, reviewed_by_user_id: currentUser?.id, reviewed_at: new Date().toISOString() });
+      await base44.entities.AuditEvent.create({
+        tenant_id: d.tenant_id, client_id: d.client_id, case_id: kycCase.id, actor_user_id: currentUser?.id, actor_name: currentUser?.full_name, actor_type: 'User',
+        event_type: 'document_reviewed', before_state: { review_status: d.review_status || 'Pending_Review' },
+        after_state: { review_status: 'Rejected', via: 'outreach_step', ...(d.ai_check?.verdict ? { ai_verdict: d.ai_check.verdict } : {}) },
+        notes: `Document "${d.file_name}" marked as Rejected: ${reason}`,
+      });
+      await loadCaseDocs();
+      setReviewItem(null);
+      toast({ title: 'Document rejected', description: 'The item stays unverified. Send a new request to the client for a replacement.' });
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'Not saved', description: e?.message });
+    } finally { setReviewBusy(false); }
+  }
+
   async function verifyItem(req, itemIndex) {
+    // A document the AI Document Checker flagged is decided in a small review dialog (reasons shown, approve or reject).
+    if (flaggedDoc(req.items[itemIndex])) { setReviewItem({ req, index: itemIndex }); return; }
     const key = `${req.id}:${itemIndex}`;
     setVerifyingItemId(key);
     // Brief spinner acknowledgment (~300ms) then optimistic flip
@@ -436,7 +528,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
   }
 
   /** Marks the given items Verified in one write, with one audit event per item. Rolls back on failure. */
-  async function verifyItems(req, indices, bulk = true) {
+  async function verifyItems(req, indices, bulk = true, reason = '') {
     const wanted = new Set(indices);
     const current = requests.find(r => r.id === req.id) || req;
     const updatedItems = current.items.map((item, i) => (wanted.has(i) ? { ...item, status: 'Verified' } : item));
@@ -459,6 +551,7 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
           notes: `${bulk ? 'Verified (bulk)' : 'Verified'}: ${current.items[i].label}`,
         }))),
       ]);
+      await approveDocs(indices.map(i => current.items[i]), { reason, bulk });
       return true;
     } catch {
       // Silent revert
@@ -628,7 +721,8 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
             const pendingCount = req.items?.filter(i => i.status === 'Requested').length || 0;
             const verifiedCount = req.items?.filter(i => i.status === 'Verified').length || 0;
             const toVerifyCount = req.items?.filter(i => i.status === 'Received').length || 0;
-            const bulk = bulkVerifyCandidates(req, isTrackerVisible);
+            // Documents flagged by the AI Document Checker are decided one by one, never in bulk.
+            const bulk = bulkVerifyCandidates(req, (item) => isTrackerVisible(item) && !flaggedDoc(item));
 
             return (
               <div key={req.id} className={cn('bg-card border rounded-xl overflow-hidden', isOverdue ? 'border-amber-300' : 'border-border')}>
@@ -730,6 +824,18 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                                   View uploaded file
                                 </button>
                               )}
+                              {item.file_url && item.field_type !== 'id_verification' && (() => {
+                                const d = docOf(item);
+                                if (!d) return null;
+                                return (
+                                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                    <AiCheckChip doc={d} running={aiRunning.has(d.id)} onCheck={() => runAiCheck(d)} onToggle={() => setReviewItem({ req, index: i, readOnly: !flaggedDoc(item) || item.status !== 'Received' })} />
+                                    {d.review_status === 'Approved' && <span className="text-[11px] text-emerald-700">Document approved{!d.reviewed_by_user_id ? ' · AI' : ''}</span>}
+                                    {d.review_status === 'Rejected' && <span className="text-[11px] text-red-700">Document rejected</span>}
+                                    {(d.ai_check?.key_points || []).length > 0 && <span className="text-[11px] text-muted-foreground truncate max-w-md" title={d.ai_check.key_points.join(' · ')}>Supports: {d.ai_check.key_points[0]}</span>}
+                                  </div>
+                                );
+                              })()}
                               {(item.field_type === 'id_verification' || (item.response_text && item.response_text.trim().startsWith('{'))) && (() => {
                                   // Resolve idv fields — may be stored directly or nested inside response_text JSON
                                   let parsedIdv = {};
@@ -820,6 +926,18 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
         onConfirm={confirmBulkVerify}
         busy={bulkBusy}
       />
+
+      {(() => {
+        const liveReq = reviewItem ? (requests.find(r => r.id === reviewItem.req.id) || reviewItem.req) : null;
+        const item = liveReq?.items?.[reviewItem?.index];
+        const d = item ? docOf(item) : null;
+        const decidable = !!d && pendingDoc(d) && item.status === 'Received' && !isLocked(client);
+        return (
+          <DocReviewDialog open={!!reviewItem && !!d} onOpenChange={(v) => { if (!v) setReviewItem(null); }} doc={d} client={client} itemLabel={item?.label}
+            busy={reviewBusy} running={d ? aiRunning.has(d.id) : false} onRecheck={() => d && runAiCheck(d)}
+            onApprove={confirmReview} onReject={rejectReview} readOnly={!decidable} />
+        );
+      })()}
 
       {viewerDoc && (
         <DocumentViewer

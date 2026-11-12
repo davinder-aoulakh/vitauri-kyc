@@ -10,7 +10,7 @@ import { AiCheckPanel } from '@/components/documents/AiDocCheck';
  * Approve verifies the outreach item and approves the document; a high-risk document needs a reason (recorded as an override).
  * Reject marks the document Rejected; the outreach item stays unverified so a new document can be requested.
  */
-export default function DocReviewDialog({ open, onOpenChange, doc, client, itemLabel, busy, running, onRecheck, onApprove, onReject }) {
+export default function DocReviewDialog({ open, onOpenChange, doc, client, itemLabel, busy, running, onRecheck, onApprove, onReject, readOnly = false }) {
   const [reason, setReason] = useState('');
   useEffect(() => { if (open) setReason(''); }, [open, doc?.id]);
   if (!doc) return null;
@@ -21,11 +21,14 @@ export default function DocReviewDialog({ open, onOpenChange, doc, client, itemL
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!busy) onOpenChange(v); }}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader><DialogTitle className="text-base">Review document: {itemLabel || doc.file_name}</DialogTitle></DialogHeader>
-        <p className="text-xs text-muted-foreground">
-          The AI Document Checker rated this document {high ? 'high risk' : 'as needing attention'}. Check the points below, then approve or reject it here.
-        </p>
+        <DialogHeader><DialogTitle className="text-base">{readOnly ? 'AI Document Check' : 'Review document'}: {itemLabel || doc.file_name}</DialogTitle></DialogHeader>
+        {!readOnly && (
+          <p className="text-xs text-muted-foreground">
+            The AI Document Checker rated this document {high ? 'high risk' : 'as needing attention'}. Check the points below, then approve or reject it here.
+          </p>
+        )}
         <AiCheckPanel doc={doc} client={client} running={running} onRecheck={onRecheck} />
+        {!readOnly && (<>
         <div className="space-y-1">
           <label htmlFor="doc-review-reason" className="text-xs font-medium">
             {high ? 'Reason (required to approve a high-risk document, and to reject)' : 'Note (optional to approve, required to reject)'}
@@ -41,6 +44,7 @@ export default function DocReviewDialog({ open, onOpenChange, doc, client, itemL
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Approve &amp; verify
           </Button>
         </div>
+        </>)}
       </DialogContent>
     </Dialog>
   );
