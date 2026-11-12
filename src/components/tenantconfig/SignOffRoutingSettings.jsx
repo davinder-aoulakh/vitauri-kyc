@@ -9,6 +9,14 @@ import { CLASSES } from '@/lib/signoffRouting';
 const OVERRIDE_LABEL = { auto: 'Auto (rules)', analyst: 'Analyst', manager: 'Manager', senior: 'Senior Management', senior_advice: 'Senior + Compliance advice' };
 const EXISTING = ['New', ...CLASSES.filter((c) => c !== 'Unacceptable')];
 
+// Module-level so inputs inside keep focus while typing (a component defined in render remounts each time).
+const Row = ({ title, desc, children }) => (
+  <div className="flex items-start justify-between gap-4 py-3">
+    <div><div className="text-sm font-medium">{title}</div><p className="text-xs text-muted-foreground">{desc}</p></div>
+    <div className="flex-shrink-0">{children}</div>
+  </div>
+);
+
 /** Sign-off routing settings (build spec §2 TenantConfig.SignOffMatrix). value = sign_off_matrix object, onChange(patch). */
 export default function SignOffRoutingSettings({ value, onChange }) {
   const v = value || {};
@@ -16,12 +24,6 @@ export default function SignOffRoutingSettings({ value, onChange }) {
   const overrides = v.overrides || {};
   const strict = { Low: 'light', Medium: 'light', High: 'strict', Unacceptable: 'strict', ...(v.qc_strictness || {}) };
   const headings = Array.isArray(v.advice_template_headings) && v.advice_template_headings.length ? v.advice_template_headings : ['Assessment', 'Risks', 'Mitigating measures', 'Conclusion'];
-  const Row = ({ title, desc, children }) => (
-    <div className="flex items-start justify-between gap-4 py-3">
-      <div><div className="text-sm font-medium">{title}</div><p className="text-xs text-muted-foreground">{desc}</p></div>
-      <div className="flex-shrink-0">{children}</div>
-    </div>
-  );
   return (
     <div className="space-y-4">
       <div className="divide-y divide-border rounded-xl border border-border bg-card px-4">
