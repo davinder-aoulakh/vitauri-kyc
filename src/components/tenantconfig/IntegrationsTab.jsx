@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useTenant } from '@/lib/tenantContext';
 import DiditConnectionCard from '@/components/tenantconfig/DiditConnectionCard';
 import AnthropicConnectionCard from '@/components/tenantconfig/AnthropicConnectionCard';
+import DocCheckSettingsCard from '@/components/tenantconfig/DocCheckSettingsCard';
 
 const INTEGRATIONS = [
   {
@@ -101,6 +102,7 @@ export default function IntegrationsTab({ tenant }) {
 
       {canManageDidit && tenant?.id && <DiditConnectionCard tenant={tenant} />}
       {canManageDidit && tenant?.id && <AnthropicConnectionCard tenant={tenant} />}
+      {canManageDidit && tenant?.id && <DocCheckSettingsCard tenant={tenant} />}
 
       <div className="bg-card border border-border rounded-xl p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
