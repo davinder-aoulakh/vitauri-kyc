@@ -10,6 +10,7 @@ import { tenantUsers } from '../../shared/tmCaseCommon.js';
 import { resolveRoute, signoffPermissions, signoffConfig, COMPLIANCE_ROLES, APPROVER_ROLES } from '../../shared/signoffRouting.js';
 import { transition, routeKey, adviceOutdated, FINAL_STATES } from '../../shared/signoffState.js';
 import { caseFacts, draftAdvice, draftRationale } from '../../shared/signoffAi.js';
+import { loadQcData, qcInputHash } from '../../shared/qcData.js';
 
 const CORE_STEPS = [1, 2, 3, 4, 5, 6, 7];
 const NOT_REQ = [5, 7];
@@ -80,11 +81,22 @@ export default async function (req) {
 
     const perms = signoffPermissions(user, kycCase, route, advice);
     const action = body.action || 'route';
-    // Phase 1 QC gate: every step complete (Case Check) and a draft report exists. The QC engine follows in phase 2.
+    // QC gate (phase 2): the latest QC round passed and the case data is unchanged since (same input hash). Legacy cases pass.
     const hasDraftReport = asList(await E.KycReport.filter({ tenant_id: tenantId, case_id: kycCase.id }, '-version_number', 5)).some((r) => r.status !== 'Superseded');
-    const qcPassed = CORE_STEPS.every((id) => stepDone(kycCase, id)) && (hasDraftReport || kycCase.qc_state === 'legacy');
+    let qcPassed = kycCase.qc_state === 'legacy';
+    let qcStale = false;
+    const needsGate = action === 'route' || action === 'submit';
+    if (!qcPassed && needsGate && kycCase.qc_state === 'passed') {
+      const lastRun = asList(await E.QcRun.filter({ tenant_id: tenantId, case_id: kycCase.id }, '-created_date', 1))[0];
+      if (lastRun?.result === 'passed') {
+        const hash = await qcInputHash(await loadQcData(E, tenantId, kycCase, client));
+        qcPassed = hash === lastRun.input_snapshot_hash;
+        qcStale = !qcPassed;
+      }
+    }
+    if (action === 'submit' && qcStale) throw httpError(422, 'The case changed after QC passed. Re-run QC before submitting.');
     if (action === 'route') {
-      return Response.json({ ok: true, route, perms, advice, qc_passed: qcPassed, has_draft_report: hasDraftReport, incomplete_steps: CORE_STEPS.filter((id) => !stepDone(kycCase, id)), config: { compliance_advice_enabled: cfg.compliance_advice_enabled, low_risk_mode: cfg.low_risk_mode, qc_strictness: cfg.qc_strictness, advice_template_headings: cfg.advice_template_headings } });
+      return Response.json({ ok: true, route, perms, advice, qc_passed: qcPassed, qc_stale: qcStale, qc_state: kycCase.qc_state || 'not_run', has_draft_report: hasDraftReport, incomplete_steps: CORE_STEPS.filter((id) => !stepDone(kycCase, id)), config: { compliance_advice_enabled: cfg.compliance_advice_enabled, low_risk_mode: cfg.low_risk_mode, qc_strictness: cfg.qc_strictness, advice_template_headings: cfg.advice_template_headings } });
     }
 
     // ---- AI drafts (no state change) ----
