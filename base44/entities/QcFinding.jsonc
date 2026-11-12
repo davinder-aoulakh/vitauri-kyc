@@ -4,6 +4,9 @@
     "case_id": {
       "type": "string"
     },
+    "case_value": {
+      "type": "string"
+    },
     "check": {
       "enum": [
         "case",
@@ -17,6 +20,21 @@
     "datapoint_ref": {
       "type": "string"
     },
+    "fingerprint": {
+      "description": "rule + datapoint key; used to carry decisions across rounds",
+      "type": "string"
+    },
+    "human": {
+      "description": "Human-action card data: { kind, question, comparison[], evidence_items[], outreach_question }",
+      "type": "object"
+    },
+    "kind": {
+      "enum": [
+        "auto",
+        "human"
+      ],
+      "type": "string"
+    },
     "owner": {
       "description": "Agent name or 'Analyst (human)'",
       "type": "string"
@@ -24,7 +42,20 @@
     "qc_run_id": {
       "type": "string"
     },
+    "report_value": {
+      "type": "string"
+    },
     "resolution_text": {
+      "type": "string"
+    },
+    "resolved_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "resolved_by": {
+      "type": "string"
+    },
+    "resolved_by_name": {
       "type": "string"
     },
     "resolved_in_round": {
@@ -49,7 +80,9 @@
         "open",
         "returned",
         "needs_human",
-        "resolved"
+        "resolved",
+        "dismissed",
+        "carried"
       ],
       "type": "string"
     },
@@ -72,6 +105,7 @@
     "case_id",
     "qc_run_id"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "user_condition": {
@@ -96,6 +130,5 @@
         "data.app_role": "__backend_only__"
       }
     }
-  },
-  "type": "object"
+  }
 }
