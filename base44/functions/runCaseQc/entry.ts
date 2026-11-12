@@ -80,7 +80,10 @@ export default async function (req) {
     if (action === 'run') {
       if (!['draft', undefined, null].includes(kycCase.signoff_status)) throw httpError(409, 'QC runs while the case is in draft');
       if (latest?.result === 'running' && Date.now() - new Date(latest.started_at || 0).getTime() < 10 * 60 * 1000) throw httpError(409, 'QC is already running');
-      const round = (latest?.round || 0) + 1;
+      // A return / reopen (qc_state back to not_run) starts a new cycle of max 3 rounds; decisions carry over only within a cycle.
+      const newCycle = !latest || ['not_run', undefined, null].includes(kycCase.qc_state);
+      const cycleRuns = newCycle ? [] : runs.filter((r) => (r.round || 1) <= (latest.round || 1)).slice(0, latest.round || 1);
+      const round = newCycle ? 1 : (latest.round || 0) + 1;
       if (round > QC_MAX_ROUNDS) throw httpError(409, `Maximum of ${QC_MAX_ROUNDS} QC rounds reached. Fix the findings manually or ask a manager to review.`);
       const data = await loadQcData(E, tenantId, kycCase);
       const strictness = cfg.qc_strictness[kycCase.risk_classification || 'Medium'] || 'light';
@@ -97,7 +100,7 @@ export default async function (req) {
         try {
           // Earlier human decisions and dismissals carry over by fingerprint (delta check).
           const prevDecided = new Map();
-          for (const r of runs) {
+          for (const r of cycleRuns) {
             for (const f of await loadFindings(r.id)) {
               if (['resolved', 'dismissed', 'carried'].includes(f.status) && f.fingerprint && !prevDecided.has(f.fingerprint) && (f.kind === 'human' || f.status !== 'resolved')) prevDecided.set(f.fingerprint, f);
             }

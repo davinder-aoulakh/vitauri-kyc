@@ -144,11 +144,11 @@ export default async function (req) {
     } else if (action === 'give_advice' || action === 'confirm_advice') {
       Object.assign(patch, { step_11_status: 'complete' });
     } else if (['return', 'return_to_analyst'].includes(action)) {
-      Object.assign(patch, { step_10_status: 'in_progress', step_8_status: 'not_started', ...(action === 'return_to_analyst' ? { step_11_status: 'in_progress' } : {}) });
+      Object.assign(patch, { step_10_status: 'in_progress', step_8_status: 'not_started', qc_state: 'not_run', ...(action === 'return_to_analyst' ? { step_11_status: 'in_progress' } : {}) });
     } else if (action === 'reopen') {
       const steps = body.scope === 'full' ? CORE_STEPS : (Array.isArray(body.steps) ? body.steps.map(Number).filter((n) => CORE_STEPS.includes(n)) : []);
       for (const s of steps) patch[`step_${s}_status`] = 'in_progress';
-      Object.assign(patch, { step_10_status: 'in_progress', step_11_status: route.needsAdvice ? 'in_progress' : 'not_started' });
+      Object.assign(patch, { step_10_status: 'in_progress', step_11_status: route.needsAdvice ? 'in_progress' : 'not_started', qc_state: 'not_run' });
     }
     await E.KycCase.update(kycCase.id, patch);
     await audit(res.audit.event_type, res.audit.text, { signoff_status: res.to, level: route.level, effective: route.effective }, { signoff_status: kycCase.signoff_status || 'draft' });
