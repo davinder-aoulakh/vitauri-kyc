@@ -35,7 +35,7 @@ export function AiCheckChip({ doc, running, onCheck, onToggle }) {
   const v = VERDICT[c.verdict] || VERDICT.needs_attention;
   const Icon = v.icon;
   return (
-    <button type="button" onClick={onToggle} title={c.summary || v.label}
+    <button type="button" onClick={onToggle} title={[(c.key_points || []).length ? `Supports: ${c.key_points.join(' · ')}` : '', c.summary || v.label].filter(Boolean).join('\n')}
       className={cn('inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full border font-medium', v.cls)}>
       <Icon className="w-3 h-3" /> {v.label}
     </button>
@@ -87,7 +87,15 @@ export function AiCheckPanel({ doc, client, onRecheck, running }) {
         <Sparkles className="w-4 h-4 text-violet-600 mt-0.5" />
         <div className="flex-1 min-w-0">
           <div className="text-xs font-semibold">AI Document Checker — <span className={cn('px-1.5 py-0.5 rounded-full border', v.cls)}>{v.short}</span> <span className="text-muted-foreground font-normal">score {c.score}/100</span></div>
+          {(c.key_points || []).length > 0 && (
+            <ul className="mt-1 space-y-0.5">
+              {c.key_points.map((k, i) => <li key={i} className="flex items-start gap-1.5 text-xs font-medium text-emerald-800"><CheckCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-600" />{k}</li>)}
+            </ul>
+          )}
           <p className="text-xs text-foreground/80 mt-1">{c.summary}</p>
+          {(c.ownership || []).length > 0 && (
+            <p className="text-[11px] text-muted-foreground mt-1">Ownership & control in the document: {c.ownership.map((o) => `${o.name}${o.role ? ` (${o.role}${o.percentage ? `, ${o.percentage}` : ''})` : o.percentage ? ` (${o.percentage})` : ''}`).join('; ')}</p>
+          )}
           <div className="text-[11px] text-muted-foreground mt-1">
             {c.document_type_detected && <>Detected: {c.document_type_detected}{c.matches_request === false ? ' (not what was requested)' : ''} · </>}
             {c.issuer && <>Issuer: {c.issuer} · </>}
@@ -114,7 +122,7 @@ export function AiCheckPanel({ doc, client, onRecheck, running }) {
           </div>
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground italic">AI indication — not a forensic certificate. The analyst decides whether to approve or reject the document.</p>
+      <p className="text-[11px] text-muted-foreground italic">AI indication — not a forensic certificate. Documents with a warning or a high-risk rating are always decided by the analyst.</p>
     </div>
   );
 }
