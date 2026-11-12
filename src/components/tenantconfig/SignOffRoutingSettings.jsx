@@ -31,11 +31,33 @@ export default function SignOffRoutingSettings({ value, onChange }) {
         <Row title="Use the highest of existing and proposed classification" desc="Reviews of existing clients are routed on the higher of the previous and the new classification. A downgrade always needs a motivation.">
           <Switch checked={v.highest_of_existing_and_proposed !== false} onCheckedChange={(x) => set({ highest_of_existing_and_proposed: x })} />
         </Row>
-        <Row title="Low-risk mode" desc="Self sign-off by the analyst (Low and Low). Automatic approval with sample review follows in a later release.">
+        <Row title="Low-risk mode" desc="Self sign-off by the analyst (Low and Low), or automatic approval (policy auto-1) when every condition holds: Low/Low, no downgrade, not previously declined, QC passed without human decisions or open findings, no confirmed screening match, not TM-triggered. Otherwise the analyst signs off.">
           <Select value={v.low_risk_mode === 'automatic' ? 'automatic' : 'self'} onValueChange={(x) => set({ low_risk_mode: x })}>
             <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="self">Analyst self sign-off</SelectItem><SelectItem value="automatic" disabled>Automatic approval (coming)</SelectItem></SelectContent>
+            <SelectContent><SelectItem value="self">Analyst self sign-off</SelectItem><SelectItem value="automatic">Automatic approval + sample review</SelectItem></SelectContent>
           </Select>
+        </Row>
+        {v.low_risk_mode === 'automatic' && (
+          <Row title="Sample review rate" desc="Share of automatic approvals drawn at random for a review by a second person (Manager, Director or Compliance).">
+            <div className="flex items-center gap-1.5">
+              <Input type="number" min={0} max={100} className="h-8 w-20 text-xs" value={v.auto_approval_sample_pct ?? 10}
+                onChange={(e) => set({ auto_approval_sample_pct: e.target.value === '' ? '' : Math.min(100, Math.max(0, Number(e.target.value))) })} />
+              <span className="text-xs text-muted-foreground">%</span>
+            </div>
+          </Row>
+        )}
+        <Row title="pKYC model" desc="Periodic reviews only, or periodic reviews plus event-driven reviews (EDR triggers) between them. Shown on approved cases.">
+          <Select value={v.pkyc_model === 'periodic' ? 'periodic' : 'periodic_plus_events'} onValueChange={(x) => set({ pkyc_model: x })}>
+            <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="periodic">Periodic only</SelectItem><SelectItem value="periodic_plus_events">Periodic + event-driven</SelectItem></SelectContent>
+          </Select>
+        </Row>
+        <Row title="Retention of declined and terminated files" desc="Months a declined / terminated record is kept for re-application matching. No default: Compliance and the privacy officer must set it. Records are never deleted automatically.">
+          <div className="flex items-center gap-1.5">
+            <Input type="number" min={1} max={240} className="h-8 w-20 text-xs" placeholder="—" value={v.retention_months ?? ''}
+              onChange={(e) => set({ retention_months: e.target.value === '' ? null : Math.max(1, Math.round(Number(e.target.value))) })} />
+            <span className="text-xs text-muted-foreground">months</span>
+          </div>
         </Row>
       </div>
 
