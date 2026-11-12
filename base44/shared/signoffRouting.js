@@ -30,7 +30,35 @@ export function signoffConfig(tenant) {
     advice_template_headings: Array.isArray(m.advice_template_headings) && m.advice_template_headings.length
       ? m.advice_template_headings : ['Assessment', 'Risks', 'Mitigating measures', 'Conclusion'],
     legacy: Object.fromEntries(CLASSES.map((c) => [c, m[c] || null])),
+    // Phase 3: automatic approval, retention of declined records (no default), pKYC model.
+    auto_approval_sample_pct: Number.isFinite(Number(m.auto_approval_sample_pct)) && m.auto_approval_sample_pct !== '' ? Math.min(100, Math.max(0, Number(m.auto_approval_sample_pct))) : 10,
+    auto_approval_policy_version: 'auto-1',
+    retention_months: Number(m.retention_months) > 0 ? Math.round(Number(m.retention_months)) : null,
+    pkyc_model: m.pkyc_model === 'periodic' ? 'periodic' : 'periodic_plus_events',
   };
+}
+
+/**
+ * Automatic approval (policy auto-1). Eligible only when every condition holds; otherwise the analyst self signs off.
+ * input: { cfg, route, kycCase, qc: { passed, humanFindings, openSerious }, confirmedHits }
+ * Returns { eligible, conditions: [{ label, ok }] }.
+ */
+export function autoApprovalCheck({ cfg, route, kycCase, qc = {}, confirmedHits = 0 }) {
+  const conditions = [
+    { label: 'Tenant uses automatic approval for Low risk', ok: cfg?.low_risk_mode === 'automatic' },
+    { label: 'Effective classification is Low', ok: route?.effective === 'Low' },
+    { label: 'Existing classification is Low or none', ok: !route?.existing || route.existing === 'Low' },
+    { label: 'No downgrade', ok: !route?.isDowngrade },
+    { label: 'Not previously declined', ok: !kycCase?.previously_declined },
+    { label: 'No Compliance advice needed', ok: !route?.needsAdvice },
+    { label: 'Analyst-level route', ok: route?.level === 'analyst' },
+    { label: 'QC passed on the current data', ok: !!qc.passed },
+    { label: 'QC needed no human decision', ok: !qc.humanFindings },
+    { label: 'No open major or blocking QC finding', ok: !qc.openSerious },
+    { label: 'No confirmed screening match', ok: !confirmedHits },
+    { label: 'Not triggered by transaction monitoring', ok: !kycCase?.tm_case_id && !(kycCase?.tm_alert_ids || []).length },
+  ];
+  return { eligible: conditions.every((c) => c.ok), conditions };
 }
 
 const LEGACY_LEVEL = { Analyst: 'analyst', 'QC Reviewer': 'analyst', Manager: 'manager', Director: 'senior', 'Compliance Admin': 'senior', 'Compliance Officer': 'senior' };
