@@ -4,7 +4,7 @@
 // it sweeps new unchecked uploads across tenants, capped per run. Advisory only — see base44/shared/docCheckAgent.js.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
-import { checkDocument, isCheckable } from '../../shared/docCheckAgent.js';
+import { checkDocument, isCheckable, CHECK_VERSION } from '../../shared/docCheckAgent.js';
 
 const WORKER_ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin', 'Vitauri Ops'];
 const SWEEP_LIMIT = 20;
@@ -33,7 +33,8 @@ export default async function (req) {
       docs = asList(await E.Document.filter({ id: body.document_id }));
     } else if (body.case_id || body.client_id) {
       docs = asList(await E.Document.filter(body.case_id ? { case_id: body.case_id } : { client_id: body.client_id }));
-      if (body.all_unchecked) docs = docs.filter((d) => !d.ai_check || d.ai_check.status === 'error');
+      // Unchecked, failed, or checked with an older rule version and not yet reviewed by a person.
+      if (body.all_unchecked) docs = docs.filter((d) => !d.ai_check || d.ai_check.status === 'error' || (String(d.ai_check.version || '1') !== CHECK_VERSION && !d.reviewed_by_user_id && (d.review_status || 'Pending_Review') === 'Pending_Review'));
       docs = docs.slice(0, USER_LIMIT);
     } else if (body.sweep) {
       // New uploads of the last 7 days without a check
