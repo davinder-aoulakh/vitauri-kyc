@@ -3,6 +3,9 @@ import { useSignoff } from '@/hooks/useSignoff';
 import { useQc } from '@/hooks/useQc';
 import QcFindingsPanel from '@/components/case/signoff/QcFindingsPanel';
 import QcAgentLog from '@/components/case/signoff/QcAgentLog';
+import DeclinedMatchBanner from '@/components/case/signoff/DeclinedMatchBanner';
+import { useTenant } from '@/lib/tenantContext';
+import { afterApproval } from '@/lib/approveSideEffects';
 import { useTenantUsers } from '@/hooks/useTenantData';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,6 +21,7 @@ const STEP_LABEL = { 1: 'Outreach & Documents', 2: 'Identity / Entity Verificati
 /** Step "Draft Report & QC" (spec §6.2): Case Check (rules) + Report Check (Claude), max 3 rounds, human decisions; QC is a hard gate for Submit. */
 export default function DraftReportQcStep({ kycCase, client, currentUser, onCaseUpdate, onNavigateToStep }) {
   const { info, route, perms, advice, decisions, reports, busy, act, reload } = useSignoff(kycCase, onCaseUpdate);
+  const { tenant } = useTenant();
   const { data: users = [] } = useTenantUsers(currentUser?.tenant_id);
   const [note, setNote] = useState('');
   const [motivation, setMotivation] = useState('');
@@ -59,13 +63,16 @@ export default function DraftReportQcStep({ kycCase, client, currentUser, onCase
   const runQc = () => qcAct('run', {}, `QC round ${roundsUsed + 1} started`);
 
   const submit = async () => {
-    const res = await act('submit', { note, downgrade_motivation: motivation }, route?.level === 'analyst' ? 'Continued to sign-off' : 'Submitted for review');
+    const res = await act('submit', { note, downgrade_motivation: motivation }, route?.level === 'analyst' ? (info.auto_eligible ? 'Approved automatically' : 'Continued to sign-off') : 'Submitted for review');
+    // Automatic approval (policy auto-1): run the same TM side effects as a manual approval.
+    if (res?.status === 'approved') await afterApproval({ kycCase, client, tenant, currentUser, note: 'Automatic approval' });
     if (res && route?.level === 'analyst') onNavigateToStep?.(8);
   };
 
   return (
     <div className="space-y-5">
       <RouteLine route={route} />
+      <DeclinedMatchBanner caseId={kycCase.id} matches={info.declined_matches || []} canView={!!info.can_view_declined} />
 
       {returned && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
@@ -158,6 +165,12 @@ export default function DraftReportQcStep({ kycCase, client, currentUser, onCase
             {route.level === 'analyst' ? 'Continue to sign-off' : 'Submit for review'}
           </Button>
           {!ready && <p className="text-[11px] text-muted-foreground">Available once QC has passed on the current case data.</p>}
+          {route.level === 'analyst' && info.config?.low_risk_mode === 'automatic' && (
+            info.auto_eligible
+              ? <p className="rounded-md bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-800">All conditions of policy {info.auto_policy} are met: the case is approved automatically when you continue. A share of automatic approvals is sampled for review by a second person.</p>
+              : <details className="text-[11px] text-muted-foreground"><summary className="cursor-pointer">Not eligible for automatic approval — you sign off yourself</summary>
+                  <ul className="mt-1 space-y-0.5">{(info.auto_conditions || []).filter((c) => !c.ok).map((c) => <li key={c.label}>✗ {c.label}</li>)}</ul></details>
+          )}
         </section>
       )}
 
