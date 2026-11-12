@@ -39,6 +39,8 @@ export default function NewClient() {
   // Name the user confirmed is NOT a duplicate, so Create doesn't re-block on it.
   const [dupAckName, setDupAckName] = useState(null);
   const [restrictedBlock, setRestrictedBlock] = useState(null);
+  // Re-application check against declined / terminated relationships (only match + strength; details are Compliance-only).
+  const [declinedHit, setDeclinedHit] = useState(null);
   const tenantColor = tenant?.branding_primary_color || '#1A6BFF';
 
   const [form, setForm] = useState({
@@ -341,6 +343,16 @@ export default function NewClient() {
             <div>
               <h2 className="text-lg font-semibold mb-1">Review & Create</h2>
               <p className="text-sm text-muted-foreground mb-5">Confirm all details before creating the client and opening a KYC case</p>
+              <DeclinedCheck clientType={clientType} form={form} onResult={setDeclinedHit} />
+              {declinedHit?.match && !declinedHit.info_only && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <span>
+                    <span className="font-semibold">{declinedHit.strength === 'strong' ? 'Matches a previously declined or terminated relationship.' : 'May match a previously declined or terminated relationship.'}</span>{' '}
+                    {declinedHit.strength === 'strong' ? 'You can create the client; Compliance review will be mandatory before sign-off.' : 'Compliance will see the possible match during the case.'}
+                  </span>
+                </div>
+              )}
 
               {dupWarning && (
                 <DupWarningBlock
@@ -402,6 +414,25 @@ export default function NewClient() {
       </div>
     </AppShell>
   );
+}
+
+/** Runs checkDeclined once per identifying-details combination on the review step. Renders nothing. */
+function DeclinedCheck({ clientType, form, onResult }) {
+  const payload = {
+    client_type: clientType, full_name: form.full_name, date_of_birth: form.date_of_birth, id_number: form.id_number,
+    registration_number: form.registration_number, registered_country: form.residential_address?.country || form.registered_country,
+    email: syncPreferredContacts(form.contact_entries || []).primary_contact_email, phone: syncPreferredContacts(form.contact_entries || []).primary_contact_phone,
+    address: form.residential_address || null,
+  };
+  const key = JSON.stringify(payload);
+  useEffect(() => {
+    let alive = true;
+    base44.functions.invoke('checkDeclined', JSON.parse(key))
+      .then((r) => { if (alive) onResult(r?.data?.match ? r.data : null); })
+      .catch(() => { if (alive) onResult(null); });
+    return () => { alive = false; };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
 }
 
 function DupWarningBlock({ duplicates, onDismiss, onViewClient }) {
