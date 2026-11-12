@@ -221,7 +221,7 @@ Return JSON only. checks: your own findings (content, consistency, validity, vis
 }
 
 // Audit, notification and the step-1 flag after a check.
-async function afterCheck(ctx, doc, result) {
+export async function afterCheck(ctx, doc, result) {
   const { E, actor } = ctx;
   const flagged = result.checks.filter((c) => c.result === 'fail' || c.result === 'warn').map((c) => c.label);
   await E.AuditEvent.create({
