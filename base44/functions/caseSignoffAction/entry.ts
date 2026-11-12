@@ -7,7 +7,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { tenantUsers } from '../../shared/tmCaseCommon.js';
-import { resolveRoute, signoffPermissions, signoffConfig, COMPLIANCE_ROLES, APPROVER_ROLES } from '../../shared/signoffRouting.js';
+import { resolveRoute, signoffPermissions, signoffConfig, autoApprovalCheck, COMPLIANCE_ROLES, APPROVER_ROLES } from '../../shared/signoffRouting.js';
+import { matchDeclined, subjectFromClient, requiresReview } from '../../shared/declinedMatch.js';
 import { transition, routeKey, adviceOutdated, FINAL_STATES } from '../../shared/signoffState.js';
 import { caseFacts, draftAdvice, draftRationale } from '../../shared/signoffAi.js';
 import { loadQcData, qcInputHash } from '../../shared/qcData.js';
@@ -59,6 +60,28 @@ export default async function (req) {
       }
     }
 
+    // ---- Re-application check (spec §9): match this client and its people against declined/terminated records ----
+    // A strong match on a Declined/Terminated record sets previously_declined (Compliance advice + at least Manager sign-off).
+    let declinedMatches = [];
+    if (client) {
+      const [records, links] = await Promise.all([
+        E.DeclinedRecord.filter({ tenant_id: tenantId }, '-created_date', 1000).then(asList).catch(() => []),
+        E.ClientRelatedPartyLink.filter({ tenant_id: tenantId, client_id: client.id }, undefined, 100).then(asList).catch(() => []),
+      ]);
+      const others = records.filter((r) => r.case_id !== kycCase.id);
+      if (others.length) {
+        const rps = links.length ? asList(await E.RelatedParty.filter({ tenant_id: tenantId, id: { $in: links.map((l) => l.related_party_id) } }, undefined, 100).catch(() => [])) : [];
+        declinedMatches = matchDeclined(subjectFromClient(client, rps), others);
+      }
+      const isDraft = ['draft', undefined, null].includes(kycCase.signoff_status);
+      if (isDraft && requiresReview(declinedMatches) && !kycCase.previously_declined) {
+        await E.KycCase.update(kycCase.id, { previously_declined: true });
+        kycCase.previously_declined = true;
+        await audit('intake.previously_declined_match', `Matches ${declinedMatches.filter((m) => m.strength === 'strong').length} declined/terminated record(s) on ${[...new Set(declinedMatches.flatMap((m) => m.matched_on))].slice(0, 4).join(', ')}. Compliance review is mandatory.`,
+          { matches: declinedMatches.map((m) => ({ record_id: m.record_id, status: m.status, strength: m.strength, matched_on: m.matched_on })) });
+      }
+    }
+
     // ---- Route (always recomputed; class changes are logged and may outdate the advice) ----
     let route = resolveRoute(kycCase, cfg);
     const stored = kycCase.route || {};
@@ -95,8 +118,34 @@ export default async function (req) {
       }
     }
     if (action === 'submit' && qcStale) throw httpError(422, 'The case changed after QC passed. Re-run QC before submitting.');
+    // Automatic approval eligibility (policy auto-1): only evaluated for a Low, analyst-level route in a tenant that enabled it.
+    let auto = { eligible: false, conditions: [] };
+    if (cfg.low_risk_mode === 'automatic' && route.level === 'analyst' && needsGate) {
+      const lastRun = asList(await E.QcRun.filter({ tenant_id: tenantId, case_id: kycCase.id }, '-created_date', 1))[0];
+      const fs = lastRun ? asList(await E.QcFinding.filter({ tenant_id: tenantId, qc_run_id: lastRun.id }, undefined, 300)) : [];
+      const confirmedHits = asList(await E.ScreeningHit.filter({ tenant_id: tenantId, client_id: kycCase.client_id, status: 'Confirmed_Match' }, undefined, 5).catch(() => [])).length;
+      auto = autoApprovalCheck({ cfg, route, kycCase, confirmedHits, qc: {
+        passed: qcPassed && kycCase.qc_state !== 'legacy',
+        humanFindings: fs.filter((f) => f.kind === 'human').length,
+        openSerious: fs.filter((f) => ['open', 'returned', 'needs_human'].includes(f.status) && f.severity !== 'minor').length,
+      } });
+    }
+    const isCompliance = COMPLIANCE_ROLES.includes(actor.role);
+    if (action === 'declined_detail') {
+      if (!isCompliance) throw httpError(403, 'Only Compliance can see the declined record details');
+      const ids = declinedMatches.map((m) => m.record_id);
+      const rows = ids.length ? asList(await E.DeclinedRecord.filter({ tenant_id: tenantId, id: { $in: ids } }, undefined, 50)) : [];
+      await audit('intake.declined_detail_viewed', `Viewed ${rows.length} declined record(s) matching this case.`);
+      return Response.json({ ok: true, records: rows.map((r) => ({ id: r.id, status: r.status, client_type: r.client_type, decided_at: r.decided_at, internal_reason: r.internal_reason, reporting_obligation_assessment: r.reporting_obligation_assessment, retention_until: r.retention_until || null, case_id: r.case_id })) });
+    }
     if (action === 'route') {
-      return Response.json({ ok: true, route, perms, advice, qc_passed: qcPassed, qc_stale: qcStale, qc_state: kycCase.qc_state || 'not_run', has_draft_report: hasDraftReport, incomplete_steps: CORE_STEPS.filter((id) => !stepDone(kycCase, id)), config: { compliance_advice_enabled: cfg.compliance_advice_enabled, low_risk_mode: cfg.low_risk_mode, qc_strictness: cfg.qc_strictness, advice_template_headings: cfg.advice_template_headings } });
+      const lastDecision = asList(await E.SignOffDecision.filter({ tenant_id: tenantId, case_id: kycCase.id }, '-created_date', 1))[0] || null;
+      return Response.json({ ok: true, route, perms, advice, qc_passed: qcPassed, qc_stale: qcStale, qc_state: kycCase.qc_state || 'not_run', has_draft_report: hasDraftReport,
+        auto_eligible: auto.eligible, auto_conditions: auto.conditions, auto_policy: cfg.auto_approval_policy_version,
+        declined_matches: declinedMatches.map((m) => ({ status: m.status, strength: m.strength, info_only: m.info_only, matched_on: m.matched_on, decided_at: m.decided_at })),
+        can_view_declined: isCompliance,
+        can_sample_review: !!lastDecision?.sample_review?.selected && lastDecision.sample_review.status === 'open' && actor.id !== kycCase.sign_off_submitted_by && [...APPROVER_ROLES.manager, ...COMPLIANCE_ROLES].includes(actor.role),
+        pkyc_model: cfg.pkyc_model, incomplete_steps: CORE_STEPS.filter((id) => !stepDone(kycCase, id)), config: { compliance_advice_enabled: cfg.compliance_advice_enabled, low_risk_mode: cfg.low_risk_mode, qc_strictness: cfg.qc_strictness, advice_template_headings: cfg.advice_template_headings } });
     }
 
     // ---- AI drafts (no state change) ----
@@ -131,6 +180,36 @@ export default async function (req) {
       await E.KycCase.update(kycCase.id, { current_report_version: report.version_number });
       await audit('case.frozen', `Report v${report.version_number} frozen as ${status} (SHA-256 ${hash.slice(0, 12)}…).`, { report_id: report.id, version: report.version_number, hash });
       return Response.json({ ok: true, hash, status });
+    }
+
+    // ---- Sample review of an automatic approval (a second person; never the submitter) ----
+    if (action === 'sample_review') {
+      const d = asList(await E.SignOffDecision.filter({ tenant_id: tenantId, case_id: kycCase.id }, '-created_date', 1))[0];
+      if (!d?.sample_review?.selected || d.sample_review.status !== 'open') throw httpError(409, 'There is no open sample review on this case');
+      if (actor.id === kycCase.sign_off_submitted_by) throw httpError(403, 'The analyst who submitted the case cannot review the sample');
+      if (![...APPROVER_ROLES.manager, ...COMPLIANCE_ROLES].includes(actor.role)) throw httpError(403, 'A Manager, Director or Compliance user reviews samples');
+      if (!['ok', 'issue'].includes(body.decision)) throw httpError(400, 'decision must be ok or issue');
+      if (body.decision === 'issue' && clip(body.note).length < 10) throw httpError(400, 'Describe the issue (at least 10 characters)');
+      const sr = { ...d.sample_review, status: body.decision, note: clip(body.note, 2000), reviewer_id: actor.id, reviewer_name: actor.name, reviewed_at: new Date().toISOString() };
+      await E.SignOffDecision.update(d.id, { sample_review: sr });
+      await audit('signoff.sample_reviewed', `Sample review of the automatic approval: ${body.decision === 'ok' ? 'OK' : `issue — ${clip(body.note, 300)}`}.`, { decision_id: d.id, decision: body.decision });
+      if (body.decision === 'issue') {
+        const us = await tenantUsers(E, tenantId).catch(() => []);
+        const ids = [...new Set(us.filter((u) => u.is_active !== false && u.id !== actor.id && (u.id === kycCase.sign_off_submitted_by || u.id === kycCase.assigned_analyst_id || APPROVER_ROLES.senior.includes(roleOf(u)))).map((u) => u.id))];
+        if (ids.length) await E.Notification.bulkCreate(ids.map((uid) => ({ tenant_id: tenantId, user_id: uid, type: 'sign_off_request', title: 'Sample review found an issue', body: clip(`Automatic approval of ${client?.full_name || 'a client'}: ${body.note}`, 400), link_case_id: kycCase.id, dedupe_key: `${uid}:${kycCase.id}:sample:${sr.reviewed_at.slice(0, 16)}` }))).catch(() => {});
+      }
+      return Response.json({ ok: true, sample_review: sr });
+    }
+    // ---- pKYC: apply the next review date from the review cycle ----
+    if (action === 'set_next_review') {
+      if (kycCase.signoff_status !== 'approved') throw httpError(409, 'Only an approved case sets the next review date');
+      if (!perms.canSubmit) throw httpError(403, 'You cannot change the review date');
+      const date = String(body.date || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw httpError(400, 'date must be YYYY-MM-DD');
+      if (!client) throw httpError(404, 'Client not found');
+      await E.Client.update(client.id, { next_review_date: date });
+      await audit('pkyc.next_review_set', `Next review date set to ${date} (was ${client.next_review_date || '—'}).`, { next_review_date: date }, { next_review_date: client.next_review_date || null });
+      return Response.json({ ok: true, next_review_date: date });
     }
 
     // ---- State transitions ----
@@ -225,8 +304,16 @@ export default async function (req) {
         await E.DeclinedRecord.create({
           tenant_id: tenantId, case_id: kycCase.id, client_id: client.id, client_type: client.client_type, status: action === 'decline' ? 'Declined, not onboarded' : 'Relationship terminated',
           identifiers, internal_reason: clip(body.rationale, 4000), reporting_obligation_assessment: body.reporting_obligation, neutral_letter_sent: !!body.neutral_letter, decided_by: actor.id, decided_at: now,
+          ...(cfg.retention_months ? { retention_until: (() => { const d = new Date(now); d.setMonth(d.getMonth() + cfg.retention_months); return d.toISOString().slice(0, 10); })() } : {}),
         });
         await E.Client.update(client.id, { status: action === 'decline' ? 'Rejected' : 'Former' }).catch(() => {});
+        if (action === 'terminate') {
+          // Exit flow: a task for the analyst; Vitauri does not close accounts itself.
+          const due = new Date(now); due.setDate(due.getDate() + 30);
+          await E.ControlMeasure.create({ tenant_id: tenantId, case_id: kycCase.id, status: 'Open', owner_user_id: kycCase.assigned_analyst_id || kycCase.sign_off_submitted_by || undefined, due_date: due.toISOString().slice(0, 10),
+            description: `Exit: offboard the relationship (close accounts and products, final statements${body.neutral_letter ? ', send the neutral letter' : ''}, stop monitoring when closed).` }).catch((e) => console.warn('exit task', e?.message));
+          await audit('exit.started', 'Exit flow started: offboarding task created (due in 30 days).');
+        }
       }
       if (fx === 'notify_compliance') await notify(active.filter((u) => COMPLIANCE_ROLES.includes(roleOf(u)) && u.id !== kycCase.sign_off_submitted_by), 'Compliance advice requested', `Case for ${name} (${route.effective}) needs Compliance advice.`, 'advice');
       if (fx === 'notify_approvers') {
@@ -238,6 +325,30 @@ export default async function (req) {
         const target = users.filter((u) => u.id === kycCase.sign_off_submitted_by || u.id === kycCase.assigned_analyst_id);
         await notify(target.filter((u) => u.id !== actor.id), `Case ${res.to.replace('_', ' ')}`, `${res.audit.text}`, 'analyst');
       }
+    }
+    // ---- Automatic approval (policy auto-1): straight after a submit that meets every condition ----
+    if (action === 'submit' && res.to === 'with_approver' && auto.eligible) {
+      const caseNow = { ...kycCase, ...patch };
+      const sys = { id: 'system', name: `Automatic approval (${cfg.auto_approval_policy_version})`, role: 'System' };
+      const ap = transition({ kycCase: caseNow, route, advice, perms: { ...perms, canApprove: true }, qcPassed }, { type: 'approve', by: sys, payload: {} });
+      if (!ap.error) {
+        const t = new Date().toISOString();
+        await E.KycCase.update(kycCase.id, { ...ap.patch, sign_off_approved_by: 'system' });
+        const selected = Math.random() * 100 < cfg.auto_approval_sample_pct;
+        const rationale = `Approved automatically under policy ${cfg.auto_approval_policy_version}: ${auto.conditions.map((c) => c.label).join('; ')}.`;
+        decision = await E.SignOffDecision.create({
+          tenant_id: tenantId, case_id: kycCase.id, client_id: kycCase.client_id, kind: 'Approved', decided_by: 'system', decided_by_name: sys.name, role: 'System', acting_as: 'automatic',
+          decided_at: t, rationale, auto_approved: true, policy_version: cfg.auto_approval_policy_version, auto_conditions: auto.conditions, route, report_version: kycCase.current_report_version || null,
+          sample_review: { selected, status: selected ? 'open' : 'not_selected', sample_pct: cfg.auto_approval_sample_pct },
+        });
+        await audit('signoff.auto_approved', `${rationale}${selected ? ' Selected for sample review.' : ''}`, { decision_id: decision.id, policy: cfg.auto_approval_policy_version, sampled: selected });
+        if (selected) {
+          await notify(active.filter((u) => [...APPROVER_ROLES.manager, ...COMPLIANCE_ROLES].includes(roleOf(u)) && u.id !== kycCase.sign_off_submitted_by && u.id !== actor.id),
+            'Sample review: automatic approval', `Case for ${name} was approved automatically and selected for a sample review.`, 'sample');
+        }
+        return Response.json({ ok: true, status: 'approved', auto_approved: true, sampled: selected, route, decision_id: decision.id });
+      }
+      console.warn('auto approval skipped:', ap.error);
     }
     return Response.json({ ok: true, status: res.to, route, decision_id: decision?.id || null });
   } catch (error) {
