@@ -574,6 +574,16 @@ export function buildReportBody(input) {
       if ((a.attachments || []).length) { subheading('Attachments (see Annex)', 8.5); table([{ label: 'Ref', w: 14 }, { label: 'Title', w: 70 }, { label: 'Description', w: 94 }], a.attachments.map((x) => [x.index, x.title, x.description])); }
       if (a.ai_assisted) kv('AI use', 'The advice text started from an AI-assisted draft; the Compliance officer is the author.');
     }
+    subheading('Quality control');
+    const q = signoff.qc;
+    if (!q) markdown(signoff.legacy ? 'This case started before the QC engine; QC is recorded as "legacy — not run".' : 'QC has not been run on this version.');
+    else {
+      kvGrid([
+        ['QC result', q.result === 'passed' ? 'Passed' : q.result], ['Certificate', q.certificate_id || '—'],
+        ['Round', `${q.round || 1} of 3`], ['Rule set', q.rule_set_version || '—'],
+        ['Report Check', q.report_check?.status === 'done' ? `Done (${q.report_check.engine || 'Claude'})` : q.report_check?.status || '—'], ['Strictness', q.strictness || '—'],
+      ]);
+    }
     subheading('Human oversight and AI use');
     const aiRows = [];
     if (a?.ai_assisted) aiRows.push(['Compliance advice', 'AI-assisted draft, edited and submitted by the Compliance officer']);
