@@ -13,6 +13,9 @@ import RationaleDialog from '@/components/case/signoff/RationaleDialog';
 import SignOffTmOutcome from '@/components/case/SignOffTmOutcome';
 import SignOffProfilePanel from '@/components/case/tm/SignOffProfilePanel';
 import { RouteLine, Locked, reportContext, LEVEL_TEXT, ClassChip } from '@/components/case/signoff/SignoffBits';
+import PkycPanel from '@/components/case/signoff/PkycPanel';
+import DeclinedMatchBanner from '@/components/case/signoff/DeclinedMatchBanner';
+import { Textarea } from '@/components/ui/textarea';
 
 const SEAL = {
   approved: ['FINAL · APPROVED', 'border-emerald-300 bg-emerald-50 text-emerald-900'],
@@ -29,6 +32,7 @@ export default function FinalSignOffStep({ kycCase, client, currentUser, onCaseU
   const [preview, setPreview] = useState(null);
   const [amlAssessment, setAmlAssessment] = useState(null);
   const [freezing, setFreezing] = useState(false);
+  const [sampleNote, setSampleNote] = useState('');
   const ctx = useMemo(() => reportContext({ kycCase, route, advice, decisions, users }), [kycCase, route, advice, decisions, users]);
 
   if (!info) return <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
@@ -144,17 +148,33 @@ export default function FinalSignOffStep({ kycCase, client, currentUser, onCaseU
         <section className={cn('space-y-2 rounded-xl border-2 p-4', SEAL[status][1])}>
           <div className="flex items-center gap-2 text-sm font-bold tracking-wide"><ShieldCheck className="h-5 w-5" /> {SEAL[status][0]}</div>
           <div className="grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
-            <span>Decided by: <strong>{finalDecision.decided_by_name}</strong> ({finalDecision.role}, acting as {LEVEL_TEXT[finalDecision.acting_as] || finalDecision.acting_as})</span>
+            <span>Decided by: <strong>{finalDecision.decided_by_name}</strong> {finalDecision.auto_approved ? `(policy ${finalDecision.policy_version})` : `(${finalDecision.role}, acting as ${LEVEL_TEXT[finalDecision.acting_as] || finalDecision.acting_as})`}</span>
             <span>At: {format(new Date(finalDecision.decided_at), 'd MMM yyyy HH:mm')}</span>
             <span>Report version: {frozen ? `v${frozen.version_number}` : 'final version not generated yet'}</span>
             <span className="font-mono break-all">Hash: {frozen?.hash || finalDecision.hash || '—'}</span>
           </div>
           {finalDecision.rationale && <p className="text-sm">{finalDecision.rationale}{finalDecision.rationale_ai_assisted && <span className="ml-1 rounded bg-violet-100 px-1.5 text-[10px] text-violet-800">AI-assisted draft, confirmed by the approver</span>}</p>}
           {finalDecision.deviates_from_advice && <p className="text-xs font-medium">This decision deviates from the Compliance advice.</p>}
+          {finalDecision.auto_approved && (
+            <div className="space-y-1.5 rounded-lg border border-emerald-200 bg-white/70 p-2 text-xs">
+              <div className="font-semibold">Automatic approval · sample review: {{ open: 'selected, waiting for a reviewer', ok: `OK (${finalDecision.sample_review?.reviewer_name})`, issue: `issue found (${finalDecision.sample_review?.reviewer_name})`, not_selected: 'not selected' }[finalDecision.sample_review?.status] || '—'}</div>
+              {finalDecision.sample_review?.note && <p>{finalDecision.sample_review.note}</p>}
+              {info.can_sample_review && (
+                <div className="space-y-1.5">
+                  <Textarea value={sampleNote} onChange={(e) => setSampleNote(e.target.value)} className="min-h-14 text-xs" placeholder="Review note (required when you find an issue)" />
+                  <div className="flex gap-2">
+                    <Button size="sm" className="h-7 text-xs" disabled={!!busy} onClick={() => act('sample_review', { decision: 'ok', note: sampleNote }, 'Sample review recorded')}>Sample OK</Button>
+                    <Button size="sm" variant="outline" className="h-7 border-red-300 text-xs text-red-700" disabled={!!busy || sampleNote.trim().length < 10} onClick={() => act('sample_review', { decision: 'issue', note: sampleNote }, 'Issue recorded')}>Issue found</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {finalDecision.reporting_obligation_assessment && <p className="text-xs">Reporting obligation: {finalDecision.reporting_obligation_assessment.replace(/_/g, ' ')} · Neutral letter: {finalDecision.neutral_letter_sent ? 'yes' : 'no'}</p>}
           {perms.canReopen && <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setDlg('reopen')}><RotateCcw className="h-3.5 w-3.5" /> Reopen case</Button>}
         </section>
       )}
+      {status === 'approved' && <PkycPanel kycCase={kycCase} client={client} model={info.pkyc_model} canEdit={!!perms.canSubmit} act={act} busy={busy} />}
       {decided && !frozen && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           Generate the {SEAL[status][0]} report version below. It is frozen (hash recorded) right after it is generated.
