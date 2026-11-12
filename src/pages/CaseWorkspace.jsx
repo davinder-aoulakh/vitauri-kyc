@@ -250,7 +250,7 @@ export default function CaseWorkspace() {
       const docs = await base44.entities.Document.filter({ case_id: id }).catch(() => []);
       const open = (docs || []).filter(d => !d.is_deleted && d.ai_check?.verdict === 'high_risk' && (d.review_status || 'Pending_Review') === 'Pending_Review');
       if (open.length) {
-        toast({ variant: 'destructive', title: 'Document needs review', description: `The AI Document Checker rated ${open.map(d => `"${d.file_name}"`).join(', ')} high risk. Approve (with a reason) or reject it in the client's Documents tab first.` });
+        toast({ variant: 'destructive', title: 'Document needs review', description: `The AI Document Checker rated ${open.map(d => `"${d.file_name}"`).join(', ')} high risk. Review it in this step: press Verify on the document, then approve it with a reason or reject it.` });
         return;
       }
     }
