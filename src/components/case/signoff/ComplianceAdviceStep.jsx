@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { AlertTriangle, Bold, Italic, List, Loader2, Paperclip, Plus, Sparkles, Trash2, Upload, MessageSquareReply } from 'lucide-react';
 import ReportPreviewPanel, { ReportRow } from '@/components/case/signoff/ReportPreviewPanel';
 import RationaleDialog from '@/components/case/signoff/RationaleDialog';
+import DeclinedMatchBanner from '@/components/case/signoff/DeclinedMatchBanner';
 import { RouteLine, Locked, reportContext, ADVICE_STATUS, LEVEL_TEXT } from '@/components/case/signoff/SignoffBits';
 
 const OUTCOMES = ['Supportive', 'Supportive with conditions', 'Not supportive'];
@@ -113,6 +114,7 @@ export default function ComplianceAdviceStep({ kycCase, client, currentUser, onC
   return (
     <div className="space-y-5">
       <RouteLine route={route} />
+      <DeclinedMatchBanner caseId={kycCase.id} matches={info?.declined_matches || []} canView={!!info?.can_view_declined} />
 
       {/* Status for everybody */}
       <section className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4 text-sm">
