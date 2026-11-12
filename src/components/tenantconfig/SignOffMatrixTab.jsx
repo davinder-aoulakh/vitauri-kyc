@@ -62,6 +62,10 @@ export default function SignOffMatrixTab({ tenant, currentUser, setTenant }) {
       notes: `Sign-off matrix updated by ${currentUser.full_name}`,
       after_state: next,
     });
+    // A (new) retention period is applied to declined/terminated records that have no retention date yet.
+    if (Number(next.retention_months) > 0 && ['Tenant Admin', 'Compliance Admin'].includes(currentUser?.app_role)) {
+      await base44.functions.invoke('applyDeclinedRetention', {}).catch((e) => console.warn('retention backfill', e?.message));
+    }
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
