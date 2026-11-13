@@ -497,6 +497,8 @@ export default function ClientPortal() {
     if (Object.keys(errors).length > 0) { setValidationErrors(errors); return; }
     setValidationErrors({});
     setSubmitting(true);
+    // Pending autosaves are written first so they cannot land after (and over) the submission.
+    await saveQueue.current?.flush().catch(() => {});
 
     const freshOutreachList = await base44.entities.OutreachRequest.filter({ id: outreach.id });
     const freshOutreach = freshOutreachList?.[0] || outreach;
@@ -605,6 +607,7 @@ export default function ClientPortal() {
 
     setAllOutreaches(prev => prev.map(r => r.id === outreach.id ? { ...r, status: newStatus, items: updatedItems } : r));
     setSubmittedIds(s => new Set([...s, outreach.id]));
+    clearDraft(token, outreach.id);
     setConfirmedOutreach({ ...outreach, items: updatedItems, status: newStatus });
     setSubmitting(false);
   }
