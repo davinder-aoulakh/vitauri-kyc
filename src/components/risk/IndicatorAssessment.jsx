@@ -30,6 +30,7 @@ export default function IndicatorAssessment({
   scores, onScoresChange,
   persistedData, onPersistedDataChange,
   tmSignalLines,
+  proposals = {}, onProposalsChange,
 }) {
   // Unchanged prompt when no TM signals are selected
   const tmPromptSuffix = tmSignalLines?.length ? `\n\nTM signals considered:\n${tmSignalLines.map(l => `- ${l}`).join('\n')}` : '';
@@ -49,11 +50,75 @@ export default function IndicatorAssessment({
   const [overrideJust, setOverrideJust] = useState('');
   const [overrideApplied, setOverrideApplied] = useState(!!scores?.__override?.score);
   const [saving, setSaving] = useState(false);
+  // AI score proposals (the analyst decides): loading state, last error, what the AI looked at, and a per-indicator hint
+  const [proposing, setProposing] = useState(false);
+  const [proposeError, setProposeError] = useState(null);
+  const [signalsUsed, setSignalsUsed] = useState(null);
+  const [belowMinHint, setBelowMinHint] = useState(null);
 
   const indicators = selectedIndicatorIds.map(id => ALL_INDICATORS.find(i => i.id === id)).filter(Boolean);
   const proposedRisk = getProposedRisk(scores);
   const scoredCount = indicators.filter(ind => scores[ind.id]?.score).length;
   const totalCount = indicators.length;
+
+  const RANK = { Low: 1, Medium: 2, High: 3, Unacceptable: 4 };
+  const pendingProposals = indicators.filter(ind => proposals[ind.id]?.decision === 'pending');
+  const acceptable = pendingProposals.filter(ind => proposals[ind.id].score && proposals[ind.id].confidence !== 'low' && !scores[ind.id]?.score);
+
+  async function proposeScores() {
+    if (!indicators.length || proposing) return;
+    setProposing(true);
+    setProposeError(null);
+    try {
+      const res = await base44.functions.invoke('proposeRiskScores', {
+        case_id: kycCase?.id, entity_key: entityKey,
+        indicators: indicators.map(i => ({ id: i.id, name: i.name, description: i.description })),
+      });
+      const data = res?.data || {};
+      if (data.error) throw new Error(data.error);
+      setSignalsUsed(data.signals_used || null);
+      if (data.ai_failed) setProposeError('The AI was not available; only the fixed minimum scores are shown.');
+      onProposalsChange?.(prev => {
+        const next = { ...prev };
+        for (const p of data.proposals || []) next[p.indicator_id] = p;
+        return next;
+      });
+    } catch (e) {
+      setProposeError(e?.response?.data?.error || e?.message || 'Could not get proposals.');
+    } finally {
+      setProposing(false);
+    }
+  }
+
+  const setDecision = (indicatorId, patch) => onProposalsChange?.(prev => (prev?.[indicatorId] ? { ...prev, [indicatorId]: { ...prev[indicatorId], ...patch, decided_at: new Date().toISOString(), decided_by: currentUser?.full_name || null } } : prev));
+
+  /** Accept = take the proposed score and put the rationale in the narrative as a draft (still to be accepted as text). */
+  function acceptProposal(ind, into = scores) {
+    const p = proposals[ind.id];
+    if (!p?.score) return into;
+    const draft = narratives[ind.id] || p.rationale || '';
+    const next = { ...into, [ind.id]: { ...into[ind.id], score: p.score, ai_narrative: draft } };
+    if (!narratives[ind.id] && draft) setNarratives(n => ({ ...n, [ind.id]: draft }));
+    setDecision(ind.id, { decision: 'accepted', analyst_score: p.score });
+    return next;
+  }
+  function acceptAll() {
+    let next = scores;
+    for (const ind of acceptable) next = acceptProposal(ind, next);
+    onScoresChange(next);
+  }
+
+  /** Manual score. Going below a fixed rule minimum needs a written reason in the notes first. */
+  function chooseScore(ind, level) {
+    const p = proposals[ind.id];
+    if (p?.rule_minimum && RANK[level] < RANK[p.rule_minimum] && (scores[ind.id]?.notes || '').trim().length < 30) {
+      setBelowMinHint(ind.id);
+      return;
+    }
+    setBelowMinHint(null);
+    onScoresChange({ ...scores, [ind.id]: { ...scores[ind.id], score: level } });
+    if (p && p.decision !== 'dismissed') setDecision(ind.id, p.score === level ? { decision: 'accepted', analyst_score: level } : { decision: 'overridden', analyst_score: level });
+  }
 
   async function loadDocs() {
     const docs = await base44.entities.Document.filter({ client_id: kycCase?.client_id });
@@ -79,7 +144,7 @@ Structure (strictly follow):
 2. 2–3 sentences of supporting evidence or observations
 3. One sentence on mitigating factors, if any (or state "No mitigating factors identified.")
 
-Tone: factual, neutral, third-person, regulatory-grade. Total: 3–5 sentences.${tmPromptSuffix}`,
+Tone: factual, neutral, third-person, regulatory-grade. Total: 3–5 sentences.${proposals[ind.id]?.evidence?.length ? `\n\nFacts from the file to rely on:\n${proposals[ind.id].evidence.map(e => `- ${e}`).join('\n')}` : ''}${tmPromptSuffix}`,
       model: 'claude_sonnet_4_6',
     });
     const text = typeof result === 'string' ? result : result?.narrative || result?.text || JSON.stringify(result);
@@ -224,6 +289,40 @@ Tone: professional, regulatory-grade, suitable for a compliance file.${tmPromptS
         </div>
       )}
 
+      {/* AI support: propose a score per indicator from the facts in the file */}
+      {totalCount > 0 && (
+        <div className="rounded-xl border border-purple-200 bg-purple-50/40 p-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Sparkles className="w-4 h-4 text-purple-600" />
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-semibold text-foreground">AI scoring support</div>
+              <div className="text-[11px] text-muted-foreground">Proposes a score per indicator from the information in the file, with the facts it rests on. You decide.</div>
+            </div>
+            {acceptable.length > 1 && (
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50" onClick={acceptAll}>
+                <CheckCircle className="w-3 h-3" /> Accept all ({acceptable.length})
+              </Button>
+            )}
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-purple-700 border-purple-300 hover:bg-purple-100" onClick={proposeScores} disabled={proposing}>
+              {proposing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              {proposing ? 'Reading the file…' : Object.keys(proposals).length ? 'Propose again' : 'AI: propose scores'}
+            </Button>
+          </div>
+          {proposeError && <div className="text-[11px] text-amber-800">{proposeError}</div>}
+          {signalsUsed && (
+            <div className="text-[11px] text-muted-foreground">
+              Considered: {[
+                signalsUsed.outreach_answers ? `${signalsUsed.outreach_answers} outreach answer(s)` : null,
+                `${signalsUsed.screening_hits || 0} screening hit(s)`,
+                signalsUsed.didit_aml ? 'Didit AML' : null, signalsUsed.sof ? 'SoF/SoW' : null, signalsUsed.osint ? 'OSINT' : null,
+                signalsUsed.transactions ? 'transaction analysis' : null, signalsUsed.documents ? `${signalsUsed.documents} document(s)` : null,
+                signalsUsed.control_measures ? `${signalsUsed.control_measures} control measure(s)` : null,
+              ].filter(Boolean).join(' · ')}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Indicators */}
       {indicators.length === 0 && (
         <div className="text-center text-muted-foreground text-sm py-8 bg-card border border-border rounded-xl">
@@ -258,6 +357,7 @@ Tone: professional, regulatory-grade, suitable for a compliance file.${tmPromptS
                 ) : (
                   <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full">Not scored</span>
                 )}
+                {proposals[ind.id]?.decision === 'pending' && <span title="AI proposal waiting for your decision" className="inline-flex items-center gap-0.5 text-[11px] text-purple-700"><Sparkles className="w-3 h-3" />{proposals[ind.id].score || 'no basis'}</span>}
                 {accepted && <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />}
                 {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
               </div>
@@ -265,6 +365,46 @@ Tone: professional, regulatory-grade, suitable for a compliance file.${tmPromptS
 
             {isExpanded && (
               <div className="border-t border-border p-4 space-y-4">
+                {/* AI proposal for this indicator */}
+                {proposals[ind.id] && proposals[ind.id].decision !== 'dismissed' && (() => {
+                  const p = proposals[ind.id];
+                  const differs = score && p.score && score !== p.score;
+                  return (
+                    <div className={cn('rounded-lg border p-3 space-y-2 text-xs', p.decision === 'pending' ? 'border-purple-200 bg-purple-50/50' : 'border-border bg-muted/30')}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                        <span className="font-semibold">AI proposal:</span>
+                        {p.score
+                          ? <span className={cn('font-semibold px-2 py-0.5 rounded-full border', RISK_COLORS[p.score]?.badge)}>{p.score}</span>
+                          : <span className="px-2 py-0.5 rounded-full border border-border bg-muted text-muted-foreground">No basis in the file</span>}
+                        {p.score && <span className="text-muted-foreground">confidence {p.confidence}</span>}
+                        {p.rule_minimum && <span className="px-1.5 py-0.5 rounded border border-amber-300 bg-amber-50 text-amber-800" title="Set by a fixed rule, not by the AI">minimum {p.rule_minimum} by rule</span>}
+                        {p.decision === 'accepted' && <span className="text-emerald-700 inline-flex items-center gap-1"><CheckCircle className="w-3 h-3" /> accepted</span>}
+                        {differs && <span className="text-amber-700">your score differs ({score})</span>}
+                        {p.decision === 'pending' && (
+                          <span className="ml-auto flex gap-1.5">
+                            {p.score && !differs && score !== p.score && (
+                              <Button size="sm" variant="outline" className="h-6 px-2 text-xs gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                onClick={() => onScoresChange(acceptProposal(ind))}><CheckCircle className="w-3 h-3" /> Accept</Button>
+                            )}
+                            <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground" onClick={() => setDecision(ind.id, { decision: 'dismissed' })}>Dismiss</Button>
+                          </span>
+                        )}
+                      </div>
+                      {p.rationale && <p className="leading-relaxed text-foreground/90">{p.rationale}</p>}
+                      {(p.evidence || []).length > 0 && (
+                        <div>
+                          <div className="text-[11px] font-semibold text-muted-foreground">Based on</div>
+                          <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">{p.evidence.map((e, i) => <li key={i}>{e}</li>)}</ul>
+                        </div>
+                      )}
+                      {(p.missing || []).length > 0 && (
+                        <div className="text-muted-foreground"><span className="font-semibold">Would change with:</span> {p.missing.join('; ')}</div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Score Selection */}
                 <div>
                   <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Risk Score</div>
@@ -272,7 +412,7 @@ Tone: professional, regulatory-grade, suitable for a compliance file.${tmPromptS
                     {RISK_LEVELS.map(level => (
                       <button
                         key={level}
-                        onClick={() => onScoresChange({ ...scores, [ind.id]: { ...scores[ind.id], score: level } })}
+                        onClick={() => chooseScore(ind, level)}
                         className={cn(
                           'text-xs px-3 py-1.5 rounded-lg border font-medium transition-all',
                           score === level
@@ -284,6 +424,12 @@ Tone: professional, regulatory-grade, suitable for a compliance file.${tmPromptS
                       </button>
                     ))}
                   </div>
+                  {belowMinHint === ind.id && (
+                    <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-800">
+                      <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                      A fixed rule sets at least {proposals[ind.id]?.rule_minimum} for this indicator. To score lower, first write your reason in Assessment Notes (30+ characters), then choose the score.
+                    </div>
+                  )}
                 </div>
 
                 {/* Notes */}
