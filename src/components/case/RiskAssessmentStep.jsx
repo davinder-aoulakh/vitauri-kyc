@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Loader2, User, Building2, BarChart3, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Loader2, User, Users, Building2, BarChart3, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { deselectedIds } from '@/lib/riskAutosave';
 import { cn } from '@/lib/utils';
@@ -30,6 +30,8 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
     setActiveTabState(t);
     try { window.sessionStorage.setItem(tabKey, t); } catch { /* storage blocked */ }
   };
+
+  const lastRelationRef = React.useRef(null);
 
   // { refs, lines } reported by TmSignalsBox; null while the box is not shown (flag off / no TM data)
   const [tmSignals, setTmSignals] = useState(null);
@@ -131,6 +133,13 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
   // A remembered entity tab that no longer exists (related party removed) falls back to the picker.
   const validTabs = ['picker', 'consolidated', ...entities.map(e => `assess_${e.key}`)];
   const currentTab = validTabs.includes(activeTab) ? activeTab : 'picker';
+  // "Relation View" opens the relation that was viewed last (or the client).
+  if (currentTab.startsWith('assess_')) lastRelationRef.current = currentTab;
+  const relationTab = validTabs.includes(lastRelationRef.current) ? lastRelationRef.current : `assess_${entities[0].key}`;
+  const progressOf = (e) => {
+    const ids = (selections[e.key] || []).filter(id => ALL_INDICATORS.some(i => i.id === id));
+    return { total: ids.length, scored: ids.filter(id => allScores[e.key]?.[id]?.score).length };
+  };
 
   return (
     <div className="space-y-4">
@@ -146,18 +155,14 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
             1. Select Indicators
             {selectionConfirmed && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-0.5" />}
           </TabsTrigger>
-          {entities.map((e, i) => (
-            <TabsTrigger
-              key={e.key}
-              value={`assess_${e.key}`}
-              className="text-xs px-3 py-1.5 data-[state=active]:bg-card data-[state=active]:shadow-sm gap-1.5"
-            >
-              {e.type?.startsWith('ORG') ? <Building2 className="w-3 h-3" /> : <User className="w-3 h-3" />}
-              {i + 2}. {e.label.split(' ')[0]}
-            </TabsTrigger>
-          ))}
+          {/* One general tab for all relations (client + related parties); the relation is chosen inside it. */}
+          <TabsTrigger value={relationTab} className="text-xs px-3 py-1.5 data-[state=active]:bg-card data-[state=active]:shadow-sm gap-1.5">
+            <Users className="w-3.5 h-3.5" />
+            2. Relation View
+            {entities.length > 1 && <span className="text-[10px] text-muted-foreground">({entities.length})</span>}
+          </TabsTrigger>
           <TabsTrigger value="consolidated" className="text-xs px-3 py-1.5 data-[state=active]:bg-card data-[state=active]:shadow-sm">
-            {entities.length + 2}. Consolidated View
+            3. Consolidated View
           </TabsTrigger>
         </TabsList>
 
@@ -197,11 +202,35 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
           const isLast = idx === entities.length - 1;
           const prevTab = isFirst ? 'picker' : `assess_${entities[idx - 1].key}`;
           const nextTab = isLast ? 'consolidated' : `assess_${entities[idx + 1].key}`;
-          const backLabel = isFirst ? 'Back to Indicators' : `Back: ${entities[idx - 1].label.split(' ')[0]}`;
-          const nextLabel = isLast ? 'Next: Consolidated View' : `Next: ${entities[idx + 1].label.split(' ')[0]}`;
+          const backLabel = isFirst ? 'Back to Indicators' : `Back: ${shortName(entities[idx - 1].label)}`;
+          const nextLabel = isLast ? 'Next: Consolidated View' : `Next: ${shortName(entities[idx + 1].label)}`;
 
           return (
             <TabsContent key={e.key} value={`assess_${e.key}`} className="mt-4">
+              {/* Relations in this case: pick whose assessment to work on */}
+              <div className="mb-3 flex flex-wrap gap-2" role="tablist" aria-label="Relations">
+                {entities.map((r) => {
+                  const pr = progressOf(r);
+                  const active = r.key === e.key;
+                  const done = pr.total > 0 && pr.scored === pr.total;
+                  return (
+                    <button key={r.key} type="button" role="tab" aria-selected={active} onClick={() => setActiveTab(`assess_${r.key}`)} title={r.label}
+                      className={cn('flex min-w-0 max-w-xs items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors',
+                        active ? 'border-primary bg-primary/5' : 'border-border bg-card hover:bg-muted/50')}>
+                      <span className={cn('flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full', r.type?.startsWith('ORG') ? 'bg-blue-100 text-blue-600' : 'bg-violet-100 text-violet-600')}>
+                        {r.type?.startsWith('ORG') ? <Building2 className="h-3 w-3" /> : <User className="h-3 w-3" />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-foreground">{r.label}</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">{r.role}</span>
+                      </span>
+                      <span className={cn('ml-1 flex flex-shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium', done ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-muted-foreground')}>
+                        {done && <CheckCircle className="h-3 w-3" />}{pr.scored}/{pr.total} scored
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
               {!selectionConfirmed ? (
                 <div className="text-center py-12 text-muted-foreground text-sm bg-card border border-border rounded-xl">
                   Complete the indicator selection in Step 1 first.
@@ -317,6 +346,14 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
       </Tabs>
     </div>
   );
+}
+
+// "Evert David Christiaan Zwarts" -> "Evert Zwarts"; company names are kept (shortened when very long).
+function shortName(label) {
+  const s = String(label || '').trim();
+  const parts = s.split(/\s+/);
+  if (/\b(b\.?v\.?|n\.?v\.?|ltd|llc|inc|gmbh|holding|group|management)\b/i.test(s) || parts.length < 3) return s.length > 28 ? `${s.slice(0, 27)}…` : s;
+  return `${parts[0]} ${parts[parts.length - 1]}`;
 }
 
 // Helpers to reconstruct component state from persisted allScores
