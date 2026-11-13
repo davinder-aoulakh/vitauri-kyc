@@ -540,7 +540,9 @@ export default function ClientPortal() {
       }
 
       let responseTextValue = s.text || item.response_text || '';
-      if (ft === 'multi_select' || ft === 'checkbox') responseTextValue = (s.selected || []).join(', ');
+      // Multi-select: the ticked options. A single checkbox keeps its own answer ('true' when ticked); it has no option list.
+      if (ft === 'multi_select') responseTextValue = (s.selected || []).join(', ');
+      if (ft === 'checkbox') responseTextValue = s.text === 'true' ? 'true' : '';
       const isDone = isItemCompleted(item, s) || ft === 'section_header';
       // KYC-linked / structured answers keep their structure for Profile Verification
       const structured = (item.profile_field || ['phone', 'address', 'country'].includes(ft))
