@@ -6,7 +6,9 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Loader2, User, Building2, BarChart3, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Loader2, User, Building2, BarChart3, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle } from 'lucide-react';
+import { format } from 'date-fns';
+import { deselectedIds } from '@/lib/riskAutosave';
 import { cn } from '@/lib/utils';
 import IndicatorPicker, { ALL_INDICATORS } from '@/components/risk/IndicatorPicker';
 import IndicatorAssessment from '@/components/risk/IndicatorAssessment';
@@ -19,7 +21,15 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
   const [relatedParties, setRelatedParties] = useState([]);
   const [rpLoading, setRpLoading] = useState(true);
   const [rpError, setRpError] = useState(null);
-  const [activeTab, setActiveTab] = useState('picker');
+  // The tab the analyst was on is remembered per case (this browser tab), so coming back to the step returns there.
+  const tabKey = `risk_tab:${kycCase?.id}`;
+  const [activeTab, setActiveTabState] = useState(() => {
+    try { return window.sessionStorage.getItem(tabKey) || 'picker'; } catch { return 'picker'; }
+  });
+  const setActiveTab = (t) => {
+    setActiveTabState(t);
+    try { window.sessionStorage.setItem(tabKey, t); } catch { /* storage blocked */ }
+  };
 
   // { refs, lines } reported by TmSignalsBox; null while the box is not shown (flag off / no TM data)
   const [tmSignals, setTmSignals] = useState(null);
@@ -28,6 +38,7 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
   const {
     loading,
     savedTmSignalRefs,
+    saveState, lastSavedAt,
     selections, selectionConfirmed,
     allScores,
     narrativeAccepted, overallNarratives, entityOverrides, consolidatedOverride,
@@ -35,8 +46,8 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
     updateAllScores, setAllScoresFull,
     updateNarrativeAccepted, updateOverallNarratives,
     updateEntityOverrides, updateConsolidatedOverride,
-    cleanupOrphanedRecords,
-  } = useRiskAssessmentPersistence({ kycCase, client, tmSignalRefs: tmSignals?.refs ?? null });
+    removeIndicatorRecords,
+  } = useRiskAssessmentPersistence({ kycCase, client, tmSignalRefs: tmSignals?.refs ?? null, onCaseUpdate });
 
   useEffect(() => { loadRelatedParties(); }, [kycCase?.client_id]);
 
@@ -68,12 +79,12 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
     })),
   ];
 
-  // When selections change, clean up orphaned RiskAssessment records for each entity
-  async function handleSelectionsChange(next) {
+  // When selections change, remove the records of the indicators the analyst de-selected in THIS change only
+  // (a stale or partial selection can then never delete scored work).
+  function handleSelectionsChange(next) {
+    const removed = deselectedIds(selections, next);
     updateSelections(next);
-    for (const entityKey of Object.keys(next)) {
-      await cleanupOrphanedRecords(entityKey, next[entityKey] || []);
-    }
+    for (const [entityKey, ids] of Object.entries(removed)) removeIndicatorRecords(entityKey, ids);
   }
 
   // Build the allScores shape expected by IndicatorAssessment (include __override from entityOverrides)
@@ -115,9 +126,18 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
     return <InlineError message={rpError} onRetry={loadRelatedParties} />;
   }
 
+  // A remembered entity tab that no longer exists (related party removed) falls back to the picker.
+  const validTabs = ['picker', 'consolidated', ...entities.map(e => `assess_${e.key}`)];
+  const currentTab = validTabs.includes(activeTab) ? activeTab : 'picker';
+
   return (
     <div className="space-y-4">
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <div className="flex justify-end -mb-2 text-[11px]" aria-live="polite">
+        {saveState === 'saving' && <span className="inline-flex items-center gap-1 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Saving…</span>}
+        {saveState === 'saved' && <span className="inline-flex items-center gap-1 text-emerald-700"><CheckCircle className="h-3 w-3" /> All changes saved{lastSavedAt ? ` · ${format(lastSavedAt, 'HH:mm')}` : ''}</span>}
+        {saveState === 'error' && <span className="inline-flex items-center gap-1 text-red-700"><AlertTriangle className="h-3 w-3" /> Not saved — retrying on your next change</span>}
+      </div>
+      <Tabs value={currentTab} onValueChange={setActiveTab}>
         <TabsList className="bg-muted/50 border border-border h-auto p-1 flex-wrap gap-1">
           <TabsTrigger value="picker" className="text-xs px-3 py-1.5 data-[state=active]:bg-card data-[state=active]:shadow-sm gap-1.5">
             <BarChart3 className="w-3.5 h-3.5" />
