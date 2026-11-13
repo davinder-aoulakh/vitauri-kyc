@@ -589,6 +589,12 @@ export function buildReportBody(input) {
     if (a?.ai_assisted) aiRows.push(['Compliance advice', 'AI-assisted draft, edited and submitted by the Compliance officer']);
     const d = signoff.decision;
     if (d?.rationale_ai_assisted) aiRows.push(['Decision rationale', 'AI-assisted draft, edited and confirmed by the approver']);
+    // AI score proposals in the Risk Assessment and what the analyst did with them
+    const props = Object.values(kycCase?.risk_assessment_meta?.scoreProposals || {}).flatMap((m) => Object.values(m || {}));
+    if (props.length) {
+      const n = (k) => props.filter((p) => p.decision === k).length;
+      aiRows.push(['Risk scores', `${props.length} proposed by AI from the file facts: ${n('accepted')} accepted, ${n('overridden')} changed by the analyst, ${n('dismissed')} dismissed, ${n('pending')} not used. Every score was set by the analyst.`]);
+    }
     (signoff.humanActions || []).forEach((h) => aiRows.push([h.question || 'Human decision', `${h.choice} by ${h.decided_by_name || '—'}${h.ai_suggestion ? ` · AI suggestion ${h.ai_followed ? 'followed' : 'not followed'}` : ''}`]));
     if (aiRows.length) table([{ label: 'Item', w: 60 }, { label: 'Human oversight', w: 118 }], aiRows);
     else markdown('No AI-assisted text was used for the advice or the decision. Every decision in this file was taken by a person.');
