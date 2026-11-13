@@ -3,7 +3,7 @@
  * Mockup-aligned: Editing For dropdown → Case Risk Preview → Confirm button → tip note.
  */
 import React from 'react';
-import { User, Building2, Clock, ChevronDown, CheckCircle } from 'lucide-react';
+import { User, Building2, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { RISK_COLORS } from '@/lib/riskColors';
@@ -43,52 +43,52 @@ export default function SelectionSummaryRail({
   return (
     <div className="space-y-3 sticky top-4">
 
-      {/* Editing Indicators For */}
-      <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+      {/* Editing Indicators For: one row per relation (client + related parties); click to switch */}
+      <div className="bg-card border border-border rounded-xl p-4 space-y-2.5">
         <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
           Editing Indicators For
         </div>
-
-        {/* Entity dropdown */}
-        <div className="relative">
-          <select
-            value={activeEntity?.key || ''}
-            onChange={e => onActiveEntityChange?.(e.target.value)}
-            className="w-full appearance-none bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm font-medium text-foreground pr-8 focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            {entities.map(e => (
-              <option key={e.key} value={e.key}>{e.label}</option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+        <div className="space-y-1.5">
+          {entities.map(e => {
+            const count = (selections[e.key] || []).length;
+            const active = e.key === activeEntity?.key;
+            const single = entities.length === 1;
+            return (
+              <button
+                key={e.key}
+                type="button"
+                title={e.label}
+                aria-pressed={active}
+                disabled={single}
+                onClick={() => onActiveEntityChange?.(e.key)}
+                className={cn(
+                  'w-full grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-1.5 items-start text-left px-3 py-2.5 rounded-lg border transition-colors',
+                  active ? 'bg-primary/5 border-primary/30' : 'bg-muted/20 border-border hover:bg-muted/50',
+                  single && 'cursor-default'
+                )}
+              >
+                <div className={cn(
+                  'w-6 h-6 rounded-full flex items-center justify-center mt-0.5',
+                  e.type?.startsWith('ORG') ? 'bg-blue-100 text-blue-600' : 'bg-violet-100 text-violet-600'
+                )}>
+                  {e.type?.startsWith('ORG') ? <Building2 className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-foreground leading-snug line-clamp-2 break-words">{e.label}</div>
+                  {e.role && <div className="text-[11px] text-muted-foreground truncate">{e.role}</div>}
+                </div>
+                <div className="col-start-2">
+                  <span className={cn(
+                    'inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full',
+                    count > 0 ? 'text-primary bg-primary/10' : 'text-muted-foreground bg-muted'
+                  )}>
+                    {count} selected
+                  </span>
+                </div>
+              </button>
+            );
+          })}
         </div>
-
-        {/* Active entity count row */}
-        {activeEntity && (
-          <div className={cn(
-            'flex items-center justify-between px-3 py-2 rounded-lg border text-xs',
-            activeCount > 0 ? 'bg-primary/5 border-primary/20' : 'bg-muted/30 border-border'
-          )}>
-            <div className="flex items-center gap-2">
-              <div className={cn(
-                'w-5 h-5 rounded-full flex items-center justify-center',
-                activeEntity.type?.startsWith('ORG') ? 'bg-blue-100 text-blue-600' : 'bg-violet-100 text-violet-600'
-              )}>
-                {activeEntity.type?.startsWith('ORG')
-                  ? <Building2 className="w-2.5 h-2.5" />
-                  : <User className="w-2.5 h-2.5" />
-                }
-              </div>
-              <span className="font-medium text-foreground truncate max-w-[80px]">{activeEntity.label}</span>
-            </div>
-            <span className={cn(
-              'font-bold px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0',
-              activeCount > 0 ? 'text-primary bg-primary/10' : 'text-muted-foreground bg-muted'
-            )}>
-              {activeCount} selected
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Case Risk Preview */}
@@ -130,11 +130,11 @@ export default function SelectionSummaryRail({
           onClick={onConfirm}
         >
           <CheckCircle className="w-4 h-4" />
-          Confirm Selection ({totalSelected})
+          Confirm selection ({totalSelected})
         </Button>
 
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Selections are scoped per entity. Switch entities above to review related parties or organisation clients in the same case.
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          {entities.length > 1 ? 'Selections are kept per relation; pick a relation above to edit its indicators.' : 'Next: score each selected indicator in Relation View.'}
         </p>
       </div>
 
