@@ -199,6 +199,10 @@ export function useRiskAssessmentPersistence({ kycCase, client, tmSignalRefs = n
     // patch = { score, notes, ai_narrative, evidence_document_ids }
     // patch = null means delete this indicator record
     const entityScores = { ...(scoresRef.current[entityKey] || {}) };
+    // Nothing to do: callers pass every indicator of the entity on each change; only the changed ones are written.
+    const before = entityScores[indicatorId];
+    if (patch === null && !before && !recordIdsRef.current[entityKey]?.[indicatorId]) return;
+    if (patch !== null && before && JSON.stringify({ ...before, ...patch }) === JSON.stringify(before)) return;
     if (patch === null) delete entityScores[indicatorId];
     else entityScores[indicatorId] = { ...(entityScores[indicatorId] || {}), ...patch };
     scoresRef.current = { ...scoresRef.current, [entityKey]: entityScores };
