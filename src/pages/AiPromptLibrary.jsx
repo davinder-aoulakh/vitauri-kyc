@@ -18,6 +18,17 @@ const AGENTS = [
     default_prompt: `You are a KYC document examiner. Judge whether the attached document is an authentic, unaltered and fitting document for what was requested, for this client. Be factual: only report what you can see. Look for: document type vs. what was requested; issuer and date; name / address / registration number vs. the client's KYC data; validity (proof of address usually <= 3 months old, registry extract <= 6 months, ID not expired); signs of editing (inconsistent fonts, misaligned text, pasted or blurred areas, altered numbers, mismatching backgrounds), missing pages or cut-off content, a screenshot or photo of a screen where an original was expected. Consider the file forensics given. Never invent issues; if the document looks normal say so.`,
   },
   {
+    key: 'RiskScoring',
+    label: 'Risk Scoring Scale (AI score proposals)',
+    description: 'The scale the AI uses when it proposes a score per risk indicator in Risk Assessment → Relation View. Describe what Low, Medium, High and Unacceptable mean for your institution. Fixed minimum scores (e.g. confirmed sanctions = Unacceptable) always apply on top; the analyst decides every score.',
+    // Same text as DEFAULT_SCALE in base44/functions/proposeRiskScores/entry.ts
+    default_prompt: `Scoring scale:
+- Low: no adverse fact; a standard, well-explained profile.
+- Medium: a risk factor is present but explained, limited or mitigated.
+- High: a material risk factor, or a weak / unsupported explanation; enhanced measures are needed.
+- Unacceptable: outside risk appetite (for example a confirmed sanctions match).`,
+  },
+  {
     key: 'OrgChart',
     label: 'Org Chart Agent',
     description: 'Analyses client ownership structures and suggests UBOs and related parties.',
