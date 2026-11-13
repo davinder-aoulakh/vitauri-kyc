@@ -5,7 +5,8 @@
 // No Didit endpoints are called. Writes an AuditEvent with ids and counts only.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
-import { collectSignals, ruleSuggestions, signalsPrompt } from '../../shared/riskSignals.js';
+import { ruleSuggestions, signalsPrompt } from '../../shared/riskSignals.js';
+import { loadRiskSignals } from '../../shared/riskFacts.js';
 
 const SCOPES = ['NP_Client', 'ORG_Client', 'NP_Related_Party', 'ORG_Related_Party'];
 
@@ -47,24 +48,8 @@ export default async function (req) {
     const client = asList(await E.Client.filter({ id: kycCase.client_id }))[0];
     if (!client) throw httpError(404, 'Client not found');
 
-    const [outreachByCase, outreachByClient, hitsByCase, hitsByClient, links] = await Promise.all([
-      E.OutreachRequest.filter({ case_id: kycCase.id }).then(asList).catch(() => []),
-      E.OutreachRequest.filter({ client_id: client.id }).then(asList).catch(() => []),
-      E.ScreeningHit.filter({ case_id: kycCase.id }).then(asList).catch(() => []),
-      E.ScreeningHit.filter({ client_id: client.id }).then(asList).catch(() => []),
-      E.ClientRelatedPartyLink.filter({ client_id: client.id }).then(asList).catch(() => []),
-    ]);
-    const rpIds = [...new Set(links.map((l) => l.related_party_id).filter(Boolean))];
-    const [relatedParties, rpHits] = await Promise.all([
-      rpIds.length ? E.RelatedParty.filter({ id: { $in: rpIds } }).then(asList).catch(() => []) : [],
-      rpIds.length ? E.ScreeningHit.filter({ related_party_id: { $in: rpIds } }).then(asList).catch(() => []) : [],
-    ]);
-    const uniq = (rows) => [...new Map(rows.filter((r) => r.tenant_id === kycCase.tenant_id).map((r) => [r.id, r])).values()];
-    // Outreach for this case, plus standalone client outreach not tied to another case
-    const outreach = uniq([...outreachByCase, ...outreachByClient.filter((r) => !r.case_id || r.case_id === kycCase.id)]);
-    const hits = uniq([...hitsByCase, ...hitsByClient, ...rpHits]);
-
-    const signals = collectSignals({ client, kycCase, outreach, hits, relatedParties: uniq(relatedParties), links });
+    // Facts per entity (shared loader, also used by proposeRiskScores)
+    const { signals } = await loadRiskSignals(E, kycCase, client);
     const rules = ruleSuggestions(signals, indicators);
 
     const typeOf = new Map(signals.entities.map((e) => [e.key, e.type]));
