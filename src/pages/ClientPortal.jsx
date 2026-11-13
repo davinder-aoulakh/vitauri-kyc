@@ -15,6 +15,7 @@ import PortalAddressInput, { isAddressComplete } from '@/components/portal/Porta
 import PhoneInput from '@/components/shared/PhoneInput';
 import CountrySelect from '@/components/shared/CountrySelect';
 import { responseText } from '@/lib/profileFieldMap';
+import { selectedFromItem, mergeItemState, createSaveQueue, readDraft, writeDraftItem, clearDraft } from '@/lib/portalAnswers';
 import { format, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -129,7 +130,15 @@ export default function ClientPortal() {
   const [diditReturnBanner, setDiditReturnBanner] = useState(null);
   const diditPollRef = useRef(null);
   const desktopCompletePollRef = useRef(null);
-  const autoSaveTimers = useRef({});
+  // Answer persistence (see src/lib/portalAnswers.js): one serialized save per request, flushed when the page is left.
+  const saveQueue = useRef(null);
+  if (!saveQueue.current) {
+    saveQueue.current = createSaveQueue({
+      fetchRequest: async (outreachId) => (await base44.entities.OutreachRequest.filter({ id: outreachId }))?.[0] || null,
+      writeItems: (outreachId, items) => base44.entities.OutreachRequest.update(outreachId, { items }),
+      onSaved: (outreachId, itemIds) => clearDraft(token, outreachId, itemIds),
+    });
+  }
 
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
@@ -143,8 +152,17 @@ export default function ClientPortal() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
   useEffect(() => { setChatMessages([{ role: 'ai', text: T[lang].chat_intro }]); }, [lang]);
   useEffect(() => () => {
-    Object.values(autoSaveTimers.current).forEach(clearTimeout);
+    saveQueue.current?.flush();
     clearInterval(desktopCompletePollRef.current);
+  }, []);
+
+  // Leaving the page (redirect to the verification, closing the tab, switching app): write pending answers now.
+  useEffect(() => {
+    const flush = () => { saveQueue.current?.flush(); };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', flush);
+    return () => { document.removeEventListener('visibilitychange', onVisibility); window.removeEventListener('pagehide', flush); };
   }, []);
 
   // Didit step 1: capture URL params immediately on mount
@@ -227,6 +245,8 @@ export default function ClientPortal() {
   }, [tenant]);
 
   async function loadByToken() {
+    // Pending answers are written first, so the reload below reads them back.
+    await saveQueue.current?.flush().catch(() => {});
     const results = await base44.entities.OutreachRequest.filter({ access_token: token });
     const primary = results?.[0];
     if (!primary) { setExpired(true); setLoading(false); return; }
@@ -302,7 +322,7 @@ export default function ClientPortal() {
           fileUrl: item.file_url || '',
           uploading: false,
           done: item.status === 'Received' || item.status === 'Verified',
-          selected: [],
+          selected: ftInit === 'multi_select' ? selectedFromItem(item) : [],
           idvResult: (item.idv_status && item.idv_status !== 'Pending') ? {
             idv_status: item.idv_status,
             idv_similarity_score: item.idv_similarity_score,
@@ -314,7 +334,32 @@ export default function ClientPortal() {
         };
       });
     });
-    setItemStateMap(map);
+    // Keep what the client changed in this session (and unsaved answers from before a redirect); the server supplies
+    // status, verification results and files.
+    const draft = readDraft(token);
+    const restored = [];
+    setItemStateMap(prev => {
+      const merged = {};
+      for (const reqId of Object.keys(map)) {
+        merged[reqId] = {};
+        for (const itemId of Object.keys(map[reqId])) {
+          const d = draft?.[reqId]?.[itemId];
+          const local = prev?.[reqId]?.[itemId];
+          merged[reqId][itemId] = mergeItemState(local, map[reqId][itemId], d);
+          if (d && !local?.dirty && !map[reqId][itemId].done) restored.push([reqId, itemId, d]);
+        }
+      }
+      return merged;
+    });
+    // Answers that only existed in the local draft are saved now.
+    for (const [reqId, itemId, d] of restored) {
+      const it = (visibleReqs.find(r => r.id === reqId)?.items || []).find(i => i.item_id === itemId);
+      if (!it) continue;
+      const isMulti = it.field_type === 'multi_select';
+      saveQueue.current?.schedule(reqId, itemId, isMulti
+        ? { response_value: d.selected || [], response_text: (d.selected || []).join(', ') }
+        : { ...(d.value != null ? { response_value: d.value } : {}), response_text: d.text || '', confirmed_unchanged: !!d.confirmed });
+    }
 
     await Promise.all([
       base44.entities.AuditEvent.create({
@@ -333,22 +378,14 @@ export default function ClientPortal() {
     return visibleReqs;
   }
 
-  async function persistItem(outreachId, itemId, patch) {
-    try {
-      const fresh = await base44.entities.OutreachRequest.filter({ id: outreachId });
-      const req = fresh?.[0];
-      if (!req) return;
-      const item = (req.items || []).find(i => i.item_id === itemId);
-      if (!item || item.field_type === 'id_verification' || item.field_type === 'section_header') return;
-      const updatedItems = req.items.map(i => i.item_id === itemId ? { ...i, ...patch } : i);
-      await base44.entities.OutreachRequest.update(outreachId, { items: updatedItems });
-    } catch { /* non-fatal — next change will retry the save */ }
+  // Saves go through the queue: one read-merge-write per request at a time, so two fields never overwrite each other.
+  function persistItem(outreachId, itemId, patch) {
+    return saveQueue.current.now(outreachId, itemId, patch);
   }
 
-  function scheduleAutoSave(outreachId, itemId, patch) {
-    const key = `${outreachId}:${itemId}`;
-    clearTimeout(autoSaveTimers.current[key]);
-    autoSaveTimers.current[key] = setTimeout(() => persistItem(outreachId, itemId, patch), 1500);
+  function scheduleAutoSave(outreachId, itemId, patch, state) {
+    if (state) writeDraftItem(token, outreachId, itemId, state);
+    saveQueue.current.schedule(outreachId, itemId, patch);
   }
 
   async function uploadFile(outreachId, itemId, file) {
@@ -365,28 +402,28 @@ export default function ClientPortal() {
   }
 
   function setItemText(outreachId, itemId, text) {
-    setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], text, value: null, prefilled: false, confirmed: false } } }));
-    scheduleAutoSave(outreachId, itemId, { response_text: text, confirmed_unchanged: false });
+    setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], text, value: null, prefilled: false, confirmed: false, dirty: true } } }));
+    scheduleAutoSave(outreachId, itemId, { response_text: text, confirmed_unchanged: false }, { text, value: null, confirmed: false });
   }
 
   // Structured answers (phone, address, country): value + readable text
   function setItemValue(outreachId, itemId, ft, value) {
     const text = responseText(ft, value);
-    setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], value, text, prefilled: false, confirmed: false } } }));
-    scheduleAutoSave(outreachId, itemId, { response_value: value, response_text: text, confirmed_unchanged: false });
+    setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], value, text, prefilled: false, confirmed: false, dirty: true } } }));
+    scheduleAutoSave(outreachId, itemId, { response_value: value, response_text: text, confirmed_unchanged: false }, { text, value, confirmed: false });
   }
 
   // "This is correct": the client confirms the data we hold without changing it
   function confirmPrefill(outreachId, item) {
     const ft = item.field_type || '';
     const text = responseText(ft, item.prefill_value);
-    setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [item.item_id]: { ...s[outreachId]?.[item.item_id], value: item.prefill_value, text, confirmed: true } } }));
-    scheduleAutoSave(outreachId, item.item_id, { response_value: item.prefill_value, response_text: text, confirmed_unchanged: true });
+    setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [item.item_id]: { ...s[outreachId]?.[item.item_id], value: item.prefill_value, text, confirmed: true, dirty: true } } }));
+    scheduleAutoSave(outreachId, item.item_id, { response_value: item.prefill_value, response_text: text, confirmed_unchanged: true }, { text, value: item.prefill_value, confirmed: true });
   }
 
   function setItemSelected(outreachId, itemId, selected) {
-    setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], selected } } }));
-    scheduleAutoSave(outreachId, itemId, { response_text: (selected || []).join(', ') });
+    setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], selected, dirty: true } } }));
+    scheduleAutoSave(outreachId, itemId, { response_value: selected || [], response_text: (selected || []).join(', ') }, { selected: selected || [] });
   }
 
   function getItemStates(outreachId) { return itemStateMap[outreachId] || {}; }

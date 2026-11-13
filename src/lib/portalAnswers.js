@@ -76,7 +76,8 @@ export function createSaveQueue({ fetchRequest, writeItems, delay = 600, onSaved
         });
         if (!saved.length) return;
         await writeItems(outreachId, items);
-        onSaved?.(outreachId, saved);
+        // Items changed again while this write ran are not reported as saved yet.
+        onSaved?.(outreachId, saved.filter((id) => !pending[outreachId]?.[id]));
       } catch {
         // Keep the answers for the next attempt (newer patches win).
         pending[outreachId] = { ...batch, ...(pending[outreachId] || {}) };
