@@ -357,7 +357,7 @@ export default function ClientPortal() {
       if (!it) continue;
       const isMulti = it.field_type === 'multi_select';
       saveQueue.current?.schedule(reqId, itemId, isMulti
-        ? { response_value: d.selected || [], response_text: (d.selected || []).join(', ') }
+        ? { response_text: (d.selected || []).join(', ') }
         : { ...(d.value != null ? { response_value: d.value } : {}), response_text: d.text || '', confirmed_unchanged: !!d.confirmed });
     }
 
@@ -423,7 +423,7 @@ export default function ClientPortal() {
 
   function setItemSelected(outreachId, itemId, selected) {
     setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], selected, dirty: true } } }));
-    scheduleAutoSave(outreachId, itemId, { response_value: selected || [], response_text: (selected || []).join(', ') }, { selected: selected || [] });
+    scheduleAutoSave(outreachId, itemId, { response_text: (selected || []).join(', ') }, { selected: selected || [] });
   }
 
   function getItemStates(outreachId) { return itemStateMap[outreachId] || {}; }

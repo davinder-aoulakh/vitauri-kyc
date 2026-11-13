@@ -5,12 +5,11 @@
 //                      with flush() for the moment the page is left;
 //  - draft helpers:    a tab-scoped copy (sessionStorage) of answers that are not yet saved on the server.
 
-/** Ticked options of a multi-select item: the saved array, or (older saves) the options found in the saved text. */
+/** Ticked options of a multi-select item, read back from the saved text ("Crypto, Gambling"); an array value is the fallback. */
 export function selectedFromItem(item) {
   const options = item?.field_options || [];
-  if (Array.isArray(item?.response_value)) return item.response_value.filter((v) => !options.length || options.includes(v));
   const text = String(item?.response_text || '');
-  if (!text) return [];
+  if (!text) return Array.isArray(item?.response_value) ? item.response_value.filter((v) => options.includes(v)) : [];
   // Per option, longest first: options may contain commas ("Frequent transactions > € 15.000,-") or contain each other.
   let rest = `, ${text}, `;
   const found = [];
