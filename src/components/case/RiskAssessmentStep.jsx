@@ -100,7 +100,9 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
 
     // Update RiskAssessment records for each changed indicator
     Object.entries(indicatorScores).forEach(([indicatorId, data]) => {
-      updateAllScores(entityKey, indicatorId, data?.score ? data : null);
+      // Notes typed before a score is chosen are kept on screen; the record itself is written once there is a score.
+      const hasContent = data?.score || data?.notes || data?.ai_narrative;
+      updateAllScores(entityKey, indicatorId, hasContent ? data : null);
     });
 
     // Persist override to meta
