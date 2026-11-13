@@ -43,11 +43,11 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
     saveState, lastSavedAt,
     selections, selectionConfirmed,
     allScores,
-    narrativeAccepted, overallNarratives, entityOverrides, consolidatedOverride,
+    narrativeAccepted, overallNarratives, entityOverrides, consolidatedOverride, scoreProposals,
     updateSelections, updateSelectionConfirmed,
     updateAllScores, setAllScoresFull,
     updateNarrativeAccepted, updateOverallNarratives,
-    updateEntityOverrides, updateConsolidatedOverride,
+    updateEntityOverrides, updateConsolidatedOverride, updateScoreProposals,
     removeIndicatorRecords,
   } = useRiskAssessmentPersistence({ kycCase, client, tmSignalRefs: tmSignals?.refs ?? null, onCaseUpdate });
 
@@ -246,6 +246,8 @@ export default function RiskAssessmentStep({ kycCase, client, currentUser, onCas
                     kycCase={kycCase}
                     currentUser={currentUser}
                     tmSignalLines={tmSignals?.lines}
+                    proposals={scoreProposals[e.key] || {}}
+                    onProposalsChange={(updater) => updateScoreProposals(prev => ({ ...prev, [e.key]: updater(prev?.[e.key] || {}) }))}
                     scores={getEntityScores(e.key)}
                     onScoresChange={scores => handleScoresChange(e.key, scores)}
                     persistedData={{

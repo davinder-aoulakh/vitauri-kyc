@@ -48,6 +48,8 @@ export function useRiskAssessmentPersistence({ kycCase, client, tmSignalRefs = n
   const [overallNarratives, setOverallNarratives] = useState({});
   const [entityOverrides, setEntityOverrides]     = useState({});
   const [consolidatedOverride, setConsolidatedOverride] = useState(null);
+  // AI score proposals and what the analyst did with them: { entityKey: { indicatorId: proposal } }
+  const [scoreProposals, setScoreProposals] = useState({});
 
   const [loading, setLoading] = useState(true);
   // Save status for the UI: 'saved' | 'saving' | 'error'
@@ -60,7 +62,7 @@ export function useRiskAssessmentPersistence({ kycCase, client, tmSignalRefs = n
 
   // Latest meta, updated synchronously by every setter (a render-time copy would lose two changes made in one tick).
   const latestRef = useRef({
-    selections: {}, selectionConfirmed: false, narrativeAccepted: {}, overallNarratives: {}, entityOverrides: {}, consolidatedOverride: null,
+    selections: {}, selectionConfirmed: false, narrativeAccepted: {}, overallNarratives: {}, entityOverrides: {}, consolidatedOverride: null, scoreProposals: {},
   });
   // Latest scores per entity/indicator, so a patch can be merged without waiting for a render.
   const scoresRef = useRef({});
@@ -161,6 +163,7 @@ export function useRiskAssessmentPersistence({ kycCase, client, tmSignalRefs = n
         overallNarratives: meta.overallNarratives || {},
         entityOverrides: meta.entityOverrides || {},
         consolidatedOverride: meta.consolidatedOverride || null,
+        scoreProposals: meta.scoreProposals || {},
       };
       latestRef.current = next;
       scoresRef.current = scores;
@@ -172,6 +175,7 @@ export function useRiskAssessmentPersistence({ kycCase, client, tmSignalRefs = n
       setOverallNarratives(next.overallNarratives);
       setEntityOverrides(next.entityOverrides);
       setConsolidatedOverride(next.consolidatedOverride);
+      setScoreProposals(next.scoreProposals);
       setAllScores(scores);
 
       if (repaired.changed || confirmed !== !!meta.selectionConfirmed) queueRef.current.schedule(META_KEY, { ...next });
@@ -193,6 +197,12 @@ export function useRiskAssessmentPersistence({ kycCase, client, tmSignalRefs = n
   function updateOverallNarratives(next) { setOverallNarratives(next); setMeta({ overallNarratives: next }); }
   function updateEntityOverrides(next) { setEntityOverrides(next); setMeta({ entityOverrides: next }); }
   function updateConsolidatedOverride(next) { setConsolidatedOverride(next); setMeta({ consolidatedOverride: next }); }
+  /** next: full map, or an updater (prev) => map. Uses the latest saved value, so quick successive decisions all count. */
+  function updateScoreProposals(next) {
+    const value = typeof next === 'function' ? next(latestRef.current.scoreProposals || {}) : next;
+    setScoreProposals(value);
+    setMeta({ scoreProposals: value });
+  }
 
   // ── Per-indicator score update + upsert ──────────────────────────────
   function updateAllScores(entityKey, indicatorId, patch) {
@@ -291,12 +301,12 @@ export function useRiskAssessmentPersistence({ kycCase, client, tmSignalRefs = n
     // State
     selections, selectionConfirmed,
     allScores,
-    narrativeAccepted, overallNarratives, entityOverrides, consolidatedOverride,
+    narrativeAccepted, overallNarratives, entityOverrides, consolidatedOverride, scoreProposals,
     // Setters
     updateSelections, updateSelectionConfirmed,
     updateAllScores, setAllScoresFull,
     updateNarrativeAccepted, updateOverallNarratives,
-    updateEntityOverrides, updateConsolidatedOverride,
+    updateEntityOverrides, updateConsolidatedOverride, updateScoreProposals,
     cleanupOrphanedRecords, removeIndicatorRecords,
   };
 }
