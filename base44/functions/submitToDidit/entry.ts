@@ -6,6 +6,8 @@ import { waitUntil } from 'base44:runtime';
 import { applyTxnDecision, TM_ALERT_STATUSES } from '../../shared/tmTxnDecision.js';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
 import { sha256Hex } from '../../shared/tmCanonical.js';
+import { submissionGroups } from '../../shared/tmSubmitOrder.js';
+import { isConfirmedPep } from '../../shared/tmProfileCheck.js';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import {
@@ -55,7 +57,12 @@ export default async function (req) {
       }
     }
 
-    const results = await mapLimit(todo, 6, async (t) => {
+    // PEP flag per client (confirmed PEP screening hit) for custom_properties
+    const pep = new Map();
+    for (const id of clientIds) pep.set(id, await isConfirmedPep(E, tenantId, id).catch(() => false));
+
+    // Velocity rules depend on order: one client's transactions go by execution date, one after another.
+    const submitOne = async (t) => {
       const client = clients.get(t.client_id);
       let ourId = t.our_transaction_id;
       if (!ourId) {
@@ -63,7 +70,7 @@ export default async function (req) {
         const short = (await sha256Hex(`${t.id}|${t.dedupe_key || ''}`)).slice(0, 10);
         ourId = `vt_${t.client_id}_${ymd}_${short}`.slice(0, 128);
       }
-      const diditBody = buildTransactionBody(t, client, ourId, tenantId, profiles.get(t.client_id));
+      const diditBody = buildTransactionBody(t, client, ourId, tenantId, profiles.get(t.client_id), { pep: pep.get(t.client_id) === true });
       try {
         const res = await postTransaction(tenant, diditBody);
         const status = normaliseTxnStatus(res?.status);
@@ -84,7 +91,15 @@ export default async function (req) {
           didit_submission_error: `${e?.status ? `HTTP ${e.status}: ` : ''}${detail}`.slice(0, 500),
         };
       }
+    };
+    const perClient = await mapLimit(submissionGroups(todo), 6, async (list) => {
+      const done = [];
+      for (const t of list) {
+        try { done.push({ ok: true, value: await submitOne(t) }); } catch (e) { done.push({ ok: false, error: e }); }
+      }
+      return done;
     });
+    const results = perClient.flatMap((g) => (g.ok ? g.value : []));
 
     const rows = results.map((r) => r.value).filter(Boolean).map((r) => {
       for (const k of Object.keys(r)) if (r[k] === undefined) delete r[k];

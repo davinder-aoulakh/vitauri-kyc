@@ -97,6 +97,19 @@ export default async function (req) {
       throw httpError(422, `No rows could be committed: ${totals.rejected.slice(0, 3).map((r) => r.reason).join('; ')}`);
     }
 
+    // ── Monitoring check for this client right away (profile, change of circumstances, detection in Vitauri) ──
+    // Never fails the commit: the nightly job runs the same check.
+    let monitoring = { alerts: [], change_of_circumstances: [] };
+    if (totals.accepted > 0) {
+      try {
+        const out = await invokeNext(base44, auth, 'runProfileCheck', { client_id: client.id, ...(body.as_of ? { as_of: body.as_of } : {}) });
+        if (out?.error) throw new Error(out.error);
+        monitoring = { alerts: out?.alerts || [], change_of_circumstances: out?.change_of_circumstances || [], detection_in_vitauri: out?.detection_in_vitauri === true };
+      } catch (e) {
+        monitoring = { alerts: [], change_of_circumstances: [], error: String(e?.message || e).slice(0, 200) };
+      }
+    }
+
     // ── Statement gaps -> CoverageDay 'missing' ──
     let bankAccountId = upload.bank_account_id;
     if (!bankAccountId && upload.account_ref) {
@@ -157,6 +170,8 @@ export default async function (req) {
       accepted: totals.accepted, duplicates: totals.duplicates, rejected: totals.rejected, gap_days: gapDays,
       covered_days: coveredDays, historical: totals.historical, recent: Math.max(0, totals.accepted - totals.historical),
       expected_historical: expectHistorical, historical_window_days: windowDays, counterparties,
+      alerts: monitoring.alerts, change_of_circumstances: monitoring.change_of_circumstances,
+      detection_in_vitauri: monitoring.detection_in_vitauri === true, ...(monitoring.error ? { monitoring_error: monitoring.error } : {}),
     });
   } catch (error) {
     if (upload && E && upload.status === 'review') {

@@ -5,8 +5,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { asList, mapLimit, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { fetchAll } from '../../shared/tmCoverage.js';
-import { summariseTxns, profileLimits, compareToProfile } from '../../shared/tmActuals.js';
-import { upsertDeviationAlert } from '../../shared/tmDeviationAlert.js';
+import { checkClient } from '../../shared/tmProfileCheck.js';
 import { recomputeCustomerRisk } from '../../shared/tmRisk.js';
 
 const CALLER_ROLES = ['Vitauri Ops', 'Tenant Admin', 'Compliance Admin', 'Compliance Officer'];
@@ -16,9 +15,7 @@ const DAY_MS = 86400000;
 async function processTenant(base44, tenant, onlyClients) {
   const E = base44.asServiceRole.entities;
   const tid = tenant.id;
-  const cur = tenant.tm_reporting_currency || 'USD';
   const since = new Date(Date.now() - 30 * DAY_MS).toISOString();
-  const windowFrom = since.slice(0, 10);
 
   const txns = await fetchAll((cursor) => E.Transaction.filter({ tenant_id: tid, executed_at: { $gte: since } }, { limit: 1000, cursor }), 30);
   const byClient = new Map();
@@ -42,16 +39,9 @@ async function processTenant(base44, tenant, onlyClients) {
   const errors = [];
   const list = [...clients.values()].filter((c) => !c.is_deleted && (!onlyClients || onlyClients.has(c.id)));
   const results = await mapLimit(list, 3, async (client) => {
-    const profile = asList(await E.ExpectedProfile.filter({ tenant_id: tid, client_id: client.id, status: 'approved' }, '-version', 1))[0];
-    if (profile) {
-      const actuals = summariseTxns(byClient.get(client.id) || [], { client, reportingCurrency: cur });
-      const limits = await profileLimits(base44, tid, profile, cur);
-      const cmp = compareToProfile(actuals, limits, profile.allowed_countries, cur);
-      if (cmp.breaches.length || cmp.newCountries.length) {
-        await upsertDeviationAlert(base44, { tenantId: tid, client, breaches: cmp.breaches, newCountries: cmp.newCountries, windowFrom });
-        alerts++;
-      }
-    }
+    // Same check as right after an upload (base44/shared/tmProfileCheck.js)
+    const res = await checkClient(base44, { tenant, client, now: new Date(), txns: byClient.get(client.id) || [], actor: SYSTEM_ACTOR });
+    if (res.profile_alert) alerts++;
     await recomputeCustomerRisk(base44, { tenantId: tid, tenant, clientId: client.id, trigger: 'nightly_deviation', actor: SYSTEM_ACTOR });
     recomputed++;
   });

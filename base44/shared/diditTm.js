@@ -1,3 +1,4 @@
+import { riskClassOf } from './tmDetection.js';
 // Thin Didit Transaction Monitoring wrappers. Backend only: uses tenant.didit_api_key.
 
 const BASE_URL = 'https://verification.didit.me';
@@ -103,7 +104,7 @@ export function subjectEntityType(t, client) {
 export const diditTxnUuid = (res) => res?.uuid || res?.transaction?.uuid || res?.id || null;
 
 /** Request body for one Vitauri Transaction. Our transaction_id is the idempotency key and must be stable across retries. */
-export function buildTransactionBody(t, client, ourId, tenantId, profile) {
+export function buildTransactionBody(t, client, ourId, tenantId, profile, { pep = false } = {}) {
   const subjectCountry = client?.client_type === 'ORG' ? client?.registered_country : client?.country_of_residence;
   const body = {
     transaction_id: ourId,
@@ -126,8 +127,11 @@ export function buildTransactionBody(t, client, ourId, tenantId, profile) {
     },
     metadata: { tenant_id: tenantId, client_id: t.client_id, our_transaction_id: ourId },
   };
+  // Risk class and PEP always travel with the transaction, so Didit rules can use class-specific thresholds (G11, G12).
+  body.custom_properties = { risk_class: riskClassOf(client, { pep }), pep: pep === true };
   if (profile) {
     body.custom_properties = {
+      ...body.custom_properties,
       profile_version: profile.version, inbound_max_month: profile.inbound_max_month,
       outbound_foreign_max_month: profile.outbound_foreign_max_month, allowed_countries: profile.allowed_countries,
       cash_max_month: profile.cash_max_month,
