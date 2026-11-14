@@ -137,3 +137,61 @@ test('submission order: per customer by execution date, customers apart', () => 
   assert.deepEqual(order, [...order].sort());
   assert.equal(order.length, 10);
 });
+
+// ── G11 / G12: risk class to Didit, thresholds per risk class ──
+import { buildTransactionBody } from '../base44/shared/diditTm.js';
+import { expandByClass, definitionForClass, cleanThresholdsByClass, toDiditPayload, validateDefinition } from '../base44/shared/tmRuleSchema.js';
+
+const RULE_DEF = validateDefinition({
+  title: 'Smurfing via private senders', category: 'aml_ctf', evaluation_mode: 'ALL',
+  scope: { transaction_types: ['finance'], directions: ['INBOUND'] },
+  conditions: [{ field: 'amount', operator: 'gte', value: 1750 }, { field: 'amount', operator: 'lt', value: 2000 }],
+  aggregation: [{ metric: 'distinct_count', field: 'counterparty_vendor_data', operator: 'gte', value: 5, window: '7d', filters: { subject_vendor_data: '__current__', direction: 'INBOUND' } }],
+  actions: [{ type: 'add_score', value: 30 }],
+});
+
+test('every transaction sent to Didit carries risk_class and pep (gap G11)', () => {
+  const t = { client_id: 'c1', direction: 'inbound', amount: 1850, currency: 'EUR', executed_at: '2026-10-14T12:00:00.000Z' };
+  const plain = buildTransactionBody(t, CLIENT, 'vt_1', 't1', null);
+  assert.deepEqual(plain.custom_properties, { risk_class: 'Medium', pep: false });
+  const withProfile = buildTransactionBody(t, CLIENT, 'vt_1', 't1', { version: 2, inbound_max_month: 3800 }, { pep: true });
+  assert.equal(withProfile.custom_properties.risk_class, 'PEP');
+  assert.equal(withProfile.custom_properties.pep, true);
+  assert.equal(withProfile.custom_properties.inbound_max_month, 3800);
+  assert.equal(withProfile.custom_properties.profile_version, 2);
+  // The idempotency key and the rest of the body are untouched
+  assert.equal(plain.transaction_id, 'vt_1');
+  assert.equal(plain.transaction_at, t.executed_at);
+  assert.deepEqual(plain.metadata, { tenant_id: 't1', client_id: 'c1', our_transaction_id: 'vt_1' });
+});
+
+test('a rule without per-class thresholds is pushed as one rule, exactly as before (gap G12)', () => {
+  assert.deepEqual(expandByClass({ definition: RULE_DEF, version: 1 }, 'ACTIVE'), []);
+  assert.deepEqual(expandByClass({ definition: RULE_DEF, version: 1, thresholds_by_class: {} }, 'ACTIVE'), []);
+  assert.equal(definitionForClass(RULE_DEF, {}, 'Medium'), RULE_DEF);
+});
+
+test('per-class thresholds give one Didit rule per class with a risk_class condition', () => {
+  const by = cleanThresholdsByClass({ Low: { aggregation_values: [5] }, Medium: { aggregation_values: [4] }, High: { aggregation_values: ['3'] }, PEP: { aggregation_values: [null] } }, RULE_DEF);
+  assert.deepEqual(Object.keys(by), ['Low', 'Medium', 'High'], 'a class without any value is left out');
+  const out = expandByClass({ definition: RULE_DEF, version: 3, thresholds_by_class: by }, 'TEST');
+  assert.deepEqual(out.map((v) => v.riskClass), ['Low', 'Medium', 'High']);
+  const medium = out[1].payload;
+  assert.equal(medium.title, 'Smurfing via private senders [Medium] (v3)');
+  assert.equal(medium.mode, 'TEST');
+  assert.equal(medium.aggregation[0].value, 4);
+  assert.deepEqual(medium.conditions[medium.conditions.length - 1], { field: 'custom_values.risk_class', operator: 'eq', value: 'Medium' });
+  assert.equal(medium.conditions.length, RULE_DEF.conditions.length + 1);
+  assert.equal(out[2].payload.aggregation[0].value, 3);
+  // The rule's own definition is not changed
+  assert.equal(RULE_DEF.aggregation[0].value, 5);
+  assert.equal(toDiditPayload({ definition: RULE_DEF, version: 3 }, 'TEST').conditions.length, RULE_DEF.conditions.length);
+});
+
+test('per-class thresholds are validated', () => {
+  assert.deepEqual(cleanThresholdsByClass(null, RULE_DEF), {});
+  assert.throws(() => cleanThresholdsByClass({ Platinum: { aggregation_values: [1] } }, RULE_DEF), /Unknown risk class/);
+  assert.throws(() => cleanThresholdsByClass({ Low: { aggregation_values: [1, 2] } }, RULE_DEF), /has 2 values but the rule has 1/);
+  assert.throws(() => cleanThresholdsByClass({ Low: { aggregation_values: ['many'] } }, RULE_DEF), /must be numbers/);
+  assert.throws(() => cleanThresholdsByClass({ Low: 4 }, RULE_DEF), /must be a list/);
+});

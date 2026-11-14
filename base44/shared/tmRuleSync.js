@@ -3,7 +3,7 @@ import { asList, httpError, mapLimit } from './tmAuth.js';
 import { writeAudit } from './tmAudit.js';
 import { upsertRule, createRule, getRule } from './diditTm.js';
 import { latestEndpointCheck, isMissingInCheck } from './diditEndpointStatus.js';
-import { MODE_MAP, toDiditPayload, normalizeForCompare, diffParts, validateDefinition } from './tmRuleSchema.js';
+import { MODE_MAP, toDiditPayload, normalizeForCompare, diffParts, validateDefinition, expandByClass } from './tmRuleSchema.js';
 
 export const errText = (e) => {
   const d = e?.detail;
@@ -39,8 +39,42 @@ async function replaceRule(ctx, rule, payload) {
  * Never silently overwrites a console change: a drifted rule needs { force: true } (an explicit user choice).
  * Persists sync metadata. Returns { rule (merged), ok, error }.
  */
+/**
+ * A rule with thresholds per risk class is pushed as one Didit rule per class (condition on custom_values.risk_class).
+ * The generic rule is not pushed next to them, or it would fire twice. Ids are kept in didit_rule_ids_by_class;
+ * didit_rule_id holds the first one so alerts still map back to this rule.
+ * Limits: the nightly drift check and the "no PATCH on this plan" replacement cover only didit_rule_id.
+ */
+async function syncRuleByClass(ctx, rule, diditMode) {
+  const def = validateDefinition(rule.definition);
+  const variants = expandByClass({ ...rule, definition: def }, diditMode);
+  const ids = { ...(rule.didit_rule_ids_by_class || {}) };
+  let patch; let ok = true;
+  try {
+    for (const v of variants) {
+      const res = await upsertRule(ctx.tenant, v.payload, ids[v.riskClass]);
+      const id = res?.uuid || res?.id || ids[v.riskClass];
+      if (!id) throw { detail: `Didit did not return a rule id for class ${v.riskClass}` };
+      ids[v.riskClass] = id;
+    }
+    patch = { didit_rule_ids_by_class: ids, didit_rule_id: ids[variants[0].riskClass], sync_status: 'synced', last_synced_at: new Date().toISOString(), sync_error: '', drift_detected_at: '' };
+  } catch (e) {
+    ok = false;
+    patch = { didit_rule_ids_by_class: ids, sync_status: 'failed', sync_error: errText(e) };
+  }
+  await ctx.E.TmRule.update(rule.id, patch);
+  await writeAudit(ctx.base44, ctx.auth, {
+    tenantId: ctx.tenantId, eventType: ok ? 'tm_rule_synced' : 'tm_rule_sync_failed',
+    before: { sync_status: rule.sync_status, didit_rule_ids_by_class: rule.didit_rule_ids_by_class || null },
+    after: { sync_status: patch.sync_status, didit_mode: diditMode, didit_rule_ids_by_class: ids, classes: variants.map((v) => v.riskClass), error: patch.sync_error || undefined },
+    notes: ok ? `Rule "${rule.name}" v${rule.version} pushed to Didit as ${diditMode}, one rule per risk class (${variants.map((v) => v.riskClass).join(', ')}).` : `Pushing rule "${rule.name}" v${rule.version} per risk class failed: ${patch.sync_error}`,
+  });
+  return { rule: { ...rule, ...patch }, ok, error: ok ? '' : patch.sync_error };
+}
+
 export async function syncRule(ctx, rule, { mode, force = false } = {}) {
   if (rule.sync_status === 'drift' && !force) throw httpError(409, 'This rule changed in Didit. Review it there, or push the Vitauri version deliberately.');
+  if (expandByClass(rule, 'DISABLED').length) return syncRuleByClass(ctx, rule, MODE_MAP[mode || rule.mode] || 'DISABLED');
   const target = mode || rule.mode;
   const diditMode = MODE_MAP[target] || 'DISABLED';
   let patch;

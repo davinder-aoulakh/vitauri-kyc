@@ -153,6 +153,14 @@
     "version": {
       "default": 1,
       "type": "number"
+    },
+    "thresholds_by_class": {
+      "type": "object",
+      "description": "Thresholds per risk class: { Medium: { aggregation_values: [4, null] } }, one value per aggregation of the rule; null keeps the rule value"
+    },
+    "didit_rule_ids_by_class": {
+      "type": "object",
+      "description": "Didit rule id per risk class when the rule is pushed as one Didit rule per class"
     }
   },
   "required": [

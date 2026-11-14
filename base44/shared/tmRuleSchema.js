@@ -191,6 +191,61 @@ export function toDiditPayload(rule, diditMode) {
   };
 }
 
+export const RULE_RISK_CLASSES = ['Low', 'Medium', 'High', 'PEP'];
+
+/**
+ * Thresholds per risk class (gap G12). Shape: { Medium: { aggregation_values: [4, null] }, High: { aggregation_values: [3] } }
+ * — one value per aggregation of the rule, in order; null / missing keeps the rule's own value.
+ * Returns a cleaned object ({} when nothing usable), or throws 422 on a wrong shape.
+ */
+export function cleanThresholdsByClass(input, definition) {
+  if (input == null || input === '') return {};
+  if (!isObj(input)) throw httpError(422, 'thresholds_by_class must be an object keyed by risk class');
+  const n = (definition?.aggregation || []).length;
+  const out = {};
+  for (const [cls, v] of Object.entries(input)) {
+    if (!RULE_RISK_CLASSES.includes(cls)) throw httpError(422, `Unknown risk class "${cls}" (allowed: ${RULE_RISK_CLASSES.join(', ')})`);
+    const vals = Array.isArray(v?.aggregation_values) ? v.aggregation_values : null;
+    if (!vals) throw httpError(422, `thresholds_by_class.${cls}.aggregation_values must be a list`);
+    if (vals.length > n) throw httpError(422, `thresholds_by_class.${cls} has ${vals.length} values but the rule has ${n} aggregation(s)`);
+    const clean = vals.map((x) => (x === null || x === '' || x === undefined ? null : Number(x)));
+    if (clean.some((x) => x !== null && !Number.isFinite(x))) throw httpError(422, `thresholds_by_class.${cls} values must be numbers`);
+    if (clean.some((x) => x !== null)) out[cls] = { aggregation_values: clean };
+  }
+  return out;
+}
+
+/** The rule's definition for one risk class: its aggregation values replaced where the class sets one. */
+export function definitionForClass(definition, thresholdsByClass, riskClass) {
+  const vals = thresholdsByClass?.[riskClass]?.aggregation_values;
+  if (!vals) return definition;
+  return { ...definition, aggregation: (definition.aggregation || []).map((a, i) => (vals[i] == null ? a : { ...a, value: vals[i] })) };
+}
+
+/**
+ * One Didit payload per risk class that has its own thresholds: the class definition plus a condition on
+ * custom_values.risk_class (sent with every transaction), title suffixed with the class.
+ * [] when the rule has no per-class thresholds (the rule then syncs as one Didit rule, as before).
+ */
+export function expandByClass(rule, diditMode) {
+  const by = rule.thresholds_by_class;
+  if (!isObj(by)) return [];
+  return RULE_RISK_CLASSES.filter((c) => by[c]?.aggregation_values).map((riskClass) => {
+    const def = definitionForClass(rule.definition, by, riskClass);
+    const base = toDiditPayload({ ...rule, definition: def }, diditMode);
+    return {
+      riskClass,
+      payload: {
+        ...base,
+        title: `${def.title} [${riskClass}] (v${rule.version || 1})`,
+        // Per-class rules must all hold: the class condition is added to the rule's own conditions
+        evaluation_mode: 'ALL',
+        conditions: [...(def.conditions || []), { field: 'custom_values.risk_class', operator: 'eq', value: riskClass }],
+      },
+    };
+  });
+}
+
 const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : isObj(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])])) : v);
 const asNum = (v) => (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : v);
 const sortedList = (arr) => arr.map((x) => JSON.stringify(sortKeys(x))).sort();

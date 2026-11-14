@@ -3,6 +3,7 @@
 // IN_REVIEW / AWAITING_USER / DECLINED answer in the POST response raises the alert at once instead of waiting
 // for the webhook. Moved unchanged from diditWebhook, plus: DECLINED blocks the transaction in Vitauri.
 import { normaliseTxnStatus } from './diditTm.js';
+import { alertSourceFor } from './tmDetection.js';
 import { afterTransactionUpdate } from './diditTxnActions.js';
 import { safeAlertRef } from './tmRefs.js';
 import { computeDue } from './tmClock.js';
@@ -192,7 +193,7 @@ export async function upsertTmAlert(base44, { tenant_id, transaction, rule_runs,
     discovered_at: nowIso,
     due_at: due_at || undefined,
     dedupe_key: dedupeKey,
-    source: 'didit_rule',
+    source: alertSourceFor(rule_runs),
   });
 
   if (client?.assigned_analyst_id) {

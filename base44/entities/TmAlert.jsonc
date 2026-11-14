@@ -92,7 +92,7 @@
       "type": "string"
     },
     "intended_at": {
-      "description": "Intended (payment instruction) time, when known \u2014 first moment of the deadline clock",
+      "description": "Intended (payment instruction) time, when known — first moment of the deadline clock",
       "format": "date-time",
       "type": "string"
     },
@@ -129,7 +129,9 @@
         "didit_rule",
         "profile_deviation",
         "manual",
-        "quality_sample"
+        "quality_sample",
+        "didit_provider",
+        "vitauri_rule"
       ],
       "type": "string"
     },
