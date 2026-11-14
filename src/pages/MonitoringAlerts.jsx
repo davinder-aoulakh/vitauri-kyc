@@ -6,6 +6,7 @@ import { useTenant } from '@/lib/tenantContext';
 import AppShell from '@/components/layout/AppShell';
 import PageHeader from '@/components/shared/PageHeader';
 import { amlLayoutOn } from '@/lib/amlNav';
+import { hasPermission } from '@/lib/permissions';
 import KpiCard from '@/components/shared/KpiCard';
 import EmptyState from '@/components/shared/EmptyState';
 import AlertDetailPanel from '@/components/monitoring/AlertDetailPanel';
