@@ -9,7 +9,7 @@ import { Landmark } from 'lucide-react';
 
 export default function AccountsCoverageTable({ rows, start, end }) {
   const { currentUser, tenant } = useTenant();
-  const canManage = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmWorkCase') && hasPermission(currentUser?.app_role, 'createRunCase');
+  const canManage = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmManageAccounts') && hasPermission(currentUser?.app_role, 'createRunCase');
   return (
     <section className="bg-card border border-border rounded-lg">
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-border">

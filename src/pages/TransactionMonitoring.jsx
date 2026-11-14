@@ -18,7 +18,7 @@ import { hasPermission } from '@/lib/permissions';
 export default function TransactionMonitoring() {
   const { currentUser, tenant } = useTenant();
   const [showStatement, setShowStatement] = useState(false);
-  const canUploadStatement = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmWorkCase');
+  const canUploadStatement = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmManageAccounts');
   const tmCore = isFeatureEnabled(tenant, 'tm_core');
   const [version, setVersion] = useState(0);
   const [transactions, setTransactions] = useState([]);

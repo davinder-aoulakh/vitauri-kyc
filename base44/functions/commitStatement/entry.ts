@@ -1,10 +1,10 @@
 // commitStatement — commit a reviewed statement: batch -> normaliseTransactions -> statement gaps as CoverageDay.
-// Auth: user with tmWorkCase. Tenant scope comes from the authenticated user.
+// Auth: user with tmManageAccounts. Tenant scope comes from the authenticated user.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import {
-  authenticate, errorResponse, httpError, invokeNext, loadTenant, chunk, asList, WORK_ROLES,
+  authenticate, errorResponse, httpError, invokeNext, loadTenant, chunk, asList, ACCOUNT_ROLES,
 } from '../../shared/tmAuth.js';
 import { applyOverrides, buildItems, chunkBySig } from '../../shared/tmStatementRows.js';
 
@@ -28,7 +28,7 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
-    const auth = await authenticate(base44, req, body, { roles: WORK_ROLES, allowApiKey: false });
+    const auth = await authenticate(base44, req, body, { roles: ACCOUNT_ROLES, allowApiKey: false });
     const tenantId = auth.tenantId;
     E = base44.asServiceRole.entities;
 

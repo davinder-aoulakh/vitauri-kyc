@@ -1,11 +1,13 @@
 // Caller authentication + tenant scoping for the TM pipeline functions.
 // Tenant scope comes ONLY from a verified tenant API key or from the authenticated user's own tenant.
-// Keep role lists in sync with tmManageIngest / tmWorkCase in src/lib/permissions.js.
+// Keep role lists in sync with tmManageIngest / tmWorkCase / tmManageAccounts in src/lib/permissions.js.
 import { sha256Hex } from './tmCanonical.js';
 import { withDiditCredentials } from './diditCredentials.js';
 
 export const INGEST_ROLES = ['Tenant Admin', 'Compliance Admin']; // tmManageIngest
 export const WORK_ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager']; // tmWorkCase
+// Bank accounts and statement uploads: the work roles plus the two admin roles (tmManageAccounts, decision D3).
+export const ACCOUNT_ROLES = [...WORK_ROLES, 'Compliance Admin', 'Tenant Admin'];
 
 export function httpError(status, message) {
   const err = new Error(message);
@@ -20,7 +22,7 @@ export function errorResponse(error) {
 
 /**
  * options: { roles: string[] (user roles allowed), allowApiKey: boolean, scope: string }
- * Returns { mode: 'api_key'|'user', tenantId, actorName, actorType, actorUserId, apiKey, apiKeyId, apiKeyRaw }
+ * Returns { mode: 'api_key'|'user', tenantId, role (user mode), actorName, actorType, actorUserId, apiKey, apiKeyId, apiKeyRaw }
  * Throws httpError on any failure. A payload tenant_id that differs from the verified scope is rejected.
  */
 export async function authenticate(base44, req, body, options = {}) {
@@ -53,7 +55,7 @@ export async function authenticate(base44, req, body, options = {}) {
   if (!role || !roles.includes(role)) throw httpError(403, 'Forbidden');
   if (payloadTenant && payloadTenant !== tenantId) throw httpError(403, 'tenant_id does not match your tenant');
   return {
-    mode: 'user', tenantId, actorType: 'User', actorName: user.full_name || user.email,
+    mode: 'user', tenantId, role, actorType: 'User', actorName: user.full_name || user.email,
     actorUserId: user.id, apiKeyId: undefined, apiKeyRaw: undefined,
   };
 }

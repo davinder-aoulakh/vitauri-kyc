@@ -1,5 +1,5 @@
 // parseStatement — parse an uploaded bank statement into reviewable rows + integrity checks.
-// Auth: user with tmWorkCase. Tenant scope comes from the authenticated user, never from the payload.
+// Auth: user with tmManageAccounts. Tenant scope comes from the authenticated user, never from the payload.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import * as XLSX from 'npm:xlsx@0.18.5';
 import { isTmEnabled } from '../../shared/tmGuards.js';
@@ -7,7 +7,7 @@ import { writeAudit } from '../../shared/tmAudit.js';
 import { runTmAgent } from '../../shared/tmAi.js';
 import { normaliseDescription } from '../../shared/tmCanonical.js';
 import {
-  authenticate, errorResponse, httpError, loadTenant, chunk, asList, WORK_ROLES,
+  authenticate, errorResponse, httpError, loadTenant, chunk, asList, ACCOUNT_ROLES,
 } from '../../shared/tmAuth.js';
 import {
   MAX_ROWS, sha256Bytes, detectFormat, parseCsv, parseMatrix, matchesSavedMap, parseMt940, parseCamt053,
@@ -66,7 +66,7 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
-    auth = await authenticate(base44, req, body, { roles: WORK_ROLES, allowApiKey: false });
+    auth = await authenticate(base44, req, body, { roles: ACCOUNT_ROLES, allowApiKey: false });
     const tenantId = auth.tenantId;
     E = base44.asServiceRole.entities;
 

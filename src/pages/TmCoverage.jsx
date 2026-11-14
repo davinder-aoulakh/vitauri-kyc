@@ -25,7 +25,7 @@ export default function TmCoverage() {
   const [showUpload, setShowUpload] = useState(false);
 
   const allowed = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmViewAlerts');
-  const canUpload = hasPermission(currentUser?.app_role, 'tmWorkCase');
+  const canUpload = hasPermission(currentUser?.app_role, 'tmManageAccounts');
   const { data: clients } = useTenantClients(tenantId, { enabled: allowed });
   const { data, isLoading, error, refetch, isFetching } = useCoverageData(tenantId, month, clients, allowed);
   const monthLabel = months.find((m) => m.value === month)?.label;

@@ -2,7 +2,7 @@
 // No bank is contacted: the only registered adapter is 'manual'. Every state change writes an AuditEvent.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
-import { authenticate, errorResponse, httpError, loadTenant, asList, WORK_ROLES } from '../../shared/tmAuth.js';
+import { authenticate, errorResponse, httpError, loadTenant, asList, ACCOUNT_ROLES } from '../../shared/tmAuth.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import { getAdapter } from '../../shared/psd2Adapter.js';
 
@@ -14,7 +14,7 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json().catch(() => ({}));
-    const auth = await authenticate(base44, req, body, { roles: WORK_ROLES, allowApiKey: false });
+    const auth = await authenticate(base44, req, body, { roles: ACCOUNT_ROLES, allowApiKey: false });
     const tid = auth.tenantId;
     const E = base44.asServiceRole.entities;
     const tenant = await loadTenant(base44, tid);

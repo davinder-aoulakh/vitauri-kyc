@@ -15,12 +15,12 @@ import RecordConsentDialog from '@/components/client/bankaccounts/RecordConsentD
 import CloseAccountDialog from '@/components/client/bankaccounts/CloseAccountDialog';
 import { Loader2, Plus } from 'lucide-react';
 
-/** "Bank accounts" card on the client Monitoring tab. Needs tm_core + tmWorkCase. */
+/** "Bank accounts" card on the client Monitoring tab. Needs tm_core + tmManageAccounts. */
 export default function BankAccountsCard({ client }) {
   const { currentUser, tenant } = useTenant();
   const qc = useQueryClient();
   const tenantId = currentUser?.tenant_id;
-  const enabled = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmWorkCase');
+  const enabled = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmManageAccounts');
   const key = ['client-bank-accounts', tenantId, client.id];
   const [form, setForm] = useState(null); // { account | null }
   const [closing, setClosing] = useState(null);

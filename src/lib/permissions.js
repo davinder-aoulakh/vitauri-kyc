@@ -33,6 +33,8 @@ export const PERMISSIONS = {
   manageArchive:        ['Compliance Admin', 'Tenant Admin'],
   tmViewAlerts:         ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'],
   tmWorkCase:           ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager'],
+  // Add bank accounts and upload statements: the work roles plus the admin roles (ACCOUNT_ROLES in base44/shared/tmAuth.js)
+  tmManageAccounts:     ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Compliance Admin', 'Tenant Admin'],
   tmFourEyes:           ['QC Reviewer', 'Compliance Officer', 'Manager', 'Director'],
   tmApproveFiuReport:   ['Compliance Officer'],
   tmManageRules:        ['Compliance Admin', 'Compliance Officer', 'Tenant Admin'],
