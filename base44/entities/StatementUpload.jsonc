@@ -1,62 +1,87 @@
 {
   "name": "StatementUpload",
-  "type": "object",
   "properties": {
-    "tenant_id": {
+    "account_ref": {
+      "description": "Account number / IBAN read from the statement",
       "type": "string"
     },
-    "client_id": {
+    "ai_run_id": {
       "type": "string"
     },
     "bank_account_id": {
       "type": "string"
     },
-    "file_url": {
+    "batch_id": {
+      "description": "TransactionIngestBatch created on commit",
+      "type": "string"
+    },
+    "blocking": {
+      "description": "Checks that block processing, e.g. [{code: iban_mismatch, file_iban, account_iban}]",
+      "items": {
+        "properties": {
+          "account_iban": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "file_iban": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "closing_balance": {
+      "type": "number"
+    },
+    "column_map": {
+      "type": "object"
+    },
+    "committed_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "committed_by_user_id": {
+      "type": "string"
+    },
+    "currency": {
+      "type": "string"
+    },
+    "duplicates_removed": {
+      "type": "number"
+    },
+    "error": {
+      "type": "string"
+    },
+    "extracted_count": {
+      "type": "number"
+    },
+    "file_hash": {
       "type": "string"
     },
     "file_name": {
       "type": "string"
     },
-    "file_hash": {
+    "file_url": {
       "type": "string"
     },
     "format": {
-      "type": "string",
       "enum": [
         "csv",
         "xlsx",
         "mt940",
         "camt053",
         "pdf"
-      ]
-    },
-    "template": {
+      ],
       "type": "string"
-    },
-    "period_from": {
-      "type": "string",
-      "format": "date"
-    },
-    "period_to": {
-      "type": "string",
-      "format": "date"
-    },
-    "opening_balance": {
-      "type": "number"
-    },
-    "closing_balance": {
-      "type": "number"
-    },
-    "currency": {
-      "type": "string"
-    },
-    "reconciles": {
-      "type": "boolean"
     },
     "gaps": {
-      "type": "array",
       "items": {
-        "type": "object",
         "properties": {
           "from": {
             "type": "string"
@@ -64,38 +89,47 @@
           "to": {
             "type": "string"
           }
-        }
-      }
+        },
+        "type": "object"
+      },
+      "type": "array"
     },
-    "tamper_signals": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "extracted_count": {
+    "historical_count": {
+      "description": "Rows older than the tenant historical window (stored, not sent to Didit, no alerts)",
       "type": "number"
     },
-    "duplicates_removed": {
+    "opening_balance": {
       "type": "number"
     },
     "own_transfers": {
       "type": "number"
     },
+    "parsed_rows": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "period_from": {
+      "format": "date",
+      "type": "string"
+    },
+    "period_to": {
+      "format": "date",
+      "type": "string"
+    },
+    "reconcile_diff": {
+      "description": "Opening + movements - closing, set by parseStatement",
+      "type": "number"
+    },
+    "reconciles": {
+      "type": "boolean"
+    },
     "reversals_linked": {
       "type": "number"
     },
-    "parsed_rows": {
-      "type": "array",
-      "items": {
-        "type": "object"
-      }
-    },
-    "column_map": {
-      "type": "object"
-    },
     "status": {
-      "type": "string",
+      "default": "uploaded",
       "enum": [
         "uploaded",
         "parsing",
@@ -104,63 +138,28 @@
         "failed",
         "committing"
       ],
-      "default": "uploaded"
+      "type": "string"
     },
-    "error": {
+    "tamper_signals": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "template": {
+      "type": "string"
+    },
+    "tenant_id": {
       "type": "string"
     },
     "uploaded_by_user_id": {
       "type": "string"
     },
-    "committed_by_user_id": {
-      "type": "string"
-    },
-    "committed_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "reconcile_diff": {
-      "type": "number",
-      "description": "Opening + movements - closing, set by parseStatement"
-    },
     "warnings": {
-      "type": "array",
       "items": {
         "type": "string"
-      }
-    },
-    "account_ref": {
-      "type": "string",
-      "description": "Account number / IBAN read from the statement"
-    },
-    "ai_run_id": {
-      "type": "string"
-    },
-    "batch_id": {
-      "type": "string",
-      "description": "TransactionIngestBatch created on commit"
-    },
-    "historical_count": {
-      "type": "number",
-      "description": "Rows older than the tenant historical window (stored, not sent to Didit, no alerts)"
-    },
-    "blocking": {
-      "type": "array",
-      "description": "Checks that block processing, e.g. [{code: iban_mismatch, file_iban, account_iban}]",
-      "items": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "file_iban": {
-            "type": "string"
-          },
-          "account_iban": {
-            "type": "string"
-          }
-        }
-      }
+      },
+      "type": "array"
     }
   },
   "required": [
@@ -168,6 +167,7 @@
     "client_id",
     "file_url"
   ],
+  "type": "object",
   "rls": {
     "create": {
       "data.tenant_id": "{{user.data.tenant_id}}"
