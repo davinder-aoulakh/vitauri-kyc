@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import AutoSaveIndicator from '@/components/shared/AutoSaveIndicator';
 import { base44 } from '@/api/base44Client';
@@ -65,7 +65,7 @@ function SourceMultiSelect({ sources, selected, onChange }) {
         </div>
       )}
       {/* Checkbox list */}
-      <div className="grid grid-cols-1 gap-1 border border-border rounded-lg p-2 bg-muted/20 max-h-48 overflow-y-auto">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 border border-border rounded-lg p-2 bg-muted/20 max-h-[32rem] overflow-y-auto">
         {sources.map(src => {
           const isOtherOption = src === 'Other';
           const isChecked = isOtherOption ? selected.some(s => s === 'Other' || s.startsWith('Other:')) : selected.includes(src);
@@ -97,6 +97,14 @@ function SourceMultiSelect({ sources, selected, onChange }) {
 }
 
 function SectionCard({ title, state, setState, sources }) {
+  // The explanation box grows with its text (typing, outreach prefill, load); CSS caps it at 60vh, then it scrolls.
+  const explRef = useRef(null);
+  useLayoutEffect(() => {
+    const el = explRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [state.explanation]);
   return (
     <div className="bg-card border border-border rounded-xl p-4 space-y-3">
       <h4 className="font-medium text-sm">{title}</h4>
@@ -112,9 +120,10 @@ function SectionCard({ title, state, setState, sources }) {
         <div>
           <Label className="text-xs mb-1.5 block">Explanation / Details</Label>
           <Textarea
+            ref={explRef}
             value={state.explanation}
             onChange={e => setState(s => ({ ...s, explanation: e.target.value }))}
-            className="text-sm min-h-16 resize-none"
+            className="text-sm leading-relaxed min-h-40 max-h-[60vh] overflow-y-auto resize-y"
             placeholder="Describe the source in detail, including amounts where known…"
           />
         </div>
@@ -711,7 +720,7 @@ Write in factual, neutral, third-person tone. 3–6 paragraphs.`;
           <div className="bg-card border border-border rounded-xl p-5 w-96 shadow-xl space-y-4">
             <h3 className="font-semibold text-sm">Override AI Assessment</h3>
             <p className="text-xs text-muted-foreground">Justification required (min 20 characters). Will be logged as an audit event.</p>
-            <Textarea value={overrideJustification} onChange={e => setOverrideJustification(e.target.value)} className="text-sm min-h-16" placeholder="Reason for override…" />
+            <Textarea value={overrideJustification} onChange={e => setOverrideJustification(e.target.value)} className="text-sm leading-relaxed min-h-24 resize-y" placeholder="Reason for override…" />
             <div className="text-xs text-muted-foreground">{overrideJustification.length}/20</div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" size="sm" onClick={() => setOverrideMode(false)}>Cancel</Button>
