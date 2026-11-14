@@ -36,9 +36,9 @@ function toNormaliseItem(t) {
   const lifecycle = t.lifecycle || 'booked';
   const intendedAt = validDate(t.intended_at) ? new Date(t.intended_at).toISOString() : undefined;
   const executedAt = t.executed_at || (lifecycle === 'intended' ? t.intended_at : undefined);
-  const historical = lifecycle === 'intended'
-    ? false
-    : (validDate(executedAt) && Date.now() - new Date(executedAt).getTime() > 7 * DAY_MS);
+  // Intended items are never historical. For the rest normaliseTransactions applies the tenant's
+  // historical_window_days (default 30), the same rule as for uploads.
+  const historical = lifecycle === 'intended' ? false : undefined;
   return {
     external_id: t.external_id, client_id: t.client_id, iban_or_number: t.account, lifecycle,
     intended_at: intendedAt, executed_at: executedAt, direction: t.direction, amount: t.amount, currency: t.currency,

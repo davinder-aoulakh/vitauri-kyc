@@ -3,6 +3,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { toCanonical, normaliseDescription } from '../../shared/tmCanonical.js';
 import { getRate } from '../../shared/tmFx.js';
+import { nowFor } from '../../shared/tmNow.js';
+import { historicalWindowDays, resolveHistorical } from '../../shared/tmHistorical.js';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import {
@@ -30,6 +32,10 @@ export default async function (req) {
     const tenant = await loadTenant(base44, tenantId);
     if (!isTmEnabled(tenant, 'tm_core')) throw httpError(403, 'Feature tm_core is not enabled');
     if (auth.mode === 'api_key' && !isTmEnabled(tenant, 'tm_ingest_api')) throw httpError(403, 'Feature tm_ingest_api is not enabled');
+
+    // Historical window (one tenant setting for every channel). as_of is honoured for Demo tenants / Vitauri Ops only.
+    const now = nowFor(tenant, body, auth);
+    const windowDays = historicalWindowDays(tenant);
 
     // ── Batch record (tenant-scoped) ──
     const batchChannel = ['api', 'upload', 'psd2', 'manual'].includes(channel) ? channel : (String(channel).startsWith('upload') || ['csv', 'xlsx', 'mt940', 'camt', 'camt053', 'pdf'].includes(channel) ? 'upload' : 'api');
@@ -106,6 +112,8 @@ export default async function (req) {
         });
       } catch (e) { r = { record: null, errors: [e.message] }; }
       if (!r.record) { rejected.push({ index, reason: r.errors.join('; ') }); continue; }
+      // Older than the window: stored for the ledger and analysis, not sent to Didit, no alert (enrichTransactions skips it).
+      r.record.historical = resolveHistorical({ historical: r.record.historical, lifecycle: r.record.lifecycle, executedAt: r.record.executed_at }, now, windowDays);
       canon.push({ index, record: r.record });
     }
 
@@ -241,6 +249,7 @@ export default async function (req) {
 
     return Response.json({
       batch_id: batchRef, received: items.length, accepted, duplicates, rejected, flagged,
+      historical: createdRows.filter((t) => t.historical === true).length, historical_window_days: windowDays,
       linked_reversals: linked, own_transfers: ownTransfers, fx_missing: fxMissing,
       transaction_ids: createdIds, enrichment,
     });

@@ -7,6 +7,9 @@ import {
   authenticate, errorResponse, httpError, invokeNext, loadTenant, chunk, asList, ACCOUNT_ROLES,
 } from '../../shared/tmAuth.js';
 import { applyOverrides, buildItems, chunkBySig } from '../../shared/tmStatementRows.js';
+import { coveredEmptyDays } from '../../shared/tmStatementChecks.js';
+import { nowFor } from '../../shared/tmNow.js';
+import { historicalWindowDays, resolveHistorical } from '../../shared/tmHistorical.js';
 
 const acctNorm = (v) => String(v ?? '').toUpperCase().replace(/[\s-]/g, '');
 const MAX_CALL_ITEMS = 200;
@@ -39,6 +42,9 @@ export default async function (req) {
     upload = asList(await E.StatementUpload.filter({ tenant_id: tenantId, id: body.statement_upload_id }))[0];
     if (!upload) throw httpError(404, 'Statement upload not found');
     if (upload.status !== 'review') throw httpError(409, `Statement is ${upload.status}; only statements in review can be committed`);
+    const mismatch = (upload.blocking || []).find((b) => b?.code === 'iban_mismatch');
+    if (mismatch) throw httpError(409, `The statement is for account ${mismatch.file_iban}, not ${mismatch.account_iban}. Choose the right account or add this IBAN as an account first.`);
+    if ((upload.blocking || []).length) throw httpError(409, 'This statement has a blocking check and cannot be processed');
     const client = asList(await E.Client.filter({ tenant_id: tenantId, id: upload.client_id }))[0];
     if (!client) throw httpError(404, 'Client not found');
 
@@ -46,7 +52,27 @@ export default async function (req) {
     const built = buildItems({
       clientId: client.id, accountId: upload.bank_account_id, accountRef: upload.account_ref, currency: upload.currency, rows,
     });
-    if (!built.length) throw httpError(422, 'No rows left to commit (all rows are duplicates or excluded)');
+    if (!built.length) {
+      // Every row is already in the ledger (the same statement uploaded again): a clean result, not an error.
+      const dup = rows.filter((r) => r.duplicate && !r.excluded).length;
+      if (!dup) throw httpError(422, 'No rows left to commit (all rows are excluded)');
+      await E.StatementUpload.update(upload.id, { status: 'committed', committed_by_user_id: auth.actorUserId, committed_at: new Date().toISOString(), error: '' });
+      await writeAudit(base44, auth, {
+        tenantId, clientId: client.id, eventType: 'tm_statement_committed',
+        before: { status: 'review' }, after: { status: 'committed', statement_upload_id: upload.id, accepted: 0, duplicates: dup, rejected: 0, gap_days: 0 },
+        notes: `Committed ${upload.file_name}: 0 transaction(s) created, ${dup} duplicate(s) skipped (already in the ledger).`,
+      });
+      return Response.json({
+        statement_upload_id: upload.id, status: 'committed', batch_id: null, accepted: 0, duplicates: dup, rejected: [],
+        gap_days: 0, covered_days: 0, historical: 0, recent: 0, counterparties: 0,
+      });
+    }
+
+    // Expected split of the rows being added (normaliseTransactions applies the same rule and stores the flag).
+    const now = nowFor(tenant, body, auth);
+    const windowDays = historicalWindowDays(tenant);
+    const expectHistorical = built.filter((b) => resolveHistorical({ lifecycle: b.item.lifecycle, executedAt: b.item.executed_at }, now, windowDays)).length;
+    const counterparties = new Set(built.map((b) => b.item.counterparty_account_id || b.item.counterparty_name).filter(Boolean)).size;
 
     await E.StatementUpload.update(upload.id, { status: 'committing', error: '' });
 
@@ -57,13 +83,14 @@ export default async function (req) {
     batchId = batch.id;
 
     const channel = `upload_${upload.format === 'camt053' ? 'camt' : upload.format}`;
-    const totals = { received: 0, accepted: 0, duplicates: 0, rejected: [] };
+    const totals = { received: 0, accepted: 0, duplicates: 0, historical: 0, rejected: [] };
     for (const items of chunkBySig(built, MAX_CALL_ITEMS)) {
-      const out = await invokeNext(base44, auth, 'normaliseTransactions', { batch_id: batchId, channel, source_file_id: upload.id, items });
+      const out = await invokeNext(base44, auth, 'normaliseTransactions', { batch_id: batchId, channel, source_file_id: upload.id, items, ...(body.as_of ? { as_of: body.as_of } : {}) });
       if (out?.error) throw httpError(502, out.error);
       totals.received += out.received || 0;
       totals.accepted += out.accepted || 0;
       totals.duplicates += out.duplicates || 0;
+      totals.historical += out.historical || 0;
       totals.rejected.push(...(out.rejected || []));
     }
     if (totals.accepted === 0 && totals.duplicates === 0 && totals.rejected.length) {
@@ -93,6 +120,27 @@ export default async function (req) {
       gapDays = fresh.length;
     }
 
+    // ── A reconciling statement covers its whole period: empty days are recorded as processed (no data missing) ──
+    let coveredDays = 0;
+    const covered = coveredEmptyDays({
+      rows: upload.parsed_rows || [], periodFrom: upload.period_from, periodTo: upload.period_to, gaps: upload.gaps || [],
+      reconciles: upload.reconciles, max: Math.max(0, MAX_GAP_DAYS - days.length),
+    });
+    if (bankAccountId && covered.length) {
+      const existing = new Set();
+      for (const c of chunk(covered, 100)) {
+        for (const cd of asList(await E.CoverageDay.filter({ tenant_id: tenantId, bank_account_id: bankAccountId, date: { $in: c } }, undefined, 500))) existing.add(cd.date);
+      }
+      const fresh = covered.filter((d) => !existing.has(d));
+      for (const c of chunk(fresh, 100)) {
+        await E.CoverageDay.bulkCreate(c.map((date) => ({
+          tenant_id: tenantId, bank_account_id: bankAccountId, client_id: client.id, date, expected: true,
+          state: 'processed', txn_count: 0, source_type: channel,
+        })));
+      }
+      coveredDays = fresh.length;
+    }
+
     await E.StatementUpload.update(upload.id, {
       status: 'committed', committed_by_user_id: auth.actorUserId, committed_at: new Date().toISOString(),
       batch_id: batchId, ...(bankAccountId ? { bank_account_id: bankAccountId } : {}), error: '',
@@ -100,13 +148,15 @@ export default async function (req) {
     await writeAudit(base44, auth, {
       tenantId, clientId: client.id, eventType: 'tm_statement_committed',
       before: { status: 'review' },
-      after: { status: 'committed', statement_upload_id: upload.id, batch_id: batchId, accepted: totals.accepted, duplicates: totals.duplicates, rejected: totals.rejected.length, gap_days: gapDays },
+      after: { status: 'committed', statement_upload_id: upload.id, batch_id: batchId, accepted: totals.accepted, duplicates: totals.duplicates, rejected: totals.rejected.length, gap_days: gapDays, covered_days: coveredDays, historical: totals.historical },
       notes: `Committed ${upload.file_name}: ${totals.accepted} transaction(s) created, ${totals.duplicates} duplicate(s) skipped, ${gapDays} gap day(s) recorded.`,
     });
 
     return Response.json({
       statement_upload_id: upload.id, status: 'committed', batch_id: batchId,
       accepted: totals.accepted, duplicates: totals.duplicates, rejected: totals.rejected, gap_days: gapDays,
+      covered_days: coveredDays, historical: totals.historical, recent: Math.max(0, totals.accepted - totals.historical),
+      expected_historical: expectHistorical, historical_window_days: windowDays, counterparties,
     });
   } catch (error) {
     if (upload && E && upload.status === 'review') {

@@ -13,7 +13,9 @@ import {
   MAX_ROWS, sha256Bytes, detectFormat, parseCsv, parseMatrix, matchesSavedMap, parseMt940, parseCamt053,
   parseDate, decorateRow, round2,
 } from '../../shared/tmStatementParse.js';
-import { deriveBalances, reconcile, findGaps, tamperSignals } from '../../shared/tmStatementChecks.js';
+import { deriveBalances, reconcile, findGaps, tamperSignals, ibanMismatch } from '../../shared/tmStatementChecks.js';
+import { nowFor } from '../../shared/tmNow.js';
+import { historicalWindowDays, resolveHistorical } from '../../shared/tmHistorical.js';
 import { assignKeys, execAt } from '../../shared/tmStatementRows.js';
 import { STATEMENT_SCHEMA, STATEMENT_SYSTEM_PROMPT, STATEMENT_SOURCE } from '../../shared/tmStatementAgent.js';
 
@@ -113,9 +115,10 @@ export default async function (req) {
       || (parsed.account_ref && accounts.find((a) => acctNorm(a.iban_or_number) === acctNorm(parsed.account_ref)))
       || null;
     if (upload.bank_account_id && !account) throw httpError(404, 'Bank account not found for this client');
-    if (account && parsed.account_ref && acctNorm(account.iban_or_number) !== acctNorm(parsed.account_ref)) {
-      warnings.push(`The statement account (${parsed.account_ref}) differs from the selected bank account (${account.iban_or_number})`);
-    }
+    // The statement names another account than the selected one: processing is blocked until the analyst chooses
+    // the right account, adds this IBAN as an account, or cancels (commitStatement refuses while this is set).
+    const mismatch = account && parsed.account_ref ? ibanMismatch(parsed.account_ref, account.iban_or_number) : null;
+    const blocking = mismatch ? [mismatch] : [];
     const fallbackCcy = parsed.currency || account?.currency || upload.currency || tenant.tm_reporting_currency || 'USD';
     let assumedCcy = 0;
     const rows = parsed.rows.map((r, i) => {
@@ -148,6 +151,15 @@ export default async function (req) {
     let duplicates = 0;
     for (const r of rows) if (existing.has(r.dedupe_key)) { r.duplicate = true; duplicates++; }
 
+    // ── Historical vs recent (preview; normaliseTransactions applies the same rule on commit) ──
+    const now = nowFor(tenant, body, auth);
+    const windowDays = historicalWindowDays(tenant);
+    let historicalCount = 0;
+    for (const r of rows) {
+      r.historical = resolveHistorical({ lifecycle: r.lifecycle, executedAt: r.date }, now, windowDays);
+      if (r.historical && !r.duplicate) historicalCount++;
+    }
+
     // ── Own transfers + reversal links (informational; normaliseTransactions repeats both on commit) ──
     const ownAccts = new Set(accounts.filter((a) => a.id !== account?.id).map((a) => acctNorm(a.iban_or_number)));
     let ownTransfers = 0;
@@ -177,6 +189,7 @@ export default async function (req) {
       currency: fallbackCcy, reconciles: rec.reconciles ?? undefined, reconcile_diff: rec.diff ?? undefined,
       gaps, tamper_signals: tamper, extracted_count: rows.length, duplicates_removed: duplicates,
       own_transfers: ownTransfers, reversals_linked: linked, parsed_rows: rows, warnings,
+      historical_count: historicalCount, blocking,
       account_ref: parsed.account_ref || account?.iban_or_number || undefined,
       ai_run_id: parsed.ai_run_id || undefined, status: 'review', error: '',
     };
@@ -192,6 +205,7 @@ export default async function (req) {
     return Response.json({
       statement_upload_id: upload.id, status: 'review', format, extracted_count: rows.length, duplicates_removed: duplicates,
       reconciles: rec.reconciles, gaps, tamper_signals: tamper, own_transfers: ownTransfers, reversals_linked: linked, warnings,
+      historical_count: historicalCount, historical_window_days: windowDays, blocking,
     });
   } catch (error) {
     if (upload && E) {
