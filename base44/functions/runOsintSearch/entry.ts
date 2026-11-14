@@ -27,7 +27,13 @@ export default async function (req) {
     const hints = String(body.hints ?? '').slice(0, 500);
     const results = await runOsint(base44, { client, kycCase, hints });
     const runAt = new Date().toISOString();
-    await E.KycCase.update(kycCase.id, { osint_cache: JSON.stringify({ results, run_at: runAt }) });
+    let selected = [];
+    try {
+      const fresh = (await E.KycCase.filter({ id: kycCase.id }))?.[0];
+      const prev = JSON.parse(fresh?.osint_cache || '{}');
+      if (Array.isArray(prev?.selected)) selected = prev.selected;
+    } catch { /* unreadable cache: nothing to keep */ }
+    await E.KycCase.update(kycCase.id, { osint_cache: JSON.stringify({ results, run_at: runAt, selected }) });
     await E.AuditEvent.create({
       tenant_id: kycCase.tenant_id, case_id: kycCase.id, client_id: client.id,
       actor_user_id: user.id, actor_name: user.full_name, actor_type: 'User', event_type: 'osint_search_run',

@@ -639,7 +639,7 @@ Deno.serve(async (req) => {
       osintResults = await runOsint(base44, { client: clientRecord, kycCase, hints: prevHints });
       // Cache it
       await base44.asServiceRole.entities.KycCase.update(case_id, {
-        osint_cache: JSON.stringify({ results: osintResults, run_at: new Date().toISOString() }),
+        osint_cache: JSON.stringify({ results: osintResults, run_at: new Date().toISOString(), selected: keptOsintSelection }),
       });
     } catch (e) {
       console.warn('OSINT search failed:', e);
