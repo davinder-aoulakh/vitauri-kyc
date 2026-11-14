@@ -193,7 +193,7 @@ export default function StatementUploadDrawer({ open, onOpenChange, clientId, ba
             <>
               <StatementTargetPicker
                 tenantId={tenantId} clients={clients} clientId={activeClient} onClientChange={setClientSel}
-                accountId={accountSel} onAccountChange={setAccountSel} lockClient={!!clientId}
+                accountId={accountSel} onAccountChange={setAccountSel} lockClient={!!clientId} disabled={false}
               />
               {selectedAccount ? (
                 <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 rounded-xl border border-border px-3 py-2.5 text-xs">
