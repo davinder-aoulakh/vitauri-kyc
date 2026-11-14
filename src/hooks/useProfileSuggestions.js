@@ -62,6 +62,7 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
 
   const [suggestions, setSuggestions] = useState(null);
   const [pipelineRunning, setPipelineRunning] = useState(false);
+  const [autoRunning, setAutoRunning] = useState(false);
   const [acceptingField, setAcceptingField] = useState(null);
   const loaded = useRef(false);
 
@@ -72,9 +73,12 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
     loaded.current = true;
     let alive = true;
     loadSuggestions(kycCase?.id).then((fresh) => {
-      if (!alive || !fresh) return;
-      setSuggestions(fresh);
-      onCaseUpdate?.(prev => (prev ? { ...prev, profile_suggestions: fresh } : prev));
+      if (!alive) return;
+      if (fresh) {
+        setSuggestions(fresh);
+        onCaseUpdate?.(prev => (prev ? { ...prev, profile_suggestions: fresh } : prev));
+      }
+      autoRunIfNeeded(fresh || kycCase?.profile_suggestions || null);
     }).catch(() => {});
     return () => { alive = false; };
   }, [kycCase?.id]);
@@ -97,14 +101,15 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
     return next;
   }
 
-  async function runPipeline(forceOsint = false) {
-    setPipelineRunning(true);
+  async function runPipeline(forceOsint = false, { silent = false } = {}) {
+    if (silent) setAutoRunning(true); else setPipelineRunning(true);
     try {
       const res = await base44.functions.invoke('buildProfileSuggestions', {
         case_id:             kycCase.id,
         client_id:           kycCase.client_id,
         client_type:         client?.client_type,
         force_osint_refresh: forceOsint,
+        ...(silent ? { skip_osint: true } : {}),
       });
       const data = res?.data ?? res;
       if (data?.suggestion) {
@@ -115,7 +120,22 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
       console.error('Pipeline error:', err);
     } finally {
       setPipelineRunning(false);
+      setAutoRunning(false);
     }
+  }
+
+  // Automatic run: when the client has answered outreach items that the last run has not seen (or there was no full
+  // run yet), the pipeline runs once in the background, without a web search. Analyst decisions are kept by the pipeline.
+  const autoRanFor = useRef(null);
+  async function autoRunIfNeeded(current) {
+    if (!kycCase?.id || !client?.id || autoRanFor.current === kycCase.id) return;
+    autoRanFor.current = kycCase.id;
+    try {
+      const reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
+      const answered = (reqs || []).reduce((n, r) => n + (r.items || []).filter(i => i.status !== 'Requested' && (i.response_text || i.file_url)).length, 0);
+      const seen = current?.run_at ? current?.sources_summary?.outreach_answers : null;
+      if (answered > 0 && seen !== answered) await runPipeline(false, { silent: true });
+    } catch { /* the manual button remains */ }
   }
 
 
@@ -315,14 +335,18 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
   const clientFields = suggestions?.client_fields || {};
   const fieldKeys = Object.keys(fieldLabels);
   const confirmed = fieldKeys.filter(k => clientFields[k]?.status === 'confirmed').length;
+  // On file: the client record already holds a value and there is no open suggestion for the field
+  const hasOnFile = (k) => { const v = getNestedValue(liveClient.current || client, k); return v != null && String(v).trim() !== '' && v !== 'null'; };
+  const OPEN = ['suggested', 'low_confidence', 'conflict', 'info_requested'];
+  const complete = fieldKeys.filter(k => clientFields[k]?.status === 'confirmed' || (hasOnFile(k) && !OPEN.includes(clientFields[k]?.status))).length;
   const conflicts = fieldKeys.filter(k => clientFields[k]?.status === 'conflict').length;
   const pending   = fieldKeys.filter(k => ['suggested', 'low_confidence'].includes(clientFields[k]?.status)).length;
   const highConfPending = fieldKeys.filter(k => clientFields[k]?.status === 'suggested' && clientFields[k]?.confidence >= CONFIDENCE_THRESHOLD).length;
 
   return {
     isOrg, fieldLabels, fieldKeys, clientFields,
-    suggestions, pipelineRunning, acceptingField,
-    confirmed, conflicts, pending, highConfPending,
+    suggestions, pipelineRunning, autoRunning, acceptingField,
+    confirmed, complete, conflicts, pending, highConfPending,
     runPipeline, acceptField, rejectField, handleManualEdit,
     markInfoRequested, reopenField, acceptAllHighConfidence,
     acceptRelatedParty, rejectRelatedParty, reapplyField,

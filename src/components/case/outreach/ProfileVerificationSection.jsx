@@ -19,8 +19,8 @@ export default function ProfileVerificationSection({
 }) {
   const profile = useProfileSuggestions({ kycCase, client, currentUser, onFieldVerified, onCaseUpdate, onClientUpdate, tenant });
   const {
-    isOrg, fieldLabels, fieldKeys, clientFields, suggestions, pipelineRunning, acceptingField,
-    confirmed, conflicts, highConfPending,
+    isOrg, fieldLabels, fieldKeys, clientFields, suggestions, pipelineRunning, autoRunning, acceptingField,
+    confirmed, complete, conflicts, highConfPending,
     runPipeline, acceptField, rejectField, handleManualEdit, markInfoRequested, reopenField,
     acceptAllHighConfidence, acceptRelatedParty, rejectRelatedParty, reapplyField,
   } = profile;
@@ -90,17 +90,13 @@ export default function ProfileVerificationSection({
           <span>{suggestions.sources_summary?.outreach_responses || 0} outreach responses</span>
           <span>{suggestions.sources_summary?.osint_findings || 0} OSINT findings</span>
           {conflicts > 0 && <span className="text-red-600 font-medium flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {conflicts} conflict{conflicts > 1 ? 's' : ''}</span>}
-          <span className="text-emerald-600 font-medium">{confirmed}/{fieldKeys.length} confirmed</span>
+          <span className="text-emerald-600 font-medium">{complete}/{fieldKeys.length} complete</span>
         </div>
       )}
 
-      {!suggestions && !pipelineRunning && (
-        <div className="bg-card border border-border rounded-xl py-12 text-center space-y-3">
-          <Sparkles className="w-8 h-8 text-purple-300 mx-auto" />
-          <p className="text-sm font-medium text-foreground">No profile suggestions yet</p>
-          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            Run the pre-fill pipeline to automatically extract {isOrg ? 'ORG' : 'NP'} profile fields from documents, outreach responses, and OSINT — each with a source and confidence score.
-          </p>
+      {autoRunning && !pipelineRunning && (
+        <div className="flex items-center gap-2 text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Reading the client's new outreach answers…
         </div>
       )}
 
@@ -119,9 +115,9 @@ export default function ProfileVerificationSection({
         </div>
       )}
 
-      {suggestions && !pipelineRunning && (
+      {!pipelineRunning && (
         <div className="space-y-5">
-          {(suggestions.flags || []).filter(f => f.type === 'registry_status').map(f => (
+          {(suggestions?.flags || []).filter(f => f.type === 'registry_status').map(f => (
             <div key={f.value} className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-red-800">
@@ -134,7 +130,7 @@ export default function ProfileVerificationSection({
             <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center gap-2">
               {isOrg ? <Building2 className="w-4 h-4 text-blue-600" /> : <User className="w-4 h-4 text-violet-600" />}
               <span className="font-semibold text-sm">{isOrg ? 'Entity Profile Fields' : 'Personal Profile Fields'}</span>
-              <span className="text-xs text-muted-foreground ml-auto">{confirmed}/{fieldKeys.length} confirmed</span>
+              <span className="text-xs text-muted-foreground ml-auto" title={`${confirmed} confirmed from a suggestion; the rest already on the client file`}>{complete}/{fieldKeys.length} complete</span>
             </div>
             <div className="p-4 grid grid-cols-1 gap-2.5">
               {fieldKeys.map(key => (
@@ -163,11 +159,11 @@ export default function ProfileVerificationSection({
                 <span className="font-semibold text-sm">Related Party Suggestions</span>
                 <span className="text-xs text-muted-foreground">(from the Didit KYB registry and incorporation docs)</span>
                 <span className="text-xs text-muted-foreground ml-auto">
-                  {(suggestions.related_parties || []).filter(r => r.status === 'confirmed').length}/{(suggestions.related_parties || []).length} confirmed
+                  {(suggestions?.related_parties || []).filter(r => r.status === 'confirmed').length}/{(suggestions?.related_parties || []).length} confirmed
                 </span>
               </div>
               <div className="p-4 space-y-2.5">
-                {!suggestions.related_parties?.length ? (
+                {!suggestions?.related_parties?.length ? (
                   <div className="text-sm text-muted-foreground py-4 text-center">
                     No related parties found in the Didit KYB registry or in documents.<br />
                     <span className="text-xs">Directors, UBOs, and shareholders appear here once the business verification or incorporation documents are in.</span>

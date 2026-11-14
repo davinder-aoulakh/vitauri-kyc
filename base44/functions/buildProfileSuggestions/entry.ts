@@ -699,6 +699,8 @@ Deno.serve(async (req) => {
   // ── 6. Build sources_summary ──────────────────────────────────────────────────
   const sourcesSummary = {
     outreach_requests: outreaches?.length || 0,
+    // Answered outreach items at the time of this run: the UI re-runs the pipeline when new answers arrive
+    outreach_answers: (outreaches || []).reduce((n: number, r: any) => n + (r.items || []).filter((i: any) => i.status !== 'Requested' && (i.response_text || i.file_url)).length, 0),
     documents_processed: ocrResults.length,
     documents_skipped: ocrableDocs.length - ocrResults.length,
     osint_findings: osintResults?.findings?.length || 0,

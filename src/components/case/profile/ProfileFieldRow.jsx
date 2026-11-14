@@ -26,6 +26,7 @@ const STATUS_CONFIG = {
   rejected:       { label: 'Rejected', bg: 'bg-slate-50 border-slate-200' },
   info_requested: { label: '⏳ Info requested', bg: 'bg-amber-50 border-amber-200' },
   missing:        { label: 'Missing', bg: 'bg-muted/30 border-border' },
+  on_file:        { label: 'On file', bg: 'bg-emerald-50/60 border-emerald-200' },
 };
 
 function ConfidencePill({ confidence }) {
@@ -68,7 +69,10 @@ export default function ProfileFieldRow({
   const [manualValue, setManualValue] = useState('');
   const [infoMenuOpen, setInfoMenuOpen] = useState(false);
 
-  const status = suggestion?.status || 'missing';
+  // No suggestion but a value on the client record (New Client form, earlier accept): the field is on file, not open.
+  const onFileValue = currentValue != null && String(currentValue).trim() !== '' && currentValue !== 'null';
+  const isOnFile = !suggestion?.status && onFileValue;
+  const status = suggestion?.status || (isOnFile ? 'on_file' : 'missing');
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.missing;
   const hasValue = suggestion?.value != null && suggestion.value !== '';
   const isConfirmed = status === 'confirmed';
@@ -76,7 +80,7 @@ export default function ProfileFieldRow({
   const isMissing = status === 'missing';
   const isConflict = status === 'conflict';
   const isInfoRequested = status === 'info_requested';
-  const showActions = !editing && !isConfirmed && !isRejected && !isInfoRequested;
+  const showActions = !editing && !isConfirmed && !isRejected && !isInfoRequested && !isOnFile;
 
   function startEdit() {
     setManualValue(suggestion?.value || currentValue || '');
@@ -110,7 +114,7 @@ export default function ProfileFieldRow({
             </div>
           ) : (
             <div className="text-sm font-medium text-foreground">
-              {isConfirmed && currentValue ? currentValue
+              {(isConfirmed || isOnFile || isRejected) && onFileValue ? String(currentValue)
                 : hasValue ? suggestion.value
                 : <span className="text-muted-foreground/50 italic">—</span>
               }
@@ -186,6 +190,15 @@ export default function ProfileFieldRow({
           </div>
         )}
 
+        {isOnFile && !editing && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-emerald-700 font-semibold" title="Already on the client file">✓ On file</span>
+            <button onClick={startEdit} className="text-muted-foreground hover:text-foreground" aria-label="Edit">
+              <Pencil className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
         {isRejected && (
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground italic">Kept existing</span>
@@ -203,7 +216,7 @@ export default function ProfileFieldRow({
       </div>
 
       {/* Source + confidence row */}
-      {!isMissing && !isConfirmed && !isRejected && (
+      {!isMissing && !isOnFile && !isConfirmed && !isRejected && (
         <div className="flex items-center gap-2 flex-wrap">
           <SourceBadge source_type={suggestion?.source_type} source_ref={suggestion?.source_ref} />
           <ConfidencePill confidence={suggestion?.confidence} />
@@ -232,9 +245,15 @@ export default function ProfileFieldRow({
 
       {/* Missing state manual entry prompt */}
       {isMissing && !editing && (
-        <button onClick={startEdit} className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1">
-          <Pencil className="w-3 h-3" /> Enter manually
-        </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-xs text-muted-foreground">Not collected yet</span>
+          <button onClick={() => onRequestInfo?.(fieldKey, 'email')} className="text-xs text-primary hover:underline flex items-center gap-1">
+            <Mail className="w-3 h-3" /> Request from client
+          </button>
+          <button onClick={startEdit} className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1">
+            <Pencil className="w-3 h-3" /> Enter manually
+          </button>
+        </div>
       )}
     </div>
   );
