@@ -9,6 +9,7 @@
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { runOsint } from '../../shared/osintSearch.js';
+import { parseAddressLine } from '../../shared/addressParse.js';
 
 const CONFIDENCE_THRESHOLD = 70;
 
@@ -167,7 +168,9 @@ function extractFromDidit(outreaches: any[]): Record<string, any[]> {
 }
 
 // Build candidate map from outreach responses
-function extractFromOutreach(outreaches: any[], isOrg: boolean): Record<string, any[]> {
+// templateFields: { [OutreachTemplate.id]: profile_field } — resolves the KYC link for request items that do not carry it
+// (requests created before the link was stored on the item).
+function extractFromOutreach(outreaches: any[], isOrg: boolean, templateFields: Record<string, string> = {}): Record<string, any[]> {
   const candidates: Record<string, any[]> = {};
 
   const push = (field: string, value: string, ref: string, confidence: number, sourceType = 'outreach', extra: Record<string, any> = {}) => {
@@ -185,8 +188,9 @@ function extractFromOutreach(outreaches: any[], isOrg: boolean): Record<string, 
       const extra = item.confirmed_unchanged ? { confirmed_by_client: true } : {};
 
       // Question linked to a KYC field (OutreachTemplate.profile_field): exact mapping, no label guessing
-      if (item.profile_field) {
-        const pf = String(item.profile_field);
+      const linkedField = item.profile_field || templateFields[item.item_id] || '';
+      if (linkedField) {
+        const pf = String(linkedField);
         const structured = item.response_value;
         if (pf === 'residential_address' || pf === 'postal_address' || pf === 'registered_address') {
           const a = structured && typeof structured === 'object' ? structured : null;
@@ -196,6 +200,16 @@ function extractFromOutreach(outreaches: any[], isOrg: boolean): Record<string, 
           } else if (a && pf === 'residential_address') {
             for (const k of ['street', 'number', 'zipcode', 'city', 'country']) {
               if (a[k]) push(`residential_address.${k}`, a[k], ref, 90, 'outreach', extra);
+            }
+          } else if (pf === 'residential_address') {
+            // Answer stored as one line of text: split it (lower confidence than a structured answer)
+            const parsed: any = parseAddressLine(val);
+            if (parsed) {
+              for (const k of ['street', 'number', 'zipcode', 'city', 'country']) {
+                if (parsed[k]) push(`residential_address.${k}`, parsed[k], ref, 72, 'outreach', extra);
+              }
+            } else {
+              push('residential_address.street', val, ref, 55, 'outreach', extra);
             }
           }
         } else {
@@ -530,7 +544,7 @@ Deno.serve(async (req) => {
   const user = await base44.auth.me();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { case_id, client_id, client_type, force_osint_refresh } = await req.json();
+  const { case_id, client_id, client_type, force_osint_refresh, skip_osint } = await req.json();
   if (!case_id || !client_id) return Response.json({ error: 'case_id and client_id are required' }, { status: 400 });
 
   const tenantId = user.tenant_id;
@@ -538,7 +552,13 @@ Deno.serve(async (req) => {
 
   // ── 1. Fetch outreach responses ──────────────────────────────────────────────
   const outreaches = await base44.asServiceRole.entities.OutreachRequest.filter({ case_id });
-  const outreachCandidates = extractFromOutreach(outreaches || [], isOrg);
+  // KYC links of the tenant's Field Library, for request items that do not carry the link themselves
+  const templateFields: Record<string, string> = {};
+  try {
+    const tmpls = await base44.asServiceRole.entities.OutreachTemplate.filter({ tenant_id: tenantId });
+    for (const t of (tmpls || [])) if (t.profile_field) templateFields[t.id] = t.profile_field;
+  } catch { /* label matching remains as the fallback */ }
+  const outreachCandidates = extractFromOutreach(outreaches || [], isOrg, templateFields);
 
   // ── 2. Fetch documents + OCR each ────────────────────────────────────────────
   const docs = await base44.asServiceRole.entities.Document.filter({ client_id, tenant_id: tenantId });
@@ -590,7 +610,8 @@ Deno.serve(async (req) => {
   if (!force_osint_refresh && kycCase?.osint_cache) {
     try { osintResults = JSON.parse(kycCase.osint_cache)?.results; } catch {}
   }
-  if (!osintResults || force_osint_refresh) {
+  // skip_osint: the silent automatic run (new outreach answers) never starts a web search; a cached result is still used.
+  if ((!osintResults && !skip_osint) || force_osint_refresh) {
     // Run fresh OSINT (same search as the OSINT panel: all name variants + identifiers, namesakes set aside)
     try {
       let prevHints = '';

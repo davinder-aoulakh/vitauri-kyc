@@ -40,7 +40,9 @@ export function parseAddressLine(text, { looksLikeCountry } = {}) {
   }
   if (zipIdx >= 0) {
     out.zipcode = zip.toUpperCase().replace(/^(\d{4})\s?([A-Z]{2})$/, '$1 $2');
-    const city = clean(parts[zipIdx].replace(zip, ''));
+    // City: what follows the postcode in that part ("5161 VL Sprang-Capelle"), else what stands before it ("London SW1A 2AA")
+    const at = parts[zipIdx].indexOf(zip);
+    const city = clean(parts[zipIdx].slice(at + zip.length)) || (parts.length > 1 ? clean(parts[zipIdx].slice(0, at)) : '');
     if (city) out.city = city;
     else if (parts[zipIdx + 1]) out.city = parts[zipIdx + 1];
     else if (zipIdx > 1) out.city = parts[zipIdx - 1];
@@ -55,5 +57,7 @@ export function parseAddressLine(text, { looksLikeCountry } = {}) {
     const before = clean(parts[0].slice(0, parts[0].indexOf(zip)));
     if (before) Object.assign(out, splitStreet(before));
   }
+  // A lone street name without number, postcode or city is not a usable split
+  if (Object.keys(out).length === 1 && out.street) return null;
   return Object.keys(out).length ? out : null;
 }
