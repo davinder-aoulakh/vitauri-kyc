@@ -20,7 +20,7 @@
       "type": "string"
     },
     "case_id": {
-      "description": "nullable \u2014 FK to KycCase if linked",
+      "description": "nullable — FK to KycCase if linked",
       "type": "string"
     },
     "category": {
@@ -30,7 +30,7 @@
       "type": "number"
     },
     "client_id": {
-      "description": "FK to Client \u2014 sent to Didit as subject.vendor_data",
+      "description": "FK to Client — sent to Didit as subject.vendor_data",
       "type": "string"
     },
     "counterparty_account_id": {
@@ -273,6 +273,14 @@
         "gambling_bonus_change"
       ],
       "type": "string"
+    },
+    "reference": {
+      "type": "string",
+      "description": "Payment reference / remittance information (MT940 /REMI/, CAMT RmtInf)"
+    },
+    "end_to_end_id": {
+      "type": "string",
+      "description": "End-to-end reference given by the payer (MT940 /EREF/)"
     }
   },
   "required": [

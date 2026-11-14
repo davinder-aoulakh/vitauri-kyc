@@ -12,7 +12,6 @@ import {
 const MAX_ITEMS = 1000;
 const CALL_SIZE = 200; // normaliseTransactions limit per call
 const RATE_LIMIT = 60;
-const DAY_MS = 86400000;
 const LIFECYCLES = ['intended', 'declined', 'booked', 'reversed', 'corrected'];
 const isId = (v) => typeof v === 'string' && /^[0-9a-f]{24}$/i.test(v);
 const validDate = (v) => v && !isNaN(new Date(v).getTime());

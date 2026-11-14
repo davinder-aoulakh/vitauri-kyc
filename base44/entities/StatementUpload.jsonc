@@ -139,6 +139,28 @@
     "batch_id": {
       "type": "string",
       "description": "TransactionIngestBatch created on commit"
+    },
+    "historical_count": {
+      "type": "number",
+      "description": "Rows older than the tenant historical window (stored, not sent to Didit, no alerts)"
+    },
+    "blocking": {
+      "type": "array",
+      "description": "Checks that block processing, e.g. [{code: iban_mismatch, file_iban, account_iban}]",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "file_iban": {
+            "type": "string"
+          },
+          "account_iban": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "required": [
