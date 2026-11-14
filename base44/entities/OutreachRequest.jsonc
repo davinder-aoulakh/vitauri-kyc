@@ -39,6 +39,10 @@
           "condition_equals_value": {
             "type": "string"
           },
+          "confirmed_unchanged": {
+            "description": "The client confirmed the prefilled value without changing it",
+            "type": "boolean"
+          },
           "description": {
             "type": "string"
           },
@@ -243,8 +247,18 @@
           "label": {
             "type": "string"
           },
+          "prefill_value": {
+            "description": "What Vitauri holds for the linked KYC field when the request was sent (string or address object)"
+          },
+          "profile_field": {
+            "description": "KYC client field this question fills (from OutreachTemplate.profile_field)",
+            "type": "string"
+          },
           "response_text": {
             "type": "string"
+          },
+          "response_value": {
+            "description": "Structured answer: address object, phone string, or other typed value; response_text keeps the readable text"
           },
           "section_title": {
             "type": "string"
@@ -285,6 +299,13 @@
           },
           "validation_required": {
             "type": "boolean"
+          },
+          "verified_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "verified_by": {
+            "type": "string"
           }
         },
         "type": "object"
