@@ -11,7 +11,7 @@ import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { cn } from '@/lib/utils';
 import FieldTypePicker, { FIELD_TYPES, KYB_FIELD_TYPE } from './outreach/FieldTypePicker';
-import { PROFILE_FIELDS, profileFieldByKey, suggestProfileField } from '@/lib/profileFieldMap';
+import { PROFILE_FIELDS, profileFieldByKey, suggestProfileField, kycFieldLabel } from '@/lib/profileFieldMap';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import FieldTypeConfig from './outreach/FieldTypeConfig';
 import PortalPreviewModal from './outreach/PortalPreviewModal';
@@ -381,7 +381,11 @@ export default function OutreachTemplatesTab({ tenant }) {
                     onChange={e => setModal(m => ({ ...m, data: { ...m.data, label: e.target.value } }))}
                     className="h-9 text-sm"
                     placeholder="e.g. Passport Copy"
+                    disabled={!!modal.data.profile_field}
                   />
+                  {modal.data.profile_field && (
+                    <p className="text-xs text-muted-foreground mt-1">The name follows the linked KYC field, so the outreach and the client file use the same name. Use the description for extra instructions.</p>
+                  )}
                 </div>
               )}
               {isSectionHeader && (
@@ -414,7 +418,8 @@ export default function OutreachTemplatesTab({ tenant }) {
                 const suggested = !modal.data.profile_field ? suggestProfileField(modal.data.label, types) : null;
                 const pick = (key) => {
                   const f = profileFieldByKey(key);
-                  setModal(m => ({ ...m, data: { ...m.data, profile_field: key || '', ...(f && ['phone', 'address', 'country'].includes(f.type) ? { field_type: f.type, item_type: 'data_point' } : {}) } }));
+                  // A linked question takes the KYC field's name (1:1 naming between outreach and client file)
+                  setModal(m => ({ ...m, data: { ...m.data, profile_field: key || '', ...(f ? { label: kycFieldLabel(key, m.data.client_types || []) } : {}), ...(f && ['phone', 'address', 'country'].includes(f.type) ? { field_type: f.type, item_type: 'data_point' } : {}) } }));
                 };
                 return (
                   <div className="space-y-1">
@@ -425,7 +430,7 @@ export default function OutreachTemplatesTab({ tenant }) {
                       className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                     >
                       <option value="">— Not linked (free answer) —</option>
-                      {options.map(f => <option key={f.key} value={f.key}>{f.label}{f.clients.length === 1 ? ` (${f.clients[0]})` : ''}</option>)}
+                      {options.map(f => <option key={f.key} value={f.key}>{kycFieldLabel(f.key, types)}{f.clients.length === 1 ? ` (${f.clients[0]})` : ''}</option>)}
                     </select>
                     {suggested && (
                       <button type="button" className="text-xs text-primary underline" onClick={() => pick(suggested.key)}>
