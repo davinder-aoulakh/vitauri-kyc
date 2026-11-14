@@ -1,11 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { nowFor, parseAsOf, mayOverrideNow, ageInDays } from '../base44/shared/tmNow.js';
-import { loadSample } from './mt940-sample.test.js';
+import { loadSample, AS_OF } from './helpers/sample.js';
 
 const REAL = new Date('2026-12-24T10:00:00Z');
 const real = () => REAL;
-const AS_OF = '2026-11-03';
 
 test('as_of is honoured for a Demo tenant', () => {
   assert.equal(nowFor({ status: 'Demo' }, { as_of: AS_OF }, { role: 'Analyst' }, real).toISOString(), '2026-11-03T23:59:59.999Z');

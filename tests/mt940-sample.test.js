@@ -1,19 +1,9 @@
 // The sample statement through the existing parser and checks (plan section 1, "What the sample MT940 does today").
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { parseMt940, decorateRow, detectFormat, round2 } from '../base44/shared/tmStatementParse.js';
+import { detectFormat, round2 } from '../base44/shared/tmStatementParse.js';
 import { reconcile, findGaps, signed } from '../base44/shared/tmStatementChecks.js';
-
-export const FIXTURE = new URL('../docs/kyc-aml/Lotte_Vermeulen_NL02ABNA0123456789_Jul-Oct2026.mt940', import.meta.url);
-export const IBAN = 'NL02ABNA0123456789';
-
-export function loadSample() {
-  const bytes = readFileSync(FIXTURE);
-  const parsed = parseMt940(bytes.toString('utf8'));
-  parsed.rows.forEach((r) => decorateRow(r, parsed.account_ref));
-  return { bytes, parsed };
-}
+import { loadSample, IBAN } from './helpers/sample.js';
 
 test('format is detected as MT940', () => {
   const { bytes } = loadSample();

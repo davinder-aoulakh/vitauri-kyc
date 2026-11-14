@@ -12,7 +12,7 @@
 - Every backend function scopes by the authenticated user's tenant, never by a tenant id in the payload.
 - Write an AuditEvent for every state change, using the existing tm_* event names where one exists.
 - UI language is English. No hardcoded thresholds: tenant settings only.
-- Before finishing: npm run lint, npm run typecheck, npm run build, node --test tests/.
+- Before finishing: npm run lint, npm run typecheck, npm run build, npm test (node --test "tests/*.test.js").
   Lint and typecheck had errors before this work started (14 Nov 2026: lint 74 errors, typecheck 2,560 error lines); a phase passes when it adds none.
 - If the spec and the code disagree in a way the plan does not cover, stop and ask.
 - Never publish the app; the owner publishes after their own checks.
