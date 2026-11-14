@@ -142,7 +142,7 @@ export default function AppShell({ children }) {
     queryKey: ['outreachBadgeCount', currentUser?.tenant_id],
     queryFn: async () => {
       if (!currentUser?.tenant_id) return 0;
-      const all = await base44.entities.OutreachRequest.filter({ tenant_id: currentUser.tenant_id }, '-created_date', 200);
+      const all = await base44.entities.OutreachRequest.filter({ tenant_id: currentUser.tenant_id }, { sort: '-created_date', limit: 200, fields: ['id', 'status'] });
       return (all || []).filter(r => r.status !== 'Complete').length;
     },
     // Fetch once per session — the central request throttler (base44Client.js) now

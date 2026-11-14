@@ -33,7 +33,10 @@ const SITUATION_LABELS = {
 import { format, addDays, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import TippingOffBanner from '@/components/shared/TippingOffBanner';
-import { finishCaseOpenTrace } from '@/lib/perfTrace';
+import { finishCaseOpenTrace, markCaseOpen } from '@/lib/perfTrace';
+
+// Last loaded requests per case (this browser session): returning to step 1 shows them at once and refreshes behind.
+const requestsCache = new Map();
 import { isLocked, fetchLocked, sendCustomerEmail, isLockError } from '@/lib/tippingOff';
 import { buildRequestItem, isVerificationItem, effectiveWorkflow } from '@/lib/outreachItems';
 import IdvWorkflowPicker from '@/components/outreach/IdvWorkflowPicker';
@@ -104,9 +107,11 @@ function buildEmailHtml(tenant, client, req, portalUrl) {
   `;
 }
 
-export default function OutreachStep({ kycCase, client, currentUser, tenant, onNavigateToStep, onOutreachAllVerified, onCaseUpdate, onClientUpdate }) {
-  const [requests, setRequests]   = useState([]);
-  const [loading, setLoading]     = useState(true);
+export default function OutreachStep({ isNewCase = false, kycCase, client, currentUser, tenant, onNavigateToStep, onOutreachAllVerified, onCaseUpdate, onClientUpdate }) {
+  const [requests, setRequests] = useState(() => requestsCache.get(kycCase.id) || []);
+  useEffect(() => { if (!loading) requestsCache.set(kycCase.id, requests); }, [requests, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A case created seconds ago has no requests yet, and a case seen before has them cached: no spinner in both cases.
+  const [loading, setLoading]     = useState(() => !(isNewCase || requestsCache.has(kycCase.id)));
   const [loadError, setLoadError] = useState(null);
   const [templatesError, setTemplatesError] = useState(null);
   const [newOpen, setNewOpen]     = useState(false);
@@ -160,15 +165,20 @@ export default function OutreachStep({ kycCase, client, currentUser, tenant, onN
   );
   const fieldLabels = clientType === 'ORG' ? ORG_FIELD_LABELS : NP_FIELD_LABELS;
 
-  useEffect(() => { load(); loadTemplates(); }, [kycCase.id]);
+  useEffect(() => {
+    if (isNewCase || requestsCache.has(kycCase.id)) markCaseOpen('step1_ready_ms');
+    load({ silent: isNewCase || requestsCache.has(kycCase.id) });
+    loadTemplates();
+  }, [kycCase.id]);
 
-  async function load() {
-    setLoading(true);
+  async function load({ silent = false } = {}) {
+    if (!silent) setLoading(true);
     setLoadError(null);
     try {
+      const docsLoad = loadCaseDocs();   // starts together with the request list
       const reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
       setRequests(reqs || []);
-      loadCaseDocs();
+      docsLoad.catch(() => {});
 
       // Report overall verification status — gates the Profile Verification step
       const allItems = (reqs || []).flatMap(r => r.items || []);

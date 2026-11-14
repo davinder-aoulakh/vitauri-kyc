@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
-import { markCaseOpen } from '@/lib/perfTrace';
+import { markCaseOpen, startCaseOpenTrace, hasCaseOpenTrace } from '@/lib/perfTrace';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { hasPermission } from '@/lib/permissions';
@@ -101,6 +101,8 @@ export default function CaseWorkspace() {
   const [client, setClient]   = useState(() => seeded?.client || null);
   const [auditEvents, setAuditEvents] = useState([]);
   const [loading, setLoading] = useState(() => !seeded);
+  // Created seconds ago (the seed is cleared after mount, so remember it): step 1 has nothing to wait for.
+  const [isNewCase] = useState(() => !!seeded);
   const [error, setError] = useState(null);
   const [searchParams] = useSearchParams();
   // Deep link: /case/:id?step=N opens that step (1-8, 10 Draft Report & QC, 11 Compliance Advice).
@@ -139,6 +141,8 @@ export default function CaseWorkspace() {
       navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
       refreshCaseData(true);
     } else {
+      // Opening an existing case is timed too; slow opens are recorded with their breakdown.
+      if (!hasCaseOpenTrace()) startCaseOpenTrace({ kind: 'existing', tenant_id: currentUser?.tenant_id, user_id: currentUser?.id, user_name: currentUser?.full_name });
       loadAll();
     }
   }, [id]);
@@ -749,7 +753,7 @@ export default function CaseWorkspace() {
                   </div>
                 ) : (
                   <>
-                    {activeStep === 1 && <OutreachStep kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} onNavigateToStep={setActiveStep} onCaseUpdate={setKycCase} onClientUpdate={mergeClient} />}
+                    {activeStep === 1 && <OutreachStep isNewCase={isNewCase} kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} onNavigateToStep={setActiveStep} onCaseUpdate={setKycCase} onClientUpdate={mergeClient} />}
                     {activeStep === 2 && client?.client_type === 'ORG' && isFeatureEnabled(tenant, 'didit_kyb') && (
                       <KybStep
                         kycCase={kycCase}
