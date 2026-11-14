@@ -43,7 +43,7 @@ export default function IngestDocsCard() {
       <p className="text-xs text-muted-foreground">
         Send <code className="font-mono">Authorization: Bearer &lt;your key&gt;</code> and a JSON body with up to 1,000 transactions.
         Limit: 60 valid requests per minute per key. Returns <code className="font-mono">202</code> with <code className="font-mono">batch_id</code>, <code className="font-mono">accepted</code>, <code className="font-mono">duplicates</code> and <code className="font-mono">rejected</code>.
-        Executed items older than 7 days are marked historical; <code className="font-mono">intended</code> items are not.
+        Executed items older than the tenant's historical window (default 30 days) are marked historical and are not screened; <code className="font-mono">intended</code> items are not.
       </p>
       <pre className="overflow-x-auto rounded-lg border border-border bg-muted p-3 font-mono text-[11px] leading-relaxed">{JSON.stringify(EXAMPLE, null, 2)}</pre>
     </div>

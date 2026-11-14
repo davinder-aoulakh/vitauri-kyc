@@ -60,6 +60,12 @@ export const FEATURE_DEFINITIONS = [
     ],
   },
   {
+    group: 'KYC + AML (new)',
+    features: [
+      { key: 'aml_nav_v2', label: 'KYC + AML layout v2', description: 'New upload dialog (account, file, checks, result), account type and holders, historical window setting; later the new sidebar', defaultOff: true },
+    ],
+  },
+  {
     group: 'Business Verification (new)',
     features: [
       { key: 'didit_kyb', label: 'Didit KYB', description: 'Business verification (registry, company documents, company AML) and key-person ID verification for organisation clients', defaultOff: true },

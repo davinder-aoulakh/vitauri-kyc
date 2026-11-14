@@ -35,6 +35,9 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
   const [maxPct, setMaxPct] = useState(String(s.max_wrongly_closed_pct ?? 2));
   const [psd2Partner, setPsd2Partner] = useState(s.psd2_partner || 'manual');
   const [autoTriage, setAutoTriage] = useState(s.auto_triage_new_alerts === true);
+  const amlV2 = isFeatureEnabled(tenant, 'aml_nav_v2');
+  const [histDays, setHistDays] = useState(String(s.historical_window_days ?? 30));
+  const histOk = !amlV2 || (Number.isInteger(Number(histDays)) && Number(histDays) >= 1 && Number(histDays) <= 3650);
   const [reverifyWf, setReverifyWf] = useState(s.reverify_workflow_id || '');
   const isOps = isVitauriOps(currentUser?.app_role);
   const [reg, setReg] = useState({ sessionId: s.regression_session_id || '', outreachId: s.regression_outreach_ref?.outreach_id || '', itemId: s.regression_outreach_ref?.item_id || '' });
@@ -46,7 +49,7 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
 
   const sum = WEIGHTS.reduce((t, [k]) => t + (Number(weights[k]) || 0), 0);
   const pct = Number(maxPct);
-  const valid = /^[A-Za-z]{3}$/.test(currency) && tz.trim() && Math.abs(sum - 1) < 0.011 && Number.isFinite(pct) && pct >= 0 && pct <= 100 && (!modelChanged || modelNote.trim().length >= MIN_NOTE);
+  const valid = /^[A-Za-z]{3}$/.test(currency) && tz.trim() && Math.abs(sum - 1) < 0.011 && Number.isFinite(pct) && pct >= 0 && pct <= 100 && histOk && (!modelChanged || modelNote.trim().length >= MIN_NOTE);
 
   async function save() {
     setSaving(true);
@@ -61,6 +64,7 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
         max_wrongly_closed_pct: pct,
         psd2_partner: psd2Partner,
         auto_triage_new_alerts: autoTriage,
+        ...(amlV2 ? { historical_window_days: Number(histDays) } : {}),
         reverify_workflow_id: reverifyWf || undefined,
         ...(isOps ? {
           regression_session_id: reg.sessionId.trim() || undefined,
@@ -130,6 +134,13 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
           <IdvWorkflowPicker tenant={tenant} item={{ field_type: 'id_verification' }} value={reverifyWf} onChange={(v) => setReverifyWf(v.idv_workflow_id)} />
         </div>
         <AiModelCard saved={savedModel} value={aiModel} onChange={setAiModel} note={modelNote} onNote={setModelNote} canChange={canChangeModel} changedAt={s.ai_model_changed_at} />
+        {amlV2 && (
+          <div className="max-w-xs">
+            <Label className="text-xs mb-1.5 block">Historical window (days)</Label>
+            <Input type="number" min="1" max="3650" step="1" value={histDays} onChange={(e) => setHistDays(e.target.value)} className="h-9 text-sm" aria-invalid={!histOk} />
+            <p className="mt-1 text-xs text-muted-foreground">Transactions executed longer ago than this are stored for analysis only: not screened by Didit, no alerts. Applies to uploads, the API and PSD2.</p>
+          </div>
+        )}
         <div className="max-w-xs">
           <Label className="text-xs mb-1.5 block">Max wrongly closed (%) for release</Label>
           <Input type="number" min="0" max="100" step="0.5" value={maxPct} onChange={(e) => setMaxPct(e.target.value)} className="h-9 text-sm" />
