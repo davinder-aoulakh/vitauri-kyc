@@ -109,9 +109,9 @@ function buildEmailHtml(tenant, client, req, portalUrl) {
 
 export default function OutreachStep({ isNewCase = false, kycCase, client, currentUser, tenant, onNavigateToStep, onOutreachAllVerified, onCaseUpdate, onClientUpdate }) {
   const [requests, setRequests] = useState(() => requestsCache.get(kycCase.id) || []);
-  useEffect(() => { if (!loading) requestsCache.set(kycCase.id, requests); }, [requests, loading]); // eslint-disable-line react-hooks/exhaustive-deps
   // A case created seconds ago has no requests yet, and a case seen before has them cached: no spinner in both cases.
   const [loading, setLoading]     = useState(() => !(isNewCase || requestsCache.has(kycCase.id)));
+  useEffect(() => { if (!loading) requestsCache.set(kycCase.id, requests); }, [requests, loading]); // eslint-disable-line react-hooks/exhaustive-deps
   const [loadError, setLoadError] = useState(null);
   const [templatesError, setTemplatesError] = useState(null);
   const [newOpen, setNewOpen]     = useState(false);
