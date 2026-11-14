@@ -23,15 +23,20 @@ import { NP_FIELD_LABELS, ORG_FIELD_LABELS } from '@/hooks/useProfileSuggestions
 import InlineError from '@/components/shared/InlineError';
 import { useAiOrchestrator } from '@/hooks/useAiOrchestrator';
 import ExpectedProfileEditor from '@/components/case/tm/ExpectedProfileEditor';
+import { EXPECTED_USE } from '@/lib/profileFieldMap';
+import { countryByName } from '@/lib/countries';
+import { collectExpectedUse, mergeExpectedUse, showAnswer } from '@/lib/expectedUseFromOutreach';
 import { loadSelected, patchSelected, onSelectedChange, removeSelected, stripPastedLine, selectedForPrompt, selectedFromCache, pastedLine } from '@/lib/osintSelected';
 
 const DRAFT_TIMEOUT_MS = 60000;
 const OUTREACH_FETCH_TIMEOUT_MS = 3000;
 
-const TX_TYPES = ['Payments', 'Investments', 'Transfers', 'FX', 'Other'];
-const TX_FREQUENCIES = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annually', 'Ad hoc'];
-const TX_VOLUMES = ['< €10k/year', '€10k–€100k/year', '€100k–€1M/year', '€1M–€10M/year', '> €10M/year'];
-const GEOGRAPHIES = ['Domestic only', 'EU/EEA', 'UK', 'USA/Canada', 'Asia Pacific', 'Middle East', 'Africa', 'Latin America', 'Other'];
+// One list of options for the screen and for the linked outreach questions
+const TX_TYPES = EXPECTED_USE.types;
+const TX_FREQUENCIES = EXPECTED_USE.frequency;
+const TX_VOLUMES = EXPECTED_USE.volumes;
+const GEOGRAPHIES = EXPECTED_USE.geographies;
+const USE_LABELS = { types: 'Transaction Types', frequency: 'Frequency', volumes: 'Expected Volumes', inbound_month: 'Incoming per month', outbound_month: 'Outgoing per month', counterparties: 'Expected Counterparties', geographies: 'Geographies', cash: 'Cash use' };
 
 const SOURCE_ICONS = { document: FileText, outreach: MessageSquare, osint: Globe };
 const SOURCE_COLORS = {
@@ -134,11 +139,15 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
   });
 
   // ── Section 1B ───────────────────────────────────────────────────────────────
-  const [txExpanded, setTxExpanded] = useState(false);
+  const [txExpanded, setTxExpanded] = useState(true);
+  // The client's own answers about the expected use (outreach questions linked to expected_use.*)
+  const [useAnswers, setUseAnswers] = useState({ values: {}, at: null });
+  const [useFilled, setUseFilled] = useState([]);
   const [txBehavior, setTxBehavior] = useState({ types: [], frequency: '', counterparties: '', geographies: [], volumes: '' });
 
   // ── Section 2 — verified profile summary (read-only; editing happens in Step 1) ──
   const [suggestions, setSuggestions] = useState(null); // full profile_suggestions object
+  const useDiffering = mergeExpectedUse(txBehavior, useAnswers.values).differing;
 
   const loaded = useRef(false);
 
@@ -150,6 +159,28 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
     }
     if (kycCase?.profile_suggestions) setSuggestions(kycCase.profile_suggestions);
     loaded.current = true;
+
+    // Answers the client gave in the outreach land here: empty fields are filled, the analyst's entries are kept
+    let alive = true;
+    base44.entities.OutreachRequest.filter({ case_id: kycCase.id }).then((reqs) => {
+      if (!alive) return;
+      const found = collectExpectedUse(reqs || []);
+      if (!Object.keys(found.values).length) return;
+      setUseAnswers(found);
+      let saved = {};
+      try { saved = JSON.parse(kycCase?.expected_transaction_behavior || '{}') || {}; } catch { saved = {}; }
+      const { filled } = mergeExpectedUse(saved, found.values);
+      if (!filled.length) return;
+      setTxBehavior((cur) => mergeExpectedUse(cur, found.values).next);
+      setUseFilled(filled);
+      base44.entities.AuditEvent.create({
+        tenant_id: kycCase.tenant_id, case_id: kycCase.id, client_id: kycCase.client_id,
+        actor_user_id: currentUser?.id, actor_name: currentUser?.full_name, actor_type: 'System',
+        event_type: 'expected_use_prefilled_from_outreach', before_state: {}, after_state: { fields: filled },
+        notes: `Expected use filled from the client's outreach answers: ${filled.join(', ')}`,
+      }).catch(() => {});
+    }).catch(() => {});
+    return () => { alive = false; };
   }, [kycCase?.id]);
 
   // Register OSINT add callback (Section 1A purpose text append)
@@ -327,18 +358,33 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
         )}
       </div>
 
-      {/* ─── SECTION 1B — Expected Transaction Behaviour ─── */}
+      {/* ─── SECTION 1B — Expected use of the account: what the client expects + the limits monitoring tests (was 1B and 1C) ─── */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <button className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/20 transition-colors"
           onClick={() => setTxExpanded(o => !o)}>
           <div>
-            <span className="font-semibold text-sm">1B — Expected Transaction Behaviour</span>
-            <span className="text-xs text-muted-foreground ml-2">(optional)</span>
+            <span className="font-semibold text-sm">1B — Expected use of the account</span>
+            <span className="text-xs text-muted-foreground ml-2">expected transactions and the profile transaction monitoring tests against</span>
           </div>
           {txExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
         </button>
         {txExpanded && (
+          <>
           <div className="px-4 pb-4 space-y-4 border-t border-border">
+            {useAnswers.at && (
+              <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 space-y-1">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <MessageSquare className="h-3.5 w-3.5" /> Answered by the client in the outreach{useAnswers.at ? ` (${new Date(useAnswers.at).toLocaleDateString()})` : ''}
+                  {useFilled.length > 0 && <span className="font-normal">· {useFilled.length} field{useFilled.length === 1 ? '' : 's'} filled from the answers</span>}
+                </div>
+                {useDiffering.map((k) => (
+                  <div key={k} className="flex flex-wrap items-center gap-1.5">
+                    <span>Client answered for “{USE_LABELS[k]}”: <b>{showAnswer(useAnswers.values[k])}</b></span>
+                    <button type="button" className="font-medium underline" onClick={() => setTxBehavior(s => ({ ...s, [k]: useAnswers.values[k] }))}>Apply</button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="pt-3">
               <Label className="text-xs mb-2 block">Transaction Types</Label>
               <MultiSelectChips options={TX_TYPES} selected={txBehavior.types || []} onChange={v => setTxBehavior(s => ({ ...s, types: v }))} />
@@ -359,6 +405,27 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
                 </Select>
               </div>
             </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs mb-1.5 block">Incoming per month (optional)</Label>
+                <input inputMode="decimal" value={txBehavior.inbound_month || ''} placeholder="Amount"
+                  onChange={e => setTxBehavior(s => ({ ...s, inbound_month: e.target.value.replace(/[^\d.]/g, '') }))}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" aria-label="Expected incoming per month" />
+              </div>
+              <div>
+                <Label className="text-xs mb-1.5 block">Outgoing per month (optional)</Label>
+                <input inputMode="decimal" value={txBehavior.outbound_month || ''} placeholder="Amount"
+                  onChange={e => setTxBehavior(s => ({ ...s, outbound_month: e.target.value.replace(/[^\d.]/g, '') }))}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" aria-label="Expected outgoing per month" />
+              </div>
+              <div>
+                <Label className="text-xs mb-1.5 block">Cash use</Label>
+                <Select value={txBehavior.cash || ''} onValueChange={v => setTxBehavior(s => ({ ...s, cash: v }))}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select…" /></SelectTrigger>
+                  <SelectContent>{EXPECTED_USE.cash.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
             <div>
               <Label className="text-xs mb-1.5 block">Expected Counterparties</Label>
               <Textarea value={txBehavior.counterparties} onChange={e => setTxBehavior(s => ({ ...s, counterparties: e.target.value }))}
@@ -369,11 +436,13 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
               <MultiSelectChips options={GEOGRAPHIES} selected={txBehavior.geographies || []} onChange={v => setTxBehavior(s => ({ ...s, geographies: v }))} />
             </div>
           </div>
+          {/* Monitoring limits (only when transaction monitoring is on for the tenant) */}
+          <ExpectedProfileEditor embedded kycCase={kycCase} client={client} behavior={txBehavior}
+            homeCountry={countryByName(client?.registered_country || client?.country_of_residence || client?.nationality)?.iso2 || ''}
+            readOnly={['Approved', 'Rejected', 'Closed'].includes(kycCase?.status)} />
+          </>
         )}
       </div>
-
-      {/* ─── SECTION 1C — Expected profile for monitoring (renders only when tm_core is on) ─── */}
-      <ExpectedProfileEditor kycCase={kycCase} client={client} readOnly={['Approved', 'Rejected', 'Closed'].includes(kycCase?.status)} />
 
       {/* ─── SECTION 2 — Verified Profile Summary (read-only) ─── */}
       <div className="border-t border-border pt-5 space-y-3">

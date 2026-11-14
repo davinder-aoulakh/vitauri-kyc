@@ -381,9 +381,9 @@ export default function OutreachTemplatesTab({ tenant }) {
                     onChange={e => setModal(m => ({ ...m, data: { ...m.data, label: e.target.value } }))}
                     className="h-9 text-sm"
                     placeholder="e.g. Passport Copy"
-                    disabled={!!modal.data.profile_field}
+                    disabled={!!modal.data.profile_field && !modal.data.profile_field.startsWith('expected_use.')}
                   />
-                  {modal.data.profile_field && (
+                  {modal.data.profile_field && !modal.data.profile_field.startsWith('expected_use.') && (
                     <p className="text-xs text-muted-foreground mt-1">The name follows the linked KYC field, so the outreach and the client file use the same name. Use the description for extra instructions.</p>
                   )}
                 </div>
@@ -419,7 +419,7 @@ export default function OutreachTemplatesTab({ tenant }) {
                 const pick = (key) => {
                   const f = profileFieldByKey(key);
                   // A linked question takes the KYC field's name (1:1 naming between outreach and client file)
-                  setModal(m => ({ ...m, data: { ...m.data, profile_field: key || '', ...(f ? { label: kycFieldLabel(key, m.data.client_types || []) } : {}), ...(f && ['phone', 'address', 'country'].includes(f.type) ? { field_type: f.type, item_type: 'data_point' } : {}), ...(f?.fieldType ? { field_type: f.fieldType, item_type: 'data_point', field_options: f.options || [] } : {}) } }));
+                  setModal(m => ({ ...m, data: { ...m.data, profile_field: key || '', ...(f && (f.group !== 'expected_use' || !m.data.label) ? { label: kycFieldLabel(key, m.data.client_types || []) } : {}), ...(f && ['phone', 'address', 'country'].includes(f.type) ? { field_type: f.type, item_type: 'data_point' } : {}), ...(f?.fieldType ? { field_type: f.fieldType, item_type: 'data_point', field_options: f.options || [] } : {}) } }));
                 };
                 return (
                   <div className="space-y-1">

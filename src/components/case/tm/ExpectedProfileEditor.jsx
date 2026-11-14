@@ -10,6 +10,7 @@ import StatusPill from '@/components/tm/kit/StatusPill';
 import { toast } from '@/components/ui/use-toast';
 import { ChevronDown, ChevronUp, LineChart, Loader2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { limitsFromBehavior } from '@/lib/tmProfileMap';
 
 const list = (r) => (Array.isArray(r) ? r : r?.items || []);
 
@@ -35,13 +36,14 @@ export const showValue = (f, v, cur) => (v == null || (Array.isArray(v) && !v.le
  * (proposeExpectedProfile mode 'draft'); the draft is proposed and, where the approver may, approved at sign-off.
  * Prefill: this case's draft, else the signed-off transaction analysis proposal, else the current approved version.
  */
-export default function ExpectedProfileEditor({ kycCase, client, readOnly = false }) {
+export default function ExpectedProfileEditor({ kycCase, client, readOnly = false, embedded = false, behavior = null, homeCountry = '' }) {
   const { tenant } = useTenant();
   const qc = useQueryClient();
   const tmOn = isFeatureEnabled(tenant, 'tm_core');
   const [open, setOpen] = useState(true);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [filledFromUse, setFilledFromUse] = useState(null);   // { keys, notes } of the last "fill from expected use"
   const key = ['case-expected-profile', kycCase?.id];
 
   const { data, isLoading } = useQuery({
@@ -75,6 +77,22 @@ export default function ExpectedProfileEditor({ kycCase, client, readOnly = fals
   const dirty = form && base && JSON.stringify(form) !== JSON.stringify(base);
   const fromAnalysis = !data?.draft && !!data?.analysis?.proposed_profile_limits;
 
+  // Proposes values for the EMPTY limits from the expected use above (same mapping as the backend). Nothing is saved.
+  const fillFromUse = () => {
+    const { fields, notes } = limitsFromBehavior(behavior || {}, homeCountry);
+    const keys = [];
+    setForm((s) => {
+      const next = { ...s };
+      for (const f of PROFILE_FIELDS) {
+        const v = fields[f.key];
+        if (v === undefined || String(next[f.key] ?? '').trim() !== '') continue;
+        next[f.key] = fromValue(f, v); keys.push(f.key);
+      }
+      return next;
+    });
+    setFilledFromUse({ keys, notes });
+  };
+
   const save = async () => {
     setSaving(true);
     try {
@@ -93,7 +111,20 @@ export default function ExpectedProfileEditor({ kycCase, client, readOnly = fals
   };
 
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
+    <div className={embedded ? 'border-t border-border' : 'bg-card border border-border rounded-xl overflow-hidden'}>
+      {embedded ? (
+        <div className="flex flex-wrap items-center gap-2 px-4 pt-3">
+          <LineChart className="w-4 h-4 text-teal-600" />
+          <span className="font-semibold text-sm">Monitoring limits</span>
+          {status && <StatusPill status={status} />}
+          {data?.approved && <span className="text-xs text-muted-foreground">current: v{data.approved.version}</span>}
+          {!locked && form && (
+            <Button type="button" size="sm" variant="outline" className="ml-auto h-7 gap-1.5 text-xs" onClick={fillFromUse}>
+              <Sparkles className="w-3.5 h-3.5" /> Fill limits from the expected use
+            </Button>
+          )}
+        </div>
+      ) : (
       <button className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/20 transition-colors" onClick={() => setOpen((o) => !o)}>
         <div className="flex items-center gap-2">
           <LineChart className="w-4 h-4 text-teal-600" />
@@ -103,8 +134,17 @@ export default function ExpectedProfileEditor({ kycCase, client, readOnly = fals
         </div>
         {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
       </button>
-      {open && (
-        <div className="px-4 pb-4 border-t border-border space-y-3 pt-3">
+      )}
+      {(open || embedded) && (
+        <div className={cn('px-4 pb-4 space-y-3 pt-3', !embedded && 'border-t border-border')}>
+          {filledFromUse && (
+            <div className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs text-purple-900">
+              {filledFromUse.keys.length
+                ? `${filledFromUse.keys.length} empty limit${filledFromUse.keys.length === 1 ? '' : 's'} filled from the expected use (highlighted). Check them, add a rationale and save.`
+                : 'Nothing to fill: the limits are already set, or the expected use above does not say enough yet.'}
+              {filledFromUse.notes.map((n, i) => <div key={i} className="mt-0.5 text-purple-800/80">{n}</div>)}
+            </div>
+          )}
           <p className="text-xs text-muted-foreground">
             Transaction monitoring tests every transaction against this profile. Deviating behaviour never becomes the new normal by itself: each version needs a rationale and approval.
           </p>
@@ -135,7 +175,7 @@ export default function ExpectedProfileEditor({ kycCase, client, readOnly = fals
                               value={form[f.key]} disabled={locked} inputMode={f.countries ? 'text' : 'decimal'}
                               placeholder={f.countries ? 'e.g. CW, VE' : 'Not limited'}
                               onChange={(e) => setForm((s) => ({ ...s, [f.key]: f.countries ? e.target.value.toUpperCase() : e.target.value.replace(/[^\d.]/g, '') }))}
-                              className={cn('h-8 text-sm', changed && 'border-amber-400 bg-amber-50/50 dark:bg-amber-500/10')}
+                              className={cn('h-8 text-sm', changed && 'border-amber-400 bg-amber-50/50 dark:bg-amber-500/10', filledFromUse?.keys.includes(f.key) && 'border-purple-400 bg-purple-50/60')}
                               aria-label={f.label}
                             />
                           </td>
