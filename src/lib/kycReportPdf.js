@@ -97,7 +97,7 @@ export async function prepareAnnex({ diditSessions = [], documents = [], fetchDi
   for (const s of diditSessions) {
     const bytes = await fetchDidit(s.session_id).catch(() => null);
     const ok = bytes && sniffType(bytes) === 'pdf';
-    items.push({ name: 'Didit identity verification report', type: 'IDV report', source: 'Didit', date: s.date || null, kind: ok ? 'pdf' : null, bytes: ok ? bytes : null, status: ok ? 'Attached' : 'Not available' });
+    items.push({ name: s.name || 'Didit identity verification report', type: s.type || 'IDV report', source: 'Didit', date: s.date || null, kind: ok ? 'pdf' : null, bytes: ok ? bytes : null, status: ok ? 'Attached' : 'Not available' });
   }
   const seen = new Set();
   const docs = documents.filter((d) => { const k = d.file_url || d.id; if (!d.file_url || seen.has(k)) return false; seen.add(k); return true; });

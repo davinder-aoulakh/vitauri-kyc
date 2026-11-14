@@ -5,6 +5,7 @@
  *           Sign-Off · 9 Annex (Didit report + all file documents inline) · 10 Audit Trail Appendix
  */
 import React, { useState, useEffect } from 'react';
+import { fetchDiditReportOrNull } from '@/lib/diditReport';
 import { base44 } from '@/api/base44Client';
 import { getSignedUrl } from '@/lib/securityUtils';
 import { Button } from '@/components/ui/button';
@@ -43,21 +44,7 @@ async function loadLogo(url) {
 }
 
 // ── Annex fetch helpers ────────────────────────────────────────────────────
-async function fetchDiditPdfBytes(sessionId, tenantId) {
-  try {
-    const res = await base44.functions.invoke('diditProxy', { action: 'session_pdf', session_id: sessionId, tenant_id: tenantId });
-    const d = res?.data ?? res;
-    const base64 = d?.pdf_base64;
-    if (!base64) return null;
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes;
-  } catch (e) {
-    console.warn('Didit report fetch failed:', e);
-    return null;
-  }
-}
+const fetchDiditPdfBytes = fetchDiditReportOrNull;
 
 async function fetchFileBytes(url) {
   try {
@@ -187,6 +174,15 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
         }
       });
     });
+
+    // ORG: Didit's business verification (KYB) report, unless it was already saved to the client file as a document
+    if (client?.client_type === 'ORG') {
+      const kyb = await base44.entities.KybVerification.filter({ client_id: client.id }, '-created_date', 1).then((r) => (Array.isArray(r) ? r : r?.items || [])[0]).catch(() => null);
+      const savedAlready = (documents || []).some((d) => d.didit_session_id === kyb?.didit_session_id && /^Didit_KYB_Report_/.test(d.file_name || ''));
+      if (kyb?.didit_session_id && !savedAlready && !seenSessions.has(kyb.didit_session_id)) {
+        diditSessions.push({ session_id: kyb.didit_session_id, date: kyb.decided_at || kyb.updated_date || null, name: 'Didit business verification (KYB) report', type: 'KYB report' });
+      }
+    }
 
     // Annex: every item fetched once; files are typed from their bytes, so portal uploads named "Additional Documents" are attached too.
     const [annexItems, logo, analyst] = await Promise.all([

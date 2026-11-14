@@ -8,7 +8,8 @@ import { hasPermission } from '@/lib/permissions';
 import { openChecks, acceptReadiness, PENDING_STATUSES } from '@/lib/kybReview';
 import { linkRoles, parseRoles, joinRoles } from '@/lib/partyRoles';
 import { upsertRelatedParty, findLinkedMatch } from '@/lib/relatedPartyUpsert';
-import { CheckCircle, Clock, FileText, Loader2, RefreshCw, ShieldAlert, UserPlus, Building2 } from 'lucide-react';
+import { CheckCircle, Clock, Eye, FileText, Loader2, RefreshCw, ShieldAlert, UserPlus, Building2 } from 'lucide-react';
+import DiditReportPreview from '@/components/didit/DiditReportPreview';
 import { cn } from '@/lib/utils';
 import KeyPeopleVerification, { keyRoleKind } from './KeyPeopleVerification';
 
@@ -62,6 +63,7 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
   const tenantId = kycCase?.tenant_id || client?.tenant_id;
   const key = ['kyb-step', client?.id];
   const [syncing, setSyncing] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [adding, setAdding] = useState(null);
   const [acceptReason, setAcceptReason] = useState('');
   const [accepting, setAccepting] = useState(false);
@@ -190,8 +192,20 @@ export default function KybStep({ kycCase, client, currentUser, tenant, onStepCo
           <h3 className="text-sm font-semibold">Business verification (Didit KYB)</h3>
           {kyb && <span className={cn('text-[11px] px-2 py-0.5 rounded-full border', STATUS_CLS[kyb.status] || 'bg-muted text-muted-foreground border-border')}>{kyb.status}</span>}
           {acceptedStillValid && <span className="text-[11px] px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">Accepted (Vitauri)</span>}
+          {kyb?.didit_session_id && (
+            <>
+              <Button size="sm" variant="outline" className="ml-auto h-7 gap-1.5 text-xs" onClick={() => setReportOpen(true)} title="Didit's full business verification report: registry data, ownership, AML, documents, officers">
+                <Eye className="w-3.5 h-3.5" /> Full Didit report
+              </Button>
+              <DiditReportPreview open={reportOpen} onOpenChange={setReportOpen} sessionId={kyb.didit_session_id} tenantId={kycCase.tenant_id}
+                title={`Didit business verification report — ${client?.full_name || ''}`}
+                fileName={`Didit_KYB_Report_${String(kyb.didit_session_id).slice(0, 8)}.pdf`}
+                audit={{ tenant_id: kycCase.tenant_id, case_id: kycCase.id, client_id: client?.id, actor_user_id: currentUser?.id, actor_name: currentUser?.full_name }}
+                saveTo={{ tenantId: kycCase.tenant_id, clientId: client?.id, caseId: kycCase.id, currentUser }} />
+            </>
+          )}
           {kyb && (
-            <Button size="sm" variant="outline" className="ml-auto h-7 gap-1.5 text-xs" onClick={() => sync(false)} disabled={syncing}>
+            <Button size="sm" variant="outline" className={cn('h-7 gap-1.5 text-xs', !kyb.didit_session_id && 'ml-auto')} onClick={() => sync(false)} disabled={syncing}>
               {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Sync from Didit
             </Button>
           )}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { X, ExternalLink, RefreshCw, AlertTriangle, Download } from 'lucide-react';
+import { X, ExternalLink, RefreshCw, AlertTriangle, Download, Eye } from 'lucide-react';
+import DiditReportPreview from '@/components/didit/DiditReportPreview';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -61,6 +62,7 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
   const [error, setError]         = useState('');
   const [mainImage, setMainImage] = useState('front');
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -251,6 +253,13 @@ export default function DiditVerificationPanel({ sessionId, tenantId, clientName
               <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
               Refresh
             </Button>
+            <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs"
+              onClick={() => setPreviewOpen(true)} disabled={!sessionId} title="Read the full Didit report on screen">
+              <Eye className="w-3.5 h-3.5" />
+              Preview
+            </Button>
+            <DiditReportPreview open={previewOpen} onOpenChange={setPreviewOpen} sessionId={sessionId} tenantId={tenantId}
+              title={`Didit report — ${clientName || ''}`} audit={{ tenant_id: tenantId }} />
             <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs"
               onClick={downloadPdf} disabled={pdfLoading}>
               {pdfLoading

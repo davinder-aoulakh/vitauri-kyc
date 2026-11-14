@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTenant } from '@/lib/tenantContext';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
-import { Shield, AlertTriangle, CheckCircle, Loader2, RefreshCw, ExternalLink, ChevronDown, ChevronUp, Radio } from 'lucide-react';
+import { Shield, AlertTriangle, CheckCircle, Loader2, RefreshCw, ExternalLink, ChevronDown, ChevronUp, Radio, Eye, ListChecks, Building2 } from 'lucide-react';
+import DiditVerificationPanel from '@/components/client/DiditVerificationPanel';
+import DiditReportPreview from '@/components/didit/DiditReportPreview';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { addDays, format } from 'date-fns';
@@ -83,6 +85,15 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
   const [sourceFilter, setSourceFilter] = useState('all');
   const [diditAmlSummary, setDiditAmlSummary] = useState(null); // { status, total_hits, screenings, warnings, thresholds, ongoing_monitoring, synced_at }
   const [showThresholds, setShowThresholds] = useState(false);
+  const [resultsSession, setResultsSession] = useState(null);   // Didit results panel, opened in this step
+  const [reportView, setReportView] = useState(null);           // { sessionId, title, fileName, saveTo? }
+  const [kyb, setKyb] = useState(null);                         // ORG: the Didit business verification
+  useEffect(() => {
+    if (client?.client_type !== 'ORG' || !client?.id) return;
+    base44.entities.KybVerification.filter({ client_id: client.id }, '-created_date', 1)
+      .then((r) => setKyb((Array.isArray(r) ? r : r?.items || [])[0] || null)).catch(() => {});
+  }, [client?.id, client?.client_type]);
+  const auditBase = { tenant_id: tenantId, case_id: caseId, client_id: client?.id, actor_user_id: currentUser?.id, actor_name: currentUser?.full_name };
   const [expandedHitIdx, setExpandedHitIdx] = useState(null); // hitKey of slide-panel open hit
   const [loadingHitDetails, setLoadingHitDetails] = useState(false);
   const [updatingHitId, setUpdatingHitId] = useState(null); // hit.id being updated in Didit
@@ -563,6 +574,41 @@ export default function ScreeningStep({ caseId, tenantId, currentUser, kycCase, 
           {syncing ? 'Syncing…' : 'Sync from Didit'}
         </Button>
       </div>
+
+      {/* ORG: the company's own screening result comes from the Didit business verification */}
+      {kyb?.didit_session_id && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-4 py-3">
+          <Building2 className="h-4 w-4 text-primary" />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold">Company screening (Didit KYB)</div>
+            <div className={cn('text-xs', (kyb.aml?.total_hits || 0) > 0 ? 'text-destructive font-medium' : 'text-muted-foreground')}>
+              {kyb.aml?.status ? `${kyb.aml.status} · ` : ''}{kyb.aml?.total_hits ?? 0} hit{(kyb.aml?.total_hits ?? 0) === 1 ? '' : 's'}
+            </div>
+          </div>
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs"
+            onClick={() => setReportView({ sessionId: kyb.didit_session_id, title: `Didit business verification report — ${client?.full_name || ''}`, fileName: `Didit_KYB_Report_${String(kyb.didit_session_id).slice(0, 8)}.pdf`, saveTo: { tenantId, clientId: client?.id, caseId, currentUser } })}>
+            <Eye className="h-3.5 w-3.5" /> See screening results
+          </Button>
+        </div>
+      )}
+
+      {/* The actual Didit results, without leaving this step */}
+      {diditAmlSummary?.session_id && (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => setResultsSession(diditAmlSummary.session_id)}>
+            <ListChecks className="h-3.5 w-3.5" /> See screening results
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs"
+            onClick={() => setReportView({ sessionId: diditAmlSummary.session_id, title: `Didit report — ${client?.full_name || ''}` })}>
+            <Eye className="h-3.5 w-3.5" /> Didit report
+          </Button>
+        </div>
+      )}
+      {resultsSession && (
+        <DiditVerificationPanel sessionId={resultsSession} tenantId={tenantId} clientName={client?.full_name} onClose={() => setResultsSession(null)} />
+      )}
+      <DiditReportPreview open={!!reportView} onOpenChange={(o) => { if (!o) setReportView(null); }} sessionId={reportView?.sessionId} tenantId={tenantId}
+        title={reportView?.title} fileName={reportView?.fileName} saveTo={reportView?.saveTo} audit={auditBase} />
 
       {/* Didit AML Summary card — shown when a Didit session has been processed */}
       {diditAmlSummary && (
