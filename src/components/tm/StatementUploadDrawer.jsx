@@ -67,6 +67,10 @@ export default function StatementUploadDrawer({ open, onOpenChange, clientId, ba
   const [result, setResult] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [otherAccount, setOtherAccount] = useState('');
+  // Test clock: only a Demo tenant or a Vitauri Ops user may set it (the backend ignores it for everyone else)
+  const canSetAsOf = v2 && (tenant?.status === 'Demo' || currentUser?.app_role === 'Vitauri Ops');
+  const [asOf, setAsOf] = useState('');
+  const asOfArg = canSetAsOf && asOf ? { as_of: asOf } : {};
 
   const activeClient = clientId || clientSel;
 
@@ -91,7 +95,7 @@ export default function StatementUploadDrawer({ open, onOpenChange, clientId, ba
 
   async function parse(id) {
     setStep('Reading and checking the statement…');
-    await base44.functions.invoke('parseStatement', { statement_upload_id: id });
+    await base44.functions.invoke('parseStatement', { statement_upload_id: id, ...asOfArg });
     const list = await base44.entities.StatementUpload.filter({ tenant_id: tenantId, id });
     setUpload(list[0]); setExcluded({}); setPhase('review');
   }
@@ -155,7 +159,7 @@ export default function StatementUploadDrawer({ open, onOpenChange, clientId, ba
     setPhase('committing'); setError('');
     try {
       const row_overrides = Object.fromEntries(Object.keys(excluded).filter((k) => excluded[k]).map((k) => [k, { exclude: true }]));
-      const res = await base44.functions.invoke('commitStatement', { statement_upload_id: uploadId, row_overrides });
+      const res = await base44.functions.invoke('commitStatement', { statement_upload_id: uploadId, row_overrides, ...asOfArg });
       setResult(res.data); setPhase('done');
       onCommitted?.(res.data);
     } catch (e) {
@@ -203,6 +207,13 @@ export default function StatementUploadDrawer({ open, onOpenChange, clientId, ba
                 <p className="text-xs text-muted-foreground">No account chosen: the account is read from the statement. If the customer has no account with that number yet, it is added when the statement is processed.</p>
               ) : (
                 <p className="text-xs text-muted-foreground">Select a client first.</p>
+              )}
+              {canSetAsOf && (
+                <label className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                  Test date (treat this day as today)
+                  <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="h-7 rounded-md border border-input bg-background px-2 text-xs text-foreground" aria-label="Test date" />
+                  <span>Demo tenants and Vitauri Ops only. Leave empty for the real date.</span>
+                </label>
               )}
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => handleOpenChange(false)}>Cancel</Button>
