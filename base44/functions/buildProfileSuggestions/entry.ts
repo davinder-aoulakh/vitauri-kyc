@@ -637,7 +637,13 @@ Deno.serve(async (req) => {
       let prevHints = '';
       try { prevHints = JSON.parse(kycCase?.osint_cache || '{}')?.results?.hints || ''; } catch { prevHints = ''; }
       osintResults = await runOsint(base44, { client: clientRecord, kycCase, hints: prevHints });
-      // Cache it
+      // Cache it; findings the analyst added to the profile are kept (read fresh: they may be added while the search runs)
+      let keptOsintSelection = [];
+      try {
+        const freshCase = await base44.asServiceRole.entities.KycCase.filter({ id: case_id });
+        const prevCache = JSON.parse((Array.isArray(freshCase) ? freshCase[0] : freshCase?.items?.[0])?.osint_cache || '{}');
+        if (Array.isArray(prevCache?.selected)) keptOsintSelection = prevCache.selected;
+      } catch { /* unreadable cache: nothing to keep */ }
       await base44.asServiceRole.entities.KycCase.update(case_id, {
         osint_cache: JSON.stringify({ results: osintResults, run_at: new Date().toISOString(), selected: keptOsintSelection }),
       });

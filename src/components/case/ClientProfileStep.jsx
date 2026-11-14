@@ -23,6 +23,7 @@ import { NP_FIELD_LABELS, ORG_FIELD_LABELS } from '@/hooks/useProfileSuggestions
 import InlineError from '@/components/shared/InlineError';
 import { useAiOrchestrator } from '@/hooks/useAiOrchestrator';
 import ExpectedProfileEditor from '@/components/case/tm/ExpectedProfileEditor';
+import { loadSelected, patchSelected, onSelectedChange, removeSelected, stripPastedLine, selectedForPrompt, selectedFromCache, pastedLine } from '@/lib/osintSelected';
 
 const DRAFT_TIMEOUT_MS = 60000;
 const OUTREACH_FETCH_TIMEOUT_MS = 3000;
@@ -102,6 +103,29 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
   const [generatingPurpose, setGeneratingPurpose] = useState(false);
   const [purposeError, setPurposeError]         = useState(null);
   const [draftStage, setDraftStage]             = useState('drafting'); // 'gathering' | 'drafting'
+  // OSINT findings the analyst added (stored on the case): shown under the box and given to the AI rewrite
+  const [osintSelected, setOsintSelected]       = useState(() => selectedFromCache(kycCase?.osint_cache));
+  const [previousText, setPreviousText]         = useState(null);     // text before the last AI rewrite (for Restore)
+  useEffect(() => {
+    if (!kycCase?.id) return undefined;
+    let alive = true;
+    loadSelected(kycCase.id).then((l) => { if (alive) setOsintSelected(l); }).catch(() => {});
+    const off = onSelectedChange((caseId, l) => { if (caseId === kycCase.id) setOsintSelected(l); });
+    return () => { alive = false; off(); };
+  }, [kycCase?.id]);
+
+  async function removeOsintFinding(s) {
+    setPurposeText((t) => stripPastedLine(t, s));
+    try {
+      await patchSelected(kycCase.id, (list) => removeSelected(list, s.key));
+      await base44.entities.AuditEvent.create({
+        tenant_id: kycCase.tenant_id, case_id: kycCase.id, client_id: kycCase.client_id,
+        actor_user_id: currentUser?.id, actor_name: currentUser?.full_name, actor_type: 'User',
+        event_type: 'osint_finding_removed', before_state: { title: s.title, source_url: s.source_url || null }, after_state: {},
+        notes: `OSINT finding removed from the profile: ${s.title}`,
+      });
+    } catch (e) { console.warn('OSINT selection not saved', e?.message); }
+  }
 
   const { invoke: invokePurposeDraft, cancel: cancelPurposeDraft } = useAiOrchestrator({
     caseId: kycCase?.id,
@@ -132,8 +156,7 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
   useEffect(() => {
     if (onRegisterOsintAdd) {
       onRegisterOsintAdd((finding) => {
-        const text = `\n\n[OSINT — ${finding.source_type?.toUpperCase()}] ${finding.title}: ${finding.summary}`;
-        setPurposeText(d => d + text);
+        setPurposeText(d => `${d}\n\n${pastedLine(finding)}`);
       });
     }
   }, [onRegisterOsintAdd]);
@@ -157,6 +180,9 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
     setGeneratingPurpose(true);
     setPurposeError(null);
     setDraftStage('gathering');
+    const textBefore = purposeText || '';
+    // Latest stored selection (a finding may have been added seconds ago)
+    const osintForDraft = await loadSelected(kycCase.id).catch(() => osintSelected);
     const stageTimer = setTimeout(() => setDraftStage('drafting'), 1000);
 
     try {
@@ -178,12 +204,19 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
       // eat into the AI generation budget, and the debounced autosave is a
       // backstop if the user navigates away before the persist completes.
       const result = await Promise.race([
-        invokePurposeDraft('PurposeDraft', { client, caseType: kycCase?.case_type, outreachSummary: outreachSummary || undefined, confirmedFieldsSummary }),
+        invokePurposeDraft('PurposeDraft', {
+          client, caseType: kycCase?.case_type, outreachSummary: outreachSummary || undefined, confirmedFieldsSummary,
+          // Bring it together: the findings the analyst added and the text already in the box
+          osintFindings: selectedForPrompt(osintForDraft) || undefined,
+          currentText: textBefore.trim() || undefined,
+        }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('AI draft timed out — please try again.')), DRAFT_TIMEOUT_MS)),
       ]);
 
       if (!result) throw new Error('Failed to generate draft. Please try again.');
       const draftText = result?.statement || '';
+      if (!draftText.trim()) throw new Error('The AI returned an empty draft. Your text was left unchanged.');
+      if (textBefore.trim() && textBefore.trim() !== draftText.trim()) setPreviousText(textBefore);
       setPurposeText(draftText);
       if (kycCase?.id) {
         base44.entities.KycCase.update(kycCase.id, { purpose_nature_text: draftText })
@@ -246,15 +279,16 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
             <p className="text-xs text-muted-foreground mt-0.5">Regulatory requirement — must be completed before this step can be marked complete</p>
           </div>
           <Button size="sm" className="gap-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white flex-shrink-0"
-            onClick={generatePurposeDraft} disabled={generatingPurpose}>
+            onClick={generatePurposeDraft} disabled={generatingPurpose}
+            title={purposeText.trim() || osintSelected.length ? `Rewrites the statement from the file, your current text${osintSelected.length ? ` and ${osintSelected.length} added OSINT finding${osintSelected.length === 1 ? '' : 's'}` : ''}` : 'Drafts the statement from the file'}>
             {generatingPurpose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            {generatingPurpose ? (draftStage === 'gathering' ? 'Gathering context…' : 'Drafting…') : 'AI Draft'}
+            {generatingPurpose ? (draftStage === 'gathering' ? 'Gathering context…' : 'Drafting…') : (purposeText.trim() || osintSelected.length ? 'AI Rewrite' : 'AI Draft')}
           </Button>
         </div>
         <Textarea
           ref={purposeRef}
           value={purposeText}
-          onChange={e => setPurposeText(e.target.value)}
+          onChange={e => { setPurposeText(e.target.value); }}
           placeholder={`Describe the nature of the client relationship, intended products/services…`}
           className={cn('text-sm leading-relaxed min-h-56 max-h-[70vh] overflow-y-auto resize-y', !purposeText && 'border-amber-300 focus:ring-amber-400')}
         />
@@ -266,6 +300,30 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
         )}
         {purposeError && (
           <InlineError message={purposeError} onRetry={generatePurposeDraft} />
+        )}
+        {previousText != null && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs text-purple-900">
+            <Sparkles className="h-3 w-3" /> Rewritten by AI — check it before you continue.
+            <button type="button" className="ml-auto font-medium underline" onClick={() => { setPurposeText(previousText); setPreviousText(null); }}>Restore previous text</button>
+            <button type="button" className="text-purple-700/70 hover:text-purple-900" onClick={() => setPreviousText(null)}>Dismiss</button>
+          </div>
+        )}
+        {osintSelected.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-xs font-medium text-muted-foreground">OSINT findings in this profile ({osintSelected.length}) — included in the next AI rewrite</div>
+            <div className="flex flex-wrap gap-1.5">
+              {osintSelected.map((s) => (
+                <span key={s.key} className={cn('inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs', s.is_adverse ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800')} title={s.summary}>
+                  <Globe className="h-3 w-3 flex-shrink-0" />
+                  {s.source_url
+                    ? <a href={s.source_url} target="_blank" rel="noopener noreferrer" className="truncate max-w-[22rem] hover:underline">{s.title}</a>
+                    : <span className="truncate max-w-[22rem]">{s.title}</span>}
+                  {s.source_type && <span className="opacity-60">· {s.source_type}</span>}
+                  <button type="button" aria-label={`Remove ${s.title}`} className="opacity-60 hover:opacity-100" onClick={() => removeOsintFinding(s)}>×</button>
+                </span>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 

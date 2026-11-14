@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import InlineError from '@/components/shared/InlineError';
 import { clientIdentityKey } from '@/lib/osintIdentity';
+import { findingKey, addSelected, loadSelected, patchSelected, onSelectedChange, selectedFromCache } from '@/lib/osintSelected';
 
 const TIMEOUT_MS = 150000;
 const MATCH = {
@@ -56,11 +57,19 @@ function FindingCard({ f, added, onAdd, muted = false }) {
   );
 }
 
-export default function OsintPanel({ kycCase, client, onAddToProfile }) {
+export default function OsintPanel({ kycCase, client, currentUser, onAddToProfile }) {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [runAt, setRunAt] = useState(null);
-  const [added, setAdded] = useState([]);
+  // Keys of the findings added to the profile: stored on the case, so they survive a reload and a new search
+  const [added, setAdded] = useState(() => selectedFromCache(kycCase?.osint_cache).map((s) => s.key));
+  useEffect(() => {
+    if (!kycCase?.id) return undefined;
+    let alive = true;
+    loadSelected(kycCase.id).then((l) => { if (alive) setAdded(l.map((s) => s.key)); }).catch(() => {});
+    const off = onSelectedChange((caseId, l) => { if (caseId === kycCase.id) setAdded(l.map((s) => s.key)); });
+    return () => { alive = false; off(); };
+  }, [kycCase?.id]);
   const [searchError, setSearchError] = useState(null);
   const [hints, setHints] = useState('');
   const [showOthers, setShowOthers] = useState(false);
@@ -89,7 +98,6 @@ export default function OsintPanel({ kycCase, client, onAddToProfile }) {
       const data = res?.data ?? res;
       setResults(data.results);
       setRunAt(data.run_at);
-      setAdded([]);
       setShowOthers(false);
     } catch (err) {
       console.error('OSINT runSearch error:', err);
@@ -100,8 +108,18 @@ export default function OsintPanel({ kycCase, client, onAddToProfile }) {
   }
 
   function handleAdd(finding) {
+    const key = findingKey(finding);
+    if (!key || added.includes(key)) return;
     onAddToProfile?.(finding);
-    setAdded((a) => [...a, finding.title]);
+    setAdded((a) => [...a, key]);
+    patchSelected(kycCase.id, (list) => addSelected(list, finding, currentUser))
+      .then(() => base44.entities.AuditEvent.create({
+        tenant_id: kycCase.tenant_id, case_id: kycCase.id, client_id: kycCase.client_id,
+        actor_user_id: currentUser?.id, actor_name: currentUser?.full_name, actor_type: 'User',
+        event_type: 'osint_finding_added', before_state: {}, after_state: { title: finding.title, source_type: finding.source_type, source_url: finding.source_url || null, is_adverse: !!finding.is_adverse },
+        notes: `OSINT finding added to the profile: ${finding.title}`,
+      }))
+      .catch((e) => console.warn('OSINT selection not saved', e?.message));
   }
 
   const findings = results?.findings || [];
@@ -221,7 +239,7 @@ export default function OsintPanel({ kycCase, client, onAddToProfile }) {
             {findings.length === 0 && (
               <p className="text-xs text-sidebar-foreground/60 text-center py-2">Nothing found that could be tied to this client. Add a hint (e.g. LinkedIn URL or employer) and re-run.</p>
             )}
-            {findings.map((f, i) => <FindingCard key={`f${i}`} f={f} added={added.includes(f.title)} onAdd={handleAdd} />)}
+            {findings.map((f, i) => <FindingCard key={`f${i}`} f={f} added={added.includes(findingKey(f))} onAdd={handleAdd} />)}
 
             {others.length > 0 && (
               <div className="space-y-2">

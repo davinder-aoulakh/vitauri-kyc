@@ -811,6 +811,7 @@ export default function CaseWorkspace() {
               <OsintPanel
                 kycCase={kycCase}
                 client={client}
+                currentUser={currentUser}
                 onAddToProfile={osintAddCallback}
               />
             ) : (
