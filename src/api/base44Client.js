@@ -1,5 +1,6 @@
 import { createClient } from '@base44/sdk';
 import { appParams } from '@/lib/app-params';
+import { createRequestQueue } from '@/lib/requestQueue';
 
 const { appId, token, functionsVersion, appBaseUrl } = appParams;
 
@@ -22,8 +23,6 @@ const rawClient = createClient({
 const MAX_CONCURRENT = 10;
 const MAX_RETRIES = 3;
 const TIMEOUT_MS = 60000;
-let active = 0;
-const queue = [];
 // Writes (update/create/delete/...) jump ahead of queued reads — a user action
 // like "Mark Complete" must never sit behind a page's background list/filter
 // calls, which can easily fill every concurrency slot on a busy workspace page.
@@ -48,51 +47,26 @@ function withTimeout(promise) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-function acquire(priority = false) {
-  return new Promise((resolve) => {
-    const tryAcquire = () => {
-      if (active < MAX_CONCURRENT) {
-        active++;
-        resolve();
-      } else if (priority) {
-        queue.unshift(tryAcquire);
-      } else {
-        queue.push(tryAcquire);
-      }
-    };
-    tryAcquire();
-  });
-}
-
-function release() {
-  active--;
-  const next = queue.shift();
-  if (next) next();
-}
-
 function isRateLimited(err) {
   return err?.status === 429 || /rate limit/i.test(err?.message || '');
 }
 
-function throttle(fn, priority = false) {
-  return async function throttled(...args) {
-    let attempt = 0;
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      await acquire(priority);
-      try {
-        return await withTimeout(fn(...args));
-      } catch (err) {
-        if (isRateLimited(err) && attempt < MAX_RETRIES) {
-          attempt++;
-          await new Promise((r) => setTimeout(r, 1000 * 2 ** (attempt - 1)));
-          continue;
-        }
-        throw err;
-      } finally {
-        release();
-      }
-    }
+// Reads started on the page the user is on now go before reads still queued from the page they left.
+const queueRuns = createRequestQueue({
+  max: MAX_CONCURRENT,
+  getScope: () => (typeof window !== 'undefined' ? window.location.pathname : ''),
+});
+
+/** Timing of recent entity calls (label, queue wait, network time, retries) — used by the case-open trace. No data. */
+export const recentEntityCalls = (since) => queueRuns.recentSince(since);
+
+function throttle(fn, priority = false, label = '') {
+  return function throttled(...args) {
+    return queueRuns.run(() => withTimeout(fn(...args)), {
+      priority,
+      label,
+      retryIf: (err, attempt) => (isRateLimited(err) && attempt < MAX_RETRIES ? 1000 * 2 ** attempt : null),
+    });
   };
 }
 
@@ -109,7 +83,7 @@ const entitiesProxy = new Proxy(rawClient.entities, {
         if (typeof method !== 'function') return method;
         // Realtime subscriptions are websocket-based, not HTTP — never throttle them
         if (methodName === 'subscribe') return method.bind(entityTarget);
-        return throttle(method.bind(entityTarget), WRITE_METHODS.has(methodName));
+        return throttle(method.bind(entityTarget), WRITE_METHODS.has(methodName), `${String(entityName)}.${String(methodName)}`);
       },
     });
     entityProxyCache.set(entityName, wrapped);
