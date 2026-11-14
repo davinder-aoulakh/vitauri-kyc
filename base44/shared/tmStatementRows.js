@@ -68,6 +68,8 @@ export function buildItems({ clientId, accountId, accountRef, currency, rows }) 
       lifecycle: r.lifecycle || 'booked',
       counterparty_name: r.counterparty_name,
       counterparty_account_id: r.counterparty_account_id,
+      reference: r.reference,
+      end_to_end_id: r.end_to_end_id,
       ...(accountId ? { bank_account_id: accountId } : accountRef ? { iban_or_number: accountRef, account_currency: currency } : {}),
     },
   }));

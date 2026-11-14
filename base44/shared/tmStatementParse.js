@@ -218,6 +218,20 @@ function mtDate(yymmdd) {
 }
 const mtNum = (s) => parseFloat(String(s).replace(',', '.'));
 
+const MT_FIELDS = 'TRTP|IBAN|BIC|NAME|REMI|EREF|MARF|CSID|ORDP|BENM|ISDT|PREF|RTRN|PURP|ULTD|ULTB|ID';
+/** Structured :86: subfields ("/IBAN/…/NAME/…/REMI/…"). Returns {} for free text. A value runs to the next known marker. */
+export function mt940Subfields(text) {
+  const d = String(text || '');
+  const marks = [...d.matchAll(new RegExp(`/(${MT_FIELDS})/`, 'g'))];
+  const out = {};
+  marks.forEach((m, i) => {
+    const end = i + 1 < marks.length ? marks[i + 1].index : d.length;
+    const value = d.slice(m.index + m[0].length, end).trim();
+    if (value && out[m[1]] === undefined) out[m[1]] = value;
+  });
+  return out;
+}
+
 export function parseMt940(text) {
   const blocks = String(text).replace(/\r/g, '').split(/\n(?=:\d{2}[A-Z]?:)/);
   const out = { account_ref: undefined, currency: undefined, period_from: undefined, period_to: undefined, opening: null, closing: null, rows: [] };
@@ -256,8 +270,14 @@ export function parseMt940(text) {
     } else if (tag === '86' && cur) {
       const d = val.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
       cur.description = cur.description ? `${cur.description} ${d}`.trim() : d;
+      // Structured subfields first; the older patterns stay as fallback for banks that do not use them.
+      const sub = mt940Subfields(d);
       const nm = d.match(/\/NAME\/(.+?)(?:\/[A-Z]{2,5}\/|$)/) || d.match(/\?32([^?]+)/);
-      if (nm) cur.counterparty_name = nm[1].trim();
+      if (sub.NAME) cur.counterparty_name = sub.NAME;
+      else if (nm) cur.counterparty_name = nm[1].trim();
+      if (sub.IBAN) { const iban = sub.IBAN.toUpperCase().replace(/\s/g, ''); if (/^[A-Z]{2}\d{2}[A-Z0-9]{8,30}$/.test(iban)) cur.counterparty_account_id = iban; }
+      if (sub.REMI) cur.reference = sub.REMI.replace(/^USTD\/\//, '').trim().slice(0, 140);
+      if (sub.EREF && !/^NOTPROVIDED$/i.test(sub.EREF)) cur.end_to_end_id = sub.EREF.slice(0, 64);
     }
   }
   out.rows = out.rows.filter((r) => r.date && r.amount > 0);

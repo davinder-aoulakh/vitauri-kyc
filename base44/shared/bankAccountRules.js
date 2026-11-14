@@ -30,6 +30,26 @@ export function cleanAccountNumber(value) {
 
 const SOURCES = ['api', 'psd2', 'upload', 'manual'];
 const FREQS = ['daily', 'weekly', 'monthly'];
+export const ACCOUNT_TYPES = ['own', 'external_psd2', 'joint', 'business'];
+const MAX_HOLDERS = 10;
+
+/** Holders of an account: [{ name, client_id?, related_party_id?, role? }]. Rows without a name are dropped. */
+export function cleanHolders(value) {
+  if (!Array.isArray(value)) throw httpError(400, 'holders must be a list');
+  const out = [];
+  for (const h of value) {
+    if (!h || typeof h !== 'object') continue;
+    const name = typeof h.name === 'string' ? h.name.trim().slice(0, 140) : '';
+    if (!name) continue;
+    const row = { name };
+    for (const k of ['client_id', 'related_party_id', 'role']) {
+      if (typeof h[k] === 'string' && h[k].trim()) row[k] = h[k].trim().slice(0, 80);
+    }
+    out.push(row);
+  }
+  if (out.length > MAX_HOLDERS) throw httpError(400, `At most ${MAX_HOLDERS} holders`);
+  return out;
+}
 
 export function requireDate(v, name) {
   if (!DATE_RE.test(String(v ?? '')) || Number.isNaN(new Date(`${v}T00:00:00Z`).getTime())) throw httpError(400, `${name} must be YYYY-MM-DD`);
@@ -60,6 +80,11 @@ export function pickFields(p) {
     if (!FREQS.includes(p.expected_frequency)) throw httpError(400, 'Invalid expected_frequency');
     out.expected_frequency = p.expected_frequency;
   }
+  if (p.account_type !== undefined && p.account_type !== '') {
+    if (!ACCOUNT_TYPES.includes(p.account_type)) throw httpError(400, 'Invalid account_type');
+    out.account_type = p.account_type;
+  }
+  if (p.holders !== undefined) out.holders = cleanHolders(p.holders);
   if (p.is_customer_owned !== undefined) out.is_customer_owned = p.is_customer_owned === true;
   if (p.opened_at) out.opened_at = requireDate(p.opened_at, 'opened_at');
   return out;
@@ -69,4 +94,5 @@ export const snapshot = (a) => ({
   iban_or_number: a.iban_or_number, institution: a.institution, bic: a.bic, currency: a.currency, holder_name: a.holder_name,
   source_type: a.source_type, is_customer_owned: a.is_customer_owned, expected_frequency: a.expected_frequency,
   opened_at: a.opened_at, status: a.status, closed_at: a.closed_at, closed_reason: a.closed_reason,
+  account_type: a.account_type, holders: a.holders,
 });

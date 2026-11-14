@@ -28,6 +28,12 @@ export async function dedupeKey({ tenant_id, bank_account_id, executed_at, amoun
   ].join('|'));
 }
 
+/** ISO country of an IBAN ("NL02ABNA…" → "NL"); undefined when the value is not an IBAN. */
+export function countryFromIban(value) {
+  const v = String(value ?? '').toUpperCase().replace(/\s/g, '');
+  return /^[A-Z]{2}\d{2}[A-Z0-9]{8,30}$/.test(v) ? v.slice(0, 2) : undefined;
+}
+
 const CHANNEL_TO_SOURCE = {
   api: 'api',
   psd2: 'psd2',
@@ -113,7 +119,9 @@ export async function toCanonical(raw, channel, context = {}) {
     external_id: raw.external_id,
     counterparty_name: raw.counterparty_name,
     counterparty_account_id: raw.counterparty_account_id,
-    counterparty_country: raw.counterparty_country,
+    counterparty_country: raw.counterparty_country || countryFromIban(raw.counterparty_account_id),
+    reference: typeof raw.reference === 'string' && raw.reference.trim() ? raw.reference.trim().slice(0, 140) : undefined,
+    end_to_end_id: typeof raw.end_to_end_id === 'string' && raw.end_to_end_id.trim() ? raw.end_to_end_id.trim().slice(0, 64) : undefined,
     bank_account_id: bankAccountId,
     own_transfer: !!(raw.own_transfer ?? context.own_transfer),
     case_id: raw.case_id || context.case_id,
