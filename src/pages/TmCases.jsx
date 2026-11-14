@@ -10,6 +10,7 @@ import { hasPermission } from '@/lib/permissions';
 import { CASE_STATUS_LABEL } from '@/lib/tmCase';
 import AppShell from '@/components/layout/AppShell';
 import PageHeader from '@/components/shared/PageHeader';
+import { amlLayoutOn } from '@/lib/amlNav';
 import EmptyState from '@/components/shared/EmptyState';
 import InlineError from '@/components/shared/InlineError';
 import DeadlineCell from '@/components/tm/alerts/DeadlineCell';
@@ -94,7 +95,7 @@ export default function TmCases() {
   return (
     <AppShell>
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
-        <PageHeader title="TM Cases" subtitle="Transaction monitoring investigations" />
+        <PageHeader title={amlLayoutOn(tenant) ? 'Investigations' : 'TM Cases'} subtitle="Transaction monitoring investigations" />
         <div className="flex flex-wrap gap-2 mb-4" role="tablist" aria-label="Case filters">
           {FILTERS.map((f) => (
             <button key={f.key} role="tab" aria-selected={filter === f.key} onClick={() => setFilter(f.key)}

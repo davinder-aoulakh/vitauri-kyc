@@ -5,6 +5,7 @@ import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import AppShell from '@/components/layout/AppShell';
 import PageHeader from '@/components/shared/PageHeader';
+import { amlLayoutOn } from '@/lib/amlNav';
 import KpiCard from '@/components/shared/KpiCard';
 import EmptyState from '@/components/shared/EmptyState';
 import AlertDetailPanel from '@/components/monitoring/AlertDetailPanel';
@@ -55,6 +56,7 @@ export default function MonitoringAlerts() {
   // TM mirror alerts (Transaction_Rule_Hit) are handled in Transaction Monitoring when tm_core is on.
   const isTmMirror = (a) => isFeatureEnabled(tenant, 'tm_core') && a.alert_type === 'Transaction_Rule_Hit';
   const navigate = useNavigate();
+  const amlLayout = amlLayoutOn(tenant);
   const [alerts, setAlerts]       = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
@@ -156,12 +158,17 @@ export default function MonitoringAlerts() {
     <AppShell>
       <div className="p-6 space-y-5 max-w-screen-xl mx-auto">
         <PageHeader
-          title="Monitoring Alerts"
+          title={amlLayout ? 'Screening' : 'Monitoring Alerts'}
           subtitle="Continuous monitoring for PEP/sanctions changes, register updates, and manual flags"
           actions={
-            <Button size="sm" className="gap-1.5 text-xs" onClick={() => setManualFlag(true)}>
-              <Flag className="w-3.5 h-3.5" /> Manual Flag
-            </Button>
+            <>
+              {amlLayout && isFeatureEnabled(tenant, 'batch_screening') && hasPermission(currentUser?.app_role, 'createEditClient') && (
+                <Button asChild size="sm" variant="outline" className="text-xs"><Link to="/batch-screening">Batch Screening</Link></Button>
+              )}
+              <Button size="sm" className="gap-1.5 text-xs" onClick={() => setManualFlag(true)}>
+                <Flag className="w-3.5 h-3.5" /> Manual Flag
+              </Button>
+            </>
           }
         />
 

@@ -18,6 +18,7 @@ import {
   Building2, UserCircle, ClipboardList, ScanSearch, Mail, Send, Activity, SlidersHorizontal, ShieldCheck, Briefcase, FileText, Inbox, PieChart
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { amlNavItems, selectNav } from '@/lib/amlNav';
 
 const navItems = [
   {
@@ -82,6 +83,13 @@ const navItems = [
 ];
 
 const groupOf = (name) => navItems.find((g) => g.group === name);
+
+// Sidebar when tm_core and aml_nav_v2 are on (structure in src/lib/amlNav.js; the icons are attached here).
+const NAV_ICONS = {
+  LayoutDashboard, FolderOpen, Users, Search, Shield, Settings, BarChart3, AlertTriangle, Calendar, Archive,
+  UserCircle, ClipboardList, Mail, Send, Activity, SlidersHorizontal, ShieldCheck, Briefcase, FileText, Inbox, PieChart,
+};
+const amlNav = amlNavItems.map((g) => ({ ...g, items: g.items.map((i) => ({ ...i, icon: NAV_ICONS[i.icon] || FolderOpen })) }));
 
 // Sidebar when tm_core is on. Items keep their existing permission and feature checks.
 // Work first (what needs me now), then the customer, reviews, monitoring and control.
@@ -205,7 +213,7 @@ export default function AppShell({ children }) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-5">
-        {(isFeatureEnabled(tenant, 'tm_core') ? tmNavItems : navItems).map((group) => {
+        {({ legacy: navItems, tm: tmNavItems, aml: amlNav })[selectNav({ tmCore: isFeatureEnabled(tenant, 'tm_core'), amlNavV2: isFeatureEnabled(tenant, 'aml_nav_v2') })].map((group) => {
           // Hide Outreach section for roles that are not allowed
           if (group.outreachOnly && !OUTREACH_ROLES.includes(userRole)) return null;
           // Hide entire group if its feature flag is disabled
@@ -214,6 +222,7 @@ export default function AppShell({ children }) {
           const tmCoreOn = isFeatureEnabled(tenant, 'tm_core');
           const visibleItems = group.items.filter(item =>
             !(item.tmMoved && tmCoreOn) &&
+            !(item.outreachOnly && !OUTREACH_ROLES.includes(userRole)) &&
             (!item.permission || hasPermission(userRole, item.permission)) &&
             (!item.anyPermission || item.anyPermission.some(p => hasPermission(userRole, p))) &&
             (!item.featureKey || isFeatureEnabled(tenant, item.featureKey))

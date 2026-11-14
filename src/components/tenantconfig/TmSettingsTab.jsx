@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { hasPermission, isVitauriOps } from '@/lib/permissions';
 import RegressionRefFields from '@/components/tenantconfig/tm/RegressionRefFields';
 import { isFeatureEnabled } from '@/lib/featureFlags';
+import { normaliseJurisdictions } from '@/lib/amlNav';
 import AiModelCard from '@/components/tenantconfig/tm/AiModelCard';
 import { MODEL_CHANGE_ROLES, MIN_NOTE } from '@/lib/tmAiModels';
 import Psd2PartnerSelect from '@/components/tenantconfig/tm/Psd2PartnerSelect';
@@ -37,6 +38,7 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
   const [autoTriage, setAutoTriage] = useState(s.auto_triage_new_alerts === true);
   const amlV2 = isFeatureEnabled(tenant, 'aml_nav_v2');
   const [histDays, setHistDays] = useState(String(s.historical_window_days ?? 30));
+  const [jurisdictions, setJurisdictions] = useState((tenant?.jurisdictions || []).join(', '));
   const histOk = !amlV2 || (Number.isInteger(Number(histDays)) && Number(histDays) >= 1 && Number(histDays) <= 3650);
   const [reverifyWf, setReverifyWf] = useState(s.reverify_workflow_id || '');
   const isOps = isVitauriOps(currentUser?.app_role);
@@ -73,11 +75,12 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
         ...(modelChanged ? { ai_model: aiModel, ai_model_changed_at: new Date().toISOString(), ai_model_change_note: modelNote.trim() } : {}),
         ...(clean[cur] ? { objective_threshold: clean[cur] } : {}), // read by the rule starters
       };
-      const before = { tm_reporting_currency: tenant.tm_reporting_currency, tm_timezone: tenant.tm_timezone, tm_settings: s };
-      const updated = await base44.entities.Tenant.update(tenant.id, { tm_reporting_currency: cur, tm_timezone: tz.trim(), tm_settings });
+      const before = { tm_reporting_currency: tenant.tm_reporting_currency, tm_timezone: tenant.tm_timezone, tm_settings: s, ...(amlV2 ? { jurisdictions: tenant.jurisdictions || [] } : {}) };
+      const juris = amlV2 ? { jurisdictions: normaliseJurisdictions(jurisdictions) } : {};
+      const updated = await base44.entities.Tenant.update(tenant.id, { tm_reporting_currency: cur, tm_timezone: tz.trim(), tm_settings, ...juris });
       await base44.entities.AuditEvent.create({
         tenant_id: tenant.id, actor_user_id: currentUser.id, actor_name: currentUser.full_name, actor_type: 'User',
-        event_type: 'tm_settings_updated', before_state: before, after_state: { tm_reporting_currency: cur, tm_timezone: tz.trim(), tm_settings },
+        event_type: 'tm_settings_updated', before_state: before, after_state: { tm_reporting_currency: cur, tm_timezone: tz.trim(), tm_settings, ...juris },
         notes: 'Transaction monitoring settings were updated.',
       });
       if (modelChanged) {
@@ -134,6 +137,13 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
           <IdvWorkflowPicker tenant={tenant} item={{ field_type: 'id_verification' }} value={reverifyWf} onChange={(v) => setReverifyWf(v.idv_workflow_id)} />
         </div>
         <AiModelCard saved={savedModel} value={aiModel} onChange={setAiModel} note={modelNote} onNote={setModelNote} canChange={canChangeModel} changedAt={s.ai_model_changed_at} />
+        {amlV2 && (
+          <div className="max-w-xs">
+            <Label className="text-xs mb-1.5 block">Jurisdictions</Label>
+            <Input value={jurisdictions} onChange={(e) => setJurisdictions(e.target.value.toUpperCase())} placeholder="e.g. NL, CW" className="h-9 text-sm" />
+            <p className="mt-1 text-xs text-muted-foreground">Country codes this tenant operates under. The rule libraries on the Rules page follow this list; leave empty to show all.</p>
+          </div>
+        )}
         {amlV2 && (
           <div className="max-w-xs">
             <Label className="text-xs mb-1.5 block">Historical window (days)</Label>

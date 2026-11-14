@@ -7,6 +7,7 @@ import AppShell from '@/components/layout/AppShell';
 import RiskBadge from '@/components/shared/RiskBadge';
 import StatusBadge from '@/components/shared/StatusBadge';
 import PageHeader from '@/components/shared/PageHeader';
+import { amlLayoutOn } from '@/lib/amlNav';
 import EmptyState from '@/components/shared/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -277,7 +278,8 @@ export default function CasesList({ myOnly = false }) {
     URL.revokeObjectURL(url);
   }
 
-  const title    = myOnly ? 'My Cases' : 'All Cases';
+  const amlLayout = amlLayoutOn(tenant);
+  const title    = amlLayout ? (myOnly ? 'My Reviews' : 'Reviews') : (myOnly ? 'My Cases' : 'All Cases');
   const subtitle = myOnly
     ? `${filtered.length} cases assigned to you`
     : `${filtered.length} cases · ${tenant?.name}`;

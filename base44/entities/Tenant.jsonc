@@ -109,7 +109,7 @@
     },
     "email_from_name": {
       "type": "string",
-      "description": "From name e.g. Compliance Team \u2014 Meridian Trust"
+      "description": "From name e.g. Compliance Team — Meridian Trust"
     },
     "email_from_address": {
       "type": "string",
@@ -141,7 +141,7 @@
     },
     "didit_api_key": {
       "type": "string",
-      "description": "Deprecated \u2014 stored in TenantSecret. Must stay empty."
+      "description": "Deprecated — stored in TenantSecret. Must stay empty."
     },
     "didit_workflow_id": {
       "type": "string",
@@ -158,19 +158,19 @@
     },
     "didit_app_id": {
       "type": "string",
-      "description": "Optional \u2014 Didit Application UUID for console deep-links"
+      "description": "Optional — Didit Application UUID for console deep-links"
     },
     "didit_webhook_secret": {
       "type": "string",
-      "description": "Deprecated \u2014 stored in TenantSecret. Must stay empty."
+      "description": "Deprecated — stored in TenantSecret. Must stay empty."
     },
     "pending_admin_email": {
       "type": "string",
-      "description": "Email of the invited Tenant Admin \u2014 cleared after onboarding is complete"
+      "description": "Email of the invited Tenant Admin — cleared after onboarding is complete"
     },
     "onboarding_token": {
       "type": "string",
-      "description": "Secure random token for the admin onboarding link \u2014 single-use, cleared after use"
+      "description": "Secure random token for the admin onboarding link — single-use, cleared after use"
     },
     "onboarding_token_expires_at": {
       "type": "string",
@@ -196,6 +196,13 @@
     "tm_timezone": {
       "type": "string",
       "default": "America/Curacao"
+    },
+    "jurisdictions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "ISO 3166-1 alpha-2 country codes the tenant operates under (rule libraries and FIU profiles follow this list)"
     }
   },
   "required": [

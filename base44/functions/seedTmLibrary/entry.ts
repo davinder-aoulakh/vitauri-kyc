@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
+import { scenarioInScope } from '../../shared/tmLibraryScope.js';
 
 const NOTE_CODES = 'Indicator codes must be filled from the official FIU lists.';
 
@@ -81,7 +82,11 @@ export default async function(req) {
     const riskIdByCode = {};
     for (const r of riskItems) riskIdByCode[r.code] = r.id;
 
-    const created = { risks: [], scenarios: [], fiu_profiles: [] };
+    // Library scenarios follow the tenant's jurisdictions; none configured = all, as before. Nothing is ever deleted.
+    const tenantRec = await db.Tenant.filter({ id: tenantId });
+    const jurisdictions = ((Array.isArray(tenantRec) ? tenantRec : tenantRec?.items || [])[0] || {}).jurisdictions;
+
+    const created = { risks: [], scenarios: [], fiu_profiles: [], skipped_scenarios: [] };
 
     for (const [code, name] of RISKS) {
       if (riskIdByCode[code]) continue;
@@ -93,6 +98,7 @@ export default async function(req) {
     const scenarioCodes = new Set(scenarioItems.map((s) => s.code));
     for (const [code, name, riskCode, jurisdiction, indicatorType] of SCENARIOS) {
       if (scenarioCodes.has(code)) continue;
+      if (!scenarioInScope(jurisdiction, jurisdictions)) { created.skipped_scenarios.push(code); continue; }
       const rec = {
         tenant_id: tenantId,
         code,

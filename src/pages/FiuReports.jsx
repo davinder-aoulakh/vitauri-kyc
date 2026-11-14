@@ -9,6 +9,7 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 import { download } from '@/lib/tmQuality';
 import AppShell from '@/components/layout/AppShell';
 import PageHeader from '@/components/shared/PageHeader';
+import { amlLayoutOn } from '@/lib/amlNav';
 import EmptyState from '@/components/shared/EmptyState';
 import InlineError from '@/components/shared/InlineError';
 import DeadlineCell from '@/components/tm/alerts/DeadlineCell';
@@ -129,7 +130,7 @@ export default function FiuReports() {
           subtitle="SAR, STR, UTR, CTR, TTR, IFT, CBR and TFR reports to the Financial Intelligence Unit"
           actions={(
             <div className="flex flex-wrap gap-2">
-              {canScan && (
+              {canScan && !amlLayoutOn(tenant) && (
                 <Button variant="outline" size="sm" className="gap-1.5" disabled={scanning} onClick={scan} title="Check the last 7 days against the CTR/TTR/IFT/CBR thresholds and terrorist-financing signals">
                   {scanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanSearch className="w-3.5 h-3.5" />} Scan for reports
                 </Button>

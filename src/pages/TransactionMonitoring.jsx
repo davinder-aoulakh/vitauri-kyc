@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import AppShell from '@/components/layout/AppShell';
 import PageHeader from '@/components/shared/PageHeader';
+import { amlLayoutOn } from '@/lib/amlNav';
 import KpiCard from '@/components/shared/KpiCard';
 import TransactionForm from '@/components/transactions/TransactionForm';
 import TransactionList from '@/components/transactions/TransactionList';
@@ -59,8 +60,8 @@ export default function TransactionMonitoring() {
     <AppShell>
       <div className="p-6 space-y-5 max-w-screen-xl mx-auto">
         <PageHeader
-          title="Transaction Monitoring"
-          subtitle="Screen fiat and crypto transactions for sanctions and wallet risk via Didit"
+          title={amlLayoutOn(tenant) ? 'Transactions' : 'Transaction Monitoring'}
+          subtitle={amlLayoutOn(tenant) ? 'Transaction ledger across all customers and accounts' : 'Screen fiat and crypto transactions for sanctions and wallet risk via Didit'}
           actions={
             <div className="flex items-center gap-2">
               {canUploadStatement && (

@@ -1,7 +1,12 @@
 // Sidebar for the KYC + AML layout (flag aml_nav_v2, build spec section 2 and decision D1). Data only: AppShell adds
 // the icons and applies the same permission / feature checks it uses for the other two sidebars.
 // No route moves in this phase: every href is an existing page.
+import { isFeatureEnabled } from './featureFlags.js';
+
 export { librariesFor, libraryCodesFor, normaliseJurisdictions } from '../../base44/shared/tmLibraryScope.js';
+
+/** The KYC + AML layout is on for this tenant (needs tm_core and aml_nav_v2). */
+export const amlLayoutOn = (tenant) => isFeatureEnabled(tenant, 'tm_core') && isFeatureEnabled(tenant, 'aml_nav_v2');
 
 /** Which sidebar to show: 'legacy' (tm_core off), 'tm' (tm_core on) or 'aml' (tm_core and aml_nav_v2 on). */
 export function selectNav({ tmCore, amlNavV2 }) {
