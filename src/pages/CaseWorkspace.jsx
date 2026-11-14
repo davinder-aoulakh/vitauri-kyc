@@ -791,7 +791,7 @@ export default function CaseWorkspace() {
 
             {/* Right Panel — Profile Verification on step 1, OSINT on step 4, AI Assistant elsewhere */}
             {activeStep === 1 ? (
-              <div className="w-[420px] flex-shrink-0 border-l border-border overflow-y-auto p-4 bg-card">
+              <div id="profile-verification-panel" className="w-[420px] flex-shrink-0 border-l border-border overflow-y-auto p-4 bg-card transition-shadow">
                 <ProfileVerificationStep
                   kycCase={kycCase}
                   client={client}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,7 @@ import SuggestedProfileUpdatesCard from '@/components/case/outreach/SuggestedPro
 import SuggestedKybUpdatesCard from '@/components/case/outreach/SuggestedKybUpdatesCard';
 import BulkVerifyDialog, { bulkVerifyCandidates } from '@/components/case/outreach/BulkVerifyDialog';
 import DocReviewDialog from '@/components/case/outreach/DocReviewDialog';
+import { linkedItemState, linkedItemsToVerify } from '@/lib/outreachLinkedItems';
 import { AiCheckChip } from '@/components/documents/AiDocCheck';
 
 const SITUATION_LABELS = {
@@ -567,6 +568,59 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
     : isFieldMappedLabel(item.label, fieldLabels));
   const isTrackerVisible = (item) => item.field_type === 'id_verification' || !inProfileGrid(item);
 
+  // The Profile Verification panel sits next to this step: bring it into view and flash it.
+  function showProfilePanel() {
+    const el = document.getElementById('profile-verification-panel');
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    el.classList.add('ring-2', 'ring-primary');
+    setTimeout(() => el.classList.remove('ring-2', 'ring-primary'), 1800);
+  }
+
+  // KYC-linked questions are checked in Profile Verification. Once their field is settled there (accepted, matched by
+  // the ID check, or equal to the client file) the outreach item is set to Verified here, so the count closes by itself.
+  const autoVerified = useRef(new Set());
+  const suggestionsKey = JSON.stringify(Object.entries(kycCase?.profile_suggestions?.client_fields || {}).map(([k, v]) => [k, v?.status]));
+  const receivedKey = requests.map(r => (r.items || []).map(i => i.status).join('')).join('|');
+  useEffect(() => {
+    if (loading || !requests.length || isLocked(client)) return;
+    const todo = linkedItemsToVerify(requests, fieldLabels, kycCase?.profile_suggestions, client)
+      .filter(t => !autoVerified.current.has(`${t.requestId}:${t.itemId}`));
+    if (!todo.length) return;
+    todo.forEach(t => autoVerified.current.add(`${t.requestId}:${t.itemId}`));
+    (async () => {
+      try {
+        const byReq = {};
+        todo.forEach(t => { (byReq[t.requestId] = byReq[t.requestId] || []).push(t); });
+        const updated = {};
+        for (const [reqId, list] of Object.entries(byReq)) {
+          // Latest copy of the request, so a save made meanwhile (verify, Didit result) is not overwritten
+          const fresh = (await base44.entities.OutreachRequest.filter({ id: reqId }))?.[0];
+          if (!fresh) continue;
+          const ids = new Set(list.map(t => t.itemId));
+          const items = (fresh.items || []).map(it => (ids.has(it.item_id) && it.status === 'Received' ? { ...it, status: 'Verified' } : it));
+          await base44.entities.OutreachRequest.update(reqId, { items });
+          updated[reqId] = items;
+        }
+        await base44.entities.AuditEvent.create({
+          tenant_id: kycCase.tenant_id, case_id: kycCase.id, client_id: kycCase.client_id,
+          actor_user_id: currentUser?.id, actor_name: currentUser?.full_name, actor_type: 'System',
+          event_type: 'outreach_items_verified_from_profile',
+          before_state: {}, after_state: { items: todo.map(t => t.label) },
+          notes: `Outreach item(s) set to Verified because their KYC field is confirmed in Profile Verification or equals the client file: ${todo.map(t => t.label).join(', ')}`,
+        });
+        setRequests(prev => {
+          const next = prev.map(r => (updated[r.id] ? { ...r, items: updated[r.id] } : r));
+          reportAllVerified(next);
+          return next;
+        });
+      } catch (e) {
+        console.warn('auto-verify of KYC-linked outreach items failed', e?.message);
+        todo.forEach(t => autoVerified.current.delete(`${t.requestId}:${t.itemId}`));
+      }
+    })();
+  }, [suggestionsKey, receivedKey, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function confirmBulkVerify(indices) {
     if (!bulkReq) return;
     setBulkBusy(true);
@@ -721,6 +775,12 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
             const pendingCount = req.items?.filter(i => i.status === 'Requested').length || 0;
             const verifiedCount = req.items?.filter(i => i.status === 'Verified').length || 0;
             const toVerifyCount = req.items?.filter(i => i.status === 'Received').length || 0;
+            // KYC-linked answers are not in this list: they are confirmed in the Profile Verification panel
+            const linkedItems = (req.items || []).filter(i => !isTrackerVisible(i));
+            const linkedOpen = linkedItems.filter(i => i.status === 'Received').length;
+            const hereTotal = (req.items?.length || 0) - linkedItems.length;
+            const hereVerified = (req.items || []).filter(i => isTrackerVisible(i) && i.status === 'Verified').length;
+            const hereToVerify = toVerifyCount - linkedOpen;
             // Documents flagged by the AI Document Checker are decided one by one, never in bulk.
             const bulk = bulkVerifyCandidates(req, (item) => isTrackerVisible(item) && !flaggedDoc(item));
 
@@ -739,9 +799,18 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                         {format(parseISO(req.deadline), 'd MMM yyyy')}
                       </span>
                     )}
-                    <span className="text-xs text-muted-foreground">
-                      {verifiedCount}/{req.items?.length || 0} verified{toVerifyCount > 0 ? ` · ${toVerifyCount} to verify` : ''}
-                    </span>
+                    {linkedOpen > 0 ? (
+                      <span className="text-xs text-muted-foreground">
+                        {hereVerified}/{hereTotal} verified here{hereToVerify > 0 ? ` · ${hereToVerify} to verify` : ''} ·{' '}
+                        <button type="button" onClick={showProfilePanel} className="text-primary font-medium hover:underline">
+                          {linkedOpen} answer{linkedOpen === 1 ? '' : 's'} to confirm in Profile Verification →
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {verifiedCount}/{req.items?.length || 0} verified{toVerifyCount > 0 ? ` · ${toVerifyCount} to verify` : ''}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {bulk.eligible.length > 1 && !isLocked(client) && (
@@ -783,7 +852,9 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                 {req.items?.length > 0 && (
                   <div className="px-4 pt-3 pb-1">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-muted-foreground">Progress</span>
+                      <span className="text-xs text-muted-foreground" title={linkedItems.length ? `${hereTotal} item(s) checked in this list · ${linkedItems.length} KYC field answer(s) checked in Profile Verification` : undefined}>
+                        Progress{linkedItems.length > 0 ? ` · ${hereVerified}/${hereTotal} in this list, ${linkedItems.length - linkedOpen}/${linkedItems.length} in Profile Verification` : ''}
+                      </span>
                       <span className="text-xs font-medium">{Math.round((verifiedCount / req.items.length) * 100)}%</span>
                     </div>
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -904,6 +975,38 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                       );
                     })}
                   </div>
+                )}
+
+                {/* KYC-linked answers: checked in the Profile Verification panel, listed here so nothing is hidden */}
+                {linkedItems.length > 0 && (
+                  <details className="border-t border-border/50 px-4 py-2.5 text-xs" open={linkedOpen > 0}>
+                    <summary className="cursor-pointer font-medium text-muted-foreground">
+                      Checked in Profile Verification ({linkedItems.length - linkedOpen}/{linkedItems.length})
+                    </summary>
+                    <ul className="mt-2 space-y-1.5">
+                      {linkedItems.map((item, n) => {
+                        const st = item.status === 'Verified' ? 'settled' : item.status === 'Requested' ? 'requested' : linkedItemState(item, fieldLabels, kycCase?.profile_suggestions, client).state;
+                        const conf = {
+                          settled:   ['Confirmed', 'bg-emerald-50 text-emerald-700 border-emerald-200'],
+                          open:      ['To confirm', 'bg-amber-50 text-amber-800 border-amber-200'],
+                          waiting:   ['Being read…', 'bg-slate-50 text-slate-600 border-slate-200'],
+                          requested: ['Not answered yet', 'bg-slate-50 text-slate-600 border-slate-200'],
+                        }[st] || ['To confirm', 'bg-amber-50 text-amber-800 border-amber-200'];
+                        return (
+                          <li key={n} className="flex items-center justify-between gap-3">
+                            <span className="min-w-0">
+                              <span className="font-medium text-foreground">{item.label}</span>
+                              {item.response_text && <span className="text-muted-foreground"> — {item.response_text}</span>}
+                            </span>
+                            <span className="flex flex-shrink-0 items-center gap-2">
+                              <span className={cn('px-1.5 py-0.5 rounded-full border', conf[1])}>{conf[0]}</span>
+                              {st !== 'settled' && st !== 'requested' && <button type="button" onClick={showProfilePanel} className="text-primary hover:underline">Review →</button>}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </details>
                 )}
 
                 {/* Covering message */}
