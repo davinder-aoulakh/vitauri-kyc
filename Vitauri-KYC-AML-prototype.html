@@ -1,0 +1,761 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vitauri KYC + AML Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --side:#0C1B38; --side2:#13284F; --sideTx:#C3CFEA; --sideMut:#7088B8; --sideAct:#1B3566; --sideActTx:#6FA2FF;
+  --bg:#F5F7FB; --card:#FFFFFF; --line:#E3E8F0; --line2:#EEF1F6; --ink:#0F172A; --mut:#5B6577; --mut2:#98A2B3;
+  --blue:#1D5BD8; --blueS:#EAF1FF; --ai:#7C3AED; --aiS:#F3EEFF; --aiB:#E4D7FC;
+  --red:#B42318; --redS:#FDECEA; --amb:#93370D; --ambS:#FEF3DC; --grn:#067647; --grnS:#E7F6EC; --gry:#475467; --gryS:#EEF1F5; --teal:#0B6E5F; --tealS:#E8F6F3;
+  --note:#FFF7D6; --noteB:#E9C84A;
+  --sans:Inter,"Segoe UI",system-ui,-apple-system,sans-serif; --mono:ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans)}
+[hidden]{display:none!important}
+button{font-family:inherit}
+a{color:var(--blue)}
+.app{display:flex;min-height:100vh}
+/* sidebar */
+.side{width:232px;flex:0 0 232px;background:var(--side);color:var(--sideTx);display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{display:flex;gap:10px;align-items:center;padding:14px 14px 12px;border-bottom:1px solid #1D2F55}
+.brand .logo{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#3B6CF0,#1D4ED8);display:grid;place-items:center;color:#fff;font-weight:700;font-size:18px}
+.brand b{display:block;color:#fff;font-size:14px}
+.brand span{font-size:12px;color:var(--sideMut)}
+.search{margin:12px 10px 4px;border:1px solid #233A68;border-radius:9px;padding:7px 10px;color:var(--sideMut);font-size:13px;display:flex;justify-content:space-between}
+.navscroll{flex:1;overflow-y:auto;padding:0 8px 10px}
+.grp{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--sideMut);font-weight:600;padding:16px 8px 6px}
+.nav{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;color:var(--sideTx);font-size:13.5px;padding:8px 9px;border-radius:8px;cursor:pointer;text-align:left}
+.nav:hover{background:#142A52}
+.nav.on{background:var(--sideAct);color:var(--sideActTx);font-weight:600}
+.nav svg{flex:0 0 17px}
+.nav .bd{margin-left:auto;font-size:11px;font-weight:600;padding:0 7px;border-radius:9px;background:#2A3F6B;color:#DCE5FA}
+.nav .bd.r{background:#B42318;color:#fff}
+.me{border-top:1px solid #1D2F55;padding:10px 12px;display:flex;gap:10px;align-items:center}
+.me .av{width:30px;height:30px;border-radius:15px;background:#26407A;color:#fff;display:grid;place-items:center;font-weight:600;font-size:13px}
+.me b{color:#fff;font-size:13px;display:block}
+.me span{font-size:11px;color:var(--sideMut)}
+/* main */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end;padding:10px 28px;border-bottom:1px solid var(--line);background:#fff;position:sticky;top:0;z-index:5}
+.topbar label{font-size:12.5px;color:var(--mut);display:flex;gap:6px;align-items:center}
+.topbar select{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:#fff}
+.page{padding:22px 32px 60px;max-width:1440px;width:100%}
+.ph{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px}
+.ph h1{margin:0;font-size:22px;font-weight:600}
+.ph p{margin:3px 0 0;color:var(--mut);font-size:14px}
+.stack{display:flex;flex-direction:column;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px}
+.pad{padding:16px 18px}
+.sec{font-size:14.5px;font-weight:600;margin:0}
+.lbl{font-size:12px;color:var(--mut)}
+.th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);font-weight:600}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.g2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
+.g3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;border-left:4px solid var(--blue)}
+.kpi .n{font-size:26px;font-weight:600;line-height:1.2;padding-top:4px}
+.kpi .s{font-size:12.5px;color:var(--mut)}
+.kpi.r{border-left-color:#D92D20}.kpi.a{border-left-color:#F79009}.kpi.g{border-left-color:#12B76A}.kpi.p{border-left-color:var(--ai)}
+.pill{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 9px;border-radius:11px;font-size:12px;font-weight:500;white-space:nowrap;background:var(--gryS);color:var(--gry)}
+.pill.b{background:var(--blueS);color:var(--blue)}.pill.r{background:var(--redS);color:var(--red)}.pill.a{background:var(--ambS);color:var(--amb)}.pill.g{background:var(--grnS);color:var(--grn)}.pill.p{background:var(--aiS);color:var(--ai)}.pill.t{background:var(--tealS);color:var(--teal)}
+.btn{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 13px;border-radius:9px;border:1px solid #D5DCE6;background:#fff;color:var(--ink);font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:#9DB2F5}
+.btn.pr{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.ai{background:var(--ai);border-color:var(--ai);color:#fff}
+.btn.ail{border-color:var(--aiB);color:var(--ai)}
+.btn.dg{border-color:#F3B5AE;color:var(--red)}
+.btn.sm{min-height:28px;padding:0 10px;font-size:12px}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid #D5DCE6;background:#fff;border-radius:16px;padding:5px 12px;font-size:12.5px;cursor:pointer;color:#344054}
+.chip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{text-align:left;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--line);background:#FAFBFD;white-space:nowrap}
+td{padding:11px 14px;border-bottom:1px solid var(--line2);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.mono{white-space:nowrap}
+tr.click{cursor:pointer}
+tr.click:hover td{background:#F7F9FD}
+.empty{padding:36px 20px;text-align:center;color:var(--mut)}
+.empty b{display:block;color:var(--ink);margin-bottom:4px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:16px;overflow-x:auto}
+.tab{border:0;background:none;padding:10px 14px;font-size:13.5px;color:var(--mut);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.tab.on{color:var(--ink);font-weight:600;border-bottom-color:var(--blue)}
+.aibox{background:#FBF9FF;border:1px solid var(--aiB);border-radius:12px;padding:14px 16px}
+.aibox .t{color:var(--ai);font-weight:600;font-size:13.5px}
+.note{background:var(--note);border:1px dashed var(--noteB);border-radius:10px;padding:10px 12px;font-size:12.5px;color:#5A4300}
+.note b{color:#3D2E00}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+.kv>div{padding:11px 14px;border-right:1px solid var(--line2);display:flex;flex-direction:column;gap:2px}
+.kv .k{font-size:11.5px;color:var(--mut)}.kv .v{font-weight:600}
+.row2{display:grid;grid-template-columns:170px 1fr;gap:8px 14px;font-size:13px}
+.chk{display:flex;gap:9px;font-size:13px;line-height:1.5}
+.chk b{flex:0 0 14px}
+.ok{color:var(--grn)}.warn{color:var(--amb)}.bad{color:var(--red)}.mut{color:var(--mut2)}
+.inp,select.inp,textarea.inp{font:inherit;font-size:13.5px;border:1px solid #D5DCE6;border-radius:8px;padding:8px 10px;background:#fff;color:var(--ink);width:100%}
+textarea.inp{min-height:80px;resize:vertical}
+.inp:focus,.btn:focus-visible,.nav:focus-visible,.chip:focus-visible,.tab:focus-visible{outline:2px solid #6E8EFF;outline-offset:1px}
+.field{display:flex;flex-direction:column;gap:4px}
+.drop{border:1.5px dashed #C9D3E3;border-radius:12px;padding:26px;text-align:center;color:var(--mut);background:#FAFBFD}
+.drop.hot{border-color:var(--blue);background:var(--blueS)}
+.steps{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+.st{flex:1 1 120px;padding:10px 12px;border-right:1px solid var(--line);font-size:12.5px;display:flex;flex-direction:column;gap:2px}
+.st:last-child{border-right:0}
+.st b{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2)}
+.st.done b{color:var(--grn)}.st.now{background:var(--blueS)}.st.now b{color:var(--blue)}
+.cov{display:grid;grid-template-columns:repeat(31,1fr);gap:2px}
+.cov i{height:14px;border-radius:2px;background:#E3E8F0}
+.cov i.g{background:#12B76A}.cov i.a{background:#F79009}.cov i.r{background:#D92D20}
+.modalbg{position:fixed;inset:0;background:rgba(12,27,56,.45);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;z-index:50;overflow-y:auto}
+.modal{background:#fff;border-radius:14px;width:min(860px,100%);box-shadow:0 20px 60px rgba(12,27,56,.3)}
+.modal .mh{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:center}
+.modal .mb{padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.modal .mf{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.x{border:0;background:none;font-size:20px;cursor:pointer;color:var(--mut)}
+.toast{position:fixed;right:20px;bottom:20px;background:#0C1B38;color:#fff;padding:11px 16px;border-radius:10px;font-size:13px;z-index:60;max-width:420px;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.hold{display:inline-flex;gap:6px;align-items:center;background:#2B1B5A;color:#fff;border-radius:8px;padding:3px 9px;font-size:12px;font-weight:600}
+.subnav{display:flex;flex-direction:column;gap:2px;min-width:210px}
+.subnav button{border:0;background:none;text-align:left;padding:8px 10px;border-radius:8px;font-size:13px;color:#344054;cursor:pointer}
+.subnav button.on{background:var(--blueS);color:var(--blue);font-weight:600}
+.split{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
+.split>.subnav{flex:0 0 210px}
+.split>.grow{flex:1 1 520px;min-width:0}
+@media (max-width:860px){.app{flex-direction:column}.side{width:100%;flex:none;height:auto;position:static}.navscroll{max-height:none}.page{padding:16px}.topbar{padding:10px 16px}}
+</style></head><body>
+
+<div class="app">
+  <aside class="side" aria-label="Main navigation">
+    <div class="brand"><div class="logo">A</div><div><b>Vitauri KYC</b><span>New Age Bank</span></div></div>
+    <div class="search"><span>Search…</span><span>⌘K</span></div>
+    <div class="navscroll" id="nav"></div>
+    <div class="me"><div class="av" id="meAv">d</div><div><b id="meName">david</b><span id="meRole">Tenant Admin</span></div></div>
+  </aside>
+  <div class="main">
+    <div class="topbar">
+      <label for="roleSel">View as <select id="roleSel">
+        <option value="admin">david · Tenant Admin (all)</option>
+        <option value="aml">R. de Wit · AML analyst</option>
+        <option value="kyc">S. Visser · KYC analyst</option>
+        <option value="co">M. Janssen · Compliance officer / MLRO</option>
+      </select></label>
+      <label for="notesTog"><input type="checkbox" id="notesTog"> Show build notes</label>
+      <button class="btn sm" id="resetBtn">Reset demo</button>
+    </div>
+    <div class="page" id="page"></div>
+  </div>
+</div>
+<div id="modalRoot"></div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+/* ================= DATA ================= */
+const TODAY = new Date('2026-11-03T12:00:00');
+const SAMPLE_MT940 = ":20:NAB2610STMT\n:25:NL02ABNA0123456789\n:28C:00010/001\n:60F:C260701EUR1250,00\n:61:2607250725C2900,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/NL44RABO0123456789/BIC/RABONL2U/NAME/VAN DALEN INSTALLATIETECHNIEK BV/REMI/SALARIS JULI 2026/EREF/NOTPROVIDED\n:61:2608010801D1150,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/NL20INGB0001234567/BIC/INGBNL2A/NAME/WOONSTICHTING MAASZICHT/REMI/HUUR AUGUSTUS/EREF/NOTPROVIDED\n:61:2608050805D250,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/PT50000201231234567890154/BIC/CGDIPTPL/NAME/M. VERMEULEN/REMI/FAMILIE/EREF/NOTPROVIDED\n:61:2608250825C2900,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/NL44RABO0123456789/BIC/RABONL2U/NAME/VAN DALEN INSTALLATIETECHNIEK BV/REMI/SALARIS AUGUSTUS 2026/EREF/NOTPROVIDED\n:61:2609010901D1150,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/NL20INGB0001234567/BIC/INGBNL2A/NAME/WOONSTICHTING MAASZICHT/REMI/HUUR SEPTEMBER/EREF/NOTPROVIDED\n:61:2609050905D250,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/PT50000201231234567890154/BIC/CGDIPTPL/NAME/M. VERMEULEN/REMI/FAMILIE/EREF/NOTPROVIDED\n:61:2609250925C2900,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/NL44RABO0123456789/BIC/RABONL2U/NAME/VAN DALEN INSTALLATIETECHNIEK BV/REMI/SALARIS SEPTEMBER 2026/EREF/NOTPROVIDED\n:61:2610011001D1150,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/NL20INGB0001234567/BIC/INGBNL2A/NAME/WOONSTICHTING MAASZICHT/REMI/HUUR OKTOBER/EREF/NOTPROVIDED\n:61:2610051005D250,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/PT50000201231234567890154/BIC/CGDIPTPL/NAME/M. VERMEULEN/REMI/FAMILIE/EREF/NOTPROVIDED\n:61:2610141014C1850,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/NL86INGB0002445588/BIC/INGBNL2A/NAME/M. KOWALSKI/REMI/GIFT/EREF/NOTPROVIDED\n:61:2610151015C1920,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/NL69ABNA0411223344/BIC/ABNANL2A/NAME/A. NOVAK/REMI/TERUGBETALING/EREF/NOTPROVIDED\n:61:2610151015C1780,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/NL13TRIO0212345678/BIC/TRIONL2U/NAME/J. PETERS/REMI/LENING/EREF/NOTPROVIDED\n:61:2610161016D5000,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/LT121000011101001000/BIC/HABALT22/NAME/T. KAZLAUSKAS/REMI/INVESTMENT/EREF/NOTPROVIDED\n:61:2610191019C1990,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/NL91BUNQ2290123456/BIC/BUNQNL2A/NAME/K. YILMAZ/REMI/GIFT/EREF/NOTPROVIDED\n:61:2610201020C1750,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/NL39RABO0300065264/BIC/RABONL2U/NAME/D. SMIT/REMI/VOORSCHOT/EREF/NOTPROVIDED\n:61:2610201020C1890,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/NL55SNSB0937402165/BIC/SNSBNL2A/NAME/R. JANSEN/REMI/TERUG/EREF/NOTPROVIDED\n:61:2610211021D5100,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/LT601010012345678901/BIC/RIKOLT22/NAME/UAB VERSLO SPRENDIMAI/REMI/SERVICES/EREF/NOTPROVIDED\n:61:2610251025C2900,00NTRFNONREF\n:86:/TRTP/SEPA OVERBOEKING/IBAN/NL44RABO0123456789/BIC/RABONL2U/NAME/VAN DALEN INSTALLATIETECHNIEK BV/REMI/SALARIS OKTOBER 2026/EREF/NOTPROVIDED\n:62F:C261031EUR9730,00\n-";
+
+function seed(){
+  return {
+    route:'mywork', p:{}, role:'admin', notes:false,
+    tenant:{ name:'New Age Bank', jurisdictions:['NL'], fiuProfiles:['FIU-Netherlands','CTIF-CFI (BE)'], histWindow:30, roleModel:'separate',
+      grouping:'one_open_per_customer', cpScreening:'presets_plus_rescreen',
+      thresholds:{Low:1, Medium:0.8, High:0.6}, didit:{connected:true, presets:['Sanctions counterparty matching','PEP counterparty exposure','Suspicious payment reference keywords']} },
+    customers:[
+      {id:'NP-10482',name:'Lotte Vermeulen',type:'NP',risk:'Medium',beh:null,segment:'Retail · employee',country:'NL',since:'12-03-2026',status:'Active',pep:false,
+        profile:{version:2,approved:'12-03-2026 · M. Janssen',source:'Client declaration (outreach) + manual',inMax:3800,outAbroadMax:300,countries:'NL, PT',txMax:8,cash:'Occasional, ≤ €250',purpose:'Salary account; household costs; support family in Portugal'},
+        declared:{inMax:3500,purpose:'Salary, rent, family support PT'}},
+      {id:'ORG-2207',name:'Brasserie De Waag B.V.',type:'ORG',risk:'Medium',beh:64,segment:'Hospitality',country:'NL',since:'02-02-2025',status:'Active',pep:false,profile:{version:1,approved:'02-02-2025 · M. Janssen',source:'Segment default → manual',inMax:60000,outAbroadMax:5000,countries:'NL, BE',txMax:400,cash:'Daily cash deposits ≤ €3,000',purpose:'Restaurant turnover, suppliers, payroll'}},
+      {id:'ORG-3110',name:'Maasvlakte Freight B.V.',type:'ORG',risk:'High',beh:78,segment:'Logistics',country:'NL',since:'18-06-2024',status:'Active',pep:false,profile:{version:3,approved:'01-07-2026 · M. Janssen',source:'KYC transaction analysis',inMax:450000,outAbroadMax:200000,countries:'NL, DE, BE, PL',txMax:900,cash:'None',purpose:'Freight services, fuel, subcontractors'}},
+      {id:'NP-11790',name:'J. de Boer',type:'NP',risk:'Low',beh:30,segment:'Retail · employee',country:'NL',since:'09-09-2023',status:'Active',pep:false,profile:{version:1,approved:'09-09-2023 · S. Visser',source:'Segment default',inMax:4000,outAbroadMax:500,countries:'NL',txMax:10,cash:'Occasional',purpose:'Salary account'}},
+      {id:'NP-12001',name:'Tessa de Wind',type:'NP',risk:'Low',beh:22,segment:'Retail · student',country:'NL',since:'14-01-2026',status:'Active',pep:false,profile:null},
+      {id:'NP-12450',name:'P. Janssens',type:'NP',risk:'High',beh:55,segment:'Retail · self-employed',country:'BE',since:'30-04-2025',status:'Active',pep:true,profile:{version:2,approved:'15-05-2026 · M. Janssen',source:'KYC transaction analysis',inMax:9000,outAbroadMax:3000,countries:'BE, NL, LU',txMax:30,cash:'None',purpose:'Consultancy income'}}
+    ],
+    accounts:[
+      {id:'A1',cust:'NP-10482',iban:'NL02ABNA0123456789',type:'Own account (New Age Bank)',holders:['Lotte Vermeulen'],source:'Upload',status:'No data yet',last:null},
+      {id:'A2',cust:'NP-10482',iban:'NL61INGB0006543210',type:'External account (PSD2)',holders:['Lotte Vermeulen'],source:'PSD2',status:'Re-auth pending since 28-10',last:'27-10-2026'},
+      {id:'A3',cust:'ORG-2207',iban:'NL73RABO0333444555',type:'Business account',holders:['Brasserie De Waag B.V.','UBO: H. de Waag'],source:'API',status:'No data for 2 days',last:'01-11-2026'},
+      {id:'A4',cust:'ORG-3110',iban:'NL18ABNA0555666777',type:'Business account',holders:['Maasvlakte Freight B.V.','UBO: K. Vos'],source:'API',status:'Live',last:'03-11-2026'},
+      {id:'A5',cust:'NP-11790',iban:'NL29INGB0777888999',type:'Joint account',holders:['J. de Boer','M. de Boer-Smit'],source:'PSD2',status:'Live · re-auth in 142 d',last:'03-11-2026'}
+    ],
+    txns:[
+      {id:'T-90011',acc:'A3',cust:'ORG-2207',date:'2026-10-31',amt:12500,cp:'Cash deposit',cpIban:'—',cpC:'NL',ref:'Kasstorting',life:'Booked',src:'API',didit:'In review',score:85,alert:'AL-9031',hist:false},
+      {id:'T-90012',acc:'A4',cust:'ORG-3110',date:'2026-10-29',amt:-48000,cp:'Rhein Spedition GmbH',cpIban:'DE89370400440532013000',cpC:'DE',ref:'INV 2026-118',life:'Booked',src:'API',didit:'In review',score:78,alert:'AL-9040',hist:false},
+      {id:'T-90013',acc:'A4',cust:'ORG-3110',date:'2026-10-31',amt:47200,cp:'Vos Holding B.V.',cpIban:'NL44RABO0999888777',cpC:'NL',ref:'Retour',life:'Booked',src:'API',didit:'In review',score:78,alert:'AL-9040',hist:false},
+      {id:'T-90014',acc:'A5',cust:'NP-11790',date:'2026-10-30',amt:-640,cp:'Hotel Atlantis Dubai',cpIban:'card',cpC:'AE',ref:'Card payment',life:'Booked',src:'PSD2',didit:'In review',score:60,alert:'AL-9029',hist:false},
+      {id:'T-90015',acc:'A5',cust:'NP-11790',date:'2026-10-25',amt:3100,cp:'Gemeente Rotterdam',cpIban:'NL12BNGH0285000000',cpC:'NL',ref:'Salaris',life:'Booked',src:'PSD2',didit:'Approved',score:0,alert:null,hist:false}
+    ],
+    alerts:[
+      {id:'AL-9031',cust:'ORG-2207',src:'Rule',rule:'NL-OBJ-01 Cash deposit above objective indicator',score:85,due:'19 h',dueLate:true,status:'New',ai:{p:'Report (objective)',why:'Wwft objective indicator met; report draft created automatically'},inv:null,txn:'T-90011'},
+      {id:'AL-9040',cust:'ORG-3110',src:'Rule',rule:'S-14 Circular flow, 3 steps (Vitauri flows)',score:78,due:'1 d',status:'Escalated',ai:{p:'Escalate',why:'€48,000 out to DE returns 2 days later via Vos Holding (shared UBO K. Vos)'},inv:'INV-0044',txn:'T-90012'},
+      {id:'AL-9029',cust:'NP-11790',src:'Rule',rule:'FATF high-risk country (Didit preset)',score:60,due:'2 d',status:'New',ai:{p:'Close',why:'Card spend abroad in holiday period; same pattern Jul 2025'},inv:null,txn:'T-90014'},
+      {id:'AL-9022',cust:'NP-12001',src:'Provider',rule:'Sanctions counterparty matching (Didit)',score:65,due:'3 d',status:'New',ai:{p:'Close',why:'Counterparty "T. de Wind-Ivanova": date of birth and nationality differ from listed person'},inv:null,txn:null},
+      {id:'AL-9018',cust:'NP-12450',src:'Provider',rule:'PEP counterparty exposure (Didit)',score:62,due:'4 d',status:'New',ai:{p:'Request information',why:'Payment from a company where a domestic PEP is director; purpose not on file'},inv:null,txn:null}
+    ],
+    invs:[
+      {id:'INV-0044',cust:'ORG-3110',type:'TM investigation',status:'Investigation',owner:'R. de Wit',alerts:['AL-9040'],opened:'01-11-2026',fiu:null,outcome:null}
+    ],
+    reviews:[
+      {id:'RV-2210',cust:'NP-12450',type:'Periodic review',status:'Screening',owner:'S. Visser',due:'12-11-2026',origin:'Review cycle (High: 12 months)'},
+      {id:'RV-2214',cust:'NP-12001',type:'Onboarding',status:'Draft Report & QC',owner:'S. Visser',due:'06-11-2026',origin:'New client'},
+      {id:'RV-2216',cust:'ORG-2207',type:'Event-driven review',status:'Risk assessment',owner:'S. Visser',due:'10-11-2026',origin:'CoC: UBO change (KvK)'},
+      {id:'RV-2198',cust:'ORG-9001',custName:'Nordic Crypto Ventures B.V.',type:'Onboarding',status:'Declined, not onboarded',owner:'S. Visser',due:'—',origin:'New client'}
+    ],
+    screening:[
+      {id:'SC-501',cust:'NP-12450',subject:'P. Janssens',list:'PEP list (Didit)',match:'96',detail:'Municipal councillor, Antwerp (since 2024)',status:'Confirmed',date:'30-10-2026'},
+      {id:'SC-502',cust:'ORG-2207',subject:'H. de Waag (UBO)',list:'Adverse media (Didit)',match:'71',detail:'News article: tax fraud investigation, catering sector',status:'Open',date:'02-11-2026'},
+      {id:'SC-503',cust:'NP-11790',subject:'J. de Boer',list:'Sanctions (Didit)',match:'58',detail:'EU list entry "Jan de Boer", DOB 1961, RU',status:'Open',date:'03-11-2026'}
+    ],
+    coc:[
+      {id:'CC-301',cust:'ORG-2207',src:'Registry (KvK)',text:'UBO change: H. de Waag 50% → 100%',date:'28-10-2026',response:'Risk reassessment',status:'Review started',review:'RV-2216'},
+      {id:'CC-302',cust:'NP-12450',src:'Screening',text:'Confirmed PEP hit (SC-501)',date:'30-10-2026',response:null,status:'Awaiting response'},
+      {id:'CC-303',cust:'NP-12001',src:'ID document',text:'Passport expires 15-12-2026',date:'01-11-2026',response:'Targeted check',status:'Outreach sent'}
+    ],
+    fiu:[
+      {id:'UTR-NL-0931',src:'Objective indicator',origin:'AL-9031',cust:'ORG-2207',profile:'FIU-Netherlands',type:'UTR objective',step:1,due:'without delay (19 h SLA)',ref:''},
+      {id:'UTR-NL-0925',src:'KYC review',origin:'RV-2198',cust:'ORG-9001',custName:'Nordic Crypto Ventures B.V.',profile:'FIU-Netherlands',type:'UTR subjective',step:2,due:'without delay',ref:''},
+      {id:'UTR-NL-0902',src:'AML investigation',origin:'INV-0031',cust:'NP-11790',profile:'FIU-Netherlands',type:'UTR subjective',step:5,due:'—',ref:'goAML-NL-2026-004611'}
+    ],
+    audit:[
+      {t:'03-11 08:52',a:'Didit',k:'system',o:'AL-9040',w:'transaction.status.updated · IN_REVIEW (event_id evt_8c1…)'},
+      {t:'02-11 16:31',a:'M. Janssen',k:'human',o:'Rule R-STRUCT-03',w:'Approved threshold change 3 → 4 (4-eyes; backtest 90 d)'},
+      {t:'01-11 07:00',a:'Vitauri',k:'system',o:'A3',w:'Connection stalled: no API data for 24 h'},
+      {t:'30-10 11:20',a:'S. Visser',k:'human',o:'SC-501',w:'Screening hit confirmed as true match → CoC event CC-302'}
+    ]
+  };
+}
+let S = load();
+function load(){ try{ const j=localStorage.getItem('vt-proto-v2'); if(j) return JSON.parse(j); }catch(e){} return seed(); }
+function save(){ try{ localStorage.setItem('vt-proto-v2', JSON.stringify(S)); }catch(e){} }
+
+/* ================= HELPERS ================= */
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const eur = n=>(n<0?'−':'')+'€'+Math.abs(n).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});
+const eur0 = n=>'€'+Math.round(n).toLocaleString('en-GB');
+const cust = id=>S.customers.find(c=>c.id===id)||{id,name:(S.reviews.find(r=>r.cust===id)||S.fiu.find(f=>f.cust===id)||{}).custName||id,risk:'—'};
+const riskPill = r=>`<span class="pill ${r==='High'?'r':r==='Medium'?'a':r==='Low'?'g':''}">${esc(r)}</span>`;
+const canAML = ()=>S.role!=='kyc';
+const canKYC = ()=>S.role!=='aml' || S.tenant.roleModel==='combined';
+function hasHold(cid){ return S.invs.some(i=>i.cust===cid && !i.outcome) || S.fiu.some(f=>f.cust===cid && f.step<5); }
+function note(html){ return S.notes?`<div class="note"><b>Build note · </b>${html}</div>`:''; }
+function toast(t){ const el=$('#toast'); el.textContent=t; el.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>el.hidden=true,3600); }
+function log(a,k,o,w){ const d=new Date(); S.audit.unshift({t:'03-11 '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),a,k,o,w}); }
+function go(route,p){ S.route=route; S.p=p||{}; save(); render(); window.scrollTo(0,0); }
+function nextId(prefix,list){ let n=1; list.forEach(x=>{const m=String(x.id).match(/(\d+)$/); if(m) n=Math.max(n,+m[1]+1);}); return prefix+String(n).padStart(4,'0'); }
+function modal(title,body,foot){ $('#modalRoot').innerHTML=`<div class="modalbg" id="mbg"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="mh"><h2 class="sec" style="font-size:16px">${esc(title)}</h2><button class="x" data-close aria-label="Close">×</button></div><div class="mb">${body}</div>${foot?`<div class="mf">${foot}</div>`:''}</div></div>`; }
+function closeModal(){ $('#modalRoot').innerHTML=''; }
+
+/* ================= NAV ================= */
+const IC={
+  work:'M4 4h16v12H4zM8 20h8M12 16v4', dash:'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', plus:'M16 11a4 4 0 1 0-8 0 4 4 0 0 0 8 0zM4 21c1-4 4-6 8-6M19 15v6M16 18h6',
+  search:'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5', folder:'M3 7h6l2 2h10v10H3z', shield:'M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z',
+  change:'M4 12a8 8 0 0 1 14-5l2 2M20 12a8 8 0 0 1-14 5l-2-2M20 4v5h-5M4 20v-5h5', alert:'M12 3l9 16H3zM12 10v4M12 17h.01', brief:'M4 7h16v12H4zM9 7V5h6v2',
+  pulse:'M3 12h4l3-8 4 16 3-8h4', doc:'M6 3h9l4 4v14H6zM14 3v5h5M9 13h6M9 17h6', log:'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01', cog:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12l2-1-1-3-2 .5-1.5-1.5L17 5l-3-1-1 2h-2L10 4 7 5l.5 2L6 8.5 4 8 3 11l2 1-2 1 1 3 2-.5 1.5 1.5L7 19l3 1 1-2h2l1 2 3-1-.5-2 1.5-1.5 2 .5 1-3z', users:'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21c1-4 4-6 7-6s6 2 7 6M16 3a4 4 0 0 1 0 8M22 21c-.5-3-2-5-4-5.5'
+};
+function navItem(r,label,ic,badge,red){ const on=S.route===r||(S.route==='customer'&&r==='search')||(S.route==='inv'&&r==='invs')||(S.route==='fiuDetail'&&r==='fiu')||(S.route==='review'&&r==='reviews');
+  return `<button class="nav ${on?'on':''}" data-go="${r}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${IC[ic]}"/></svg><span>${label}</span>${badge?`<span class="bd ${red?'r':''}">${badge}</span>`:''}</button>`; }
+function renderNav(){
+  const openAl=S.alerts.filter(a=>a.status==='New'||a.status==='Triage').length;
+  const openInv=S.invs.filter(i=>!i.outcome).length;
+  const openFiu=S.fiu.filter(f=>f.step<5).length;
+  const openSc=S.screening.filter(s=>s.status==='Open').length;
+  const openCoc=S.coc.filter(c=>c.status==='Awaiting response').length;
+  let h='';
+  h+=`<div class="grp">Overview</div>`+navItem('mywork','My Work','work')+(canKYC()?navItem('kycdash','KYC Dashboard','dash'):'')+(canAML()?navItem('amldash','AML Dashboard','dash'):'');
+  h+=`<div class="grp">Customers</div>`+navItem('newclient','New Client','plus')+navItem('search','Client Search','search');
+  if(canKYC()) h+=`<div class="grp">KYC</div>`+navItem('reviews','Reviews','folder',S.reviews.filter(r=>!/Declined|Approved/.test(r.status)).length)+navItem('screening','Screening','shield',openSc||'')+navItem('coc','Change of circumstances','change',openCoc||'');
+  if(canAML()) h+=`<div class="grp">AML</div>`+navItem('alerts','Alerts','alert',openAl||'',true)+navItem('invs','Investigations','brief',openInv||'')+navItem('txns','Transactions','pulse');
+  if(canAML()) h+=`<div class="grp">Reporting</div>`+navItem('fiu','FIU Reports','doc',openFiu||'');
+  if(S.role==='admin'||S.role==='co') h+=`<div class="grp">Admin</div>`+navItem('audit','Audit Log','log')+navItem('config','Tenant Config','cog')+navItem('users','Users','users');
+  else h+=`<div class="grp">Admin</div>`+navItem('audit','Audit Log','log');
+  $('#nav').innerHTML=h;
+  const who={admin:['d','david','Tenant Admin'],aml:['RW','R. de Wit','AML analyst'],kyc:['SV','S. Visser','KYC analyst'],co:['MJ','M. Janssen','Compliance officer / MLRO']}[S.role];
+  $('#meAv').textContent=who[0]; $('#meName').textContent=who[1]; $('#meRole').textContent=who[2];
+}
+
+/* ================= VIEWS ================= */
+const cocText=x=>x.restricted&&!canAML()?'AML outcome requires a review · details restricted to AML and Compliance (no tipping-off)':x.text;
+function ph(t,sub,right){ return `<div class="ph"><div><h1>${t}</h1>${sub?`<p>${sub}</p>`:''}</div>${right?`<div class="btns">${right}</div>`:''}</div>`; }
+function custLink(id){ const c=cust(id); return `<button class="btn sm" style="border:0;padding:0;min-height:0;color:var(--blue);background:none" data-go="customer" data-id="${id}">${esc(c.name)}</button>`; }
+
+/* ---- My Work ---- */
+function vMyWork(){
+  const kyc=[], aml=[];
+  S.reviews.filter(r=>!/Declined|Approved/.test(r.status)).forEach(r=>kyc.push({due:r.due,what:`${r.type} · ${r.status}`,who:cust(r.cust).name,go:'review',id:r.id}));
+  S.screening.filter(s=>s.status==='Open').forEach(s=>kyc.push({due:'2 d',what:`Screening hit to disposition · ${s.list}`,who:cust(s.cust).name,go:'screening'}));
+  S.coc.filter(c=>c.status==='Awaiting response').forEach(c=>kyc.push({due:'5 d',what:`Change of circumstances · ${c.src}: choose response`,who:cust(c.cust).name,go:'coc'}));
+  S.alerts.filter(a=>a.status==='New'||a.status==='Triage').forEach(a=>aml.push({due:a.due,what:`Alert · ${a.rule}`,who:cust(a.cust).name,go:'alerts',late:a.dueLate}));
+  S.invs.filter(i=>!i.outcome).forEach(i=>aml.push({due:'5 d',what:`Investigation ${i.id} · ${i.status}`,who:cust(i.cust).name,go:'inv',id:i.id}));
+  S.fiu.filter(f=>f.step<5).forEach(f=>aml.push({due:f.due,what:`FIU report ${f.id} · ${FIU_STEPS[f.step]}`,who:cust(f.cust).name,go:'fiuDetail',id:f.id}));
+  S.accounts.filter(a=>/pending|No data for/.test(a.status)).forEach(a=>aml.push({due:'today',what:`Data action · ${a.status}`,who:cust(a.cust).name+' · '+a.iban,go:'customer',id:a.cust,tab:'accounts'}));
+  const list=(arr)=>arr.length?`<table><thead><tr><th>Due</th><th>Task</th><th>Customer</th></tr></thead><tbody>${arr.map(t=>`<tr class="click" data-go="${t.go}" ${t.id?`data-id="${t.id}"`:''} ${t.tab?`data-tab="${t.tab}"`:''}><td class="${t.late?'bad':''}" style="white-space:nowrap;font-weight:500">${esc(t.due)}</td><td>${esc(t.what)}</td><td>${esc(t.who)}</td></tr>`).join('')}</tbody></table>`:`<div class="empty"><b>Nothing waiting</b>New tasks appear here.</div>`;
+  return ph('My Work','Everything assigned to you, in two sections: KYC and AML.')+
+  note('Decision 22: two sections. Data actions (stalled connection, PSD2 re-authentication) are AML tasks. Each row deep-links to where the work is done.')+
+  `<div class="stack">${canKYC()?`<div class="card"><div class="pad"><h2 class="sec">My KYC work <span class="pill">${kyc.length}</span></h2></div><div class="tbl">${list(kyc)}</div></div>`:''}
+  ${canAML()?`<div class="card"><div class="pad"><h2 class="sec">My AML work <span class="pill">${aml.length}</span></h2></div><div class="tbl">${list(aml)}</div></div>`:''}</div>`;
+}
+
+/* ---- KYC Dashboard ---- */
+function vKycDash(){
+  const by=r=>S.customers.filter(c=>c.risk===r).length;
+  return ph('KYC Dashboard','Reviews and backlog · risk portfolio')+
+  `<div class="stack"><div class="kpis">
+    <div class="kpi"><div class="th">Open reviews</div><div class="n">${S.reviews.filter(r=>!/Declined|Approved/.test(r.status)).length}</div><div class="s">1 onboarding · 1 periodic · 1 event-driven</div></div>
+    <div class="kpi a"><div class="th">Awaiting sign-off</div><div class="n">1</div><div class="s">Manager queue</div></div>
+    <div class="kpi r"><div class="th">SLA breached</div><div class="n">0</div><div class="s">—</div></div>
+    <div class="kpi p"><div class="th">Change of circumstances</div><div class="n">${S.coc.length}</div><div class="s">${S.coc.filter(c=>c.status==='Awaiting response').length} awaiting response</div></div>
+    <div class="kpi g"><div class="th">Periodic reviews next 30 d</div><div class="n">14</div><div class="s">by review cycle</div></div>
+  </div>
+  <div class="g2">
+    <div class="card pad"><h2 class="sec">Risk portfolio</h2><div style="display:grid;grid-template-columns:110px 1fr 40px;gap:10px;align-items:center;margin-top:12px;font-size:13px">
+      ${['Low','Medium','High'].map(r=>`<span>${riskPill(r)}</span><div style="height:10px;background:#EEF1F5;border-radius:5px"><div style="height:100%;border-radius:5px;width:${by(r)/S.customers.length*100}%;background:${r==='High'?'#D92D20':r==='Medium'?'#F79009':'#12B76A'}"></div></div><span class="mono">${by(r)}</span>`).join('')}
+    </div><p class="lbl" style="margin:12px 0 0">PEPs: ${S.customers.filter(c=>c.pep).length} · High-risk country residence: 0 · Classification changes (30 d): 2</p></div>
+    <div class="card pad"><h2 class="sec">Change-of-circumstances sources (30 d)</h2><div class="row2" style="margin-top:10px">
+      <span class="lbl">Screening (confirmed hits)</span><b>1</b><span class="lbl">Registry / UBO</span><b>1</b><span class="lbl">ID expiry</span><b>1</b><span class="lbl">Address change</span><b>0</b><span class="lbl">TM (from AML)</span><b>${S.coc.filter(c=>c.src.startsWith('TM')).length}</b></div></div>
+  </div></div>`;
+}
+
+/* ---- AML Dashboard ---- */
+function vAmlDash(){
+  const t=S.p.tab||'overview';
+  const tabs=`<div class="tabs">${[['overview','Overview'],['coverage','Data coverage'],['detection','Detection quality']].map(([k,l])=>`<button class="tab ${t===k?'on':''}" data-go="amldash" data-tab="${k}">${l}</button>`).join('')}</div>`;
+  let body='';
+  if(t==='overview') body=`<div class="kpis">
+    <div class="kpi"><div class="th">Open alerts</div><div class="n">${S.alerts.filter(a=>a.status==='New'||a.status==='Triage').length}</div><div class="s">by source: rule, provider, profile</div></div>
+    <div class="kpi r"><div class="th">Deadline &lt; 24 h</div><div class="n">${S.alerts.filter(a=>a.dueLate).length}</div><div class="s">incl. objective report</div></div>
+    <div class="kpi"><div class="th">Open investigations</div><div class="n">${S.invs.filter(i=>!i.outcome).length}</div><div class="s">one open per customer</div></div>
+    <div class="kpi p"><div class="th">FIU reports open</div><div class="n">${S.fiu.filter(f=>f.step<5).length}</div><div class="s">from AML, KYC and objective</div></div></div>
+    <div class="card"><div class="pad"><h2 class="sec">Alerts by source</h2></div><div class="tbl"><table><thead><tr><th>Source</th><th>Open</th><th>Closed (Q3)</th><th>Escalated</th></tr></thead><tbody>
+      <tr><td>Rule (Didit / Vitauri)</td><td>${S.alerts.filter(a=>a.src==='Rule'&&a.status!=='Closed').length}</td><td>312</td><td>9%</td></tr>
+      <tr><td>Provider (Didit counterparty screening)</td><td>${S.alerts.filter(a=>a.src==='Provider'&&a.status!=='Closed').length}</td><td>58</td><td>3%</td></tr>
+      <tr><td>Profile (actual vs expected)</td><td>${S.alerts.filter(a=>a.src==='Profile'&&a.status!=='Closed').length}</td><td>41</td><td>17%</td></tr>
+      <tr><td>Manual flag</td><td>0</td><td>4</td><td>50%</td></tr></tbody></table></div></div>`;
+  if(t==='coverage'){
+    const rows=S.accounts.map(a=>{ const days=[]; const txd=new Set(S.txns.filter(x=>x.acc===a.id).map(x=>x.date));
+      for(let d=1;d<=31;d++){ const ds='2026-10-'+String(d).padStart(2,'0'); let c='';
+        if(a.status==='No data yet') c=''; else if(a.source==='PSD2'&&/pending/.test(a.status)&&d>27) c='a'; else if(a.status.startsWith('No data for')&&d>=31) c='r'; else c='g';
+        if(a.source==='Upload' && a.last) c = d<=31?'g':''; days.push(`<i class="${c}" title="Oct ${d}"></i>`);}
+      return `<tr><td>${esc(cust(a.cust).name)}<div class="lbl mono">${a.iban}</div></td><td>${esc(a.source)}</td><td style="min-width:260px"><div class="cov">${days.join('')}</div></td><td>${statusPill(a.status)}</td></tr>`; }).join('');
+    body=`<div class="kpis"><div class="kpi"><div class="th">Accounts</div><div class="n">${S.accounts.length}</div><div class="s">across ${new Set(S.accounts.map(a=>a.cust)).size} customers</div></div>
+      <div class="kpi g"><div class="th">Complete</div><div class="n">${S.accounts.filter(a=>/Live/.test(a.status)||a.last&&a.source==='Upload').length}</div><div class="s">October 2026</div></div>
+      <div class="kpi a"><div class="th">Missing days</div><div class="n">${S.accounts.filter(a=>/pending|No data for/.test(a.status)).length}</div><div class="s">accounts affected</div></div>
+      <div class="kpi r"><div class="th">Stalled connections</div><div class="n">${S.accounts.filter(a=>/No data for/.test(a.status)).length}</div><div class="s">API / PSD2</div></div>
+      <div class="kpi"><div class="th">No data yet</div><div class="n">${S.accounts.filter(a=>a.status==='No data yet').length}</div><div class="s">upload or connect</div></div></div>
+      <div class="card"><div class="pad"><h2 class="sec">Coverage per account · October 2026</h2><p class="lbl" style="margin:4px 0 0">Measurement only. Actions (upload, send re-auth link) are done in the customer file → Accounts &amp; transactions.</p></div><div class="tbl"><table><thead><tr><th>Customer / account</th><th>Source</th><th>Daily coverage</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  }
+  if(t==='detection') body=`<div class="card"><div class="pad"><h2 class="sec">Rule performance (last 90 days)</h2><p class="lbl" style="margin:4px 0 0">Setup and calibration live in Tenant Config → AML → Rules &amp; scenarios.</p></div><div class="tbl"><table><thead><tr><th>Rule</th><th>Alerts</th><th>Escalated</th><th>FP rate</th><th>Last backtest</th><th>Below-the-line</th><th></th></tr></thead><tbody>
+    ${RULES.map(r=>`<tr><td><b>${r.id}</b> ${esc(r.name)}<div class="lbl">${esc(r.src)}</div></td><td class="mono">${r.perf[0]}</td><td class="mono">${r.perf[1]}</td><td class="mono">${r.perf[2]}</td><td>${r.perf[3]}</td><td>${r.perf[4]}</td><td><button class="btn sm" data-go="config" data-tab="aml" data-sub="rules">Open rule</button></td></tr>`).join('')}</tbody></table></div></div>
+    <div class="g2"><div class="card pad"><h2 class="sec">Coverage gaps</h2><div class="chk"><b class="bad">!</b>Layering via related companies (S-14): only Vitauri flows, no backtest yet</div><div class="chk"><b class="bad">!</b>Trade-based ML: invoice data not available</div></div>
+    <div class="aibox"><div class="t">✦ AI triage performance (shadow mode)</div><p class="lbl">Released per scenario on measured missed signals, wrongly closed alerts and citation accuracy. Name hits: released · Velocity: shadow · Money mule: full review.</p></div></div>`;
+  return ph('AML Dashboard','Alerts & deadlines · data & detection')+tabs+note('Decision 21: AML Dashboard = alerts & deadlines + data & detection. Data coverage moved here from Control.')+`<div class="stack">${body}</div>`;
+}
+function statusPill(s){ return `<span class="pill ${/No data for|withdrawn/.test(s)?'r':/pending|due/.test(s)?'a':/Live|Processed/.test(s)?'g':''}">${esc(s)}</span>`; }
+
+/* ---- Customers ---- */
+function vNewClient(){ return ph('New Client','Existing onboarding flow (unchanged)')+`<div class="card pad"><p>The 8-step onboarding is unchanged. Two additions for AML:</p><div class="chk"><b class="ok">+</b>Client outreach collects <b>purpose of the relationship</b> and <b>expected transaction pattern</b> (input for the expected profile).</div><div class="chk"><b class="ok">+</b>Optional step: client connects bank accounts via <b>PSD2</b> or uploads statements via a secure link (feeds KYC transaction analysis, 1 day to 60 months).</div></div>`+note('Decision 18: profile sources are client declaration (outreach), KYC transaction analysis, analyst input, segment default. Segment default applies until a personal profile is approved.'); }
+function vSearch(){
+  return ph('Client Search',S.customers.length+' customers')+`<div class="card"><div class="tbl"><table><thead><tr><th>Customer</th><th>Type</th><th>Segment</th><th>Risk class</th><th>Behaviour score</th><th>Accounts</th><th></th></tr></thead><tbody>
+  ${S.customers.map(c=>`<tr class="click" data-go="customer" data-id="${c.id}"><td><b>${esc(c.name)}</b><div class="lbl mono">${c.id}</div></td><td>${c.type}</td><td>${esc(c.segment)}</td><td>${riskPill(c.risk)} ${c.pep?'<span class="pill p">PEP</span>':''}</td><td>${c.beh==null?'<span class="mut">no data</span>':beh(c.beh)}</td><td>${S.accounts.filter(a=>a.cust===c.id).length}</td><td>${hasHold(c.id)?'<span class="hold">AML hold</span>':''}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function beh(n){ return `<span class="pill ${n>=70?'r':n>=50?'a':'g'}">${n}</span>`; }
+
+function vCustomer(){
+  const c=cust(S.p.id); const t=S.p.tab||'overview'; const hold=hasHold(c.id);
+  const tabs=[['overview','Overview'],['accounts','Accounts & transactions'],['profile','Expected profile'],['kyc','Reviews & changes'],...(canAML()?[['aml','Alerts & investigations']]:[])];
+  let h=`<div class="ph"><div><div class="th">${c.type==='ORG'?'Organisation':'Natural person'} · ${c.id} · ${esc(c.segment)}</div><h1>${esc(c.name)}</h1>
+    <div class="btns" style="margin-top:6px">${riskPill(c.risk)}<span class="pill">Official risk class (KYC)</span>${c.beh!=null?`<span class="pill p">Behaviour score ${c.beh}</span>`:''}${c.pep?'<span class="pill p">PEP</span>':''}${hold?'<span class="hold">AML hold</span>':''}</div></div>
+    <div class="btns"><button class="btn" data-go="search">← Client Search</button></div></div>`;
+  if(hold && S.role==='kyc') h+=`<div class="note" style="background:#F3EEFF;border-color:#C9B5F5;color:#3B1E7A"><b>AML hold.</b> An AML matter is open for this customer. Client outreach about transactions is blocked or must use a neutral template (no tipping-off). Contents are visible to AML roles and Compliance only.</div>`;
+  h+=`<div class="tabs">${tabs.map(([k,l])=>`<button class="tab ${t===k?'on':''}" data-go="customer" data-id="${c.id}" data-tab="${k}">${l}</button>`).join('')}</div>`;
+  if(t==='overview') h+=custOverview(c);
+  if(t==='accounts') h+=custAccounts(c);
+  if(t==='profile') h+=custProfile(c);
+  if(t==='kyc') h+=custKyc(c);
+  if(t==='aml' && canAML()) h+=custAml(c);
+  return h;
+}
+function custOverview(c){
+  const tx=S.txns.filter(x=>x.cust===c.id&&!x.hist&&x.date>='2026-10-01'); const inb=tx.filter(x=>x.amt>0).reduce((s,x)=>s+x.amt,0);
+  const pr=c.profile;
+  return `<div class="stack"><div class="kv">
+    <div><span class="k">Expected profile</span><span class="v">${pr?`v${pr.version} · ${esc(pr.approved)}`:'<span class="warn">Segment default</span>'}</span></div>
+    <div><span class="k">Expected inbound / month</span><span class="v mono">${pr?eur0(pr.inMax):'—'}</span></div>
+    <div><span class="k">Actual inbound Oct 2026</span><span class="v mono ${pr&&inb>pr.inMax?'bad':''}">${tx.length?eur0(inb):'—'}</span></div>
+    <div><span class="k">Accounts</span><span class="v">${S.accounts.filter(a=>a.cust===c.id).length}</span></div>
+    <div><span class="k">Open alerts</span><span class="v">${canAML()?S.alerts.filter(a=>a.cust===c.id&&a.status!=='Closed').length:'<span class="mut">restricted</span>'}</span></div></div>
+    <div class="g2"><div class="card pad"><h2 class="sec">Risk: one official class, two inputs</h2><div class="row2" style="margin-top:10px"><span class="lbl">Official risk class</span><span>${riskPill(c.risk)} set by KYC review, routed via Sign-Off Matrix</span><span class="lbl">Behaviour score (TM)</span><span>${c.beh==null?'<span class="mut">no transaction data yet</span>':beh(c.beh)} live, from alerts and profile deviation</span><span class="lbl">Rule</span><span>A high behaviour score can <b>propose</b> a reclassification (Change of circumstances). It never changes the class itself.</span></div></div>
+    <div class="card pad"><h2 class="sec">Timeline</h2>${timeline(c.id)}</div></div>
+    ${note('Decision 13: one official risk class with two inputs. Decision 8: TM → KYC bridge creates a Change-of-circumstances event; the class changes only through a review and the Sign-Off Matrix (highest of existing and proposed).')}</div>`;
+}
+function timeline(cid){
+  const ev=[];
+  S.coc.filter(x=>x.cust===cid).forEach(x=>ev.push([x.date,'CoC · '+x.src+': '+cocText(x)]));
+  S.reviews.filter(x=>x.cust===cid).forEach(x=>ev.push([x.due,x.type+' · '+x.status]));
+  if(canAML()) S.alerts.filter(x=>x.cust===cid).forEach(x=>ev.push(['', 'Alert '+x.id+' · '+x.rule+' · '+x.status]));
+  if(!ev.length) return '<p class="lbl">No events yet.</p>';
+  return ev.map(e=>`<div class="chk"><b class="mut">•</b><span><span class="lbl mono">${esc(e[0])}</span> ${esc(e[1])}</span></div>`).join('');
+}
+function custAccounts(c){
+  const accs=S.accounts.filter(a=>a.cust===c.id);
+  const tx=S.txns.filter(x=>x.cust===c.id).sort((a,b)=>b.date.localeCompare(a.date));
+  return `<div class="stack">${note('Decisions 6, 14, 15, 19: Customer → Account → Data source → Transactions. Account types: own, joint, business with related parties, external via PSD2. Upload here is the first MT940 test flow.')}
+  <div class="card"><div class="pad" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><h2 class="sec">Accounts</h2><div class="btns"><button class="btn" data-act="addAccount" data-id="${c.id}">+ Add account</button><button class="btn" data-act="sendLink" data-id="${c.id}">Send secure link to customer</button></div></div>
+  <div class="tbl"><table><thead><tr><th>IBAN</th><th>Type</th><th>Holders / related parties</th><th>Source</th><th>Status</th><th>Last data</th><th></th></tr></thead><tbody>
+  ${accs.map(a=>`<tr><td class="mono">${a.iban}</td><td>${esc(a.type)}</td><td>${a.holders.map(esc).join('<br>')}</td><td>${esc(a.source)}</td><td>${statusPill(a.status)}</td><td class="mono">${a.last||'—'}</td><td><div class="btns">${a.source==='Upload'?`<button class="btn sm pr" data-act="upload" data-id="${a.id}">Upload statement</button>`:''}${a.source==='PSD2'?`<button class="btn sm" data-act="reauth" data-id="${a.id}">Send re-auth link</button>`:''}</div></td></tr>`).join('')||'<tr><td colspan="7" class="empty"><b>No accounts</b>Add an account to start monitoring.</td></tr>'}
+  </tbody></table></div></div>
+  <div class="card"><div class="pad"><h2 class="sec">Transactions <span class="pill">${tx.length}</span></h2></div>${txTable(tx,false)}</div></div>`;
+}
+function txTable(tx,showCust){
+  if(!tx.length) return `<div class="empty"><b>No transactions yet</b>Upload an MT940, CAMT.053, CSV or PDF statement, connect PSD2, or send data via API.</div>`;
+  return `<div class="tbl"><table><thead><tr>${showCust?'<th>Customer</th>':''}<th>Executed</th><th>Amount</th><th>Counterparty</th><th>Reference</th><th>Lifecycle</th><th>Source</th><th>Didit</th><th>Alert</th></tr></thead><tbody>
+  ${tx.map(x=>`<tr>${showCust?`<td>${esc(cust(x.cust).name)}</td>`:''}<td class="mono">${x.date}</td><td class="mono ${x.amt<0?'':'ok'}" style="white-space:nowrap">${eur(x.amt)}</td><td>${esc(x.cp)}<div class="lbl mono">${esc(x.cpIban)} ${x.cpC?'· '+x.cpC:''}</div></td><td class="lbl">${esc(x.ref)}</td><td>${esc(x.life)}${x.hist?'<div><span class="pill">historical · analysis only</span></div>':''}</td><td>${esc(x.src)}</td><td><span class="pill ${x.didit==='Approved'?'g':x.didit==='In review'?'a':''}">${esc(x.didit)}</span></td><td>${x.alert&&canAML()?`<button class="btn sm" data-go="alerts">${x.alert}</button>`:'—'}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function custProfile(c){
+  const p=c.profile;
+  return `<div class="stack">${note('Decision 18: sources and precedence. Segment default → replaced by an approved personal profile. A gap between declaration and analysis becomes a finding. Each version stores rationale, validity, approver.')}
+  <div class="g2"><div class="card pad"><h2 class="sec">Approved expected profile ${p?`v${p.version}`:''}</h2>${p?`<div class="row2" style="margin-top:10px">
+    <span class="lbl">Inbound per month</span><b class="mono">≤ ${eur0(p.inMax)}</b><span class="lbl">Outbound abroad / month</span><b class="mono">≤ ${eur0(p.outAbroadMax)}</b><span class="lbl">Countries</span><b>${esc(p.countries)}</b><span class="lbl">Transactions / month</span><b>≤ ${p.txMax}</b><span class="lbl">Cash</span><b>${esc(p.cash)}</b><span class="lbl">Purpose</span><b>${esc(p.purpose)}</b><span class="lbl">Source</span><span>${esc(p.source)}</span><span class="lbl">Approved</span><span>${esc(p.approved)}</span></div>`:`<p class="lbl">No personal profile yet. Segment default "${esc(c.segment)}" applies.</p>`}</div>
+  <div class="card pad"><h2 class="sec">Sources</h2><div class="tbl"><table><thead><tr><th>Source</th><th>Inbound / month</th><th>Status</th></tr></thead><tbody>
+   <tr><td>Client declaration (outreach)</td><td class="mono">${c.declared?eur0(c.declared.inMax):'—'}</td><td>${c.declared?'<span class="pill g">received</span>':'<span class="pill">not requested</span>'}</td></tr>
+   <tr><td>KYC transaction analysis</td><td class="mono">${S.txns.some(x=>x.cust===c.id)?eur0(Math.round(S.txns.filter(x=>x.cust===c.id&&x.amt>0&&x.hist).reduce((s,x)=>s+x.amt,0)/Math.max(1,new Set(S.txns.filter(x=>x.cust===c.id&&x.hist).map(x=>x.date.slice(0,7))).size))):'—'}</td><td>${S.txns.some(x=>x.cust===c.id&&x.hist)?'<span class="pill b">from uploaded history</span>':'<span class="pill">needs statements</span>'}</td></tr>
+   <tr><td>Analyst input</td><td class="mono">${p?eur0(p.inMax):'—'}</td><td>${p?'<span class="pill g">set</span>':'—'}</td></tr>
+   <tr><td>Segment default · ${esc(c.segment)}</td><td class="mono">€4,000</td><td><span class="pill">${p?'superseded':'active'}</span></td></tr></tbody></table></div>
+   ${c.declared&&p&&c.declared.inMax!==p.inMax?`<p class="lbl" style="margin:10px 0 0"><b class="warn">Finding:</b> declared ${eur0(c.declared.inMax)} vs set ${eur0(p.inMax)}; rationale recorded in v${p.version}.</p>`:''}
+   <div class="btns" style="margin-top:10px"><button class="btn" data-act="toast" data-msg="Opens KYC transaction analysis (existing step) with uploaded history as input.">Run KYC transaction analysis</button><button class="btn" data-act="toast" data-msg="New profile version drafted; approval routed by risk class (Sign-Off Matrix).">Propose new version</button></div></div></div></div>`;
+}
+function custKyc(c){
+  const rv=S.reviews.filter(r=>r.cust===c.id), cc=S.coc.filter(x=>x.cust===c.id), sc=S.screening.filter(x=>x.cust===c.id);
+  return `<div class="g2"><div class="card"><div class="pad"><h2 class="sec">Reviews</h2></div><div class="tbl"><table><tbody>${rv.map(r=>`<tr class="click" data-go="review" data-id="${r.id}"><td class="mono">${r.id}</td><td>${r.type}</td><td>${r.status}</td></tr>`).join('')||'<tr><td class="lbl">None</td></tr>'}</tbody></table></div></div>
+  <div class="card"><div class="pad"><h2 class="sec">Change of circumstances &amp; screening</h2></div><div class="tbl"><table><tbody>${cc.map(x=>`<tr><td>${esc(x.src)}</td><td>${esc(cocText(x))}</td><td>${esc(x.status)}</td></tr>`).join('')}${sc.map(x=>`<tr><td>Screening</td><td>${esc(x.list)} · ${esc(x.subject)}</td><td>${esc(x.status)}</td></tr>`).join('')||''}${!cc.length&&!sc.length?'<tr><td class="lbl">None</td></tr>':''}</tbody></table></div></div></div>`;
+}
+function custAml(c){
+  const al=S.alerts.filter(a=>a.cust===c.id), inv=S.invs.filter(i=>i.cust===c.id), f=S.fiu.filter(x=>x.cust===c.id);
+  return `<div class="stack"><div class="card"><div class="pad"><h2 class="sec">Alerts</h2></div>${alertTable(al)}</div>
+  <div class="g2"><div class="card"><div class="pad"><h2 class="sec">Investigations</h2></div><div class="tbl"><table><tbody>${inv.map(i=>`<tr class="click" data-go="inv" data-id="${i.id}"><td class="mono">${i.id}</td><td>${i.status}</td><td>${i.alerts.length} alerts</td></tr>`).join('')||'<tr><td class="lbl">None</td></tr>'}</tbody></table></div></div>
+  <div class="card"><div class="pad"><h2 class="sec">FIU reports</h2></div><div class="tbl"><table><tbody>${f.map(x=>`<tr class="click" data-go="fiuDetail" data-id="${x.id}"><td class="mono">${x.id}</td><td>${x.src}</td><td>${FIU_STEPS[x.step]}</td></tr>`).join('')||'<tr><td class="lbl">None</td></tr>'}</tbody></table></div></div></div></div>`;
+}
+
+/* ---- KYC ---- */
+function vReviews(){
+  const f=S.p.f||'all'; const types=['all','Onboarding','Periodic review','Event-driven review'];
+  const rows=S.reviews.filter(r=>f==='all'||r.type===f);
+  return ph('Reviews','One case engine · KYC queue (onboarding, periodic, event-driven)')+note('Decision 1: one case object with a type. KYC types show here, TM investigations under AML → Investigations. Existing 8-step workspace and sign-off flow are unchanged.')+
+  `<div class="chips" style="margin-bottom:12px">${types.map(x=>`<button class="chip ${f===x?'on':''}" data-go="reviews" data-f="${x}">${x==='all'?'All':x}</button>`).join('')}</div>
+  <div class="card"><div class="tbl"><table><thead><tr><th>Case</th><th>Customer</th><th>Type</th><th>Origin</th><th>Status</th><th>Owner</th><th>Due</th></tr></thead><tbody>
+  ${rows.map(r=>`<tr class="click" data-go="review" data-id="${r.id}"><td class="mono">${r.id}</td><td>${esc(cust(r.cust).name)}</td><td>${r.type}</td><td class="lbl">${esc(r.origin)}</td><td><span class="pill ${/Declined/.test(r.status)?'r':'b'}">${esc(r.status)}</span></td><td>${r.owner}</td><td>${r.due}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function vReview(){
+  const r=S.reviews.find(x=>x.id===S.p.id); const c=cust(r.cust);
+  return ph(`${r.id} · ${esc(c.name)}`,`${r.type} · ${r.status} · origin: ${esc(r.origin)}`,`<button class="btn" data-go="reviews">← Reviews</button>`)+
+  `<div class="card pad"><p>This opens the existing KYC case workspace (8 steps, Draft Report &amp; QC, Compliance Advice, Final Report &amp; Sign-off).</p>${/Declined/.test(r.status)?`<div class="chk"><b class="ok">✓</b>Step "Assess unusual-transaction reporting obligation" → report <b>UTR-NL-0925</b> created in the one FIU register (source: KYC review).</div><div class="btns" style="margin-top:8px">${canAML()?'<button class="btn" data-go="fiuDetail" data-id="UTR-NL-0925">Open FIU report</button>':''}</div>`:''}
+  ${r.type==='Event-driven review'?`<div class="chk"><b class="ok">✓</b>Only the steps affected by the change re-run (delta review); QC checks them again.</div>`:''}</div>`+note('Decision 16: FIU reports can start from KYC reviews (declined onboarding) as well as AML investigations.');
+}
+function vScreening(){
+  return ph('Screening','PEP, sanctions and adverse media on customers, UBOs and directors · results from Didit')+note('Decision 17: Screening decides (is it this person?). A confirmed hit becomes a Change-of-circumstances event; the response is chosen there. Transaction/counterparty screening is NOT here: it is a rule type and lands in AML → Alerts.')+
+  `<div class="card"><div class="tbl"><table><thead><tr><th>Subject</th><th>Customer</th><th>List</th><th>Match</th><th>Detail</th><th>Status</th><th>Decision</th></tr></thead><tbody>
+  ${S.screening.map(s=>`<tr><td><b>${esc(s.subject)}</b><div class="lbl">${s.date}</div></td><td>${esc(cust(s.cust).name)}</td><td>${esc(s.list)}</td><td class="mono">${s.match}</td><td class="lbl">${esc(s.detail)}</td><td><span class="pill ${s.status==='Open'?'a':s.status==='Confirmed'?'r':'g'}">${s.status}</span></td><td>${s.status==='Open'?`<div class="btns"><button class="btn sm dg" data-act="scConfirm" data-id="${s.id}">True match</button><button class="btn sm" data-act="scDismiss" data-id="${s.id}">Not this person</button></div>`:'—'}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+const RESPONSES=['No action','Targeted check','Risk reassessment','Full CDD refresh'];
+function vCoc(){
+  return ph('Change of circumstances','Events that may change what we know about a customer · graduated response')+note('Sources: confirmed screening hits, registry/UBO, ID expiry, address, and TM (profile overrun, new high-risk country, investigation closed with report, alert frequency). Response starts an Event-driven review where needed; only affected steps re-run.')+
+  `<div class="card"><div class="tbl"><table><thead><tr><th>Date</th><th>Customer</th><th>Source</th><th>Event</th><th>Response</th><th>Status</th></tr></thead><tbody>
+  ${S.coc.map(x=>`<tr><td class="mono">${x.date}</td><td>${esc(cust(x.cust).name)}</td><td><span class="pill ${x.src.startsWith('TM')?'p':''}">${esc(x.src)}</span></td><td>${esc(cocText(x))}${x.hold&&S.role==='kyc'?'<div><span class="hold">AML hold · neutral outreach only</span></div>':''}</td><td>${x.response?esc(x.response):`<select class="inp" style="min-width:170px" data-act="cocResp" data-id="${x.id}"><option value="">Choose response…</option>${RESPONSES.map(r=>`<option>${r}</option>`).join('')}</select>`}</td><td>${esc(x.status)}${x.review?` · <button class="btn sm" data-go="review" data-id="${x.review}">${x.review}</button>`:''}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+
+/* ---- AML ---- */
+function alertTable(list){
+  if(!list.length) return `<div class="empty"><b>No alerts</b>New alerts appear when rules, Didit screening presets or profile checks raise them.</div>`;
+  return `<div class="tbl"><table><thead><tr><th>Alert</th><th>Customer</th><th>Source</th><th>Rule / signal</th><th>Score</th><th>AI proposal and reason</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody>
+  ${list.map(a=>`<tr><td class="mono">${a.id}</td><td>${custLink(a.cust)}</td><td><span class="pill ${a.src==='Provider'?'t':a.src==='Profile'?'p':'b'}">${a.src}</span></td><td>${esc(a.rule)}</td><td class="mono ${a.score>=70?'bad':'warn'}">${a.score}</td><td>${S.p.ai||a.aiShown?`<span class="pill p">✦ ${esc(a.ai.p)}</span><div class="lbl">${esc(a.ai.why)}</div>`:'<span class="mut">not triaged</span>'}</td><td class="${a.dueLate?'bad':''}">${a.due}</td><td>${esc(a.status)}${a.inv?`<div><button class="btn sm" data-go="inv" data-id="${a.inv}">${a.inv}</button></div>`:''}</td>
+  <td>${a.status==='Closed'||a.status==='Escalated'?'':`<div class="btns"><button class="btn sm" data-act="alClose" data-id="${a.id}">Close</button><button class="btn sm pr" data-act="alEsc" data-id="${a.id}">Escalate</button></div>`}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function vAlerts(){
+  const f=S.p.f||'open'; const src=S.p.src||'all';
+  let list=S.alerts.filter(a=>f==='all'||(f==='open'?a.status==='New'||a.status==='Triage':a.status===f));
+  if(src!=='all') list=list.filter(a=>a.src===src);
+  return ph('Alerts',`${S.alerts.filter(a=>a.status==='New'||a.status==='Triage').length} open · one queue for rule hits, Didit counterparty screening and profile checks`,`<button class="btn ai" data-go="alerts" data-ai="1" data-f="${f}" data-src="${src}">✦ Run AI triage on new alerts</button>`)+
+  note('Decisions 3, 9, 10: transaction screening is a rule type (Didit presets "Sanctions counterparty matching", "PEP counterparty exposure", reference keywords) → source Provider. Alert is the unit of work; Escalate creates or adds to an investigation (one open per customer, configurable). Didit has no public alert API: Vitauri builds alerts from transaction.status.updated + rule_runs.')+
+  `<div class="btns" style="margin-bottom:12px"><div class="chips">${[['open','Open'],['Escalated','Escalated'],['Closed','Closed'],['all','All']].map(([k,l])=>`<button class="chip ${f===k?'on':''}" data-go="alerts" data-f="${k}" data-src="${src}">${l}</button>`).join('')}</div><span class="lbl" style="margin-left:8px">Source</span><div class="chips">${['all','Rule','Provider','Profile'].map(k=>`<button class="chip ${src===k?'on':''}" data-go="alerts" data-f="${f}" data-src="${k}">${k==='all'?'All':k}</button>`).join('')}</div></div>
+  <div class="card">${alertTable(list)}</div><p class="lbl">AI proposals show reasons, not percentages. Bulk closing only for alert types released after measurement.</p>`;
+}
+function vInvs(){
+  return ph('Investigations','One case engine · AML queue (TM investigation, network)')+`<div class="card"><div class="tbl"><table><thead><tr><th>Case</th><th>Customer</th><th>Type</th><th>Alerts</th><th>Status</th><th>Owner</th><th>FIU</th></tr></thead><tbody>
+  ${S.invs.map(i=>`<tr class="click" data-go="inv" data-id="${i.id}"><td class="mono">${i.id}</td><td>${esc(cust(i.cust).name)}</td><td>${i.type}</td><td>${i.alerts.length}</td><td><span class="pill ${i.outcome?'g':'b'}">${esc(i.outcome||i.status)}</span></td><td>${i.owner}</td><td>${i.fiu?`<span class="pill p">${i.fiu}</span>`:'—'}</td></tr>`).join('')||'<tr><td colspan="7" class="empty"><b>No investigations</b>Escalate an alert to start one.</td></tr>'}</tbody></table></div></div>`;
+}
+function vInv(){
+  const i=S.invs.find(x=>x.id===S.p.id); const c=cust(i.cust); const als=S.alerts.filter(a=>i.alerts.includes(a.id));
+  const tx=S.txns.filter(x=>x.cust===i.cust&&als.some(a=>a.txns&&a.txns.includes(x.id)||a.txn===x.id));
+  return ph(`${i.id} · ${esc(c.name)}`,`${i.type} · ${i.outcome||i.status} · owner ${i.owner}`,`<button class="btn" data-go="invs">← Investigations</button>`)+
+  `<div class="stack">${note('One open investigation per customer (tenant setting: or per rule + customer). Didit cases have one subject; multi-party work uses a network investigation. Closing with a report or as true positive creates a TM → KYC Change-of-circumstances event.')}
+  <div class="g2"><div class="card"><div class="pad"><h2 class="sec">Bundled alerts</h2></div>${alertTable(als)}</div>
+  <div class="aibox"><div class="t">✦ Evidence collected by AI</div>${(i.evidence||['Counterparty and flow analysis across accounts','Screening results of all counterparties (Didit)','Comparison with approved expected profile']).map(e=>`<div class="chk"><b class="warn">!</b>${esc(e)}</div>`).join('')}<p class="lbl" style="margin-top:6px">Sources linked per statement. AI never closes an alert with a true hit and never submits a report.</p></div></div>
+  ${tx.length?`<div class="card"><div class="pad"><h2 class="sec">Transactions in scope</h2></div>${txTable(tx,false)}</div>`:''}
+  <div class="card pad"><h2 class="sec">Outcome</h2>${i.outcome?`<p>Closed: <b>${esc(i.outcome)}</b>${i.fiu?` · FIU report ${i.fiu}`:''}</p>`:`<div class="btns" style="margin-top:8px"><button class="btn ai" data-act="invFiu" data-id="${i.id}">✦ Prepare FIU report</button><button class="btn" data-act="invClose" data-id="${i.id}" data-o="No report · explained">Close: explained, no report</button><button class="btn" data-act="invClose" data-id="${i.id}" data-o="True positive · no report (motivated)">Close: true positive, motivated no-report</button></div><p class="lbl" style="margin-top:8px">Customer outreach is locked while a report is in preparation (tipping-off). A KYC user only sees "AML hold".</p>`}</div></div>`;
+}
+function vTxns(){
+  const tx=[...S.txns].sort((a,b)=>b.date.localeCompare(a.date));
+  return ph('Transactions','Transaction ledger across all customers and accounts',`<button class="btn pr" data-act="bulk">Import file</button><button class="btn" data-act="toast" data-msg="Manual entry requires customer, account and execution date.">+ New transaction</button>`)+
+  note('Decision 6: bulk import under AML (one file with many accounts, matched on IBAN, unmatched queue). Didit has no bulk API: Vitauri parses and submits per transaction with the original date. Description changed: this is the ledger, not a screening page.')+
+  (S.unmatched&&S.unmatched.length?`<div class="card" style="margin-bottom:16px"><div class="pad"><h2 class="sec">Unmatched accounts <span class="pill a">${S.unmatched.length}</span></h2><p class="lbl" style="margin:4px 0 0">IBANs in imported files that are not linked to a customer. Transactions are held until matched.</p></div><div class="tbl"><table><thead><tr><th>IBAN</th><th>Transactions</th><th>Period</th><th></th></tr></thead><tbody>${S.unmatched.map((u,ix)=>`<tr><td class="mono">${u.iban}</td><td>${u.n}</td><td class="mono">${u.from} → ${u.to}</td><td><button class="btn sm" data-act="toast" data-msg="Opens customer picker to link this IBAN as a new account.">Link to customer</button></td></tr>`).join('')}</tbody></table></div></div>`:'')+
+  `<div class="card">${txTable(tx,true)}</div>`;
+}
+const FIU_STEPS=['Draft','In review','Approved','Generated','Submitted','Received'];
+function vFiu(){
+  return ph('FIU Reports','One register · reports from AML investigations, KYC reviews and objective indicators')+note('Decisions 11, 16: one register, own Reporting group. "Scan for reports" removed. Action point for developers: verify the Didit API for FIU report generation (goAML XML); public docs show console-only.')+
+  `<div class="card"><div class="tbl"><table><thead><tr><th>Report</th><th>Source</th><th>Customer</th><th>FIU profile</th><th>Type</th><th>Status</th><th>Due</th><th>FIU reference</th></tr></thead><tbody>
+  ${S.fiu.map(f=>`<tr class="click" data-go="fiuDetail" data-id="${f.id}"><td class="mono">${f.id}</td><td><span class="pill ${f.src==='KYC review'?'b':f.src==='Objective indicator'?'a':'p'}">${f.src}</span><div class="lbl mono">${f.origin}</div></td><td>${esc(cust(f.cust).name)}</td><td>${f.profile}</td><td>${f.type}</td><td><span class="pill ${f.step>=5?'g':f.step>=3?'a':'b'}">${FIU_STEPS[f.step]}</span></td><td>${esc(f.due)}</td><td class="mono">${f.ref||'—'}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function vFiuDetail(){
+  const f=S.fiu.find(x=>x.id===S.p.id); const c=cust(f.cust); const s=f.step;
+  const names=['Draft','In review','Approved','Generated','Submitted','Received'];
+  const steps=names.map((n,ix)=>`<div class="st ${ix<s||s>=5?'done':ix===s?'now':''}"><b>${ix<s||s>=5?'✓':ix===s?'●':'○'} ${n}</b><span>${['AI agent + analyst','4-eyes by MLRO','M. Janssen','goAML XML','portal / API','FIU reference'][ix]}</span></div>`).join('');
+  const act=[
+    `<button class="btn pr" data-act="fiuStep" data-id="${f.id}">Send for approval</button>`,
+    S.role==='co'||S.role==='admin'?`<button class="btn pr" data-act="fiuStep" data-id="${f.id}">Approve as MLRO</button>`:'<span class="lbl">Waiting for MLRO approval (four eyes).</span>',
+    `<button class="btn pr" data-act="fiuStep" data-id="${f.id}">Generate goAML XML</button>`,
+    `<input id="fiuRef" class="inp" style="max-width:300px" placeholder="FIU reference, e.g. goAML-NL-2026-004899"><button class="btn pr" data-act="fiuSubmit" data-id="${f.id}">Record submission</button>`,
+    `<button class="btn pr" data-act="fiuStep" data-id="${f.id}">Record FIU receipt</button>`,
+    `<span class="ok">Received · reference ${esc(f.ref)} · evidence stored in investigation and audit log.</span>`][s];
+  return ph(`${f.id} · ${esc(c.name)}`,`${f.type} · ${f.profile} · source: ${f.src} (${f.origin})`,`<button class="btn" data-go="fiu">← FIU Reports</button>`)+
+  `<div class="stack"><div class="steps">${steps}</div>
+  ${note('Action point (developers): Didit FIU report generation via API is not publicly documented (console-only per docs.didit.me). Confirm the API that was tested; otherwise Vitauri generates goAML XML per FIU profile. A file is not a submission: generated, submitted and received are separate states with evidence.')}
+  <div class="g2"><div class="card pad"><h2 class="sec">Report content</h2><div class="row2" style="margin-top:10px"><span class="lbl">Subject</span><span>${esc(c.name)} <span class="pill b">KYC file</span></span><span class="lbl">Indicator</span><span>${f.type.includes('objective')?'Objective indicator (Wwft)':'Subjective indicator (Wwft)'} <span class="pill">FIU profile</span></span><span class="lbl">Transactions</span><span>from ${esc(f.origin)} <span class="pill">ledger</span></span><span class="lbl">Reason</span><span>Structured narrative + comparison with expected profile <span class="pill p">AI draft</span></span></div></div>
+  <div class="card pad"><h2 class="sec">Deadline clock</h2><div class="row2" style="margin-top:10px"><span class="lbl">Executed</span><span class="mono">from transaction</span><span class="lbl">Received by Vitauri</span><span class="mono">upload / API time</span><span class="lbl">Discovered</span><span class="mono">alert created</span><span class="lbl">Escalated to MLRO</span><span class="mono">investigation</span><span class="lbl">Decision to report</span><span class="mono">approval</span></div><p class="lbl" style="margin-top:8px">Never measured from upload time alone; expired deadlines are shown.</p></div></div>
+  <div class="card pad"><h2 class="sec">Next step</h2><div class="btns" style="margin-top:8px">${act}</div></div></div>`;
+}
+function vAudit(){
+  return ph('Audit Log','Every system event, AI step and human decision · append-only')+`<div class="card"><div class="tbl"><table><thead><tr><th>Time</th><th>Actor</th><th>Object</th><th>What happened</th></tr></thead><tbody>
+  ${S.audit.map(r=>`<tr><td class="mono lbl">${r.t}</td><td style="font-weight:600;color:${r.k==='ai'?'var(--ai)':r.k==='system'?'var(--grn)':'inherit'}">${esc(r.a)}</td><td class="mono">${esc(r.o)}</td><td>${esc(r.w)}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function vUsers(){
+  return ph('Users','Roles are configurable per tenant')+`<div class="card"><div class="tbl"><table><thead><tr><th>User</th><th>Role</th><th>KYC</th><th>AML</th><th>FIU</th></tr></thead><tbody>
+  <tr><td>david</td><td>Tenant Admin</td><td>✓</td><td>✓</td><td>✓</td></tr><tr><td>S. Visser</td><td>KYC analyst</td><td>✓</td><td>AML hold badge only</td><td>—</td></tr><tr><td>R. de Wit</td><td>AML analyst</td><td>read</td><td>✓</td><td>draft</td></tr><tr><td>M. Janssen</td><td>Compliance officer / MLRO</td><td>✓</td><td>✓</td><td>approve</td></tr></tbody></table></div></div>`;
+}
+
+/* ================= TENANT CONFIG ================= */
+const RULES=[
+  {id:'NL-OBJ-01',name:'Cash deposit above objective indicator',src:'Library · Wwft objective indicators',type:'Detection',mode:'Active',sync:'Synced',ver:'v2',owner:'M. Janssen',review:'01-03-2027',fiu:'Wwft objective (code per FIU list) → auto report draft',perf:[27,'100%','—','02-11','—']},
+  {id:'R-STRUCT-03',name:'Structuring under threshold, 7 days, distinct senders',src:'Didit preset · Finance (custom thresholds)',type:'Detection',mode:'Active',sync:'Synced',ver:'v4',owner:'M. Janssen',review:'01-03-2027',fiu:'Subjective indicator',perf:[41,'12%','71%','02-11','2 missed / 400']},
+  {id:'R-RAPID-01',name:'Rapid in/out within 48 h (≥ 80%)',src:'Didit preset · AML/CTF',type:'Detection',mode:'Active',sync:'Synced',ver:'v1',owner:'M. Janssen',review:'01-12-2026',fiu:'Subjective indicator',perf:[33,'18%','64%','15-10','0 missed / 400']},
+  {id:'R-PROF-01',name:'Inbound above expected profile ceiling',src:'Vitauri · profile rule (reads custom_values.profile)',type:'Detection',mode:'Active',sync:'Vitauri',ver:'v1',owner:'R. de Wit',review:'01-02-2027',fiu:'—',perf:[41,'17%','58%','20-10','—']},
+  {id:'P-SAN-CP',name:'Sanctions counterparty matching',src:'Didit preset · screening',type:'Screening',mode:'Active',sync:'Synced',ver:'v1',owner:'M. Janssen',review:'01-03-2027',fiu:'Subjective indicator',perf:[19,'5%','89%','—','—']},
+  {id:'P-PEP-CP',name:'PEP counterparty exposure',src:'Didit preset · screening',type:'Screening',mode:'Active',sync:'Synced',ver:'v1',owner:'M. Janssen',review:'01-03-2027',fiu:'—',perf:[31,'3%','92%','—','—']},
+  {id:'P-REF-KW',name:'Suspicious payment reference keywords',src:'Didit preset · contains_any',type:'Screening',mode:'Test',sync:'Synced',ver:'v1',owner:'R. de Wit',review:'15-12-2026',fiu:'—',perf:['—','—','—','—','—']},
+  {id:'S-14',name:'Circular flow across related companies, 3 steps',src:'Vitauri flows (additional detection)',type:'Detection',mode:'Test',sync:'Vitauri',ver:'v1',owner:'R. de Wit',review:'—',fiu:'Subjective indicator',perf:[8,'38%','—','—','not tested']}
+];
+function vConfig(){
+  const tab=S.p.tab||'aml'; const sub=S.p.sub||({general:'company',kyc:'workflows',aml:'rules'}[tab]);
+  const subs={general:[['company','Company & jurisdictions'],['roles','Users & roles'],['fiuprof','FIU profiles'],['retention','Data retention']],
+    kyc:[['workflows','Workflows'],['cycles','Review cycles'],['signoff','Sign-off matrix'],['scrset','Screening settings'],['coctrig','Change-of-circumstances triggers'],['riskmodel','Risk scoring model']],
+    aml:[['sources','Data sources'],['didit','Didit connection'],['rules','Rules & scenarios'],['thresholds','Risk-class thresholds'],['routing','Routing & case grouping'],['fiumap','FIU mapping & objective indicators'],['cpscreen','Counterparty screening'],['gov','Rule governance']]};
+  const tabs=`<div class="tabs">${[['general','General'],['kyc','KYC'],['aml','AML']].map(([k,l])=>`<button class="tab ${tab===k?'on':''}" data-go="config" data-tab="${k}">${l}</button>`).join('')}</div>`;
+  const nav=`<nav class="subnav">${subs[tab].map(([k,l])=>`<button class="${sub===k?'on':''}" data-go="config" data-tab="${tab}" data-sub="${k}">${l}</button>`).join('')}</nav>`;
+  return ph('Tenant Config','Setup and calibration · General / KYC / AML')+note('Decision 12: tenant config split. Decision 4: rules setup and calibration live here; rule performance is on AML Dashboard → Detection quality.')+tabs+`<div class="split">${nav}<div class="grow stack">${cfgBody(tab,sub)}</div></div>`;
+}
+function cfgBody(tab,sub){
+  const T=S.tenant;
+  const card=(t,b)=>`<div class="card pad"><h2 class="sec" style="margin-bottom:10px">${t}</h2>${b}</div>`;
+  if(sub==='company') return card('Company & jurisdictions',`<div class="row2"><span class="lbl">Legal name</span><span>New Age Bank N.V.</span><span class="lbl">Licence</span><span>Bank (DNB)</span><span class="lbl">Jurisdictions</span><span>${T.jurisdictions.join(', ')} <span class="lbl">→ drives which rule libraries and FIU profiles are offered</span></span><span class="lbl">Reporting currency</span><span>EUR</span></div>`);
+  if(sub==='roles') return card('Users & roles',`<div class="field"><label class="lbl" for="rm">Role model</label><select id="rm" class="inp" data-act="roleModel" style="max-width:360px"><option value="separate" ${T.roleModel==='separate'?'selected':''}>Separate KYC and AML roles (need-to-know)</option><option value="combined" ${T.roleModel==='combined'?'selected':''}>Combined analyst (small institutions)</option></select></div><p class="lbl">Need-to-know: KYC users see an "AML hold" badge but not investigation or FIU content. Outreach is blocked or neutral while an AML matter is open.</p>`);
+  if(sub==='fiuprof') return card('FIU profiles',`<table><thead><tr><th>Profile</th><th>System</th><th>Language</th><th>Timing</th><th>Schema</th></tr></thead><tbody><tr><td>FIU-Netherlands</td><td>goAML</td><td>Dutch</td><td>Without delay once unusual nature is known</td><td><span class="pill a">to load</span></td></tr><tr><td>CTIF-CFI (BE)</td><td>goAML</td><td>Dutch / French</td><td>Without delay</td><td><span class="pill a">to load</span></td></tr><tr><td>FIU Curaçao</td><td>goAML</td><td>confirm</td><td>Objective 48 h · subjective: CO 24 h, then 10 working days</td><td><span class="pill">not enabled for this tenant</span></td></tr></tbody></table>`);
+  if(sub==='retention') return card('Data retention',`<p class="lbl">Retention period and legal basis per record type are set by Compliance and the privacy officer. No default is hardcoded.</p>`);
+  if(sub==='workflows') return card('Workflows',`<p class="lbl">Existing KYC workflows (onboarding, periodic, event-driven) and outreach templates, incl. the new outreach questions: purpose of the relationship and expected transaction pattern.</p>`);
+  if(sub==='cycles') return card('Review cycles',`<table><thead><tr><th>Risk class</th><th>Periodic review</th></tr></thead><tbody><tr><td>${riskPill('Low')}</td><td>tenant setting</td></tr><tr><td>${riskPill('Medium')}</td><td>tenant setting</td></tr><tr><td>${riskPill('High')}</td><td>tenant setting</td></tr></tbody></table><p class="lbl">pKYC model: event-driven + periodic backstop (see sign-off spec).</p>`);
+  if(sub==='signoff') return card('Sign-off matrix',`<p class="lbl">As specified in the Sign-off &amp; QC build spec (highest of existing and proposed, override table, Compliance Advice). A TM-proposed reclassification follows the same matrix.</p>`);
+  if(sub==='scrset') return card('Screening settings (customers, UBOs, directors)',`<div class="row2"><span class="lbl">Provider</span><span>Didit AML screening (/v3/aml) · ongoing monitoring on</span><span class="lbl">Lists</span><span>Sanctions, PEP levels 1–4, adverse media</span><span class="lbl">Auto-disposition</span><span>Low risk below tenant threshold (separate backlog item)</span><span class="lbl">Confirmed hit</span><span>creates Change-of-circumstances event</span></div>`);
+  if(sub==='coctrig') return card('Change-of-circumstances triggers',`<table><thead><tr><th>Trigger</th><th>Source</th><th>Default response</th></tr></thead><tbody>
+    <tr><td>Confirmed screening hit</td><td>KYC · Screening</td><td>Risk reassessment</td></tr><tr><td>UBO / director / registry change</td><td>Registry</td><td>Risk reassessment</td></tr><tr><td>ID document expires &lt; 45 d</td><td>KYC file</td><td>Targeted check</td></tr><tr><td>Address / residency change</td><td>Client / registry</td><td>Targeted check</td></tr>
+    <tr><td><b>Structural profile overrun</b> (2 months above ceiling)</td><td><span class="pill p">TM</span></td><td>Risk reassessment</td></tr><tr><td><b>New high-risk country or counterparty type</b></td><td><span class="pill p">TM</span></td><td>Targeted check</td></tr><tr><td><b>Investigation closed with FIU report / true positive</b></td><td><span class="pill p">TM</span></td><td>Risk reassessment (neutral outreach only)</td></tr><tr><td><b>More than X alerts in Y days</b></td><td><span class="pill p">TM</span></td><td>Targeted check</td></tr></tbody></table><p class="lbl">Graduated responses: no action, targeted check, risk reassessment, full CDD refresh. Only affected steps re-run.</p>`);
+  if(sub==='riskmodel') return card('Risk scoring model',`<div class="row2"><span class="lbl">Official risk class</span><span>KYC factors (customer, product, geography, channel) → class via Sign-Off Matrix</span><span class="lbl">Behaviour score (live)</span><span>Inputs: open/escalated alerts, profile deviation, counterparty risk, screening hits on counterparties</span><span class="lbl">Bridge</span><span>Behaviour score ≥ <input class="inp" style="width:70px;display:inline-block" value="70" aria-label="Behaviour score threshold"> proposes a reclassification (CoC event). Never changes the class itself.</span></div>`);
+  if(sub==='sources') return card('Data sources',`<table><thead><tr><th>Route</th><th>Formats / partner</th><th>Status</th></tr></thead><tbody>
+    <tr><td>Upload in customer file</td><td>MT940, CAMT.053, CSV (mapping templates), PDF (AI extraction)</td><td><span class="pill g">enabled</span></td></tr><tr><td>Bulk import (AML → Transactions)</td><td>MT940 / CAMT.053 multi-account, CSV; match on IBAN; unmatched queue</td><td><span class="pill g">enabled</span></td></tr>
+    <tr><td>PSD2 via KYC flow / secure link</td><td>Licensed AIS partner · consent, withdrawal, re-auth (180 d) tracked separately</td><td><span class="pill a">partner to select</span></td></tr><tr><td>API / SFTP from client core system</td><td>Canonical transaction schema · incl. intended transactions</td><td><span class="pill g">enabled</span></td></tr></tbody></table>
+    <div class="row2" style="margin-top:12px"><span class="lbl">Historical window</span><span>Transactions older than <input class="inp" style="width:70px;display:inline-block" data-act="histWin" value="${T.histWindow}" aria-label="Historical window in days"> days: analysis only, no alerts (decision 20)</span></div>`);
+  if(sub==='didit') return card('Didit connection',`<div class="row2"><span class="lbl">Status</span><span><span class="pill g">Connected</span> API key ••••7a2f · webhooks: transaction.created, transaction.status.updated</span><span class="lbl">Dedupe</span><span>on event_id; full record fetched via GET /v3/transactions/{id}/</span><span class="lbl">Party fields sent</span><span>entity_type, vendor_data (= Vitauri customer ID), full_name, date_of_birth, country_code, address; payment_method (method_type, account_id = IBAN, issuing_country); transaction_details (direction, amount, currency, payment_details, payment_reference_id); custom_properties (risk_class, profile_version, profile ceilings)</span><span class="lbl">Not available in Didit</span><span>BIC / bank name field · public alert API · bulk API · FIU report API (verify)</span></div>`);
+  if(sub==='rules') return `<div class="card"><div class="pad" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><div><h2 class="sec">Rules &amp; scenarios</h2><p class="lbl" style="margin:2px 0 0">Authored and versioned here, executed in Didit via Management API (or in Vitauri for profile and flow rules). Nothing goes Active without a second approver.</p></div><div class="btns"><button class="btn">Library: Wwft indicators</button><button class="btn">Library: AMLR (from 10 Jul 2027)</button><button class="btn">Didit presets</button><button class="btn pr">+ New rule</button></div></div>
+    <div class="tbl"><table><thead><tr><th>Rule</th><th>Type</th><th>Source</th><th>Version</th><th>Mode</th><th>Sync</th><th>Owner</th><th>Review</th></tr></thead><tbody>${RULES.map(r=>`<tr><td><b>${r.id}</b> ${esc(r.name)}</td><td><span class="pill ${r.type==='Screening'?'t':'b'}">${r.type}</span></td><td class="lbl">${esc(r.src)}</td><td>${r.ver}</td><td><span class="pill ${r.mode==='Active'?'g':'a'}">${r.mode}</span></td><td>${r.sync}</td><td>${r.owner}</td><td class="mono">${r.review}</td></tr>`).join('')}</tbody></table></div></div>
+    <div class="aibox"><div class="t">✦ Describe a rule in plain language</div><div class="btns" style="margin-top:8px"><input class="inp" style="flex:1 1 360px" value="5 or more different senders paying €1,750 to €1,999 into one account within 7 days" aria-label="Rule in plain language"><button class="btn ai" data-act="toast" data-msg="Draft rule created (Draft · not synced). Run backtest, then send for 4-eyes approval.">Turn into rule</button></div></div>
+    ${note('Libraries shown follow tenant jurisdictions (NL): the Curaçao library is hidden here. Fix: scenario IDs must be consistent; every rule links to a risk and scenario in the coverage matrix.')}`;
+  if(sub==='thresholds') return card('Risk-class thresholds',`<p class="lbl">Same rules for everyone; thresholds and windows per official risk class (decision 7). PEP and high-risk residence add rules.</p><table><thead><tr><th>Rule</th><th>${riskPill('Low')}</th><th>${riskPill('Medium')}</th><th>${riskPill('High')}</th><th>PEP</th></tr></thead><tbody>
+    <tr><td>Large inbound transaction</td><td class="mono">€10,000</td><td class="mono">€8,000</td><td class="mono">€5,000</td><td class="mono">€5,000</td></tr><tr><td>Structuring: distinct senders in 7 d</td><td class="mono">5</td><td class="mono">4</td><td class="mono">3</td><td class="mono">3</td></tr><tr><td>Rapid in/out window</td><td class="mono">24 h</td><td class="mono">48 h</td><td class="mono">72 h</td><td class="mono">72 h</td></tr><tr><td>Profile overrun tolerance</td><td class="mono">+50%</td><td class="mono">+25%</td><td class="mono">+10%</td><td class="mono">+10%</td></tr></tbody></table>`);
+  if(sub==='routing') return card('Routing & case grouping',`<div class="row2"><span class="lbl">Unit of work</span><span>Alert first; escalate to investigation (decision 10)</span><span class="lbl">Grouping</span><span><select class="inp" style="max-width:320px" data-act="grouping"><option value="one_open_per_customer" ${T.grouping==='one_open_per_customer'?'selected':''}>One open investigation per customer</option><option value="per_rule_customer" ${T.grouping==='per_rule_customer'?'selected':''}>Per rule + customer</option></select></span><span class="lbl">Auto-create investigation</span><span>Objective indicators, confirmed sanctions hits</span><span class="lbl">Priority &amp; SLA</span><span>Score, risk class, FIU timing; alert SLA 5 d, objective 24 h</span><span class="lbl">Auto-close</span><span>Only for alert types released after measurement</span></div>`);
+  if(sub==='fiumap') return card('FIU mapping & objective indicators',`<table><thead><tr><th>Rule</th><th>FIU-Netherlands</th><th>CTIF-CFI</th><th>Auto draft</th></tr></thead><tbody>${RULES.filter(r=>r.fiu!=='—').map(r=>`<tr><td><b>${r.id}</b> ${esc(r.name)}</td><td>${esc(r.fiu)}</td><td>code per CTIF-CFI list</td><td>${r.id==='NL-OBJ-01'?'<span class="pill a">yes</span>':'no'}</td></tr>`).join('')}</tbody></table>`);
+  if(sub==='cpscreen') return card('Counterparty screening',`<div class="row2"><span class="lbl">Real time</span><span>Didit presets on every transaction: Sanctions counterparty matching, PEP counterparty exposure, reference keywords → AML Alerts (source Provider)</span><span class="lbl">Re-screening</span><span>Recurring and high-risk counterparties enrolled in Didit ongoing monitoring (/v3/aml, daily) after entity resolution</span><span class="lbl">Enrol when</span><span>≥ 3 transactions in 90 d, or counterparty country high-risk, or customer High/PEP</span><span class="lbl">Custom lists</span><span>Internal watchlist of names and IBANs (Didit list type bank_account) referenced in rules</span></div>`);
+  if(sub==='gov') return card('Rule governance',`<div class="row2"><span class="lbl">Versioning</span><span>Every change = new version, old version kept</span><span class="lbl">Before Active</span><span>Backtest (Didit, 90 d default) + test mode + 4-eyes</span><span class="lbl">Per rule</span><span>Owner, review date, linked risk and scenario</span><span class="lbl">Reproducibility</span><span>Each alert stores rule version, profile version, FX rate, screening result, model version</span></div>`);
+  return '';
+}
+
+/* ================= MT940 ================= */
+function parseMT940(text){
+  const out=[]; const raw=text.replace(/\r/g,'');
+  // split into statements by :20:
+  const parts=raw.split(/\n(?=:20:)/);
+  parts.forEach(part=>{
+    if(!/:25:/.test(part)) return;
+    const st={iban:'',open:null,close:null,tx:[],errors:[]};
+    // join continuation lines into tags
+    const tags=[]; part.split('\n').forEach(l=>{ if(/^:\d{2}[A-Z]?:/.test(l)) tags.push(l); else if(tags.length && l.trim() && l.trim()!=='-') tags[tags.length-1]+=l; });
+    let cur=null;
+    tags.forEach(t=>{
+      const m=t.match(/^:(\d{2}[A-Z]?):(.*)$/); if(!m) return; const k=m[1], v=m[2];
+      if(k==='25') st.iban=v.replace(/[^A-Z0-9]/gi,'').replace(/EUR$/,'');
+      if(k==='60F'||k==='60M') st.open=bal(v);
+      if(k==='62F'||k==='62M') st.close=bal(v);
+      if(k==='61'){ const r=v.match(/^(\d{6})(\d{4})?(R?[CD])[A-Z]?([\d,]+)/); if(!r){ st.errors.push('Unreadable :61: line'); return; }
+        const d='20'+r[1].slice(0,2)+'-'+r[1].slice(2,4)+'-'+r[1].slice(4,6); const amt=parseFloat(r[4].replace(',','.'))*(r[3].endsWith('D')?-1:1);
+        cur={date:d,amt,rev:r[3].startsWith('R'),cp:'',cpIban:'',ref:'',raw86:''}; st.tx.push(cur); }
+      if(k==='86'&&cur){ cur.raw86=v; const g=(c)=>{const x=v.match(new RegExp('/'+c+'/([^/]*)'));return x?x[1].trim():'';};
+        cur.cp=g('NAME')||v.slice(0,40); cur.cpIban=g('IBAN'); cur.ref=g('REMI')||''; }
+    });
+    out.push(st);
+  });
+  return out;
+}
+function bal(v){ const m=v.match(/^([CD])(\d{6})([A-Z]{3})([\d,]+)/); if(!m) return null; return {sign:m[1],date:'20'+m[2].slice(0,2)+'-'+m[2].slice(2,4)+'-'+m[2].slice(4,6),cur:m[3],amt:parseFloat(m[4].replace(',','.'))*(m[1]==='D'?-1:1)}; }
+function checkStatement(st,accId){
+  const res=[]; const acc=S.accounts.find(a=>a.id===accId);
+  res.push(acc&&acc.iban===st.iban?['ok','IBAN in file (:25:) matches account '+st.iban]:['bad','IBAN in file (:25: '+(st.iban||'missing')+') does not match account '+(acc?acc.iban:'')]);
+  if(st.open&&st.close){ const sum=st.tx.reduce((s,x)=>s+x.amt,0); const diff=Math.round((st.open.amt+sum-st.close.amt)*100)/100;
+    res.push(diff===0?['ok',`Opening balance ${eur(st.open.amt)} + movements ${eur(sum)} = closing balance ${eur(st.close.amt)}`]:['bad',`Balance does not reconcile: difference ${eur(diff)}`]); }
+  else res.push(['warn','Opening or closing balance missing (:60F: / :62F:)']);
+  const months=new Set(st.tx.map(x=>x.date.slice(0,7)));
+  res.push(['ok',`${st.tx.length} transactions · ${st.tx.length?st.tx[0].date+' → '+st.tx[st.tx.length-1].date:''} · ${months.size} month(s)`]);
+  const existing=new Set(S.txns.filter(x=>x.acc===accId).map(x=>x.date+'|'+x.amt+'|'+x.cpIban));
+  const dup=st.tx.filter(x=>existing.has(x.date+'|'+x.amt+'|'+x.cpIban)).length;
+  res.push(dup?['warn',`${dup} duplicate(s) with earlier uploads will be skipped`]:['ok','No duplicates with earlier uploads']);
+  const own=st.tx.filter(x=>S.accounts.some(a=>a.cust===(acc&&acc.cust)&&a.iban===x.cpIban)).length;
+  res.push(['ok',own?`${own} transfer(s) between the customer's own accounts recognised (not counted twice)`:'No transfers between own accounts']);
+  const cutoff=new Date(TODAY); cutoff.setDate(cutoff.getDate()-S.tenant.histWindow);
+  const hist=st.tx.filter(x=>new Date(x.date)<cutoff).length;
+  res.push(['ok',`${hist} transaction(s) older than ${S.tenant.histWindow} days: analysis only, no alerts · ${st.tx.length-hist} can raise alerts`]);
+  const newCp=new Set(st.tx.map(x=>x.cpIban||x.cp)).size;
+  res.push(['ok',`${newCp} counterparties found in :86: (/NAME/, /IBAN/, /REMI/) · new ones screened via Didit presets`]);
+  return {res,dup,ok:acc&&acc.iban===st.iban};
+}
+
+/* ---- Upload wizard ---- */
+let W=null;
+function openUpload(accId){ W={acc:accId,step:1,text:'',name:'',st:null}; drawUpload(); }
+function drawUpload(){
+  const acc=S.accounts.find(a=>a.id===W.acc); const c=cust(acc.cust);
+  const stepper=`<div class="steps">${['Account','File','Checks & preview','Result'].map((n,i)=>`<div class="st ${i+1<W.step?'done':i+1===W.step?'now':''}"><b>${i+1<W.step?'✓':i+1===W.step?'●':'○'} ${n}</b></div>`).join('')}</div>`;
+  let body=stepper, foot='';
+  if(W.step===1){ body+=`<div class="row2"><span class="lbl">Customer</span><b>${esc(c.name)}</b><span class="lbl">Account</span><b class="mono">${acc.iban}</b><span class="lbl">Type</span><span>${esc(acc.type)}</span><span class="lbl">Holders</span><span>${acc.holders.map(esc).join(', ')}</span></div>`; foot=`<button class="btn" data-close>Cancel</button><button class="btn pr" data-act="wNext">Next</button>`; }
+  if(W.step===2){ body+=`<label class="drop" id="drop" for="file"><b style="color:var(--ink)">Drop a statement here or click to choose</b><br>MT940 (.sta, .940, .mt940, .txt) · CAMT.053 and CSV follow the same flow<input type="file" id="file" accept=".sta,.940,.mt940,.txt,.swi" hidden></label>
+    <div class="btns"><button class="btn" data-act="wSample">Use sample MT940 (Lotte Vermeulen, Jul–Oct 2026)</button>${W.name?`<span class="pill g">${esc(W.name)} loaded</span>`:''}</div>`; foot=`<button class="btn" data-act="wBack">Back</button><button class="btn pr" data-act="wParse" ${W.text?'':'disabled'}>Read file</button>`; }
+  if(W.step===3){ const st=W.st; const chk=checkStatement(st,W.acc);
+    body+=`<div class="card pad">${chk.res.map(([k,t])=>`<div class="chk"><b class="${k}">${k==='ok'?'✓':k==='warn'?'!':'✕'}</b><span>${esc(t)}</span></div>`).join('')}</div>
+    <div class="card"><div class="tbl" style="max-height:280px;overflow:auto"><table><thead><tr><th>Date</th><th>Amount</th><th>Counterparty (/NAME/)</th><th>IBAN (/IBAN/)</th><th>Reference (/REMI/)</th></tr></thead><tbody>${st.tx.map(x=>`<tr><td class="mono">${x.date}</td><td class="mono" style="white-space:nowrap">${eur(x.amt)}</td><td>${esc(x.cp)}</td><td class="mono">${esc(x.cpIban)}</td><td class="lbl">${esc(x.ref)}</td></tr>`).join('')}</tbody></table></div></div>
+    ${chk.ok?'':`<div class="note"><b>IBAN mismatch.</b> Choose another account, add this IBAN as a new account for the customer, or cancel. (Prototype: processing is blocked.)</div>`}`;
+    foot=`<button class="btn" data-act="wBack">Back</button><button class="btn pr" data-act="wProcess" ${chk.ok?'':'disabled'}>Process ${st.tx.length} transactions</button>`; }
+  if(W.step===4){ const r=W.result; body+=`<div class="card pad"><div class="chk"><b class="ok">✓</b>${r.added} transactions added to the ledger (${r.hist} historical, analysis only)</div><div class="chk"><b class="ok">✓</b>Coverage for ${acc.iban} filled ${r.from} → ${r.to}</div><div class="chk"><b class="ok">✓</b>${r.cps} new counterparties screened via Didit presets · 0 hits</div><div class="chk"><b class="ok">✓</b>Recent transactions submitted to Didit (original execution dates; webhooks deduped on event_id)</div>
+    <div class="chk"><b class="${r.alerts.length?'bad':'ok'}">${r.alerts.length?'!':'✓'}</b>${r.alerts.length} alert(s) raised: ${r.alerts.map(a=>esc(a.rule)).join(' · ')||'none'}</div>${r.coc?`<div class="chk"><b class="warn">↗</b>TM → KYC: Change-of-circumstances event proposed (${esc(r.coc)})</div>`:''}</div>`;
+    foot=`<button class="btn" data-close>Close</button><button class="btn" data-act="wGo" data-to="customer">View transactions</button>${canAML()?'<button class="btn pr" data-act="wGo" data-to="alerts">Open alerts</button>':''}`; }
+  modal('Upload statement',body,foot);
+  const f=$('#file'); if(f){ f.addEventListener('change',e=>readFile(e.target.files[0])); const d=$('#drop'); ['dragover','dragenter'].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.add('hot');})); d.addEventListener('dragleave',()=>d.classList.remove('hot')); d.addEventListener('drop',e=>{e.preventDefault();d.classList.remove('hot'); if(e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);}); }
+}
+function readFile(file){ if(!file) return; const fr=new FileReader(); fr.onload=()=>{ W.text=String(fr.result); W.name=file.name; if(W.bulk) drawBulk(); else drawUpload(); }; fr.readAsText(file); }
+
+function processStatement(st,accId){
+  const acc=S.accounts.find(a=>a.id===accId); const c=cust(acc.cust); const cutoff=new Date(TODAY); cutoff.setDate(cutoff.getDate()-S.tenant.histWindow);
+  const existing=new Set(S.txns.filter(x=>x.acc===accId).map(x=>x.date+'|'+x.amt+'|'+x.cpIban));
+  const added=[]; let n=S.txns.length+1;
+  st.tx.forEach(x=>{ if(existing.has(x.date+'|'+x.amt+'|'+x.cpIban)) return; const hist=new Date(x.date)<cutoff;
+    const t={id:'T-'+(91000+n++),acc:accId,cust:acc.cust,date:x.date,amt:Math.round(x.amt*100)/100,cp:x.cp,cpIban:x.cpIban,cpC:(x.cpIban||'').slice(0,2),ref:x.ref,life:x.rev?'Reversed':'Booked',src:'MT940 upload',didit:hist?'Not submitted':'Approved',score:0,alert:null,hist};
+    S.txns.push(t); added.push(t); });
+  acc.status='Processed'; acc.last=st.close?st.close.date.split('-').reverse().join('-'):'—';
+  // detection on recent
+  const recent=added.filter(t=>!t.hist).sort((a,b)=>a.date.localeCompare(b.date));
+  const alerts=[];
+  const mk=(rule,src,score,why,prop,txs)=>{ const id=nextId('AL-',S.alerts); const a={id,cust:c.id,src,rule,score,due:'5 d',status:'New',ai:{p:prop,why},inv:null,txn:txs[0]&&txs[0].id,txns:txs.map(t=>t.id)}; S.alerts.unshift(a); txs.forEach(t=>{t.alert=id;t.didit='In review';t.score=score;}); alerts.push(a); };
+  // structuring: distinct senders in 7 days, amount 1750-1999.99, threshold per risk class
+  const need={Low:5,Medium:4,High:3}[c.risk]||4; const band=recent.filter(t=>t.amt>=1750&&t.amt<2000);
+  for(let i=0;i<band.length;i++){ const start=new Date(band[i].date); const win=band.filter(t=>{const d=(new Date(t.date)-start)/864e5; return d>=0&&d<=7;}); const senders=new Set(win.map(t=>t.cpIban||t.cp));
+    if(senders.size>=need){ mk('R-STRUCT-03 Structuring under threshold, 7 days, distinct senders','Rule',72,`${senders.size} different private senders in 7 days, each €1,750–1,999 (threshold for ${c.risk}: ${need})`,'Escalate',win); break; } }
+  // rapid in/out
+  const outs=recent.filter(t=>t.amt<0&&!/NL/.test(t.cpC)&&t.cpC);
+  outs.forEach(o=>{ const ins=recent.filter(t=>t.amt>0&&(new Date(o.date)-new Date(t.date))/864e5>=0&&(new Date(o.date)-new Date(t.date))/864e5<=2&&!/SALARIS|SALARY/i.test(t.ref)); const inSum=ins.reduce((s,t)=>s+t.amt,0);
+    if(inSum>0&&Math.abs(o.amt)>=0.8*inSum){ mk('R-RAPID-01 Rapid in/out within 48 h','Rule',74,`${Math.round(Math.abs(o.amt)/inSum*100)}% of ${eur0(inSum)} received forwarded to ${o.cpC} (${o.cp}) within 48 h`,'Escalate',[...ins,o]); } });
+  // profile overrun per month
+  let coc=null;
+  if(c.profile){ const byM={}; recent.filter(t=>t.amt>0).forEach(t=>{const m=t.date.slice(0,7); byM[m]=(byM[m]||0)+t.amt;});
+    Object.entries(byM).forEach(([m,v])=>{ if(v>c.profile.inMax*1.25){ mk('R-PROF-01 Inbound above expected profile ceiling','Profile',66,`${m}: inbound ${eur0(v)} vs ceiling ${eur0(c.profile.inMax)} (profile v${c.profile.version})`,'Escalate',recent.filter(t=>t.amt>0&&t.date.startsWith(m)));
+      coc=`Inbound ${m} ${eur0(v)} vs ceiling ${eur0(c.profile.inMax)}; new country LT`; } }); }
+  if(coc){ S.coc.unshift({id:nextId('CC-',S.coc),cust:c.id,src:'TM · profile deviation',text:coc,date:'03-11-2026',response:null,status:'Awaiting response',hold:false}); }
+  if(alerts.length) c.beh=Math.max(c.beh||0,58+alerts.length*6);
+  log('Vitauri','system',acc.iban,`MT940 processed: ${added.length} transactions (${added.filter(t=>t.hist).length} historical), ${alerts.length} alerts`);
+  save();
+  const ds=added.map(t=>t.date).sort();
+  return {added:added.length,hist:added.filter(t=>t.hist).length,from:ds[0]||'—',to:ds[ds.length-1]||'—',cps:new Set(added.map(t=>t.cpIban)).size,alerts,coc};
+}
+
+/* ---- Bulk import ---- */
+function openBulk(){ W={bulk:true,step:1,text:'',name:''}; drawBulk(); }
+function drawBulk(){
+  let body='',foot='';
+  if(W.step===1){ body=`<p class="lbl">One file with statements for many accounts. Each statement is matched to an account on IBAN (:25:). Unknown IBANs go to the unmatched queue.</p><label class="drop" id="drop" for="file"><b style="color:var(--ink)">Drop file or click to choose</b><br>MT940 multi-statement · CAMT.053 · CSV<input type="file" id="file" accept=".sta,.940,.mt940,.txt,.swi" hidden></label><div class="btns"><button class="btn" data-act="bSample">Use sample (2 accounts, 1 unknown)</button>${W.name?`<span class="pill g">${esc(W.name)} loaded</span>`:''}</div>`; foot=`<button class="btn" data-close>Cancel</button><button class="btn pr" data-act="bParse" ${W.text?'':'disabled'}>Read file</button>`; }
+  if(W.step===2){ body=`<div class="card"><div class="tbl"><table><thead><tr><th>IBAN</th><th>Transactions</th><th>Match</th></tr></thead><tbody>${W.sts.map(st=>{const a=S.accounts.find(x=>x.iban===st.iban);return `<tr><td class="mono">${st.iban}</td><td>${st.tx.length}</td><td>${a?`<span class="pill g">${esc(cust(a.cust).name)}</span>`:'<span class="pill a">Unmatched → queue</span>'}</td></tr>`;}).join('')}</tbody></table></div></div>`; foot=`<button class="btn" data-close>Cancel</button><button class="btn pr" data-act="bProcess">Process</button>`; }
+  modal('Import transactions',body,foot);
+  const f=$('#file'); if(f){ f.addEventListener('change',e=>readFile(e.target.files[0])); }
+}
+
+/* ================= RENDER + EVENTS ================= */
+const VIEWS={mywork:vMyWork,kycdash:vKycDash,amldash:vAmlDash,newclient:vNewClient,search:vSearch,customer:vCustomer,reviews:vReviews,review:vReview,screening:vScreening,coc:vCoc,alerts:vAlerts,invs:vInvs,inv:vInv,txns:vTxns,fiu:vFiu,fiuDetail:vFiuDetail,audit:vAudit,config:vConfig,users:vUsers};
+const AML_ROUTES=['amldash','alerts','invs','inv','txns','fiu','fiuDetail'];
+function render(){
+  if(S.role==='kyc' && AML_ROUTES.includes(S.route)) S.route='mywork';
+  if(S.role==='aml' && ['kycdash','reviews','review','screening','coc'].includes(S.route) && S.tenant.roleModel!=='combined') S.route='mywork';
+  if(['config','users'].includes(S.route) && !(S.role==='admin'||S.role==='co')) S.route='mywork';
+  renderNav(); $('#page').innerHTML=(VIEWS[S.route]||vMyWork)(); $('#roleSel').value=S.role; $('#notesTog').checked=S.notes;
+}
+document.addEventListener('click',e=>{
+  const g=e.target.closest('[data-go]');
+  if(g && !e.target.closest('[data-act]')){ const p={}; ['id','tab','sub','f','src','ai'].forEach(k=>{ if(g.dataset[k]!=null) p[k]=g.dataset[k]; }); if(p.ai) S.alerts.forEach(a=>{ if(a.status==='New'){a.aiShown=true;} }); closeModal(); go(g.dataset.go,p); return; }
+  if(e.target.closest('[data-close]')||e.target.id==='mbg'){ closeModal(); return; }
+  const a=e.target.closest('[data-act]'); if(!a) return; const id=a.dataset.id; const act=a.dataset.act;
+  if(act==='toast') toast(a.dataset.msg);
+  if(act==='upload') openUpload(id);
+  if(act==='wNext'){ W.step=2; drawUpload(); }
+  if(act==='wBack'){ W.step--; drawUpload(); }
+  if(act==='wSample'){ W.text=SAMPLE_MT940; W.name='Lotte_Vermeulen_NL02ABNA0123456789_Jul-Oct2026.mt940'; drawUpload(); }
+  if(act==='wParse'){ const sts=parseMT940(W.text); if(!sts.length){ toast('No MT940 statement found in this file (missing :25: / :61:).'); return; } W.st=sts[0]; W.step=3; drawUpload(); }
+  if(act==='wProcess'){ W.result=processStatement(W.st,W.acc); W.step=4; drawUpload(); renderNav(); }
+  if(act==='wGo'){ const acc=S.accounts.find(x=>x.id===W.acc); closeModal(); if(a.dataset.to==='alerts'){ S.alerts.forEach(x=>{ if(x.status==='New') x.aiShown=true; }); go('alerts',{}); } else go('customer',{id:acc.cust,tab:'accounts'}); }
+  if(act==='addAccount'){ modal('Add account',`<div class="g2"><div class="field"><label class="lbl" for="nIban">IBAN</label><input id="nIban" class="inp" placeholder="NL.."></div><div class="field"><label class="lbl" for="nType">Type</label><select id="nType" class="inp"><option>Own account (New Age Bank)</option><option>External account (PSD2)</option><option>Joint account</option><option>Business account</option></select></div><div class="field"><label class="lbl" for="nSrc">Source</label><select id="nSrc" class="inp"><option>Upload</option><option>PSD2</option><option>API</option></select></div><div class="field"><label class="lbl" for="nHold">Holders / related parties</label><input id="nHold" class="inp" value="${esc(cust(id).name)}"></div></div>`,`<button class="btn" data-close>Cancel</button><button class="btn pr" data-act="addAccountSave" data-id="${id}">Add account</button>`); }
+  if(act==='addAccountSave'){ const iban=($('#nIban').value||'').replace(/\s/g,'').toUpperCase(); if(!/^[A-Z]{2}\d{2}[A-Z0-9]{8,30}$/.test(iban)){ toast('Enter a valid IBAN.'); return; } S.accounts.push({id:'A'+(S.accounts.length+1)+Date.now()%1000,cust:id,iban,type:$('#nType').value,holders:$('#nHold').value.split(',').map(s=>s.trim()),source:$('#nSrc').value,status:'No data yet',last:null}); save(); closeModal(); render(); toast('Account added.'); }
+  if(act==='sendLink') toast('Secure link sent: the customer can upload statements or connect via PSD2. Blocked automatically while an AML hold is open.');
+  if(act==='reauth'){ const acc=S.accounts.find(x=>x.id===id); acc.status='Re-auth link sent'; save(); render(); toast('PSD2 re-authentication link sent.'); }
+  if(act==='scConfirm'||act==='scDismiss'){ const s=S.screening.find(x=>x.id===id); s.status=act==='scConfirm'?'Confirmed':'Dismissed'; if(act==='scConfirm'){ S.coc.unshift({id:nextId('CC-',S.coc),cust:s.cust,src:'Screening',text:'Confirmed hit: '+s.list+' · '+s.subject,date:'03-11-2026',response:null,status:'Awaiting response'}); toast('True match recorded → Change-of-circumstances event created.'); } else toast('Dismissed with rationale. Logged.'); log(S.role==='kyc'?'S. Visser':'david','human',s.id,'Screening: '+s.status); save(); render(); }
+  if(act==='alClose'){ const al=S.alerts.find(x=>x.id===id); al.status='Closed'; log('R. de Wit','human',id,'Alert closed (reason recorded)'); save(); render(); toast(id+' closed. Reason and AI suggestion (followed/overridden) logged.'); }
+  if(act==='alEsc'){ const al=S.alerts.find(x=>x.id===id); let inv=S.invs.find(i=>i.cust===al.cust&&!i.outcome&&S.tenant.grouping==='one_open_per_customer');
+    if(!inv){ inv={id:nextId('INV-',S.invs),cust:al.cust,type:'TM investigation',status:'Investigation',owner:'R. de Wit',alerts:[],opened:'03-11-2026',fiu:null,outcome:null}; S.invs.unshift(inv); }
+    inv.alerts.push(al.id); al.status='Escalated'; al.inv=inv.id; log('R. de Wit','human',id,'Escalated to '+inv.id); save(); go('inv',{id:inv.id}); toast(`${id} added to ${inv.id} (one open investigation per customer).`); }
+  if(act==='invFiu'){ const inv=S.invs.find(x=>x.id===id); const fid='UTR-NL-0'+(940+S.fiu.length); S.fiu.unshift({id:fid,src:'AML investigation',origin:inv.id,cust:inv.cust,profile:'FIU-Netherlands',type:'UTR subjective',step:0,due:'without delay',ref:''}); inv.fiu=fid; inv.status='FIU report in preparation'; log('AI agent','ai',inv.id,'Prepared FIU report draft '+fid+' from KYC file, transactions and investigation'); save(); go('fiuDetail',{id:fid}); toast('Draft prepared by AI agent. Customer outreach locked (AML hold).'); }
+  if(act==='invClose'){ const inv=S.invs.find(x=>x.id===id); inv.outcome=a.dataset.o; inv.status='Closed'; if(/True positive/.test(inv.outcome)) S.coc.unshift({id:nextId('CC-',S.coc),cust:inv.cust,src:'TM · investigation outcome',text:inv.id+' closed as true positive',restricted:true,date:'03-11-2026',response:null,status:'Awaiting response'}); log('R. de Wit','human',inv.id,'Closed: '+inv.outcome); save(); render(); toast('Investigation closed.'+(/True positive/.test(inv.outcome)?' Change-of-circumstances event sent to KYC.':'')); }
+  if(act==='fiuStep'){ const f=S.fiu.find(x=>x.id===id); f.step=Math.min(f.step+1,5); if(f.step===5){ const inv=S.invs.find(i=>i.fiu===f.id); if(inv&&!inv.outcome&&f.step===5){ inv.outcome='Reported to FIU'; inv.status='Closed'; S.coc.unshift({id:nextId('CC-',S.coc),cust:f.cust,src:'TM · investigation outcome',text:inv.id+' closed with FIU report '+f.id,restricted:true,date:'03-11-2026',response:null,status:'Awaiting response',hold:true}); } } log(S.role==='co'?'M. Janssen':'R. de Wit','human',f.id,'FIU report → '+FIU_STEPS[f.step]); save(); render(); }
+  if(act==='fiuSubmit'){ const f=S.fiu.find(x=>x.id===id); f.ref=($('#fiuRef').value||'').trim()||'goAML-NL-2026-004899'; f.step=4; log('R. de Wit','human',f.id,'Submission recorded · '+f.ref); save(); render(); }
+  if(act==='bulk') openBulk();
+  if(act==='bSample'){ const other=SAMPLE_MT940.replace('NL02ABNA0123456789','NL99ABNA0999999999').replace(':20:NAB2610STMT',':20:NAB2610STMX'); W.text=SAMPLE_MT940+'\n'+other; W.name='bulk_sample.mt940'; drawBulk(); }
+  if(act==='bParse'){ W.sts=parseMT940(W.text); W.step=2; drawBulk(); }
+  if(act==='bProcess'){ let n=0; S.unmatched=S.unmatched||[]; W.sts.forEach(st=>{ const acc=S.accounts.find(x=>x.iban===st.iban); if(acc){ processStatement(st,acc.id); n++; } else S.unmatched.push({iban:st.iban,n:st.tx.length,from:st.tx[0]?st.tx[0].date:'—',to:st.tx.length?st.tx[st.tx.length-1].date:'—'}); }); save(); closeModal(); render(); toast(`${n} statement(s) processed; ${W.sts.length-n} unmatched.`); }
+});
+document.addEventListener('change',e=>{
+  const a=e.target.closest('[data-act]'); if(!a) return; const act=a.dataset.act;
+  if(act==='cocResp'&&a.value){ const c=S.coc.find(x=>x.id===a.dataset.id); c.response=a.value; if(a.value==='No action') c.status='Closed'; else { const rid=nextId('RV-',S.reviews); S.reviews.unshift({id:rid,cust:c.cust,type:'Event-driven review',status:'Scoping',owner:'S. Visser',due:'17-11-2026',origin:'CoC: '+c.src}); c.status='Review started'; c.review=rid; } log('S. Visser','human',c.id,'Response: '+a.value); save(); render(); toast(a.value==='No action'?'Closed with no action.':'Event-driven review started; only affected steps re-run.'); }
+  if(act==='roleModel'){ S.tenant.roleModel=a.value; save(); render(); }
+  if(act==='grouping'){ S.tenant.grouping=a.value; save(); render(); }
+  if(act==='histWin'){ S.tenant.histWindow=Math.max(1,+a.value||30); save(); toast('Historical window set to '+S.tenant.histWindow+' days.'); }
+});
+$('#roleSel').addEventListener('change',e=>{ S.role=e.target.value; save(); render(); });
+$('#notesTog').addEventListener('change',e=>{ S.notes=e.target.checked; save(); render(); });
+$('#resetBtn').addEventListener('click',()=>{ S=seed(); save(); closeModal(); render(); toast('Demo reset.'); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
+render();
+
+</script>
+</body></html>
