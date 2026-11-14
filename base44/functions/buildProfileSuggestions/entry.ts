@@ -10,6 +10,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { runOsint } from '../../shared/osintSearch.js';
 import { parseAddressLine } from '../../shared/addressParse.js';
+import { ISO3_MAP } from '../../shared/diditDecision.js';
 
 const CONFIDENCE_THRESHOLD = 70;
 
@@ -496,7 +497,26 @@ function extractFromOsint(osintResults: any, isOrg: boolean): Record<string, any
 // info requests and accepts from documents / outreach / OSINT would go back to "suggested" every time the
 // pipeline runs (it also runs after a Didit KYB sync). A decision stays unless a source now gives a different
 // value; a value already in the client file is shown as confirmed.
-const sameVal = (a: any, b: any) => String(a ?? '').toLowerCase().replace(/\s+/g, ' ').trim() === String(b ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+// Same fact in another notation counts as the same value (mirrors src/lib/profileValueMatch.js):
+// countries "NLD" / "NL" / "Netherlands" / "Netherlands (NL)", dates with or without a time, gender "M" / "Male".
+const plainVal = (v: any) => String(v ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+function countryKey(v: any): string {
+  const t = String(v ?? '').trim();
+  if (!t) return '';
+  const viaIso3 = /^[A-Za-z]{3}$/.test(t) ? (ISO3_MAP as any)[t.toUpperCase()] : null;
+  const s = viaIso3 || t;
+  const paren = s.match(/^(.*?)\s*\(([A-Za-z]{2})\)\s*$/);
+  return plainVal(paren ? paren[1] : s); // country name without the "(NL)" suffix
+}
+const sameVal = (a: any, b: any) => {
+  const x = plainVal(a), y = plainVal(b);
+  if (x === y) return true;
+  if (!x || !y) return false;
+  if (countryKey(a) && countryKey(a) === countryKey(b)) return true;
+  if (/^\d{4}-\d{2}-\d{2}/.test(x) && /^\d{4}-\d{2}-\d{2}/.test(y)) return x.slice(0, 10) === y.slice(0, 10);
+  const g = (v: string) => (v === 'm' || v === 'male' ? 'male' : v === 'f' || v === 'female' ? 'female' : v);
+  return g(x) === g(y) && ['male', 'female'].includes(g(x));
+};
 const KEPT = ['confirmed', 'rejected', 'info_requested'];
 function nestedVal(obj: any, path: string) {
   if (!path.includes('.')) return obj?.[path];
