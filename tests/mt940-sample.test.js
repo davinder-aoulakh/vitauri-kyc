@@ -41,15 +41,13 @@ test('11 distinct counterparty IBANs, every row has a name from /NAME/', () => {
   assert.ok(parsed.rows.every((r) => r.counterparty_name && r.counterparty_name.trim()));
 });
 
-// Known behaviour TODAY that Phase 1 (gap G4) changes: a reconciling statement on a "daily" account still reports
-// every empty day as missing. When Phase 1 lands, this expectation must become 0 gap days.
-test('coverage today (to change in Phase 1): 107 empty days reported as gaps for a daily account', () => {
+// Phase 1 (gap G4): a statement that reconciles covers its whole period, so it has no gaps.
+test('coverage: the reconciling sample has no gaps, also for a daily account', () => {
   const { parsed } = loadSample();
   const rec = reconcile(parsed.rows, parsed.opening, parsed.closing);
   const gaps = findGaps({
     rows: parsed.rows, periodFrom: parsed.period_from, periodTo: parsed.period_to, opening: parsed.opening, closing: parsed.closing,
     hasRowBalances: false, expectedFrequency: 'daily', reconciles: rec.reconciles,
   });
-  const days = gaps.reduce((n, g) => n + (Date.parse(g.to) - Date.parse(g.from)) / 86400000 + 1, 0);
-  assert.equal(days, 107);
+  assert.deepEqual(gaps, []);
 });
