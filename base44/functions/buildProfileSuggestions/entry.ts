@@ -192,6 +192,8 @@ function extractFromOutreach(outreaches: any[], isOrg: boolean, templateFields: 
       const linkedField = item.profile_field || templateFields[item.item_id] || '';
       if (linkedField) {
         const pf = String(linkedField);
+        // Expected-use answers belong to the client profile step (step 4), not to the identity fields grid
+        if (pf.startsWith('expected_use.')) continue;
         const structured = item.response_value;
         if (pf === 'residential_address' || pf === 'postal_address' || pf === 'registered_address') {
           const a = structured && typeof structured === 'object' ? structured : null;

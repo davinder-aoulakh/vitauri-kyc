@@ -5,6 +5,26 @@
 
 // Labels are the KYC field names (same as the New Client form and the Profile Verification grid): one name everywhere.
 // orgLabel: the name of the same key on an organisation's file.
+// Expected use of the account: the answers land in step 4 (section 1B) and feed the monitoring profile.
+export const EXPECTED_USE = {
+  types: ['Payments', 'Investments', 'Transfers', 'FX', 'Other'],
+  frequency: ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annually', 'Ad hoc'],
+  volumes: ['< €10k/year', '€10k–€100k/year', '€100k–€1M/year', '€1M–€10M/year', '> €10M/year'],
+  geographies: ['Domestic only', 'EU/EEA', 'UK', 'USA/Canada', 'Asia Pacific', 'Middle East', 'Africa', 'Latin America', 'Other'],
+  cash: ['None', 'Occasional', 'Regular'],
+};
+const BOTH = ['NP', 'ORG'];
+export const EXPECTED_USE_FIELDS = [
+  { key: 'expected_use.types', label: 'Expected use: transaction types', fieldType: 'multi_select', options: EXPECTED_USE.types, clients: BOTH, group: 'expected_use', match: /what will you use|transaction types|use of the account|gebruik van de rekening/i },
+  { key: 'expected_use.frequency', label: 'Expected use: transaction frequency', fieldType: 'dropdown', options: EXPECTED_USE.frequency, clients: BOTH, group: 'expected_use', match: /how often|transaction frequency|frequentie/i },
+  { key: 'expected_use.volumes', label: 'Expected use: yearly volume', fieldType: 'dropdown', options: EXPECTED_USE.volumes, clients: BOTH, group: 'expected_use', match: /yearly volume|expected volume|annual volume|jaarvolume/i },
+  { key: 'expected_use.inbound_month', label: 'Expected use: incoming per month', fieldType: 'number', clients: BOTH, group: 'expected_use', match: /incoming per month|inbound per month|inkomend per maand/i },
+  { key: 'expected_use.outbound_month', label: 'Expected use: outgoing per month', fieldType: 'number', clients: BOTH, group: 'expected_use', match: /outgoing per month|outbound per month|uitgaand per maand/i },
+  { key: 'expected_use.counterparties', label: 'Expected use: main counterparties', fieldType: 'textarea', clients: BOTH, group: 'expected_use', match: /counterpart|pay or receive|tegenpartij/i },
+  { key: 'expected_use.geographies', label: 'Expected use: countries / regions', fieldType: 'multi_select', options: EXPECTED_USE.geographies, clients: BOTH, group: 'expected_use', match: /countries.*(involved|transact)|regions involved|geograph/i },
+  { key: 'expected_use.cash', label: 'Expected use: cash', fieldType: 'dropdown', options: EXPECTED_USE.cash, clients: BOTH, group: 'expected_use', match: /cash use|expected cash|contant/i },
+].map((f) => ({ type: 'text', ...f }));
+
 export const PROFILE_FIELDS = [
   // Natural person
   { key: 'full_name', label: 'Full Name', orgLabel: 'Legal Entity Name', type: 'text', clients: ['NP', 'ORG'], match: /^(full|legal|company) name|full name of the company|^name$|naam/i },
@@ -36,6 +56,7 @@ export const PROFILE_FIELDS = [
   { key: 'primary_contact_phone', label: 'Phone Number', type: 'phone', clients: ['NP', 'ORG'], match: /phone|mobile|telefoon|tel\b/i },
   { key: 'tin', label: 'Tax Identification Number (TIN)', type: 'text', clients: ['NP', 'ORG'], match: /\btin\b|tax identification|fiscaal nummer|bsn/i },
   { key: 'tax_residency', label: 'Tax Residency', type: 'country', clients: ['NP', 'ORG'], match: /tax residen/i },
+  ...EXPECTED_USE_FIELDS,
 ];
 
 /** The KYC name of a linked field for the given client types (an ORG-only question uses the organisation's name for the key). */
@@ -70,7 +91,7 @@ export function addressToText(a) {
 export function prefillFromClient(profileField, client) {
   if (!client || !profileField) return null;
   const f = profileFieldByKey(profileField);
-  if (!f) return null;
+  if (!f || f.group === 'expected_use') return null;   // expected use is asked fresh, never prefilled from the client record
   if (f.type === 'address') {
     // ORG: the structured address lives in residential_address; registered_address is a text line
     const obj = profileField === 'registered_address' ? (isAddressEmpty(client.residential_address) ? null : client.residential_address) : client[profileField];

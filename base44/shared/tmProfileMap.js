@@ -57,6 +57,48 @@ export function mapGeographies(list) {
 }
 
 const round = (n) => Math.round(n);
+const amount = (v) => { const n = Number(String(v ?? '').replace(/[^\d.]/g, '')); return Number.isFinite(n) && n > 0 ? n : undefined; };
+
+/** Limits that follow from the expected use alone (no transaction analysis). homeCountry: ISO-2, for "Domestic only". */
+export function limitsFromBehavior(behavior, homeCountry) {
+  const fields = {};
+  const notes = [];
+  if (!behavior) return { fields, notes };
+  // A stated monthly amount is more precise than the yearly band; 30% headroom as for analysed statements
+  const inMonth = amount(behavior.inbound_month);
+  const outMonth = amount(behavior.outbound_month);
+  if (inMonth) fields.inbound_max_month = round(inMonth * 1.3);
+  if (outMonth) fields.outbound_max_month = round(outMonth * 1.3);
+  if (!inMonth) {
+    const vols = asArray(behavior.volumes ?? behavior.volume).map(mapVolume).filter((v) => v !== undefined);
+    if (vols.length) {
+      if (vols.includes(null)) notes.push('Volume above EUR 10M/year: set manually.');
+      else fields.inbound_max_month = Math.max(...vols);
+    }
+  }
+  const freqs = asArray(behavior.frequency).map(mapFrequency).filter((v) => v !== undefined);
+  if (freqs.length) fields.inbound_max_count_month = Math.max(...freqs);
+
+  const geoList = asArray(behavior.geographies ?? behavior.geography);
+  const domestic = geoList.some((g) => /domestic/i.test(String(g)));
+  const geo = mapGeographies(geoList.filter((g) => !/domestic/i.test(String(g))));
+  const countries = new Set(geo.countries);
+  if (domestic && /^[A-Za-z]{2}$/.test(String(homeCountry || ''))) countries.add(String(homeCountry).toUpperCase());
+  else if (domestic) geo.unmapped.push('Domestic only');
+  if (countries.size) fields.allowed_countries = [...countries];
+  if (domestic && geoList.length === 1 && countries.size) fields.outbound_foreign_max_month = 0;
+  if (geo.unmapped.length) notes.push(`Geographies not mapped to countries: ${geo.unmapped.join(', ')}.`);
+
+  const cash = norm(behavior.cash);
+  if (cash === 'none' || cash === 'nocash') fields.cash_max_month = 0;
+  else if (cash) notes.push(`Cash use expected (${behavior.cash}): set the monthly cash limit manually.`);
+
+  const types = asArray(behavior.types ?? behavior.transaction_types);
+  if (types.length) fields.expected_categories = types.map(String);
+  const cps = asArray(behavior.counterparties);
+  if (cps.length) notes.push(`Expected counterparties: ${cps.map(String).join(', ')}.`);
+  return { fields, notes };
+}
 
 /** Build the profile fields. Returns { fields, notes[] }. Always safe: unusable input => notes only. */
 export function buildProfileFields({ behavior, analysis, observedCountries, reportingCurrency }) {
@@ -74,22 +116,9 @@ export function buildProfileFields({ behavior, analysis, observedCountries, repo
 
   if (behavior) {
     fields.currency = 'EUR';
-    const vols = asArray(behavior.volumes ?? behavior.volume).map(mapVolume).filter((v) => v !== undefined);
-    if (vols.length) {
-      if (vols.includes(null)) { fields.inbound_max_month = undefined; notes.push('Volume above EUR 10M/year: set manually.'); }
-      else fields.inbound_max_month = Math.max(...vols);
-    }
-    const freqs = asArray(behavior.frequency).map(mapFrequency).filter((v) => v !== undefined);
-    if (freqs.length) fields.inbound_max_count_month = Math.max(...freqs);
-
-    const geo = mapGeographies(behavior.geographies ?? behavior.geography);
-    if (geo.countries.length) fields.allowed_countries = geo.countries;
-    if (geo.unmapped.length) notes.push(`Geographies not mapped to countries: ${geo.unmapped.join(', ')}.`);
-
-    const types = asArray(behavior.types ?? behavior.transaction_types);
-    if (types.length) fields.expected_categories = types.map(String);
-    const cps = asArray(behavior.counterparties);
-    if (cps.length) notes.push(`Expected counterparties: ${cps.map(String).join(', ')}.`);
+    const fromUse = limitsFromBehavior(behavior);
+    Object.assign(fields, fromUse.fields);
+    notes.push(...fromUse.notes);
   }
 
   const usable = Object.keys(fields).some((k) => k !== 'currency' && fields[k] !== undefined);

@@ -419,7 +419,7 @@ export default function OutreachTemplatesTab({ tenant }) {
                 const pick = (key) => {
                   const f = profileFieldByKey(key);
                   // A linked question takes the KYC field's name (1:1 naming between outreach and client file)
-                  setModal(m => ({ ...m, data: { ...m.data, profile_field: key || '', ...(f ? { label: kycFieldLabel(key, m.data.client_types || []) } : {}), ...(f && ['phone', 'address', 'country'].includes(f.type) ? { field_type: f.type, item_type: 'data_point' } : {}) } }));
+                  setModal(m => ({ ...m, data: { ...m.data, profile_field: key || '', ...(f ? { label: kycFieldLabel(key, m.data.client_types || []) } : {}), ...(f && ['phone', 'address', 'country'].includes(f.type) ? { field_type: f.type, item_type: 'data_point' } : {}), ...(f?.fieldType ? { field_type: f.fieldType, item_type: 'data_point', field_options: f.options || [] } : {}) } }));
                 };
                 return (
                   <div className="space-y-1">
