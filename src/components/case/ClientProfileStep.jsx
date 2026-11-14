@@ -162,8 +162,15 @@ export default function ClientProfileStep({ kycCase, client, currentUser, onRegi
 
     // Answers the client gave in the outreach land here: empty fields are filled, the analyst's entries are kept
     let alive = true;
-    base44.entities.OutreachRequest.filter({ case_id: kycCase.id }).then((reqs) => {
+    Promise.all([
+      base44.entities.OutreachRequest.filter({ case_id: kycCase.id }),
+      // Requests built from a form template may not carry the link on the item: resolve it from the Field Library
+      base44.entities.OutreachTemplate.filter({ tenant_id: kycCase.tenant_id }).catch(() => []),
+    ]).then(([reqsRaw, tmpls]) => {
       if (!alive) return;
+      const linkOf = {};
+      (tmpls || []).forEach((t) => { if (String(t.profile_field || '').startsWith('expected_use.')) linkOf[t.id] = t.profile_field; });
+      const reqs = (reqsRaw || []).map((r) => ({ ...r, items: (r.items || []).map((i) => (!i.profile_field && linkOf[i.item_id] ? { ...i, profile_field: linkOf[i.item_id] } : i)) }));
       const found = collectExpectedUse(reqs || []);
       if (!Object.keys(found.values).length) return;
       setUseAnswers(found);
