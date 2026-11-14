@@ -61,10 +61,12 @@ const FIELD_ADDRESS = {
 function checkRow(cfg, item, client) {
   const raw = (cfg.extract(item) || '').toString().trim();
   if (!raw) return null;
-  const appliedFields = new Set(item.idv_profile_applied_fields || []);
-  if (appliedFields.has(cfg.key)) return null;
   const diditValue = toFileValue(cfg.key, raw); // countries in the app's own format, never a bare "NLD"
   const currentValue = (cfg.getCurrent(client) || '').toString().trim();
+  // Already accepted or confirmed earlier: kept only for the "matches the client file" line
+  if (new Set(item.idv_profile_applied_fields || []).has(cfg.key)) {
+    return cfg.onlyWhenEmpty ? null : { rowKey: `${item.item_id}:${cfg.key}`, fieldKey: cfg.key, label: cfg.label, currentValue, diditValue, same: true, done: true, item };
+  }
   const isEmpty = currentValue === '';
   if (cfg.onlyWhenEmpty && !isEmpty) return null;
   const same = !isEmpty && sameProfileValue(cfg.key, currentValue, raw);
@@ -100,9 +102,9 @@ export default function SuggestedProfileUpdatesCard({ diditSummary, requests, cl
   // Values that already match the client file need no decision: they are recorded as confirmed by the ID check
   // (marker on the outreach item + confirmed suggestion + one audit event). The client record is not written.
   const autoConfirmed = useRef(new Set());
-  const matchSignature = groups.map(g => g.matched.map(r => r.rowKey).join(',')).join('|');
+  const matchSignature = groups.map(g => g.matched.filter(r => !r.done).map(r => r.rowKey).join(',')).join('|');
   useEffect(() => {
-    const todo = groups.flatMap(g => g.matched).filter(r => !autoConfirmed.current.has(r.rowKey));
+    const todo = groups.flatMap(g => g.matched).filter(r => !r.done && !autoConfirmed.current.has(r.rowKey));
     if (!todo.length || !kycCase?.id) return;
     todo.forEach(r => autoConfirmed.current.add(r.rowKey));
     (async () => {
