@@ -47,15 +47,21 @@ const VIEWS = [
  * Customer 360 ("Overview" tab): a sticky header band (dynamic risk next to the KYC rating, verification and screening,
  * actions) and sub-views for transactions, profile & risk, alerts & cases, network and the full timeline.
  * Needs tm_core + createRunCase. ?view= deep-links a sub-view.
+ * `section` (KYC + AML layout): the customer file shows the sub-views as its own tabs, so this renders one of them
+ * (summary | transactions | profile | work) without the full switcher. The header band stays on the Overview tab,
+ * where Network and Timeline remain as sub-views.
  */
-export default function MonitoringTab({ client }) {
+export default function MonitoringTab({ client, section }) {
   const { currentUser, tenant } = useTenant();
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const enabled = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'createRunCase');
   const key = ['client-monitoring', currentUser?.tenant_id, client.id];
   const isOrg = client.client_type === 'ORG';
-  const view = VIEWS.some((v) => v.key === searchParams.get('view')) ? searchParams.get('view') : 'summary';
+  const urlView = VIEWS.some((v) => v.key === searchParams.get('view')) ? searchParams.get('view') : 'summary';
+  const view = !section ? urlView : section === 'summary' ? (['network', 'timeline'].includes(urlView) ? urlView : 'summary') : section;
+  const shownViews = !section ? VIEWS : section === 'summary' ? VIEWS.filter((v) => ['summary', 'network', 'timeline'].includes(v.key)) : [];
+  const showHeader = !section || section === 'summary';
   const setView = (v) => {
     const next = new URLSearchParams(searchParams);
     next.set('tab', 'overview');
@@ -89,6 +95,7 @@ export default function MonitoringTab({ client }) {
   return (
     <div className="space-y-4">
       {/* Header band: risk next to the KYC rating, verification/screening and actions. */}
+      {showHeader && (
       <div>
         <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-5">
@@ -106,7 +113,7 @@ export default function MonitoringTab({ client }) {
         </div>
         {/* View switcher stays in view while scrolling. */}
         <div role="tablist" aria-label="Customer views" className="sticky top-0 z-10 mt-3 flex flex-wrap gap-1 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          {VIEWS.map((v) => (
+          {shownViews.map((v) => (
             <button
               key={v.key} type="button" role="tab" aria-selected={view === v.key} onClick={() => setView(v.key)}
               className={cn('px-3 py-2 text-sm -mb-px border-b-2 transition-colors',
@@ -117,6 +124,7 @@ export default function MonitoringTab({ client }) {
           ))}
         </div>
       </div>
+      )}
 
       {view === 'summary' && (
         <div className="space-y-4">

@@ -17,6 +17,7 @@ import DocumentsTab     from '@/components/client/DocumentsTab';
 import AuditTrailTab    from '@/components/client/AuditTrailTab';
 import OngoingMonitoringToggle from '@/components/client/OngoingMonitoringToggle';
 import MonitoringTab from '@/components/client/MonitoringTab';
+import { amlLayoutOn, CLIENT_TABS_V2, clientTabFor } from '@/lib/amlNav';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { Network, ChevronRight, User, Building2, UserCog, GitFork, AlertTriangle, Trash2 } from 'lucide-react';
 import { useTenantUsers } from '@/hooks/useTenantData';
@@ -58,15 +59,20 @@ export default function ClientDetail() {
   const canDelete = hasPermission(userRole, 'deleteClient');
   const showMonitoring = isFeatureEnabled(tenant, 'tm_core') && hasPermission(userRole, 'createRunCase');
 
+  const amlTabs = showMonitoring && amlLayoutOn(tenant);
+
   // TM on: 'overview' is the first and default tab; ?tab= wins and ?tab=monitoring is an alias for 'overview'.
   const location = useLocation();
   const tabTouched = useRef(false);
   useEffect(() => {
     if (!showMonitoring) return;
-    const param = new URLSearchParams(location.search).get('tab');
+    const sp = new URLSearchParams(location.search);
+    const param = sp.get('tab');
+    // KYC + AML layout: the monitoring sub-views are tabs of their own; links made before it keep working.
+    if (amlTabs) { if (param || !tabTouched.current) setActiveTab(clientTabFor(param, sp.get('view')).tab); return; }
     if (param) setActiveTab(param === 'monitoring' ? 'overview' : param);
     else if (!tabTouched.current) setActiveTab('overview');
-  }, [showMonitoring, location.search]);
+  }, [showMonitoring, amlTabs, location.search]);
   const { data: customerFile } = useCustomerFile(id, showMonitoring);
   const tmCaseCount = showMonitoring ? (customerFile?.tm_cases?.length || 0) : 0;
 
@@ -291,14 +297,20 @@ export default function ClientDetail() {
         {/* ── Tabs ── */}
         <Tabs value={activeTab} onValueChange={v => { tabTouched.current = true; setActiveTab(v); }}>
           <TabsList className="bg-card border border-border h-auto p-1 gap-1 flex-wrap">
-            {[
+            {(amlTabs ? CLIENT_TABS_V2.map((t) => ({
+              value: t.value,
+              label: t.value === 'cases' ? `${t.label} (${cases.length})`
+                : t.value === 'alerts' && tmCaseCount ? `${t.label} (${tmCaseCount})`
+                : t.value === 'related-parties' ? `${t.label} (${relatedParties.length})`
+                : t.value === 'documents' ? `${t.label} (${documents.length})` : t.label,
+            })) : [
               ...(showMonitoring ? [{ value: 'overview', label: 'Overview' }] : []),
               { value: 'profile',          label: 'Profile' },
               { value: 'related-parties',  label: `Related Parties (${relatedParties.length})` },
               { value: 'cases',            label: `Cases (${cases.length + tmCaseCount})` },
               { value: 'documents',        label: `Documents (${documents.length})` },
               { value: 'audit-trail',      label: 'Audit Trail' },
-            ].map(t => (
+            ]).map(t => (
               <TabsTrigger key={t.value} value={t.value}
                 className="text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-primary data-[state=active]:text-white">
                 {t.label}
@@ -351,9 +363,14 @@ export default function ClientDetail() {
 
           {showMonitoring && (
             <TabsContent value="overview">
-              <MonitoringTab client={client} />
+              <MonitoringTab client={client} section={amlTabs ? 'summary' : undefined} />
             </TabsContent>
           )}
+          {amlTabs && CLIENT_TABS_V2.filter((t) => t.monitoring && t.value !== 'overview').map((t) => (
+            <TabsContent key={t.value} value={t.value}>
+              <MonitoringTab client={client} section={t.monitoring} />
+            </TabsContent>
+          ))}
         </Tabs>
       </div>
 
