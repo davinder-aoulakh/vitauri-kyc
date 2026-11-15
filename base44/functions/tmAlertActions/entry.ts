@@ -67,7 +67,8 @@ export default async function (req) {
       if (alert.tm_case_id) throw httpError(409, 'Alert is already linked to an investigation');
       const mode = caseGroupingSettings(tenant).case_grouping;
       const open = asList(await E.TmCase.filter({ tenant_id: tenantId, primary_client_id: alert.client_id, status: { $in: OPEN_CASE } }, 'created_date', 50));
-      const target = pickCase(open, alert, mode);
+      // An investigation already waiting for the Compliance Officer's decision is not extended: a new one is started.
+      const target = pickCase(open.filter((c) => ['open', 'investigating'].includes(c.status)), alert, mode);
       const ctx = { base44, E, auth, tenantId, tenant };
       let out; let created = false;
       if (target) {

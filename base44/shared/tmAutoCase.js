@@ -16,7 +16,7 @@ export async function autoCaseForAlert(base44, tenant, alert) {
     const tenantId = tenant.id;
     const nowIso = new Date().toISOString();
     const open = asList(await E.TmCase.filter({ tenant_id: tenantId, primary_client_id: alert.client_id, status: { $in: OPEN_CASE } }, 'created_date', 50));
-    const target = pickCase(open, alert, cfg.case_grouping);
+    const target = pickCase(open.filter((c) => ['open', 'investigating'].includes(c.status)), alert, cfg.case_grouping);
     let caseId; let caseRef; let created = false;
     if (target) {
       await E.TmCase.update(target.id, {

@@ -8,6 +8,9 @@ import { Link } from 'react-router-dom';
 import InlineError from '@/components/shared/InlineError';
 import CreateCaseDialog from '@/components/tm/case/CreateCaseDialog';
 import { errorMessage } from '@/lib/tmAlerts';
+import { useTenant } from '@/lib/tenantContext';
+import { amlLayoutOn } from '@/lib/amlNav';
+import { toast } from '@/components/ui/use-toast';
 
 const OPEN_CASE = ['open', 'investigating', 'pending_co'];
 
@@ -17,6 +20,8 @@ export default function CaseActions({ alert, tenantId, onChanged }) {
   const [caseId, setCaseId] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const { tenant } = useTenant();
+  const v2 = amlLayoutOn(tenant);
 
   const { data: cases = [] } = useQuery({
     queryKey: ['tmOpenCases', tenantId],
@@ -28,7 +33,10 @@ export default function CaseActions({ alert, tenantId, onChanged }) {
     setBusy(action);
     setError('');
     try {
-      await base44.functions.invoke('tmAlertActions', { alert_id: alert.id, action, ...extra });
+      const res = await base44.functions.invoke('tmAlertActions', { alert_id: alert.id, action, ...extra });
+      if (action === 'escalate' && res?.data?.case_ref) {
+        toast({ title: res.data.created ? `Investigation ${res.data.case_ref} started` : `Added to investigation ${res.data.case_ref}` });
+      }
       setAdding(false);
       onChanged?.();
     } catch (e) {
@@ -39,7 +47,20 @@ export default function CaseActions({ alert, tenantId, onChanged }) {
   };
 
   if (alert.tm_case_id) {
-    return <Link to={`/tm/case/${alert.tm_case_id}`} className="text-xs text-primary hover:underline">Linked to a TM case. Open case</Link>;
+    return <Link to={`/tm/case/${alert.tm_case_id}`} className="text-xs text-primary hover:underline">{v2 ? 'Linked to an investigation. Open investigation' : 'Linked to a TM case. Open case'}</Link>;
+  }
+
+  // New layout: one Escalate button. The alert joins the customer's open investigation or starts one (tenant setting).
+  if (v2) {
+    return (
+      <div className="space-y-2">
+        <Button size="sm" className="gap-1.5" disabled={!!busy} onClick={() => run('escalate')}>
+          {busy === 'escalate' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderInput className="w-3.5 h-3.5" />} Escalate to investigation
+        </Button>
+        <p className="text-xs text-muted-foreground">Adds this alert to the open investigation it belongs to, or starts a new one.</p>
+        {error && <InlineError message={error} />}
+      </div>
+    );
   }
 
   return (

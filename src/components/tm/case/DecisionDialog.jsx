@@ -6,17 +6,28 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 import { DECISION_CONFIG } from '@/lib/tmCase';
+import { useTenant } from '@/lib/tenantContext';
+import { amlLayoutOn } from '@/lib/amlNav';
+
+// New layout: the report decision has three outcomes (spec section 7). The third is still "do not report" for the FIU flow.
+const REPORT_OUTCOMES_V2 = [
+  ['report', 'Report to the FIU'],
+  ['no_report', 'No report: activity explained'],
+  ['true_positive_no_report', 'True positive, motivated decision not to report'],
+];
 
 export default function DecisionDialog({ type, onClose, run }) {
   const [outcome, setOutcome] = useState('');
   const [rationale, setRationale] = useState('');
   const [busy, setBusy] = useState(false);
+  const { tenant } = useTenant();
   const cfg = DECISION_CONFIG[type];
+  const outcomes = type === 'report_decision' && amlLayoutOn(tenant) ? REPORT_OUTCOMES_V2 : cfg?.outcomes;
 
   const submit = async () => {
     setBusy(true);
     const res = type === 'report_decision'
-      ? await run('co_decide', { decision: outcome, rationale }, { success: 'Decision recorded' })
+      ? await run('co_decide', outcome === 'true_positive_no_report' ? { decision: 'no_report', outcome, rationale } : { decision: outcome, rationale }, { success: 'Decision recorded' })
       : await run('record_decision', { decision_type: type, outcome, rationale }, { success: `${cfg.label} recorded` });
     setBusy(false);
     if (res) onClose();
@@ -34,7 +45,7 @@ export default function DecisionDialog({ type, onClose, run }) {
             <Label className="text-xs">Outcome</Label>
             <Select value={outcome} onValueChange={setOutcome}>
               <SelectTrigger className="h-9"><SelectValue placeholder="Choose an outcome" /></SelectTrigger>
-              <SelectContent>{cfg?.outcomes.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
+              <SelectContent>{(outcomes || []).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>

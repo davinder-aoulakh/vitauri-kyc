@@ -10,6 +10,7 @@ import RegressionRefFields from '@/components/tenantconfig/tm/RegressionRefField
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { normaliseJurisdictions } from '@/lib/amlNav';
 import { detectionSettings } from '../../../base44/shared/tmDetection.js';
+import { caseGroupingSettings } from '../../../base44/shared/tmCaseGrouping.js';
 import AiModelCard from '@/components/tenantconfig/tm/AiModelCard';
 import { MODEL_CHANGE_ROLES, MIN_NOTE } from '@/lib/tmAiModels';
 import Psd2PartnerSelect from '@/components/tenantconfig/tm/Psd2PartnerSelect';
@@ -50,6 +51,10 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
   });
   const [cocMode, setCocMode] = useState(det0.profile_coc_mode);
   const [cocMonths, setCocMonths] = useState(String(det0.profile_coc_months));
+  const grp0 = caseGroupingSettings(tenant);
+  const [caseGrouping, setCaseGrouping] = useState(grp0.case_grouping);
+  const [autoObjective, setAutoObjective] = useState(grp0.auto_case_objective);
+  const [autoSanctions, setAutoSanctions] = useState(grp0.auto_case_sanctions);
   const posInt = (v, min = 1) => Number.isInteger(Number(v)) && Number(v) >= min;
   const detOk = !amlV2 || (Number(det.amount_min) > 0 && Number(det.amount_below) > Number(det.amount_min) && posInt(det.window_days) && ['Low', 'Medium', 'High', 'PEP'].every((c) => posInt(det[c], 2))
     && posInt(det.window_hours) && Number(det.min_ratio_pct) >= 1 && Number(det.min_ratio_pct) <= 1000 && posInt(cocMonths));
@@ -82,6 +87,7 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
         auto_triage_new_alerts: autoTriage,
         ...(amlV2 ? { historical_window_days: Number(histDays) } : {}),
         ...(amlV2 ? {
+          case_grouping: caseGrouping, auto_case_objective: autoObjective, auto_case_sanctions: autoSanctions,
           detection_in_vitauri: detOn, profile_coc_mode: cocMode, profile_coc_months: Number(cocMonths),
           detection: {
             ...(s.detection || {}),
@@ -171,6 +177,27 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
             <Label className="text-xs mb-1.5 block">Historical window (days)</Label>
             <Input type="number" min="1" max="3650" step="1" value={histDays} onChange={(e) => setHistDays(e.target.value)} className="h-9 text-sm" aria-invalid={!histOk} />
             <p className="mt-1 text-xs text-muted-foreground">Transactions executed longer ago than this are stored for analysis only: not screened by Didit, no alerts. Applies to uploads, the API and PSD2.</p>
+          </div>
+        )}
+        {amlV2 && (
+          <div className="space-y-3 rounded-xl border border-border p-4">
+            <div className="text-sm font-medium">Alerts and investigations</div>
+            <div className="max-w-md">
+              <Label className="text-xs mb-1.5 block">Escalating an alert</Label>
+              <select value={caseGrouping} onChange={(e) => setCaseGrouping(e.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm" aria-label="Case grouping">
+                <option value="one_open_per_customer">One open investigation per customer</option>
+                <option value="per_rule_customer">One open investigation per rule and customer</option>
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">The alert joins that investigation, or a new one is started. An investigation already waiting for the Compliance Officer is not extended.</p>
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div><div className="text-sm">Start an investigation automatically for objective indicators</div><div className="text-xs text-muted-foreground">A new alert with an objective indicator goes straight into an investigation, without waiting for triage.</div></div>
+              <Switch checked={autoObjective} onCheckedChange={setAutoObjective} aria-label="Auto-create for objective indicators" />
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div><div className="text-sm">Start an investigation automatically for confirmed sanctions hits</div><div className="text-xs text-muted-foreground">Takes effect with the screening changes of the next phase (a hit is confirmed there). The choice is saved now.</div></div>
+              <Switch checked={autoSanctions} onCheckedChange={setAutoSanctions} aria-label="Auto-create for confirmed sanctions hits" />
+            </div>
           </div>
         )}
         {amlV2 && (
