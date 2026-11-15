@@ -4,6 +4,7 @@ import { safeRecompute } from './tmRisk.js';
 import { proposeTriggers } from './edrTriggers.js';
 import { collectEvidence } from './tmCaseEvidence.js';
 import { riskAt, caseInputs } from './decisionSnapshot.js';
+import { outcomeFor, CASE_OUTCOMES } from './tmCaseGrouping.js';
 import {
   OPEN_CASE, WORKABLE_CASE, OPEN_ALERT, FOUR_EYES_ROLES, CO_ROLES, roleOf, tenantUsers, tlEntry, commit,
   clockPatch, distinct, caseClients, nextCaseRef,
@@ -167,7 +168,9 @@ export async function coDecide(ctx, tmCase, body) {
   const nowIso = new Date().toISOString();
   const report = body.decision === 'report';
   const status = report ? 'decided_report' : 'decided_no_report';
-  const patch = { co_decision: body.decision, co_decided_at: nowIso, co_decided_by_user_id: auth.actorUserId, co_rationale: rationale, status, ...(await clockPatch(ctx, { ...tmCase, co_decided_at: nowIso })) };
+  if (body.outcome !== undefined && body.outcome !== '' && !CASE_OUTCOMES.includes(body.outcome)) throw httpError(400, 'Unknown outcome');
+  const outcome = outcomeFor(body.decision, body.outcome);
+  const patch = { outcome, co_decision: body.decision, co_decided_at: nowIso, co_decided_by_user_id: auth.actorUserId, co_rationale: rationale, status, ...(await clockPatch(ctx, { ...tmCase, co_decided_at: nowIso })) };
 
   const alerts = asList(await E.TmAlert.filter({ tenant_id: tenantId, id: { $in: tmCase.alert_ids || [] } }, undefined, 100));
   for (const a of alerts.filter((x) => OPEN_ALERT.includes(x.status))) {
@@ -183,7 +186,7 @@ export async function coDecide(ctx, tmCase, body) {
     },
   });
   await commit(ctx, tmCase, patch, tlEntry(auth, 'co_decision', `Compliance Officer ${auth.actorName} decided: ${report ? 'report to FIU' : 'do not report'}. ${rationale}`),
-    { type: 'tm_case_co_decision', before: { status: tmCase.status }, after: { status, co_decision: body.decision } });
+    { type: 'tm_case_co_decision', before: { status: tmCase.status }, after: { status, co_decision: body.decision, outcome } });
   for (const cid of caseClients(tmCase.primary_client_id, tmCase.client_ids || [], tmCase.network_client_ids || [])) {
     await safeRecompute(ctx.base44, { tenantId, tenant, clientId: cid, trigger: 'tm_case_decision', actor: auth });
   }
@@ -203,7 +206,7 @@ export async function coDecide(ctx, tmCase, body) {
       }
     } catch (e) { console.warn('tm_case EDR trigger failed', e?.message || e); }
   }
-  return { tm_case_id: tmCase.id, status };
+  return { tm_case_id: tmCase.id, status, outcome };
 }
 
 export async function recordDecision(ctx, tmCase, body) {

@@ -1,9 +1,12 @@
-// tmAlertActions — audited alert workflow actions: assign_to_me, create_case, add_to_case.
+// tmAlertActions — audited alert workflow actions: assign_to_me, create_case, add_to_case, escalate.
+// escalate = add the alert to the open investigation it belongs to (tenant setting case_grouping), or start one.
 // Auth: signed-in user with tmWorkCase; tenant from the user. Requires tm_core.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { authenticate, errorResponse, httpError, loadTenant, asList, WORK_ROLES } from '../../shared/tmAuth.js';
 import { writeAudit } from '../../shared/tmAudit.js';
+import { caseGroupingSettings, pickCase, groupingKeyFor, aiFollowed } from '../../shared/tmCaseGrouping.js';
+import { createCase, addAlerts } from '../../shared/tmCaseCore.js';
 
 const OPEN_ALERT = ['new', 'triaged', 'in_review'];
 const OPEN_CASE = ['open', 'investigating', 'pending_co'];
@@ -58,6 +61,29 @@ export default async function (req) {
       await E.TmAlert.update(alert.id, { tm_case_id: tmCase.id, status: 'in_review' });
       await audit('tm_alert_added_to_case', { tm_case_id: null }, { tm_case_id: tmCase.id, case_ref: tmCase.case_ref }, `Alert ${alert.id} added to case ${tmCase.case_ref}.`);
       return Response.json({ ok: true, tm_case_id: tmCase.id, case_ref: tmCase.case_ref });
+    }
+
+    if (body.action === 'escalate') {
+      if (alert.tm_case_id) throw httpError(409, 'Alert is already linked to an investigation');
+      const mode = caseGroupingSettings(tenant).case_grouping;
+      const open = asList(await E.TmCase.filter({ tenant_id: tenantId, primary_client_id: alert.client_id, status: { $in: OPEN_CASE } }, 'created_date', 50));
+      const target = pickCase(open, alert, mode);
+      const ctx = { base44, E, auth, tenantId, tenant };
+      let out; let created = false;
+      if (target) {
+        await addAlerts(ctx, target, { alert_ids: [alert.id] });
+        out = { tm_case_id: target.id, case_ref: target.case_ref };
+      } else {
+        out = await createCase(ctx, null, { alert_ids: [alert.id], title: alert.title });
+        await E.TmCase.update(out.tm_case_id, { grouping_key: groupingKeyFor(alert, mode) });
+        created = true;
+      }
+      const followed = aiFollowed(alert.ai_proposal, 'escalate');
+      if (followed !== null) await E.TmAlert.update(alert.id, { ai_followed: followed });
+      await audit('tm_alert_escalated', { tm_case_id: null, ai_proposal: alert.ai_proposal || null },
+        { tm_case_id: out.tm_case_id, case_ref: out.case_ref, created_case: created, case_grouping: mode, ai_followed: followed },
+        created ? `Alert ${alert.ref || alert.id} escalated: investigation ${out.case_ref} started.` : `Alert ${alert.ref || alert.id} escalated: added to investigation ${out.case_ref}.`);
+      return Response.json({ ok: true, tm_case_id: out.tm_case_id, case_ref: out.case_ref, created });
     }
 
     throw httpError(400, 'Unknown action');

@@ -3,6 +3,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { authenticate, errorResponse, httpError, loadTenant, asList, WORK_ROLES } from '../../shared/tmAuth.js';
+import { aiFollowed } from '../../shared/tmCaseGrouping.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import { safeRecompute } from '../../shared/tmRisk.js';
 import { riskAt, alertInputs } from '../../shared/decisionSnapshot.js';
@@ -74,10 +75,11 @@ export default async function (req) {
         tenant_id: tenantId, subject_type: 'alert', subject_id: a.id, client_id: a.client_id, decision_type: 'alert_close',
         outcome, rationale: reason, decided_by_user_id: auth.actorUserId, decided_at: nowIso, snapshot,
       });
-      await E.TmAlert.update(a.id, { status: outcome, close_reason: reason, closed_by_user_id: auth.actorUserId });
+      const followed = aiFollowed(a.ai_proposal, 'close');
+      await E.TmAlert.update(a.id, { status: outcome, close_reason: reason, closed_by_user_id: auth.actorUserId, ...(followed !== null ? { ai_followed: followed } : {}) });
       await writeAudit(base44, auth, {
         tenantId, clientId: a.client_id, eventType: 'tm_alert_closed',
-        before: { status: a.status, ai_proposal: a.ai_proposal || null }, after: { status: outcome, close_reason: reason, bulk: ids.length > 1 },
+        before: { status: a.status, ai_proposal: a.ai_proposal || null }, after: { status: outcome, close_reason: reason, bulk: ids.length > 1, ai_followed: followed },
         notes: `Alert ${a.id} closed (${outcome}): ${reason}`,
       });
     }

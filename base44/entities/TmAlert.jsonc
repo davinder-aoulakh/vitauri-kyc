@@ -162,6 +162,10 @@
         "type": "string"
       },
       "type": "array"
+    },
+    "ai_followed": {
+      "type": "boolean",
+      "description": "Whether the analyst followed the AI proposal (escalate / close); empty when there was none"
     }
   },
   "required": [

@@ -4,6 +4,7 @@
 // for the webhook. Moved unchanged from diditWebhook, plus: DECLINED blocks the transaction in Vitauri.
 import { normaliseTxnStatus } from './diditTm.js';
 import { alertSourceFor } from './tmDetection.js';
+import { autoCaseForAlert } from './tmAutoCase.js';
 import { afterTransactionUpdate } from './diditTxnActions.js';
 import { safeAlertRef } from './tmRefs.js';
 import { computeDue } from './tmClock.js';
@@ -217,5 +218,8 @@ export async function upsertTmAlert(base44, { tenant_id, transaction, rule_runs,
   }).catch(() => {});
 
   await scheduleAutoTriage(base44, { tenantId: tenant_id, alertId: created.id, waitUntilFn });
+  // Tenant setting: start an investigation straight away for objective indicators
+  const tenantRec = (await E.Tenant.filter({ id: tenant_id }).catch(() => []))?.[0];
+  if (tenantRec) await autoCaseForAlert(base44, tenantRec, created);
   return created;
 }

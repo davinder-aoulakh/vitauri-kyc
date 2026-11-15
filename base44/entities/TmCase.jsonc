@@ -159,6 +159,19 @@
     },
     "last_evidence_run_id": {
       "type": "string"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "reported_to_fiu",
+        "no_report_explained",
+        "true_positive_no_report"
+      ],
+      "description": "Outcome of the investigation, set with the Compliance Officer decision"
+    },
+    "grouping_key": {
+      "type": "string",
+      "description": "Customer (and rule) this investigation groups alerts for; set when it is started by an escalation"
     }
   },
   "required": [
