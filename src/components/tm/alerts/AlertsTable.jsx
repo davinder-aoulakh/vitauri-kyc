@@ -11,12 +11,15 @@ import { toClient } from '@/lib/routes';
 const scoreClass = (s) => (s >= 70 ? 'text-red-600 bg-red-50' : s >= 50 ? 'text-amber-700 bg-amber-50' : 'text-muted-foreground bg-secondary');
 
 /** Rule / signal: name + the Didit rule id (or scenario code) so analysts can find it in Didit. */
+// Where the alert came from (spec: Rule, Provider, Profile, Manual). Didit rule alerts show their Didit id, not a label.
+const SOURCE_LABEL = { profile_deviation: 'Profile deviation', didit_provider: 'Provider screening', vitauri_rule: 'Vitauri rule', manual: 'Manual', quality_sample: 'Quality sample' };
+
 function RuleCell({ alert, scenarios, rulesByDiditId }) {
   const diditId = (alert.rule_ids || [])[0];
   const rule = diditId ? rulesByDiditId?.get(diditId) : null;
   const scenario = scenarios?.get(alert.scenario_id);
   const name = alert.title || rule?.name || scenario?.name || '—';
-  const sub = [diditId ? `Didit ${diditId}` : null, scenario?.code || null, alert.source === 'profile_deviation' ? 'Profile deviation' : null].filter(Boolean).join(' · ');
+  const sub = [diditId ? `Didit ${diditId}` : null, scenario?.code || null, SOURCE_LABEL[alert.source] || null].filter(Boolean).join(' · ');
   return (
     <div className="min-w-0" title={name}>
       <div className="truncate">{name}</div>

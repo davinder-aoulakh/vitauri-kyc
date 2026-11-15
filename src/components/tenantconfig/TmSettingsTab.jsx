@@ -9,6 +9,7 @@ import { hasPermission, isVitauriOps } from '@/lib/permissions';
 import RegressionRefFields from '@/components/tenantconfig/tm/RegressionRefFields';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { normaliseJurisdictions } from '@/lib/amlNav';
+import { detectionSettings } from '../../../base44/shared/tmDetection.js';
 import AiModelCard from '@/components/tenantconfig/tm/AiModelCard';
 import { MODEL_CHANGE_ROLES, MIN_NOTE } from '@/lib/tmAiModels';
 import Psd2PartnerSelect from '@/components/tenantconfig/tm/Psd2PartnerSelect';
@@ -39,6 +40,19 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
   const amlV2 = isFeatureEnabled(tenant, 'aml_nav_v2');
   const [histDays, setHistDays] = useState(String(s.historical_window_days ?? 30));
   const [jurisdictions, setJurisdictions] = useState((tenant?.jurisdictions || []).join(', '));
+  // Detection in Vitauri + profile → change of circumstances (phase 3). Shown values are the effective ones (defaults filled in).
+  const det0 = detectionSettings(tenant);
+  const [detOn, setDetOn] = useState(det0.enabled);
+  const [det, setDet] = useState({
+    amount_min: String(det0.structuring.amount_min), amount_below: String(det0.structuring.amount_below), window_days: String(det0.structuring.window_days),
+    Low: String(det0.structuring.senders_by_class.Low), Medium: String(det0.structuring.senders_by_class.Medium), High: String(det0.structuring.senders_by_class.High), PEP: String(det0.structuring.senders_by_class.PEP),
+    window_hours: String(det0.rapid.window_hours), min_ratio_pct: String(Math.round(det0.rapid.min_ratio * 100)),
+  });
+  const [cocMode, setCocMode] = useState(det0.profile_coc_mode);
+  const [cocMonths, setCocMonths] = useState(String(det0.profile_coc_months));
+  const posInt = (v, min = 1) => Number.isInteger(Number(v)) && Number(v) >= min;
+  const detOk = !amlV2 || (Number(det.amount_min) > 0 && Number(det.amount_below) > Number(det.amount_min) && posInt(det.window_days) && ['Low', 'Medium', 'High', 'PEP'].every((c) => posInt(det[c], 2))
+    && posInt(det.window_hours) && Number(det.min_ratio_pct) >= 1 && Number(det.min_ratio_pct) <= 1000 && posInt(cocMonths));
   const histOk = !amlV2 || (Number.isInteger(Number(histDays)) && Number(histDays) >= 1 && Number(histDays) <= 3650);
   const [reverifyWf, setReverifyWf] = useState(s.reverify_workflow_id || '');
   const isOps = isVitauriOps(currentUser?.app_role);
@@ -51,7 +65,7 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
 
   const sum = WEIGHTS.reduce((t, [k]) => t + (Number(weights[k]) || 0), 0);
   const pct = Number(maxPct);
-  const valid = /^[A-Za-z]{3}$/.test(currency) && tz.trim() && Math.abs(sum - 1) < 0.011 && Number.isFinite(pct) && pct >= 0 && pct <= 100 && histOk && (!modelChanged || modelNote.trim().length >= MIN_NOTE);
+  const valid = /^[A-Za-z]{3}$/.test(currency) && tz.trim() && Math.abs(sum - 1) < 0.011 && Number.isFinite(pct) && pct >= 0 && pct <= 100 && histOk && detOk && (!modelChanged || modelNote.trim().length >= MIN_NOTE);
 
   async function save() {
     setSaving(true);
@@ -67,6 +81,14 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
         psd2_partner: psd2Partner,
         auto_triage_new_alerts: autoTriage,
         ...(amlV2 ? { historical_window_days: Number(histDays) } : {}),
+        ...(amlV2 ? {
+          detection_in_vitauri: detOn, profile_coc_mode: cocMode, profile_coc_months: Number(cocMonths),
+          detection: {
+            ...(s.detection || {}),
+            structuring: { ...(s.detection?.structuring || {}), amount_min: Number(det.amount_min), amount_below: Number(det.amount_below), window_days: Number(det.window_days), senders_by_class: { Low: Number(det.Low), Medium: Number(det.Medium), High: Number(det.High), PEP: Number(det.PEP) } },
+            rapid: { ...(s.detection?.rapid || {}), window_hours: Number(det.window_hours), min_ratio: Number(det.min_ratio_pct) / 100 },
+          },
+        } : {}),
         reverify_workflow_id: reverifyWf || undefined,
         ...(isOps ? {
           regression_session_id: reg.sessionId.trim() || undefined,
@@ -149,6 +171,34 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
             <Label className="text-xs mb-1.5 block">Historical window (days)</Label>
             <Input type="number" min="1" max="3650" step="1" value={histDays} onChange={(e) => setHistDays(e.target.value)} className="h-9 text-sm" aria-invalid={!histOk} />
             <p className="mt-1 text-xs text-muted-foreground">Transactions executed longer ago than this are stored for analysis only: not screened by Didit, no alerts. Applies to uploads, the API and PSD2.</p>
+          </div>
+        )}
+        {amlV2 && (
+          <div className="space-y-3 rounded-xl border border-border p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div><div className="text-sm font-medium">Detection in Vitauri</div><div className="text-xs text-muted-foreground">After each upload Vitauri checks its own ledger for structuring and rapid in/out and raises the alert itself. Use this while these rules are not running in Didit, or you would get two alerts for the same pattern. The values below are demo values; set them with Compliance.</div></div>
+              <Switch checked={detOn} onCheckedChange={setDetOn} aria-label="Detection in Vitauri" />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {[['amount_min', 'Structuring: amount from'], ['amount_below', 'Structuring: amount below'], ['window_days', 'Structuring: window (days)'],
+                ['Low', 'Senders needed: Low'], ['Medium', 'Senders needed: Medium'], ['High', 'Senders needed: High'], ['PEP', 'Senders needed: PEP'],
+                ['window_hours', 'Rapid in/out: window (hours)'], ['min_ratio_pct', 'Rapid in/out: sent on (% of received)']].map(([k, l]) => (
+                <div key={k}><Label className="text-xs mb-1.5 block">{l}</Label><Input type="number" min="0" value={det[k]} onChange={(e) => setDet({ ...det, [k]: e.target.value })} className="h-9 text-sm" /></div>
+              ))}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label className="text-xs mb-1.5 block">Profile overrun becomes a change of circumstances</Label>
+                <select value={cocMode} onChange={(e) => setCocMode(e.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm" aria-label="Profile overrun to change of circumstances">
+                  <option value="structural">After several months above the ceiling</option>
+                  <option value="first_overrun">On the first overrun</option>
+                </select>
+              </div>
+              {cocMode === 'structural' && (
+                <div><Label className="text-xs mb-1.5 block">Months above the ceiling</Label><Input type="number" min="1" step="1" value={cocMonths} onChange={(e) => setCocMonths(e.target.value)} className="h-9 text-sm" /></div>
+              )}
+            </div>
+            {!detOk && <p className="text-xs text-destructive">Check the values: amounts and windows above zero, at least 2 senders per class.</p>}
           </div>
         )}
         <div className="max-w-xs">

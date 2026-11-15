@@ -330,9 +330,29 @@ export default function StatementUploadDrawer({ open, onOpenChange, clientId, ba
                     <ResultLine>{plural(result.counterparties || 0, 'counterparty').replace('counterpartys', 'counterparties')} found</ResultLine>
                   </>
                 )}
+                {result.accepted > 0 && (result.alerts || []).length === 0 && !result.monitoring_error && (
+                  <ResultLine>No alerts raised by the profile check{result.detection_in_vitauri ? ' or the Vitauri rules' : ''}</ResultLine>
+                )}
+                {(result.alerts || []).length > 0 && (
+                  <ResultLine ok={false}>
+                    <b>{plural(result.alerts.length, 'alert')} raised</b>
+                    <ul className="mt-1 list-disc pl-4 text-xs text-muted-foreground">
+                      {result.alerts.map((a) => <li key={a.id}>{a.ref ? `${a.ref} · ` : ''}{a.title}{a.created === false ? ' (existing alert updated)' : ''}</li>)}
+                    </ul>
+                  </ResultLine>
+                )}
+                {(result.change_of_circumstances || []).length > 0 && (
+                  <ResultLine ok={false}>
+                    <b>Change of circumstances proposed</b> for the KYC file
+                    <ul className="mt-1 list-disc pl-4 text-xs text-muted-foreground">
+                      {result.change_of_circumstances.map((c) => <li key={c.id}>{c.summary}</li>)}
+                    </ul>
+                  </ResultLine>
+                )}
+                {result.monitoring_error && <ResultLine ok={false}>The monitoring check could not run now ({result.monitoring_error}); it runs again tonight.</ResultLine>}
                 {(result.rejected || []).length > 0 && <ResultLine ok={false}>{plural(result.rejected.length, 'row')} could not be added: {result.rejected.slice(0, 2).map((r) => r.reason).join('; ')}</ResultLine>}
               </ul>
-              <p className="text-xs text-muted-foreground">Alerts from screening appear under Alerts once Didit has answered.</p>
+              <p className="text-xs text-muted-foreground">Alerts from Didit screening appear under Alerts once Didit has answered.</p>
               <div className="flex justify-end"><Button onClick={() => handleOpenChange(false)}>Close</Button></div>
             </div>
           )}

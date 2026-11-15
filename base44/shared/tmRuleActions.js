@@ -3,7 +3,7 @@
 import { asList, httpError } from './tmAuth.js';
 import { writeAudit } from './tmAudit.js';
 import { tenantUsers, roleOf } from './tmCaseCommon.js';
-import { APPROVE_ROLES, validateDefinition, definitionKey } from './tmRuleSchema.js';
+import { APPROVE_ROLES, validateDefinition, definitionKey, cleanThresholdsByClass } from './tmRuleSchema.js';
 import { syncRule } from './tmRuleSync.js';
 
 const MODES = ['test', 'active', 'disabled'];
@@ -41,6 +41,9 @@ export async function saveRule(ctx, body) {
   const meta = {};
   for (const k of ['scenario_id', 'owner_user_id', 'review_date']) if (body[k] !== undefined) meta[k] = body[k] || '';
   if (meta.review_date && !/^\d{4}-\d{2}-\d{2}$/.test(meta.review_date)) throw httpError(400, 'review_date must be YYYY-MM-DD');
+  // Thresholds per risk class (G12) change what the rule does, so they follow the same governance as the definition.
+  const byClass = body.thresholds_by_class !== undefined ? cleanThresholdsByClass(body.thresholds_by_class, def) : undefined;
+  if (byClass !== undefined && !body.rule_id) meta.thresholds_by_class = byClass;
   if (meta.scenario_id) {
     const sc = asList(await E.TmScenario.filter({ tenant_id: tenantId, id: meta.scenario_id }))[0];
     if (!sc) throw httpError(404, 'Scenario not found');
@@ -58,6 +61,9 @@ export async function saveRule(ctx, body) {
 
   const rule = await loadRule(E, tenantId, body.rule_id);
   if (rule.mode === 'retired') throw httpError(409, 'A retired rule cannot be edited. Start a new rule instead.');
+  const byClassChanged = byClass !== undefined && JSON.stringify(byClass) !== JSON.stringify(rule.thresholds_by_class || {});
+  if (byClassChanged && frozen(rule)) throw httpError(409, 'Thresholds per risk class cannot be changed on an approved or live rule. Edit the rule to start a new version, then set them on the draft.');
+  if (byClassChanged) { meta.thresholds_by_class = byClass; meta.approval_status = 'not_requested'; meta.backtest_id = ''; }
   const defChanged = definitionKey(def) !== definitionKey(rule.definition);
 
   if (!defChanged) {
