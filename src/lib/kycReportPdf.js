@@ -583,6 +583,13 @@ export function buildReportBody(input) {
         ['Round', `${q.round || 1} of 3`], ['Rule set', q.rule_set_version || '—'],
         ['Report Check', q.report_check?.status === 'done' ? `Done (${q.report_check.engine || 'Claude'})` : q.report_check?.status || '—'], ['Strictness', q.strictness || '—'],
       ]);
+      const ov = signoff.qcOverrules || [];
+      if (ov.length) {
+        subheading(`Findings of the QC Agent overruled by the QC Officer (${ov.length})`, 8.5);
+        const day = (v) => { try { return v ? new Date(v).toISOString().slice(0, 16).replace('T', ' ') : '—'; } catch { return '—'; } };
+        table([{ label: 'Finding', w: 74 }, { label: 'Overruled by', w: 34 }, { label: 'Rationale', w: 70 }],
+          ov.map((f) => [`${f.code} (${f.severity}) ${String(f.text || '').slice(0, 260)}`, `${f.resolved_by_name || 'QC Officer'}\n${day(f.resolved_at)}`, String(f.resolution_text || '').slice(0, 400)]));
+      }
     }
     subheading('Human oversight and AI use');
     const aiRows = [];

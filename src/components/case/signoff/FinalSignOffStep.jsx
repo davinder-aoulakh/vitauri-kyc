@@ -15,6 +15,7 @@ import SignOffProfilePanel from '@/components/case/tm/SignOffProfilePanel';
 import { RouteLine, Locked, reportContext, LEVEL_TEXT, ClassChip } from '@/components/case/signoff/SignoffBits';
 import PkycPanel from '@/components/case/signoff/PkycPanel';
 import DeclinedMatchBanner from '@/components/case/signoff/DeclinedMatchBanner';
+import QcOverrulesList from '@/components/case/signoff/QcOverrulesList';
 import { Textarea } from '@/components/ui/textarea';
 
 const SEAL = {
@@ -95,6 +96,8 @@ export default function FinalSignOffStep({ kycCase, client, currentUser, onCaseU
         {decided && <span className="text-xs text-muted-foreground">Closed {kycCase.closed_at ? format(new Date(kycCase.closed_at), 'd MMM yyyy') : ''}{cycle != null ? ` · cycle time ${cycle}d` : ''}</span>}
         {!decided && kycCase.sign_off_submitted_at && <span className="text-xs text-muted-foreground">Submitted {format(new Date(kycCase.sign_off_submitted_at), 'd MMM yyyy HH:mm')} by {nameOf(kycCase.sign_off_submitted_by)}</span>}
       </section>
+
+      <QcOverrulesList caseId={kycCase.id} />
 
       {/* Decision card */}
       {!decided && (

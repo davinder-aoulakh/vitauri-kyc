@@ -205,7 +205,10 @@ export default function KycReportStep({ kycCase, client, currentUser, onRefresh,
         base44.entities.QcRun.filter({ case_id: kycCase.id }, '-created_date', 1).then(toList).catch(() => []),
         base44.entities.QcHumanAction.filter({ case_id: kycCase.id }, '-created_date', 30).then(toList).catch(() => []),
       ]);
-      signoffInput = { ...signoff, qc: qcRuns[0] || null, humanActions: [...(signoff.humanActions || []), ...humanActions] };
+      const qcOverrules = qcRuns[0]
+        ? await base44.entities.QcFinding.filter({ case_id: kycCase.id, qc_run_id: qcRuns[0].id, status: 'overruled' }, undefined, 200).then(toList).catch(() => [])
+        : [];
+      signoffInput = { ...signoff, qc: qcRuns[0] || null, qcOverrules, humanActions: [...(signoff.humanActions || []), ...humanActions] };
     }
 
     const built = await buildKycReportPdf({
