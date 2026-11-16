@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Users, Plus, Mail, Shield, Loader2, CheckCircle, AlertTriangle, Info, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { APP_ROLES, PERMISSIONS } from '@/lib/permissions';
+import { APP_ROLES, PERMISSIONS, roleModel, WORK_DOMAINS, WORK_DOMAIN_LABEL, ALWAYS_BOTH_ROLES } from '@/lib/permissions';
 
 const PERMISSION_LABELS = {
   viewOwnCases: 'View Own Cases', viewAllTenantCases: 'View All Cases',
@@ -41,7 +41,9 @@ function RolePermissionSummary({ role }) {
 }
 
 export default function UserManagement() {
-  const { currentUser } = useTenant();
+  const { currentUser, tenant } = useTenant();
+  // Work domain per user is only relevant when the tenant's role model is 'separate' (Tenant Config → TM settings).
+  const separateRoles = roleModel(tenant) === 'separate';
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
@@ -79,9 +81,15 @@ export default function UserManagement() {
     await loadUsers();
   }
 
-  async function updateUser(userId, updates) {
+  async function updateUser(userId, updates, workDomain) {
     setSaving(true);
     await base44.entities.User.update(userId, updates);
+    // The work domain is written by a backend function (Tenant Admin only, audited), not from the browser.
+    const before = users.find((u) => u.id === userId)?.work_domain || 'both';
+    if (separateRoles && workDomain && workDomain !== before) {
+      try { await base44.functions.invoke('setUserWorkDomain', { user_id: userId, work_domain: workDomain }); }
+      catch (e) { console.error('setUserWorkDomain failed', e); window.alert(e?.response?.data?.error || 'The work domain could not be saved.'); }
+    }
     setSaving(false);
     setEditUser(null);
     await loadUsers();
@@ -165,6 +173,9 @@ export default function UserManagement() {
                       <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
                         {u.app_role || 'Analyst'}
                       </span>
+                      {separateRoles && !ALWAYS_BOTH_ROLES.includes(u.app_role) && (u.work_domain || 'both') !== 'both' && (
+                        <span className="ml-1 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">{WORK_DOMAIN_LABEL[u.work_domain]}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {u.is_active !== false ? <CheckCircle className="w-4 h-4 text-emerald-500" /> : <span className="text-xs text-red-500">Inactive</span>}
@@ -250,6 +261,18 @@ export default function UserManagement() {
                      </SelectContent>
                    </Select>
                  </div>
+                 {separateRoles && (
+                   <div>
+                     <Label className="text-xs font-semibold mb-1.5 block">Work domain</Label>
+                     <p className="text-xs text-muted-foreground mb-1.5">Need-to-know: which side this user works on. {ALWAYS_BOTH_ROLES.includes(editUser.app_role) ? 'This role always sees both sides.' : 'KYC-only users do not see alerts, investigations or FIU reports.'}</p>
+                     <Select value={editUser.work_domain || 'both'} onValueChange={v => setEditUser(u => ({ ...u, work_domain: v }))} disabled={ALWAYS_BOTH_ROLES.includes(editUser.app_role)}>
+                       <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                       <SelectContent>
+                         {WORK_DOMAINS.map(d => <SelectItem key={d} value={d}>{WORK_DOMAIN_LABEL[d]}</SelectItem>)}
+                       </SelectContent>
+                     </Select>
+                   </div>
+                 )}
                  {/* Permission summary for selected role */}
                  <div className="bg-muted/30 border border-border rounded-lg p-3">
                    <div className="flex items-center gap-1.5 mb-2">
@@ -271,7 +294,7 @@ export default function UserManagement() {
                 </div>
                 <div className="flex gap-3 justify-end">
                   <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
-                  <Button onClick={() => updateUser(editUser.id, { role: editUser.role, app_role: editUser.app_role, is_active: editUser.is_active, mfa_enabled: editUser.mfa_enabled })} disabled={saving} className="gap-2">
+                  <Button onClick={() => updateUser(editUser.id, { role: editUser.role, app_role: editUser.app_role, is_active: editUser.is_active, mfa_enabled: editUser.mfa_enabled }, editUser.work_domain)} disabled={saving} className="gap-2">
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                     Save Changes
                   </Button>

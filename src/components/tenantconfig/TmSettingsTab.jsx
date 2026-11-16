@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
-import { hasPermission, isVitauriOps } from '@/lib/permissions';
+import { hasPermission, isVitauriOps, roleModel as roleModelOf } from '@/lib/permissions';
 import RegressionRefFields from '@/components/tenantconfig/tm/RegressionRefFields';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { normaliseJurisdictions } from '@/lib/amlNav';
@@ -41,6 +41,8 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
   const amlV2 = isFeatureEnabled(tenant, 'aml_nav_v2');
   const [histDays, setHistDays] = useState(String(s.historical_window_days ?? 30));
   const [jurisdictions, setJurisdictions] = useState((tenant?.jurisdictions || []).join(', '));
+  // Role model (phase 6): 'combined' = every analyst does KYC and AML; 'separate' = each user's work domain decides.
+  const [roleModel, setRoleModel] = useState(roleModelOf(tenant));
   // Detection in Vitauri + profile → change of circumstances (phase 3). Shown values are the effective ones (defaults filled in).
   const det0 = detectionSettings(tenant);
   const [detOn, setDetOn] = useState(det0.enabled);
@@ -85,7 +87,7 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
         max_wrongly_closed_pct: pct,
         psd2_partner: psd2Partner,
         auto_triage_new_alerts: autoTriage,
-        ...(amlV2 ? { historical_window_days: Number(histDays) } : {}),
+        ...(amlV2 ? { historical_window_days: Number(histDays), role_model: roleModel } : {}),
         ...(amlV2 ? {
           case_grouping: caseGrouping, auto_case_objective: autoObjective, auto_case_sanctions: autoSanctions,
           detection_in_vitauri: detOn, profile_coc_mode: cocMode, profile_coc_months: Number(cocMonths),
@@ -170,6 +172,16 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
             <Label className="text-xs mb-1.5 block">Jurisdictions</Label>
             <Input value={jurisdictions} onChange={(e) => setJurisdictions(e.target.value.toUpperCase())} placeholder="e.g. NL, CW" className="h-9 text-sm" />
             <p className="mt-1 text-xs text-muted-foreground">Country codes this tenant operates under. The rule libraries on the Rules page follow this list; leave empty to show all.</p>
+          </div>
+        )}
+        {amlV2 && (
+          <div className="max-w-md">
+            <Label className="text-xs mb-1.5 block">Role model</Label>
+            <select value={roleModel} onChange={(e) => setRoleModel(e.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
+              <option value="combined">Combined — every analyst does KYC and AML</option>
+              <option value="separate">Separate — KYC and AML analysts (need-to-know)</option>
+            </select>
+            <p className="mt-1 text-xs text-muted-foreground">With "Separate", each user gets a work domain in User Management. KYC-only users do not see alerts, investigations or FIU reports; they see an "AML hold" badge. Compliance Officer, Compliance Admin and Tenant Admin always see both.</p>
           </div>
         )}
         {amlV2 && (
