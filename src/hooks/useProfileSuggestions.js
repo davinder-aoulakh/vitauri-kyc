@@ -132,7 +132,9 @@ export function useProfileSuggestions({ kycCase, client, currentUser, onFieldVer
     autoRanFor.current = kycCase.id;
     try {
       const reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id });
-      const answered = (reqs || []).reduce((n, r) => n + (r.items || []).filter(i => i.status !== 'Requested' && (i.response_text || i.file_url)).length, 0);
+      // Same rule as the pipeline's sources_summary.outreach_answers: an answer counts once it is on the item.
+      const answered = (reqs || []).reduce((n, r) => n + (r.items || []).filter(i =>
+        !!String(i.response_text || '').trim() || i.response_value != null || !!i.file_url).length, 0);
       const seen = current?.run_at ? current?.sources_summary?.outreach_answers : null;
       if (answered > 0 && seen !== answered) await runPipeline(false, { silent: true });
     } catch { /* the manual button remains */ }

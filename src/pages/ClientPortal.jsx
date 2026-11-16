@@ -4,7 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { FileText, Upload, CheckCircle, Clock, Send, Loader2, MessageCircle, AlertTriangle, X, ChevronRight, ArrowLeft, LayoutDashboard, Shield, PenLine } from 'lucide-react';
+import { Upload, CheckCircle, Clock, Send, Loader2, MessageCircle, AlertTriangle, X, ChevronRight, ArrowLeft, LayoutDashboard, Shield } from 'lucide-react';
 import { portalSecureUpload } from '@/lib/securityUtils';
 import SubmissionConfirmation from '@/components/portal/SubmissionConfirmation';
 import IdVerificationField from '@/components/portal/IdVerificationField';
@@ -122,6 +122,7 @@ export default function ClientPortal() {
   const [submitting, setSubmitting] = useState(false);
   const [submittedIds, setSubmittedIds] = useState(new Set());
   const [confirmedOutreach, setConfirmedOutreach] = useState(null);
+  const [submitError, setSubmitError] = useState(null);
 
   const [diditCallbackDone, setDiditCallbackDone] = useState(false);
   const [diditCallbackStatus, setDiditCallbackStatus] = useState('');
@@ -496,6 +497,7 @@ export default function ClientPortal() {
     });
     if (Object.keys(errors).length > 0) { setValidationErrors(errors); return; }
     setValidationErrors({});
+    setSubmitError(null);
     setSubmitting(true);
     // Pending autosaves are written first so they cannot land after (and over) the submission.
     await saveQueue.current?.flush().catch(() => {});
@@ -562,7 +564,14 @@ export default function ClientPortal() {
     const newStatus = allDone ? 'Complete' : 'Partial_Response';
     const submittedCount = countable.filter(i => i.status === 'Received').length;
 
-    await base44.entities.OutreachRequest.update(outreach.id, { items: mergedItems, status: newStatus });
+    try {
+      await base44.entities.OutreachRequest.update(outreach.id, { items: mergedItems, status: newStatus });
+    } catch (err) {
+      // Nothing reached the server: keep the answers (the local draft is not cleared) so the client can retry.
+      setSubmitError(err?.response?.data?.error || err?.message || 'We could not save your answers. Please try again.');
+      setSubmitting(false);
+      return;
+    }
     const updatedItems = mergedItems;
 
     for (const item of updatedItems) {
@@ -589,8 +598,10 @@ export default function ClientPortal() {
       client_id: outreach.client_id, actor_type: 'System', actor_name: 'Client Portal',
       event_type: 'portal_submitted',
       notes: `Client submitted: ${newStatus}. ${submittedCount}/${countable.length} items.${!outreach.case_id ? ' (Standalone outreach)' : ''}`,
-    });
+    }).catch(() => {});
 
+    // The confirmation email is a courtesy: a mail failure must not hide a submission that was saved.
+    try {
     if (client?.primary_contact_email) {
       const submittedItems = updatedItems.filter(i => i.status === 'Received' || i.status === 'Verified').map(i => `• ${i.label}`).join('\n');
       const emailBody = allDone
@@ -603,6 +614,7 @@ export default function ClientPortal() {
         from_name: tenant?.email_from_name || tenant?.name || 'Compliance Team',
       });
     }
+    } catch { /* the submission itself is saved */ }
 
     // Answers are not written to the client file here: KYC-linked answers go to Profile Verification for the analyst
     // to accept (buildProfileSuggestions), so every change to the KYC file is reviewed and audited.
@@ -1329,6 +1341,14 @@ Answer in plain, friendly language (in ${lang === 'nl' ? 'Dutch' : 'English'}). 
               );
             })}
           </div>
+
+          {submitError && (
+            <div className="flex items-start gap-2 rounded-xl px-4 py-3 text-sm" style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#991B1B' }}>
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span className="flex-1">{submitError} Your answers are kept on this page — please try again.</span>
+              <button type="button" onClick={() => handleSubmit(outreach)} className="font-semibold underline">Retry</button>
+            </div>
+          )}
 
           {/* Submit bar */}
           <div className="portal-submit-bar">

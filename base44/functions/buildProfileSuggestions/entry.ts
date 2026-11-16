@@ -14,6 +14,11 @@ import { ISO3_MAP } from '../../shared/diditDecision.js';
 
 const CONFIDENCE_THRESHOLD = 70;
 
+// An outreach item counts as answered when it carries any answer, whether or not its status was finalised
+// (the portal autosaves answers before the client submits, and a submit can be retried).
+const hasOutreachAnswer = (i: any) =>
+  !!String(i?.response_text || '').trim() || i?.response_value != null || !!i?.file_url;
+
 // NP fields we can extract from sources — includes dot-path keys for nested residential_address
 const NP_FIELDS = [
   'full_name','first_names','last_name','initials','preferred_name','gender',
@@ -78,11 +83,11 @@ function mergeField(candidates: Array<{ value: string; confidence: number; sourc
     };
   }
 
-  // Check for conflicts: normalise values for comparison
-  const normalised = valid.map(c => String(c.value).toLowerCase().trim());
-  const unique = [...new Set(normalised)];
+  // Candidates conflict only when they really differ: "M"/"Male", "NLD"/"NL" and a date with or without a time are
+  // the same fact, so they must not raise a conflict for the analyst.
+  const distinct = valid.filter((c, i) => valid.findIndex(o => sameVal(o.value, c.value)) === i);
 
-  if (unique.length > 1) {
+  if (distinct.length > 1) {
     // Conflict: clean list of distinct values only — no source IDs/refs exposed to end users
     const distinctValues: string[] = [];
     const seenVals = new Set<string>();
@@ -184,7 +189,7 @@ function extractFromOutreach(outreaches: any[], isOrg: boolean, templateFields: 
     for (const item of (req.items || [])) {
       const label = (item.label || '').toLowerCase();
       const val = item.response_text;
-      if (!val || item.status === 'Requested') continue;
+      if (!hasOutreachAnswer(item)) continue;
       const ref = `Outreach: ${item.label}`;
       const extra = item.confirmed_unchanged ? { confirmed_by_client: true } : {};
 
@@ -728,7 +733,7 @@ Deno.serve(async (req) => {
   const sourcesSummary = {
     outreach_requests: outreaches?.length || 0,
     // Answered outreach items at the time of this run: the UI re-runs the pipeline when new answers arrive
-    outreach_answers: (outreaches || []).reduce((n: number, r: any) => n + (r.items || []).filter((i: any) => i.status !== 'Requested' && (i.response_text || i.file_url)).length, 0),
+    outreach_answers: (outreaches || []).reduce((n: number, r: any) => n + (r.items || []).filter(hasOutreachAnswer).length, 0),
     documents_processed: ocrResults.length,
     documents_skipped: ocrableDocs.length - ocrResults.length,
     osint_findings: osintResults?.findings?.length || 0,
