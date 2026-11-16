@@ -321,7 +321,76 @@
     "read": {
       "$or": [
         {
-          "data.tenant_id": "{{user.data.tenant_id}}"
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.work_domain": "both"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.work_domain": "aml"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Officer"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Vitauri Ops"
+              }
+            }
+          ]
         },
         {
           "user_condition": {

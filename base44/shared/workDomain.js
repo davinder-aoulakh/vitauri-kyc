@@ -37,7 +37,7 @@ export const canAml = (user, tenant) => allowed(user, tenant, 'aml');
 export const canKyc = (user, tenant) => allowed(user, tenant, 'kyc');
 
 /**
- * Read rule for TmAlert, TmCase and FiuReport (prepared in phase 6, applied on the tenant owner's go):
+ * Read rule for TmAlert, TmCase and FiuReport (applied 16 Nov 2026 on the tenant owner's go):
  * same tenant AND (work_domain aml or both, or a role that always sees both). Platform admins keep their read.
  * Note: the rule cannot see the tenant's role model, so it relies on every user carrying a work_domain
  * (backfilled to 'both'); a user without the field and without an always-both role would lose the read.
@@ -47,7 +47,7 @@ export function amlReadRule() {
   const who = [
     { user_condition: { 'data.work_domain': 'both' } },
     { user_condition: { 'data.work_domain': 'aml' } },
-    ...ALWAYS_BOTH_ROLES.filter((r) => r !== 'Vitauri Ops').map((r) => ({ user_condition: { 'data.app_role': r } })),
+    ...ALWAYS_BOTH_ROLES.map((r) => ({ user_condition: { 'data.app_role': r } })),
   ];
   return { $or: [...who.map((w) => ({ $and: [tenant, w] })), { user_condition: { role: 'admin' } }] };
 }

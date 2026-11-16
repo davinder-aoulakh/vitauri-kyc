@@ -117,17 +117,20 @@ test('User has work_domain with default both', () => {
   assert.equal(p.default, 'both');
 });
 
-test('prepared read rule: tenant on every branch, AML domains and always-both roles only', () => {
+test('read rule: tenant on every branch, AML domains and always-both roles only; applied to the three entities', () => {
   const rule = amlReadRule();
   const branches = rule.$or.filter((b) => b.$and);
-  assert.equal(branches.length, 5);
+  assert.equal(branches.length, 6);
   for (const b of branches) assert.deepEqual(b.$and[0], { 'data.tenant_id': '{{user.data.tenant_id}}' });
   const who = branches.map((b) => JSON.stringify(b.$and[1].user_condition));
   assert.ok(who.includes('{"data.work_domain":"both"}') && who.includes('{"data.work_domain":"aml"}'));
   assert.ok(!who.some((w) => w.includes('"kyc"')));
   assert.deepEqual(rule.$or.at(-1), { user_condition: { role: 'admin' } });
-  // not applied yet: the three entities still carry the tenant-only rule, and the prepared rule is on file
-  for (const n of ['TmAlert', 'TmCase', 'FiuReport']) assert.ok(!JSON.stringify(entity(n).rls.read).includes('work_domain'), n);
+  // applied: the three entities carry exactly this rule; create / update / delete stay tenant-only
+  for (const n of ['TmAlert', 'TmCase', 'FiuReport']) {
+    assert.deepEqual(entity(n).rls.read, rule, n);
+    for (const op of ['create', 'update', 'delete']) assert.deepEqual(entity(n).rls[op], { 'data.tenant_id': '{{user.data.tenant_id}}' }, `${n}.${op}`);
+  }
   const doc = read('docs/kyc-aml/phase6-read-rules.md');
   assert.ok(doc.includes(JSON.stringify(rule, null, 2)));
 });
