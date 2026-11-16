@@ -70,7 +70,7 @@ export default async function (req) {
         // The analyst who drafted the profile stays the proposer, so the sign-off approver is the second pair of eyes.
         const proposer = mode === 'draft' || !caseDraft.proposed_by_user_id
           ? { proposed_by_user_id: auth.actorUserId, proposed_by_name: auth.actorName } : {};
-        const info = status === 'proposed' ? sourceInfo({ ...caseDraft, ...overrides }, { overrides: { ...caseDraft, ...overrides } }) : {};
+        const info = status === 'proposed' ? sourceInfo({ ...caseDraft, ...overrides }) : {};
         row = await E.ExpectedProfile.update(caseDraft.id, { ...overrides, status, ...proposer, ...info });
         row = { ...caseDraft, ...overrides, ...info, ...(row || {}), status };
       } else {
