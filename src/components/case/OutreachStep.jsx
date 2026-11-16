@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   MessageSquare, Plus, Send, Loader2, FileText, CheckCircle,
-  AlertTriangle, Sparkles, Eye, Copy, ExternalLink, ShieldCheck, Mail, ChevronDown, LibraryBig
+  Sparkles, Eye, Copy, ExternalLink, ShieldCheck, Mail, ChevronDown, LibraryBig
 } from 'lucide-react';
 import DocumentViewer from '@/components/shared/DocumentViewer';
 import InlineError from '@/components/shared/InlineError';
@@ -21,6 +21,7 @@ import BulkVerifyDialog, { bulkVerifyCandidates } from '@/components/case/outrea
 import DocReviewDialog from '@/components/case/outreach/DocReviewDialog';
 import { linkedItemState, linkedItemsToVerify } from '@/lib/outreachLinkedItems';
 import { AiCheckChip } from '@/components/documents/AiDocCheck';
+import { useToast } from '@/components/ui/use-toast';
 
 const SITUATION_LABELS = {
   Welcome: 'Welcome',
@@ -108,6 +109,7 @@ function buildEmailHtml(tenant, client, req, portalUrl) {
 }
 
 export default function OutreachStep({ isNewCase = false, kycCase, client, currentUser, tenant, onNavigateToStep, onOutreachAllVerified, onCaseUpdate, onClientUpdate }) {
+  const { toast } = useToast();
   const [requests, setRequests] = useState(() => requestsCache.get(kycCase.id) || []);
   // A case created seconds ago has no requests yet, and a case seen before has them cached: no spinner in both cases.
   const [loading, setLoading]     = useState(() => !(isNewCase || requestsCache.has(kycCase.id)));

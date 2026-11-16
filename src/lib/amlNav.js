@@ -4,7 +4,7 @@
 // `domain` ('kyc' | 'aml') on a group or item: hidden for users who work on the other side only (phase 6).
 import { isFeatureEnabled } from './featureFlags.js';
 
-export { librariesFor, libraryCodesFor, normaliseJurisdictions } from '../../base44/shared/tmLibraryScope.js';
+export { librariesFor, libraryCodesFor, normaliseJurisdictions } from './tmLibraryScope.js';
 
 /** The KYC + AML layout is on for this tenant (needs tm_core and aml_nav_v2). */
 export const amlLayoutOn = (tenant) => isFeatureEnabled(tenant, 'tm_core') && isFeatureEnabled(tenant, 'aml_nav_v2');
