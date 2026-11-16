@@ -6,10 +6,12 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import { authenticate, errorResponse, httpError, loadTenant, asList } from '../../shared/tmAuth.js';
-import { parseBehavior, buildProfileFields } from '../../shared/tmProfileMap.js';
+import { parseBehavior, buildProfileFields, limitsFromBehavior } from '../../shared/tmProfileMap.js';
+import { PROFILE_SOURCES, declaredValues, fillFromSegment, fieldSources, overallSource, profileGap } from '../../shared/tmProfileSources.js';
+import { amlV2On } from '../../shared/tmFiuSubmission.js';
 
 const CREATE_RUN_CASE = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin']; // createRunCase
-const SOURCES = ['kyc_case', 'kyc_txn_analysis', 'manual', 'tm_review'];
+const SOURCES = PROFILE_SOURCES;
 const OVERRIDABLE = [
   'currency', 'inbound_max_month', 'inbound_max_count_month', 'outbound_max_month', 'outbound_foreign_max_month',
   'allowed_countries', 'cash_max_month', 'expected_categories', 'notes',
@@ -45,6 +47,14 @@ export default async function (req) {
     const caseDraft = kycCase
       ? asList(await E.ExpectedProfile.filter({ tenant_id: tenantId, client_id: client.id, case_id: kycCase.id, status: 'draft' }, '-version', 1))[0] || null
       : null;
+    // Phase 10 (G20, KYC + AML layout only): what the client declared, where each limit comes from, and the gap.
+    const v2 = amlV2On(tenant);
+    const homeCountry = String(client.country_of_residence || client.registered_country || '').match(/\(([A-Z]{2})\)/)?.[1] || '';
+    const declared = v2 ? declaredValues(limitsFromBehavior(parseBehavior(kycCase?.expected_transaction_behavior) || {}, homeCountry).fields) : {};
+    const sourceInfo = (fields, extra = {}) => (v2 ? {
+      declared_values: declared, field_sources: fieldSources({ fields, declared, ...extra }), finding_gap: profileGap(declared, fields) || {},
+    } : {});
+
     const pickOverrides = () => {
       const o = {};
       for (const k of OVERRIDABLE) if (body.overrides && body.overrides[k] !== undefined) o[k] = body.overrides[k];
@@ -60,8 +70,9 @@ export default async function (req) {
         // The analyst who drafted the profile stays the proposer, so the sign-off approver is the second pair of eyes.
         const proposer = mode === 'draft' || !caseDraft.proposed_by_user_id
           ? { proposed_by_user_id: auth.actorUserId, proposed_by_name: auth.actorName } : {};
-        row = await E.ExpectedProfile.update(caseDraft.id, { ...overrides, status, ...proposer });
-        row = { ...caseDraft, ...overrides, ...(row || {}), status };
+        const info = status === 'proposed' ? sourceInfo({ ...caseDraft, ...overrides }, { overrides: { ...caseDraft, ...overrides } }) : {};
+        row = await E.ExpectedProfile.update(caseDraft.id, { ...overrides, status, ...proposer, ...info });
+        row = { ...caseDraft, ...overrides, ...info, ...(row || {}), status };
       } else {
         const latest = asList(await E.ExpectedProfile.filter({ tenant_id: tenantId, client_id: client.id }, '-version', 1))[0];
         row = await E.ExpectedProfile.create({
@@ -108,15 +119,25 @@ export default async function (req) {
     const existing = asList(await E.ExpectedProfile.filter({ tenant_id: tenantId, client_id: client.id }, '-version', 1));
     const version = (existing[0]?.version || 0) + 1;
 
+    // Limits that neither the analysis nor the declaration gives come from the segment default (KYC + AML layout).
+    const analysisFields = analysis ? fields : null;
+    const seg = v2 ? fillFromSegment({ ...fields, ...overrides }, client, tenant) : { fields: null, filled: [] };
+    const merged = v2 ? seg.fields : { ...fields, ...overrides };
+    const info = sourceInfo(merged, { analysisFields, segmentFilled: seg.filled, overrides });
+    if (seg.filled.length) notes.push(`From the segment default: ${seg.filled.join(', ')}.`);
+    const effectiveSource = v2 && !body.source ? overallSource(info.field_sources, source) : source;
+
     const extraNotes = [overrides.notes, ...notes].filter(Boolean).join('\n');
     const record = {
       ...fields,
       ...overrides,
+      ...(v2 ? merged : {}),
+      ...info,
       tenant_id: tenantId,
       client_id: client.id,
       version,
       status: 'proposed',
-      source,
+      source: effectiveSource,
       source_id: body.source_id || analysis?.id || kycCase?.id || undefined,
       case_id: kycCase?.id || undefined,
       notes: extraNotes || undefined,

@@ -89,7 +89,9 @@
         "kyc_case",
         "kyc_txn_analysis",
         "manual",
-        "tm_review"
+        "tm_review",
+        "client_declaration",
+        "segment_default"
       ],
       "type": "string"
     },
@@ -120,6 +122,18 @@
     },
     "version": {
       "type": "number"
+    },
+    "declared_values": {
+      "type": "object",
+      "description": "Limits that follow from the client's own statements about expected use"
+    },
+    "field_sources": {
+      "type": "object",
+      "description": "Per limit: client_declaration, kyc_txn_analysis, manual or segment_default"
+    },
+    "finding_gap": {
+      "type": "object",
+      "description": "Limits where the proposed value differs from the declaration by more than the tolerance: { fields: [...], tolerance }"
     }
   },
   "required": [

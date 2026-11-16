@@ -164,6 +164,10 @@
     "account_filter": {
       "type": "string",
       "description": "IBAN of the one account to read from a file that holds statements for several accounts (bulk import)"
+    },
+    "mapping_template": {
+      "type": "string",
+      "description": "Name of the tenant's column-mapping template used to read a CSV / Excel file"
     }
   },
   "required": [

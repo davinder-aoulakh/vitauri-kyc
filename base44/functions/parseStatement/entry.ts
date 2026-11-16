@@ -19,6 +19,7 @@ import { historicalWindowDays, resolveHistorical } from '../../shared/tmHistoric
 import { assignKeys, execAt } from '../../shared/tmStatementRows.js';
 import { STATEMENT_SCHEMA, STATEMENT_SYSTEM_PROMPT, STATEMENT_SOURCE } from '../../shared/tmStatementAgent.js';
 import { parseStatements, groupByAccount, pickAccount } from '../../shared/tmBulkImport.js';
+import { templatesOf, pickTemplate } from '../../shared/tmCsvTemplates.js';
 
 const acctNorm = (v) => String(v ?? '').toUpperCase().replace(/[\s-]/g, '');
 const DAY_MS = 86400000;
@@ -46,7 +47,7 @@ async function parsePdf(base44, tenantId, upload, fileUrl) {
   };
 }
 
-async function parseTabular(E, tenantId, format, bytes) {
+async function parseTabular(E, tenantId, format, bytes, tenant) {
   let matrix;
   if (format === 'xlsx') {
     const wb = XLSX.read(new Uint8Array(bytes), { type: 'array' });
@@ -54,6 +55,12 @@ async function parseTabular(E, tenantId, format, bytes) {
     matrix = sheets.find((s) => s.length >= 2) || sheets[0] || [];
   } else {
     matrix = parseCsv(new TextDecoder().decode(bytes));
+  }
+  // The tenant's named mapping templates come first (phase 10); then, as before, the map of a recent upload with the same headers.
+  const template = pickTemplate(matrix, templatesOf(tenant), matchesSavedMap);
+  if (template) {
+    const parsed = parseMatrix(matrix, { by_header: template.by_header });
+    return { ...parsed, used_saved_map: true, mapping_template: template.name };
   }
   const prev = asList(await E.StatementUpload.filter({ tenant_id: tenantId }, '-created_date', 30))
     .map((u) => u.column_map).filter((m) => m?.by_header);
@@ -105,7 +112,7 @@ export default async function (req) {
     if (format === 'pdf') parsed = await parsePdf(base44, tenantId, upload, fileUrl);
     else if (format === 'mt940') parsed = parseMt940(new TextDecoder().decode(bytes));
     else if (format === 'camt053') parsed = parseCamt053(new TextDecoder().decode(bytes));
-    else parsed = await parseTabular(E, tenantId, format, bytes);
+    else parsed = await parseTabular(E, tenantId, format, bytes, tenant);
 
     // A file can hold statements for several accounts (phase 8). An upload made by the bulk import names the one
     // account to read (account_filter); a normal upload is read as before, with a warning.
@@ -199,7 +206,7 @@ export default async function (req) {
 
     const patch = {
       format, file_hash, template: parsed.templateKey ? (await sha256Bytes(new TextEncoder().encode(parsed.templateKey))).slice(0, 16) : undefined,
-      column_map: parsed.column_map || undefined,
+      column_map: parsed.column_map || undefined, mapping_template: parsed.mapping_template || undefined,
       bank_account_id: account?.id || upload.bank_account_id || undefined,
       period_from, period_to, opening_balance: bal.opening ?? undefined, closing_balance: bal.closing ?? undefined,
       currency: fallbackCcy, reconciles: rec.reconciles ?? undefined, reconcile_diff: rec.diff ?? undefined,
@@ -222,6 +229,7 @@ export default async function (req) {
       statement_upload_id: upload.id, status: 'review', format, extracted_count: rows.length, duplicates_removed: duplicates,
       reconciles: rec.reconciles, gaps, tamper_signals: tamper, own_transfers: ownTransfers, reversals_linked: linked, warnings,
       historical_count: historicalCount, historical_window_days: windowDays, blocking,
+      ...(parsed.mapping_template ? { mapping_template: parsed.mapping_template } : {}),
     });
   } catch (error) {
     if (upload && E) {

@@ -1,6 +1,7 @@
 // Dynamic customer risk: weighted KYC + behaviour + screening + alerts. Never touches Client.risk_classification.
 import { asList } from './tmAuth.js';
 import { loadActuals, profileLimits, compareToProfile, OPEN_ALERT_STATUSES, countableTxns } from './tmActuals.js';
+import { behaviourThreshold, reachesThreshold, behaviourDedupeKey, behaviourFinding } from './tmBehaviourProposal.js';
 
 const DEFAULT_WEIGHTS = { kyc: 0.35, behaviour: 0.25, screening: 0.2, alerts: 0.2 };
 const KYC_POINTS = { Low: 20, Medium: 45, High: 75, Unacceptable: 100 };
@@ -182,6 +183,31 @@ export async function recomputeCustomerRisk(base44, { tenantId, tenant, clientId
       after_state: { score, band, trigger, risk_score_id: record.id },
       notes: `Dynamic customer risk ${prev ? `${prev.score} (${prev.band}) → ` : ''}${score} (${band}). Trigger: ${trigger}.`,
     });
+  }
+
+  // Behaviour-score proposal threshold (phase 10, tenant setting, off by default): one proposal per customer per month.
+  const bThreshold = behaviourThreshold(tenant);
+  if (reachesThreshold(behaviour.score, bThreshold)) {
+    try {
+      const dedupeKey = behaviourDedupeKey(clientId, new Date(nowIso));
+      const existing = asList(await E.EdrTrigger.filter({ tenant_id: tenantId, dedupe_key: dedupeKey }, undefined, 1))[0];
+      const openEdr = asList(await E.KycCase.filter({ tenant_id: tenantId, client_id: clientId, case_type: 'Event_Driven_Review' }, undefined, 100)).some((c) => !OPEN_EDR_EXCLUDED.includes(c.status));
+      if (!existing && !openEdr) {
+        const f = behaviourFinding({ score: behaviour.score, threshold: bThreshold, reasons: behaviour.reasons, riskScoreId: record.id });
+        const trigger = await E.EdrTrigger.create({
+          tenant_id: tenantId, client_id: clientId, trigger_type: 'risk_band_rise', source_ref: record.id, status: 'proposed', dedupe_key: dedupeKey,
+          source_label: 'Risk score', before: f.before, after: f.after,
+        });
+        await E.AuditEvent.create({
+          tenant_id: tenantId, client_id: clientId, actor_user_id: actor?.actorUserId, actor_name: actor?.actorName || 'System',
+          actor_type: actor?.actorType || 'System', event_type: 'edr_trigger_proposed',
+          before_state: {}, after_state: { edr_trigger_id: trigger.id, trigger_type: 'risk_band_rise', dedupe_key: dedupeKey, behaviour_score: behaviour.score, threshold: bThreshold },
+          notes: `Risk review proposed: behaviour score ${behaviour.score} reached the threshold of ${bThreshold}.`,
+        });
+      }
+    } catch (e) {
+      console.warn('behaviour threshold proposal failed:', e?.message);
+    }
   }
 
   let edrProposed = false;
