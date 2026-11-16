@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,13 +10,31 @@ const CATEGORIES = ['finance', 'kyc', 'travel_rule', 'user_event', 'audit_trail_
 const FIAT_METHODS = ['bank_card', 'bank_account', 'ewallet', 'other'];
 const CRYPTO_METHODS = ['crypto_wallet', 'unhosted_wallet'];
 
-export default function TransactionForm({ clients, onCreated, onCancel }) {
+const nowLocal = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+/** requireAccount (KYC + AML layout): the customer's account and the execution date are required (spec test 14). */
+export default function TransactionForm({ clients, onCreated, onCancel, requireAccount = false }) {
   const [form, setForm] = useState({
     client_id: '', case_id: '', transaction_category: 'finance', direction: 'inbound',
     amount: '', currency_kind: 'fiat', currency: 'USD',
     counterparty_name: '', counterparty_account_id: '', counterparty_method_type: 'bank_account',
     subject_entity_type: 'person', subject_full_name: '',
+    bank_account_id: '', executed_at: '',
   });
+  const [accounts, setAccounts] = useState([]);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+
+  // Accounts of the chosen customer (only asked for with the KYC + AML layout).
+  useEffect(() => {
+    if (!requireAccount || !form.client_id) { setAccounts([]); return undefined; }
+    let alive = true;
+    setLoadingAccounts(true);
+    base44.entities.BankAccount.filter({ client_id: form.client_id })
+      .then((res) => { if (alive) setAccounts((Array.isArray(res) ? res : res?.items || []).filter((a) => a.status !== 'closed')); })
+      .catch(() => { if (alive) setAccounts([]); })
+      .finally(() => { if (alive) setLoadingAccounts(false); });
+    return () => { alive = false; };
+  }, [requireAccount, form.client_id]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -31,13 +49,15 @@ export default function TransactionForm({ clients, onCreated, onCancel }) {
         // Didit subject type follows the client: ORG → company, otherwise person.
         const c = clients.find(x => x.id === value);
         if (c) next.subject_entity_type = c.client_type === 'ORG' ? 'company' : 'person';
+        next.bank_account_id = '';
       }
       return next;
     });
   }
 
   const canSubmit = form.client_id && form.transaction_category && form.direction && form.amount &&
-    form.currency && form.currency_kind && form.counterparty_name && form.counterparty_account_id && form.counterparty_method_type;
+    form.currency && form.currency_kind && form.counterparty_name && form.counterparty_account_id && form.counterparty_method_type &&
+    (!requireAccount || (form.bank_account_id && form.executed_at));
 
   async function handleSubmit() {
     if (!canSubmit) return;
@@ -57,6 +77,7 @@ export default function TransactionForm({ clients, onCreated, onCancel }) {
         counterparty_method_type: form.counterparty_method_type,
         subject_entity_type: form.subject_entity_type,
         subject_full_name: form.subject_full_name || undefined,
+        ...(requireAccount ? { bank_account_id: form.bank_account_id, executed_at: new Date(form.executed_at).toISOString() } : {}),
       });
       if (res?.data?.error) { setError(res.data.detail || res.data.error); setSubmitting(false); return; }
       onCreated();
@@ -81,6 +102,25 @@ export default function TransactionForm({ clients, onCreated, onCancel }) {
           </SelectContent>
         </Select>
       </div>
+
+      {requireAccount && (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs mb-1.5 block">Account *</Label>
+            <Select value={form.bank_account_id} onValueChange={v => update('bank_account_id', v)} disabled={!form.client_id || loadingAccounts}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder={!form.client_id ? 'Select the client first' : loadingAccounts ? 'Loading…' : accounts.length ? 'Select account' : 'No account on file'} /></SelectTrigger>
+              <SelectContent>
+                {accounts.map(a => <SelectItem key={a.id} value={a.id}>{a.iban_or_number}{a.label ? ` · ${a.label}` : ''}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {form.client_id && !loadingAccounts && !accounts.length && <p className="mt-1 text-xs text-muted-foreground">Add an account in the customer file first.</p>}
+          </div>
+          <div>
+            <Label className="text-xs mb-1.5 block">Execution date *</Label>
+            <Input type="datetime-local" value={form.executed_at} max={nowLocal()} onChange={e => update('executed_at', e.target.value)} className="h-9 text-sm" />
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2">
         {['fiat', 'crypto'].map(kind => (

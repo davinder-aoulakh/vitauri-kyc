@@ -13,12 +13,14 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Activity, Plus, CheckCircle, ShieldAlert, Upload } from 'lucide-react';
 import StatementUploadDrawer from '@/components/tm/StatementUploadDrawer';
+import { BulkImportDialog, UnmatchedAccountsCard } from '@/components/tm/BulkImport';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { hasPermission } from '@/lib/permissions';
 
 export default function TransactionMonitoring() {
   const { currentUser, tenant } = useTenant();
   const [showStatement, setShowStatement] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
   const canUploadStatement = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmManageAccounts');
   const tmCore = isFeatureEnabled(tenant, 'tm_core');
   const [version, setVersion] = useState(0);
@@ -69,6 +71,11 @@ export default function TransactionMonitoring() {
                   <Upload className="w-3.5 h-3.5" /> Upload statement
                 </Button>
               )}
+              {canUploadStatement && amlLayoutOn(tenant) && (
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setShowBulk(true)}>
+                  <Upload className="w-3.5 h-3.5" /> Import file
+                </Button>
+              )}
               <Button size="sm" className="gap-1.5 text-xs" onClick={() => setShowForm(true)}>
                 <Plus className="w-3.5 h-3.5" /> New Transaction
               </Button>
@@ -81,6 +88,10 @@ export default function TransactionMonitoring() {
           <KpiCard label="Pending Review" value={loading ? '…' : reviewCount} icon={ShieldAlert} accent="bg-warning" />
           <KpiCard label="Declined" value={loading ? '…' : declinedCount} icon={Activity} accent="bg-destructive" />
         </div>
+
+        {amlLayoutOn(tenant) && tmCore && (
+          <UnmatchedAccountsCard tenantId={currentUser?.tenant_id} clients={clients} version={version} canManage={canUploadStatement} onChanged={loadAll} />
+        )}
 
         {tmCore ? (
           <TmTransactionList tenantId={currentUser?.tenant_id} clients={clients} version={version} onSelect={setSelected} />
@@ -107,6 +118,10 @@ export default function TransactionMonitoring() {
         />
       )}
 
+      {canUploadStatement && amlLayoutOn(tenant) && (
+        <BulkImportDialog open={showBulk} onOpenChange={setShowBulk} onDone={loadAll} />
+      )}
+
       {canUploadStatement && (
         <StatementUploadDrawer
           open={showStatement}
@@ -121,6 +136,7 @@ export default function TransactionMonitoring() {
           <DialogHeader><DialogTitle>Screen a New Transaction</DialogTitle></DialogHeader>
           <TransactionForm
             clients={clients}
+            requireAccount={amlLayoutOn(tenant)}
             onCancel={() => setShowForm(false)}
             onCreated={() => { setShowForm(false); loadAll(); }}
           />
