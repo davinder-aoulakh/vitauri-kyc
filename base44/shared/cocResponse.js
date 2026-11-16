@@ -85,8 +85,6 @@ export function hitSourceFor(alert) {
 
 // ── Restricted events ──
 export const RESTRICTED_TEXT = 'AML outcome requires a review · details restricted to AML and Compliance';
-/** Until phase 6 introduces KYC-only users, every role may see AML details. */
-export const canSeeAml = (_role) => true;
 
 /** The event as a user may see it: a restricted event keeps its type, dates and status, and loses its details. */
 export function maskTrigger(trigger, mayseeAml) {

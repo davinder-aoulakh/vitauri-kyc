@@ -260,7 +260,7 @@ export async function buildCustomerFile(base44, { tenantId, client, role, sectio
   const cid = client.id;
   const wanted = Array.isArray(sections) && sections.length ? sections : FILE_SECTIONS;
   const want = (s) => wanted.includes(s);
-  const fiuAllowed = FIU_READ_ROLES.includes(role);
+  const fiuAllowed = FIU_READ_ROLES.includes(role) && aml;
   const since30 = new Date(Date.now() - 30 * DAY_MS).toISOString().slice(0, 10);
   const timeline = want('timeline');
 

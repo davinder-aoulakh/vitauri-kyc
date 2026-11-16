@@ -2,12 +2,13 @@
 // Auth: any signed-in user of the tenant with an app role; tenant from the user.
 //   { status?: 'proposed' | 'accepted' | 'dismissed', client_id? } -> { events: [...], can_see_aml }
 // Restricted events (AML outcomes) are returned without their details to users who may not see AML data
-// (cocResponse.maskTrigger). Until phase 6 introduces KYC-only users, every role may see them.
+// (cocResponse.maskTrigger with workDomain.canAml: tenant role model 'separate' and a KYC-only user).
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { errorResponse, httpError, loadTenant, asList } from '../../shared/tmAuth.js';
 import { TRIGGER_LABEL } from '../../shared/edrTriggers.js';
-import { maskTrigger, canSeeAml, STATUS_LABEL, RESPONSE_LABEL, AFFECTED_STEPS, REVIEW_STEPS } from '../../shared/cocResponse.js';
+import { canAml } from '../../shared/workDomain.js';
+import { maskTrigger, STATUS_LABEL, RESPONSE_LABEL, AFFECTED_STEPS, REVIEW_STEPS } from '../../shared/cocResponse.js';
 
 const SOURCE_BY_TYPE = {
   screening_hit: 'Screening', profile_breach: 'Transaction monitoring', tm_case: 'Investigation', tm_alert_frequency: 'Transaction monitoring',
@@ -35,7 +36,7 @@ export default async function (req) {
     const clientIds = [...new Set(triggers.map((t) => t.client_id).filter(Boolean))];
     const clients = clientIds.length ? asList(await E.Client.filter({ tenant_id: tenantId, id: { $in: clientIds } }, undefined, 1000)) : [];
     const nameOf = new Map(clients.map((c) => [c.id, { name: c.full_name, type: c.client_type || null, risk: c.risk_classification || null }]));
-    const mayAml = canSeeAml(role);
+    const mayAml = canAml(user, tenant);
 
     const events = triggers.map((raw) => {
       const t = maskTrigger(raw, mayAml);

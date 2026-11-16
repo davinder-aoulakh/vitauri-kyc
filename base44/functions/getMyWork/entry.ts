@@ -5,6 +5,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { asList, errorResponse, httpError, loadTenant } from '../../shared/tmAuth.js';
 import { canDecideProfile } from '../../shared/tmProfileAuth.js';
+import { canAml } from '../../shared/workDomain.js';
 
 const WORK_ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager'];
 const FOUR_EYES_ROLES = ['QC Reviewer', 'Compliance Officer', 'Manager', 'Director'];
@@ -28,7 +29,10 @@ export default async function (req) {
     const me = user.id;
     const tenant = await loadTenant(base44, tenantId);
     const E = base44.asServiceRole.entities;
-    const tm = isTmEnabled(tenant, 'tm_core');
+    const tmCore = isTmEnabled(tenant, 'tm_core');
+    // Need-to-know (phase 6): without AML access no alerts, investigations or FIU reports appear in My Work.
+    const aml = canAml(user, tenant);
+    const tm = tmCore && aml;
     const fiuOn = tm && isTmEnabled(tenant, 'tm_fiu');
     const now = Date.now();
     const seeAll = VIEW_ALL_ROLES.includes(role);
@@ -38,8 +42,8 @@ export default async function (req) {
       tm ? safe(E.TmAlert.filter({ tenant_id: tenantId, status: { $in: OPEN_ALERT } }, 'due_at', 500)) : [],
       tm ? safe(E.TmCase.filter({ tenant_id: tenantId, status: { $in: OPEN_CASE } }, 'due_at', 300)) : [],
       safe(E.KycCase.filter({ tenant_id: tenantId, status: { $in: OPEN_KYC } }, 'due_date', 500)),
-      tm && EDR_ROLES.includes(role) ? safe(E.EdrTrigger.filter({ tenant_id: tenantId, status: 'proposed' }, '-created_date', 200)) : [],
-      tm ? safe(E.ExpectedProfile.filter({ tenant_id: tenantId, status: 'proposed' }, '-created_date', 200)) : [],
+      tmCore && EDR_ROLES.includes(role) ? safe(E.EdrTrigger.filter({ tenant_id: tenantId, status: 'proposed' }, '-created_date', 200)) : [],
+      tmCore ? safe(E.ExpectedProfile.filter({ tenant_id: tenantId, status: 'proposed' }, '-created_date', 200)) : [],
       fiuOn ? safe(E.FiuReport.filter({ tenant_id: tenantId, status: { $in: ['draft', 'in_review', 'approved', 'generated', 'submitted'] } }, '-created_date', 200)) : [],
       safe(E.OutreachRequest.filter({ tenant_id: tenantId, status: { $in: ['Partial_Response', 'Complete'] }, updated_date: { $gte: new Date(now - 14 * DAY).toISOString() } }, '-updated_date', 200)),
     ]);
