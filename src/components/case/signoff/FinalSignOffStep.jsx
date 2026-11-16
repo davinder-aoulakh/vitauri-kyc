@@ -62,9 +62,12 @@ export default function FinalSignOffStep({ kycCase, client, currentUser, onCaseU
   const selfSignOff = route?.level === 'analyst';
   const canDecide = perms.canApprove && !adviceOutdated;
 
+  // Phase 7: result of the draft FIU report started by a decline / termination with "report to be filed".
+  const [fiuNote, setFiuNote] = useState(null);
   const run = async (action, payload, okText) => {
     const res = await act(action, payload, okText);
     if (!res) return false;
+    if (res?.fiu_report) setFiuNote(res.fiu_report);
     if (action === 'approve') await afterApproval({ kycCase, client, tenant, currentUser, note: payload.rationale, amlAssessment });
     if (['return', 'decline', 'terminate'].includes(action)) await recordTmDecision({ kycCase, tenant, outcome: 'rejected', amlAssessment });
     if (action === 'return') onNavigateToStep?.(10);

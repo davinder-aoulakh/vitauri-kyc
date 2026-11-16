@@ -7,9 +7,14 @@ import InlineError from '@/components/shared/InlineError';
 import ReasonDialog from '@/components/tm/report/ReasonDialog';
 import EvidenceDialog from '@/components/tm/report/EvidenceDialog';
 import { rank } from '@/lib/fiuReport';
+import { useTenant } from '@/lib/tenantContext';
+import { amlLayoutOn } from '@/lib/amlNav';
+import { referenceOf } from '../../../../base44/shared/tmFiuSubmission.js';
 
 export default function ReportFooter({ report, isCO, isPreparer, editing, setEditing, pastDue, act, busy }) {
   const { toast } = useToast();
+  const { tenant } = useTenant();
+  const v2 = amlLayoutOn(tenant);
   const [dlg, setDlg] = useState('');
   const s = report.status;
   const missing = (report.missing_fields || []).length;
@@ -57,7 +62,7 @@ export default function ReportFooter({ report, isCO, isPreparer, editing, setEdi
         </p>
       )}
       <p className="text-xs text-muted-foreground">
-        {s === 'generated' ? 'The report only counts as submitted with that evidence.' : s === 'received' || s === 'accepted' ? `FIU reference: ${report.received?.fiu_reference || '—'}` : s === 'rejected' ? `Rejected by the FIU: ${report.rejection_reason || ''}` : ''}
+        {s === 'generated' ? 'The report only counts as submitted with that evidence.' : s === 'submitted' && referenceOf(report) ? `FIU reference: ${referenceOf(report)}` : s === 'received' || s === 'accepted' ? `FIU reference: ${referenceOf(report) || '—'}` : s === 'rejected' ? `Rejected by the FIU: ${report.rejection_reason || ''}` : ''}
       </p>
       <ReasonDialog open={dlg === 'reject'} onOpenChange={(v) => !v && setDlg('')} title="Send back to draft" description="The report returns to draft as a new version." label="Reason" confirmLabel="Send back" busy={!!busy}
         onSubmit={(reason) => act('fiuReportAction', { action: 'reject', reason }, 'Sent back to draft').then(Boolean)} />
@@ -65,8 +70,8 @@ export default function ReportFooter({ report, isCO, isPreparer, editing, setEdi
         onSubmit={approveAndGenerate} />
       <ReasonDialog open={dlg === 'fiu_rejected'} onOpenChange={(v) => !v && setDlg('')} title="Rejected by the FIU" label="Reason given by the FIU" confirmLabel="Record rejection" busy={!!busy}
         onSubmit={(reason) => record('rejected', { reason }, 'Rejection recorded')} />
-      <EvidenceDialog open={dlg === 'submitted'} onOpenChange={(v) => !v && setDlg('')} mode="submitted" busy={!!busy} onSubmit={(p) => record('submitted', p, 'Submission recorded')} />
-      <EvidenceDialog open={dlg === 'received'} onOpenChange={(v) => !v && setDlg('')} mode="received" busy={!!busy} onSubmit={(p) => record('received', p, 'Receipt recorded')} />
+      <EvidenceDialog open={dlg === 'submitted'} onOpenChange={(v) => !v && setDlg('')} mode="submitted" referenceAtSubmission={v2} busy={!!busy} onSubmit={(p) => record('submitted', p, 'Submission recorded')} />
+      <EvidenceDialog key={`rec-${report.submitted?.fiu_reference || ''}`} open={dlg === 'received'} onOpenChange={(v) => !v && setDlg('')} mode="received" defaultReference={report.submitted?.fiu_reference || ''} busy={!!busy} onSubmit={(p) => record('received', p, 'Receipt recorded')} />
     </div>
   );
 }

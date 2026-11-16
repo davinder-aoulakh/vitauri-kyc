@@ -13,6 +13,9 @@ import { transition, routeKey, adviceOutdated, FINAL_STATES } from '../../shared
 import { caseFacts, draftAdvice, draftRationale } from '../../shared/signoffAi.js';
 import { loadQcData, qcInputHash } from '../../shared/qcData.js';
 import { deltaSkipped } from '../../shared/cocResponse.js';
+import { isTmEnabled } from '../../shared/tmGuards.js';
+import { amlV2On, wantsKycReport } from '../../shared/tmFiuSubmission.js';
+import { prepareKycCaseReport } from '../../shared/tmFiuPrepare.js';
 
 const CORE_STEPS = [1, 2, 3, 4, 5, 6, 7];
 const NOT_REQ = [5, 7];
@@ -351,7 +354,23 @@ export default async function (req) {
       }
       console.warn('auto approval skipped:', ap.error);
     }
-    return Response.json({ ok: true, status: res.to, route, decision_id: decision?.id || null });
+    // Phase 7: a decline / termination with "report to be filed" starts a draft FIU report (source: KYC review).
+    // Only with the KYC + AML layout and FIU reporting on. A failure never blocks the decision; it is audited.
+    let fiuReport = null;
+    if (client && wantsKycReport(action, body.reporting_obligation) && amlV2On(tenant) && isTmEnabled(tenant, 'tm_core') && isTmEnabled(tenant, 'tm_fiu')) {
+      try {
+        const fctx = { base44, E, tenantId, tenant, auth: { mode: 'user', tenantId, role: actor.role, actorType: 'User', actorName: actor.name, actorUserId: actor.id } };
+        fiuReport = await prepareKycCaseReport(fctx, { kycCase, client, rationale: body.rationale });
+        await audit(fiuReport.created ? 'fiu_report.drafted_from_kyc_case' : 'fiu_report.not_drafted_from_kyc_case',
+          fiuReport.created ? `Draft FIU report ${fiuReport.report_ref || ''} created from this review (report to be filed).`
+            : fiuReport.existing ? `FIU report ${fiuReport.report_ref || ''} is already linked to this review.` : `No draft FIU report was created: ${fiuReport.reason}.`,
+          { fiu_report_id: fiuReport.report_id || null });
+      } catch (e) {
+        fiuReport = { created: false, reason: String(e?.message || e).slice(0, 300) };
+        await audit('fiu_report.not_drafted_from_kyc_case', `No draft FIU report was created: ${fiuReport.reason}. Prepare it from FIU Reports.`);
+      }
+    }
+    return Response.json({ ok: true, status: res.to, route, decision_id: decision?.id || null, ...(fiuReport ? { fiu_report: fiuReport } : {}) });
   } catch (error) {
     console.error('caseSignoffAction error:', error?.message);
     return errorResponse(error);

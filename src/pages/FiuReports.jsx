@@ -38,7 +38,8 @@ const TONE = {
 };
 const PRE_SUBMISSION = ['draft', 'in_review', 'approved', 'generated'];
 const list = (res) => (Array.isArray(res) ? res : res?.items || []);
-const statusText = (r) => (r.status === 'received' && r.received?.fiu_reference ? `Received · ${r.received.fiu_reference}` : BASE_LABEL[r.status] || r.status);
+const statusText = (r) => (r.status === 'received' && r.received?.fiu_reference ? `Received · ${r.received.fiu_reference}`
+  : r.status === 'submitted' && r.submitted?.fiu_reference ? `${BASE_LABEL.submitted || 'Submitted'} · ${r.submitted.fiu_reference}` : BASE_LABEL[r.status] || r.status);
 const csvCell = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 
 /** FIU report list (/tm/reports). Tenant-scoped, refreshed in realtime via FiuReport.subscribe. */
@@ -116,7 +117,7 @@ export default function FiuReports() {
   const exportCsv = () => {
     const head = ['Report ref', 'FIU', 'Type', 'Status', 'FIU reference', 'Deadline', 'Customer', 'TM case id', 'KYC case id'];
     const lines = rows.map((r) => [
-      r.report_ref, fiuName(r.fiu_profile_code), typeCode(r.type), statusText(r), r.received?.fiu_reference || '',
+      r.report_ref, fiuName(r.fiu_profile_code), typeCode(r.type), statusText(r), r.received?.fiu_reference || r.submitted?.fiu_reference || '',
       r.clock?.due_at || '', clientsById.get(r.client_id)?.full_name || r.client_id || '', r.tm_case_id || '', r.kyc_case_id || '',
     ].map(csvCell).join(','));
     download(`fiu-reports_${format(new Date(), 'yyyy-MM-dd')}.csv`, [head.join(','), ...lines].join('\n'), 'text/csv');

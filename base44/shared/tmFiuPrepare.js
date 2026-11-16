@@ -172,7 +172,8 @@ export async function prepareReport(ctx, opts) {
   };
   if (!body.tm_case_id) delete body.tm_case_id;
   // Automatic proposals stay drafts so a person always reviews them before the four-eyes approval.
-  if (origin === 'auto_threshold' || origin === 'auto_tf') body.status = 'draft';
+  // A report from a KYC review (no investigation) also starts as a draft: the AML team completes it first.
+  if (origin === 'auto_threshold' || origin === 'auto_tf' || (origin === 'kyc_case' && caseLess)) body.status = 'draft';
 
   let report;
   if (existing) {
@@ -226,6 +227,6 @@ export async function prepareKycCaseReport(ctx, { kycCase, client, rationale }) 
     narrativeText: `Report following a KYC review (${String(kycCase.case_type || 'review').replace(/_/g, ' ')}) that ended in a decision not to start or to end the relationship.${text ? ` Decision rationale: ${text}` : ''}`,
   });
   const id = res?.report_id || res?.id;
-  if (id) await E.FiuReport.update(id, { kyc_case_id: kycCase.id, status: 'draft' }).catch(() => {});
+  if (id) await E.FiuReport.update(id, { kyc_case_id: kycCase.id }).catch(() => {});
   return { created: true, report_id: id || null, report_ref: res?.report_ref || null };
 }

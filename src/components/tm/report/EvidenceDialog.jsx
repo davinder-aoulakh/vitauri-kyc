@@ -11,22 +11,26 @@ import { Loader2 } from 'lucide-react';
 
 const nowLocal = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
-/** mode 'submitted': method + time + required evidence. mode 'received': FIU reference + time + optional evidence. (Files stored privately.) */
-export default function EvidenceDialog({ open, onOpenChange, mode, busy, onSubmit }) {
+/**
+ * mode 'submitted': method + time + required evidence. mode 'received': FIU reference + time + optional evidence. (Files stored privately.)
+ * referenceAtSubmission (KYC + AML layout): the FIU reference is required when recording the submission, and the
+ * receipt starts with that reference (defaultReference).
+ */
+export default function EvidenceDialog({ open, onOpenChange, mode, busy, onSubmit, referenceAtSubmission = false, defaultReference = '' }) {
   const submitted = mode === 'submitted';
   const [method, setMethod] = useState('portal_upload');
-  const [reference, setReference] = useState('');
+  const [reference, setReference] = useState(defaultReference || '');
   const [at, setAt] = useState(nowLocal());
   const [file, setFile] = useState(null);
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
-  const ready = submitted ? !!file : !!reference.trim();
+  const ready = submitted ? !!file && (!referenceAtSubmission || !!reference.trim()) : !!reference.trim();
 
   const submit = async () => {
     setError(''); setUploading(true);
     try {
       const evidence_file = file ? await uploadEvidence(file) : undefined;
-      const payload = submitted ? { method, at: new Date(at).toISOString(), evidence_file } : { fiu_reference: reference.trim(), at: new Date(at).toISOString(), evidence_file };
+      const payload = submitted ? { method, at: new Date(at).toISOString(), evidence_file, ...(referenceAtSubmission ? { fiu_reference: reference.trim() } : {}) } : { fiu_reference: reference.trim(), at: new Date(at).toISOString(), evidence_file };
       if (await onSubmit(payload)) onOpenChange(false);
     } catch (e) { setError(errorMessage(e)); } finally { setUploading(false); }
   };
@@ -36,7 +40,7 @@ export default function EvidenceDialog({ open, onOpenChange, mode, busy, onSubmi
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{submitted ? 'Record submission' : 'Record receipt'}</DialogTitle>
-          <DialogDescription>{submitted ? 'The report only counts as submitted with that evidence.' : 'Enter the reference the FIU gave. Evidence is optional.'}</DialogDescription>
+          <DialogDescription>{submitted ? (referenceAtSubmission ? 'The report only counts as submitted with the FIU reference and that evidence.' : 'The report only counts as submitted with that evidence.') : 'Enter the reference the FIU gave. Evidence is optional.'}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           {submitted ? (
@@ -46,7 +50,11 @@ export default function EvidenceDialog({ open, onOpenChange, mode, busy, onSubmi
                 <SelectContent>{SUBMISSION_METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-          ) : (
+          ) : null}
+          {submitted && referenceAtSubmission && (
+            <div><Label>FIU reference (required)</Label><Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Reference shown by the FIU portal" /></div>
+          )}
+          {submitted ? null : (
             <div><Label>FIU reference</Label><Input value={reference} onChange={(e) => setReference(e.target.value)} /></div>
           )}
           <div><Label>{submitted ? 'Submitted at' : 'Received at'}</Label><Input type="datetime-local" value={at} max={nowLocal()} onChange={(e) => setAt(e.target.value)} /></div>
