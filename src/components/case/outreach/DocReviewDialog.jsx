@@ -9,12 +9,15 @@ import { AiCheckPanel } from '@/components/documents/AiDocCheck';
  * Review of a document the AI Document Checker flagged, inside the Outreach step (no trip to the Documents tab).
  * Approve verifies the outreach item and approves the document; a high-risk document needs a reason (recorded as an override).
  * Reject marks the document Rejected; the outreach item stays unverified so a new document can be requested.
+ * `itemVerified`: the item was verified earlier and its document was left pending. Approve then decides the document only;
+ * Reject also puts the item back to Received.
  */
-export default function DocReviewDialog({ open, onOpenChange, doc, client, itemLabel, busy, running, onRecheck, onApprove, onReject, readOnly = false }) {
+export default function DocReviewDialog({ open, onOpenChange, doc, client, itemLabel, busy, running, onRecheck, onApprove, onReject, readOnly = false, itemVerified = false }) {
   const [reason, setReason] = useState('');
   useEffect(() => { if (open) setReason(''); }, [open, doc?.id]);
   if (!doc) return null;
   const high = doc.ai_check?.verdict === 'high_risk';
+  const flagged = high || doc.ai_check?.verdict === 'needs_attention';
   const min = 10;
   const okApprove = !high || reason.trim().length >= min;
   const okReject = reason.trim().length >= min;
@@ -24,7 +27,10 @@ export default function DocReviewDialog({ open, onOpenChange, doc, client, itemL
         <DialogHeader><DialogTitle className="text-base">{readOnly ? 'AI Document Check' : 'Review document'}: {itemLabel || doc.file_name}</DialogTitle></DialogHeader>
         {!readOnly && (
           <p className="text-xs text-muted-foreground">
-            The AI Document Checker rated this document {high ? 'high risk' : 'as needing attention'}. Check the points below, then approve or reject it here.
+            {flagged
+              ? `The AI Document Checker rated this document ${high ? 'high risk' : 'as needing attention'}. Check the points below, then approve or reject it here.`
+              : 'This document is not approved yet. Check the points below, then approve or reject it here.'}
+            {itemVerified ? ' The item is already verified: approving settles the document; rejecting sets the item back to Received.' : ''}
           </p>
         )}
         <AiCheckPanel doc={doc} client={client} running={running} onRecheck={onRecheck} />
@@ -41,7 +47,7 @@ export default function DocReviewDialog({ open, onOpenChange, doc, client, itemL
             <XCircle className="h-4 w-4" /> Reject document
           </Button>
           <Button className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700" disabled={!!busy || !okApprove} onClick={() => onApprove(reason.trim())}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Approve &amp; verify
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} {itemVerified ? 'Approve document' : <>Approve &amp; verify</>}
           </Button>
         </div>
         </>)}

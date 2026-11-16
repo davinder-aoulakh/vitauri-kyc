@@ -21,6 +21,8 @@ import BulkVerifyDialog, { bulkVerifyCandidates } from '@/components/case/outrea
 import DocReviewDialog from '@/components/case/outreach/DocReviewDialog';
 import { linkedItemState, linkedItemsToVerify } from '@/lib/outreachLinkedItems';
 import { AiCheckChip } from '@/components/documents/AiDocCheck';
+import { docPending, docFlagged, docDecidable, needsRecheck, catchUpApprovals } from '@/lib/docReviewState';
+import { hasPermission } from '@/lib/permissions';
 import { useToast } from '@/components/ui/use-toast';
 
 const SITUATION_LABELS = {
@@ -142,6 +144,7 @@ export default function OutreachStep({ isNewCase = false, kycCase, client, curre
   const [caseDocs, setCaseDocs] = useState([]);
   const [aiRunning, setAiRunning] = useState(new Set());
   const [reviewItem, setReviewItem] = useState(null); // { req, index } of the open document-review dialog
+  const [docsLoaded, setDocsLoaded] = useState(false);
   const [reviewBusy, setReviewBusy] = useState(false);
 
   // Email templates
@@ -449,14 +452,16 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
 
   async function loadCaseDocs() {
     const docs = await base44.entities.Document.filter({ case_id: kycCase.id }).catch(() => []);
-    setCaseDocs((docs || []).filter(d => !d.is_deleted));
-    return docs || [];
+    const live = (docs || []).filter(d => !d.is_deleted);
+    setCaseDocs(live);
+    setDocsLoaded(true);
+    return live;
   }
   /** The Document that holds the file of an outreach item (same file). */
   const docOf = (item) => (item?.file_url ? caseDocs.find(d => d.file_url === item.file_url) || null : null);
-  const pendingDoc = (d) => !!d && (d.review_status || 'Pending_Review') === 'Pending_Review';
+  const pendingDoc = docPending;
   /** Flagged by the AI Document Checker and not reviewed yet: needs an individual decision. */
-  const flaggedDoc = (item) => { const d = docOf(item); return pendingDoc(d) && ['high_risk', 'needs_attention'].includes(d.ai_check?.verdict) ? d : null; };
+  const flaggedDoc = (item) => { const d = docOf(item); return docFlagged(d) ? d : null; };
 
   async function runAiCheck(doc) {
     setAiRunning(prev => new Set(prev).add(doc.id));
@@ -475,43 +480,65 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
   }
 
   /** Verify = review: approving the outreach item also approves its document in the client file (one decision, one audit trail). */
-  async function approveDocs(items, { reason = '', bulk = false } = {}) {
+  async function approveDocs(items, opts = {}) {
+    const seen = new Set();
+    const docs = items.map(docOf).filter(d => d && !seen.has(d.id) && seen.add(d.id));
+    return approveDocList(docs, opts);
+  }
+  /**
+   * Approves the given documents. `catchUp`: the outreach item was verified earlier and its document was left pending;
+   * recorded as a system action (no reviewer), never used for a document the AI Document Checker flagged.
+   * Returns the number of documents that could not be approved.
+   */
+  async function approveDocList(docs, { reason = '', bulk = false, catchUp = false } = {}) {
     const now = new Date().toISOString();
-    for (const item of items) {
-      const d = docOf(item);
+    let failed = 0;
+    for (const d of docs) {
       if (!pendingDoc(d)) continue;
       const high = d.ai_check?.verdict === 'high_risk';
       const notes = reason || 'Verified in Outreach & Documents';
       try {
-        await base44.entities.Document.update(d.id, { review_status: 'Approved', review_notes: notes, reviewed_by_user_id: currentUser?.id, reviewed_at: now });
+        await base44.entities.Document.update(d.id, { review_status: 'Approved', review_notes: notes, reviewed_at: now, ...(catchUp ? {} : { reviewed_by_user_id: currentUser?.id }) });
         await base44.entities.AuditEvent.create({
-          tenant_id: d.tenant_id, client_id: d.client_id, case_id: kycCase.id, actor_user_id: currentUser?.id, actor_name: currentUser?.full_name, actor_type: 'User',
+          tenant_id: d.tenant_id, client_id: d.client_id, case_id: kycCase.id, actor_user_id: currentUser?.id, actor_name: currentUser?.full_name, actor_type: catchUp ? 'System' : 'User',
           event_type: 'document_reviewed', before_state: { review_status: d.review_status || 'Pending_Review' },
-          after_state: { review_status: 'Approved', via: 'outreach_step', ...(d.ai_check?.verdict ? { ai_verdict: d.ai_check.verdict } : {}) },
+          after_state: { review_status: 'Approved', via: 'outreach_step', ...(catchUp ? { catch_up: true } : {}), ...(d.ai_check?.verdict ? { ai_verdict: d.ai_check.verdict } : {}) },
           is_override: high,
-          notes: `Document "${d.file_name}" marked as Approved${bulk ? ' (bulk verify)' : ''}${high ? ' despite a high-risk AI check' : ''}: ${notes}`,
+          notes: `Document "${d.file_name}" marked as Approved${bulk ? ' (bulk verify)' : ''}${catchUp ? ' (catch-up: its outreach item was already verified)' : ''}${high ? ' despite a high-risk AI check' : ''}: ${notes}`,
         });
       } catch (e) {
+        failed += 1;
         console.warn('document approve failed', e?.message);
-        toast({ variant: 'destructive', title: 'Document not approved', description: `"${d.file_name}" is verified here but still needs approval in the Documents tab.` });
+        if (!catchUp) toast({ variant: 'destructive', title: 'Document not approved', description: `"${d.file_name}" is still waiting for approval. Try again from the AI chip on the item.` });
       }
     }
     await loadCaseDocs();
+    return failed;
   }
 
   async function confirmReview(reason) {
     if (!reviewItem) return;
     setReviewBusy(true);
-    const item = reviewItem.req.items[reviewItem.index];
+    const liveReq = requests.find(r => r.id === reviewItem.req.id) || reviewItem.req;
+    const item = liveReq.items[reviewItem.index];
+    if (item.status === 'Verified') {
+      // The item was verified earlier and its document was left pending: decide the document only.
+      const failed = await approveDocs([item], { reason });
+      setReviewBusy(false);
+      if (!failed) { setReviewItem(null); toast({ title: `Document approved: ${item.label}` }); }
+      return;
+    }
     const ok = await verifyItems(reviewItem.req, [reviewItem.index], false, reason);
     setReviewBusy(false);
     if (ok) { setReviewItem(null); toast({ title: `Verified and approved: ${item.label}` }); }
   }
   async function rejectReview(reason) {
     if (!reviewItem) return;
-    const item = reviewItem.req.items[reviewItem.index];
+    const liveReq = requests.find(r => r.id === reviewItem.req.id) || reviewItem.req;
+    const item = liveReq.items[reviewItem.index];
     const d = docOf(item);
     if (!d) return;
+    const wasVerified = item.status === 'Verified';
     setReviewBusy(true);
     try {
       await base44.entities.Document.update(d.id, { review_status: 'Rejected', review_notes: reason, reviewed_by_user_id: currentUser?.id, reviewed_at: new Date().toISOString() });
@@ -521,9 +548,26 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
         after_state: { review_status: 'Rejected', via: 'outreach_step', ...(d.ai_check?.verdict ? { ai_verdict: d.ai_check.verdict } : {}) },
         notes: `Document "${d.file_name}" marked as Rejected: ${reason}`,
       });
+      if (wasVerified) {
+        // A verified item whose document is rejected is no longer verified: back to Received (latest copy of the request).
+        const fresh = (await base44.entities.OutreachRequest.filter({ id: liveReq.id }))?.[0];
+        const idx = reviewItem.index;
+        if (fresh?.items?.[idx]?.status === 'Verified' && fresh.items[idx].file_url === item.file_url) {
+          const items = fresh.items.map((it, i) => (i === idx ? { ...it, status: 'Received' } : it));
+          await base44.entities.OutreachRequest.update(fresh.id, { items });
+          await base44.entities.AuditEvent.create({
+            tenant_id: kycCase.tenant_id, client_id: d.client_id, case_id: kycCase.id, actor_user_id: currentUser?.id, actor_name: currentUser?.full_name, actor_type: 'User',
+            event_type: 'outreach_item_unverified', before_state: { status: 'Verified' }, after_state: { status: 'Received', document_id: d.id },
+            notes: `No longer verified: ${item.label} (its document "${d.file_name}" was rejected)`,
+          });
+          const next = requests.map(r => (r.id === fresh.id ? { ...r, items } : r));
+          setRequests(next);
+          reportAllVerified(next);
+        }
+      }
       await loadCaseDocs();
       setReviewItem(null);
-      toast({ title: 'Document rejected', description: 'The item stays unverified. Send a new request to the client for a replacement.' });
+      toast({ title: 'Document rejected', description: wasVerified ? 'The item is no longer verified. Send a new request to the client for a replacement.' : 'The item stays unverified. Send a new request to the client for a replacement.' });
     } catch (e) {
       toast({ variant: 'destructive', title: 'Not saved', description: e?.message });
     } finally { setReviewBusy(false); }
@@ -573,6 +617,39 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
       return false;
     }
   }
+
+  // Once per opening of the step: bring old AI ratings up to date and close the gap between a verified item and its document.
+  //  1. Documents still pending, not reviewed by a person, rated with an older rule version (or whose check failed) are re-checked (max 5).
+  //  2. A verified item whose document is pending and not flagged gets its document approved (catch-up, audited).
+  //     A flagged document is never approved here: it is decided in the review dialog.
+  const docSync = useRef(null);
+  useEffect(() => {
+    if (loading || !docsLoaded || docSync.current === kycCase.id) return;
+    if (isLocked(client) || !hasPermission(currentUser?.app_role, 'createRunCase')) return;
+    docSync.current = kycCase.id;
+    (async () => {
+      const stale = caseDocs.filter(d => needsRecheck(d)).slice(0, 5);
+      const attempted = stale.map(d => d.id);
+      try {
+        let docs = caseDocs;
+        let reqs = null;
+        if (stale.length) {
+          setAiRunning(prev => { const n = new Set(prev); attempted.forEach(id => n.add(id)); return n; });
+          await Promise.allSettled(stale.map(d => base44.functions.invoke('checkDocumentAuthenticity', { document_id: d.id })));
+          docs = await loadCaseDocs();
+          // The checker may have verified an item itself (tenant setting): pick that up.
+          reqs = await base44.entities.OutreachRequest.filter({ case_id: kycCase.id }).catch(() => null);
+          if (reqs) { setRequests(reqs); reportAllVerified(reqs); }
+        }
+        const todo = catchUpApprovals((reqs || requests).flatMap(r => r.items || []), docs, { attempted });
+        if (todo.length) await approveDocList(todo, { catchUp: true });
+      } catch (e) {
+        console.warn('document sync failed', e?.message);
+      } finally {
+        if (attempted.length) setAiRunning(prev => { const n = new Set(prev); attempted.forEach(id => n.delete(id)); return n; });
+      }
+    })();
+  }, [loading, docsLoaded, kycCase.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A question linked to a KYC field shown in the Profile Verification grid is verified there, not in this tracker
   const inProfileGrid = (item) => (item.profile_field
@@ -912,8 +989,13 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
                                 if (!d) return null;
                                 return (
                                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                                    <AiCheckChip doc={d} running={aiRunning.has(d.id)} onCheck={() => runAiCheck(d)} onToggle={() => setReviewItem({ req, index: i, readOnly: !flaggedDoc(item) || item.status !== 'Received' })} />
-                                    {d.review_status === 'Approved' && <span className="text-[11px] text-emerald-700">Document approved{!d.reviewed_by_user_id ? ' · AI' : ''}</span>}
+                                    <AiCheckChip doc={d} running={aiRunning.has(d.id)} onCheck={() => runAiCheck(d)} onToggle={() => setReviewItem({ req, index: i })} />
+                                    {item.status === 'Verified' && docFlagged(d) && !isLocked(client) && (
+                                      <button type="button" className="text-[11px] font-medium text-amber-800 underline underline-offset-2 hover:text-amber-900" onClick={() => setReviewItem({ req, index: i })}>
+                                        Document not approved yet — review
+                                      </button>
+                                    )}
+                                    {d.review_status === 'Approved' && <span className="text-[11px] text-emerald-700">Document approved{!d.reviewed_by_user_id && !/^Verified in Outreach/.test(d.review_notes || '') ? ' · AI' : ''}</span>}
                                     {d.review_status === 'Rejected' && <span className="text-[11px] text-red-700">Document rejected</span>}
                                     {(d.ai_check?.key_points || []).length > 0 && <span className="text-[11px] text-muted-foreground truncate max-w-md" title={d.ai_check.key_points.join(' · ')}>Supports: {d.ai_check.key_points[0]}</span>}
                                   </div>
@@ -1046,11 +1128,11 @@ Return the item IDs you recommend requesting, with a short reason for each.`,
         const liveReq = reviewItem ? (requests.find(r => r.id === reviewItem.req.id) || reviewItem.req) : null;
         const item = liveReq?.items?.[reviewItem?.index];
         const d = item ? docOf(item) : null;
-        const decidable = !!d && pendingDoc(d) && item.status === 'Received' && !isLocked(client);
+        const decidable = docDecidable(d, item, isLocked(client));
         return (
           <DocReviewDialog open={!!reviewItem && !!d} onOpenChange={(v) => { if (!v) setReviewItem(null); }} doc={d} client={client} itemLabel={item?.label}
             busy={reviewBusy} running={d ? aiRunning.has(d.id) : false} onRecheck={() => d && runAiCheck(d)}
-            onApprove={confirmReview} onReject={rejectReview} readOnly={!decidable} />
+            onApprove={confirmReview} onReject={rejectReview} readOnly={!decidable} itemVerified={item?.status === 'Verified'} />
         );
       })()}
 
