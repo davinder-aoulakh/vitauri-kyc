@@ -2,9 +2,13 @@
 // Auth: signed-in user with tmWorkCase, or a Director; tenant from the user.
 //   accept  { edr_trigger_id }                  -> creates a KycCase (Event_Driven_Review), links it, status accepted
 //   dismiss { edr_trigger_id, dismiss_reason }  -> status dismissed
+//   respond { edr_trigger_id, response, reason } -> graduated response (Change of circumstances page):
+//       no_action closes the event; targeted_check / risk_reassessment / full_cdd_refresh open the review with only
+//       the steps the event touches (base44/shared/cocResponse.js). Also open to Compliance Admin and Tenant Admin.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
-import { authenticate, errorResponse, httpError, loadTenant, asList, WORK_ROLES } from '../../shared/tmAuth.js';
+import { authenticate, errorResponse, httpError, loadTenant, asList, WORK_ROLES, ACCOUNT_ROLES } from '../../shared/tmAuth.js';
+import { RESPONSES, RESPONSE_LABEL, STEP_LABEL, stepsForResponse } from '../../shared/cocResponse.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import { TRIGGER_LABEL } from '../../shared/edrTriggers.js';
 
@@ -14,7 +18,7 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
-    const auth = await authenticate(base44, req, body, { roles: [...WORK_ROLES, 'Director'], allowApiKey: false });
+    const auth = await authenticate(base44, req, body, { roles: body?.action === 'respond' ? [...ACCOUNT_ROLES, 'Director'] : [...WORK_ROLES, 'Director'], allowApiKey: false });
     const tenantId = auth.tenantId;
     const tenant = await loadTenant(base44, tenantId);
     if (!isTmEnabled(tenant, 'tm_core')) throw httpError(403, 'Feature tm_core is not enabled');
@@ -40,13 +44,32 @@ export default async function (req) {
       return Response.json({ ok: true, status: 'dismissed' });
     }
 
-    if (body.action !== 'accept') throw httpError(400, "action must be 'accept' or 'dismiss'");
+    // Graduated response. 'accept' and 'dismiss' above/below are unchanged.
+    let plan = null; let responseReason = '';
+    if (body.action === 'respond') {
+      if (!RESPONSES.includes(body.response)) throw httpError(400, `response must be one of: ${RESPONSES.join(', ')}`);
+      responseReason = String(body.reason || '').trim();
+      plan = stepsForResponse(trigger.trigger_type, body.response);
+      if (!plan.createsReview) {
+        if (responseReason.length < 10) throw httpError(400, 'A reason of at least 10 characters is required to close an event without action');
+        await E.EdrTrigger.update(trigger.id, { status: 'dismissed', response: body.response, response_reason: responseReason, dismiss_reason: responseReason, decided_by_user_id: auth.actorUserId, decided_at: nowIso });
+        await writeAudit(base44, auth, {
+          tenantId, clientId: trigger.client_id, eventType: 'change_event_responded',
+          before: { status: 'proposed' }, after: { status: 'dismissed', edr_trigger_id: trigger.id, response: body.response, reason: responseReason },
+          notes: `Change of circumstances (${label}) closed with no action by ${auth.actorName}: ${responseReason}`,
+        });
+        return Response.json({ ok: true, status: 'dismissed', response: body.response });
+      }
+      if (responseReason.length < 5) throw httpError(400, 'A reason is required');
+    } else if (body.action !== 'accept') throw httpError(400, "action must be 'accept', 'dismiss' or 'respond'");
     const client = asList(await E.Client.filter({ tenant_id: tenantId, id: trigger.client_id }, undefined, 1))[0];
     if (!client) throw httpError(404, 'Client not found');
     // Same fields as the EDR case created from a monitoring alert (AlertDetailPanel.escalateToEDR).
     const prevCase = asList(await E.KycCase.filter({ tenant_id: tenantId, client_id: client.id, status: 'Approved' }, '-created_date', 1))[0] || null;
     const dueDate = isoDate(new Date(Date.now() + 30 * 86400000));
-    const triggerReason = `EDR trigger: ${label}${summary ? ` — ${summary}` : ''}`;
+    const triggerReason = plan
+      ? `Change of circumstances: ${label}${summary ? ` — ${summary}` : ''} · ${RESPONSE_LABEL[body.response]}`
+      : `EDR trigger: ${label}${summary ? ` — ${summary}` : ''}`;
     // Carry the trigger's evidence into the review: what changed (before/after), linked TM alert or case, risk at open.
     const ref = String(trigger.source_ref || '');
     const alertIds = [trigger.after?.tm_alert_id, ...(Array.isArray(trigger.after?.tm_alert_ids) ? trigger.after.tm_alert_ids : []), ref.startsWith('alert:') ? ref.slice(6) : null].filter(Boolean);
@@ -54,6 +77,7 @@ export default async function (req) {
     const tmContext = {
       opened_by: 'edr_trigger', at: nowIso,
       score: client.customer_risk_score ?? null, band: client.customer_risk_band || null,
+      ...(plan ? { response: body.response, response_reason: responseReason, required_steps: plan.required } : {}),
       trigger: {
         id: trigger.id, type: trigger.trigger_type, label, summary: summary || null,
         before: trigger.before || {}, after: trigger.after || {}, source_ref: trigger.source_ref || null, proposed_at: trigger.created_date || null,
@@ -69,12 +93,18 @@ export default async function (req) {
       risk_classification: prevCase?.risk_classification || null,
       step_1_status: 'not_started', step_2_status: 'not_started', step_3_status: 'not_started', step_4_status: 'not_started',
       step_5_status: 'not_started', step_6_status: 'not_started', step_7_status: 'not_started', step_8_status: 'not_started',
+      ...(plan ? { ...plan.flags, delta_response: body.response } : {}),
     });
-    await E.EdrTrigger.update(trigger.id, { status: 'accepted', kyc_case_id: kyc.id, decided_by_user_id: auth.actorUserId, decided_at: nowIso });
+    await E.EdrTrigger.update(trigger.id, {
+      status: 'accepted', kyc_case_id: kyc.id, decided_by_user_id: auth.actorUserId, decided_at: nowIso,
+      ...(plan ? { response: body.response, response_reason: responseReason } : {}),
+    });
     await writeAudit(base44, auth, {
       tenantId, clientId: client.id, eventType: 'edr_trigger_accepted',
-      before: { status: 'proposed' }, after: { status: 'accepted', edr_trigger_id: trigger.id, kyc_case_id: kyc.id },
-      notes: `EDR trigger accepted (${label}) by ${auth.actorName}; event-driven review ${kyc.id} opened.`,
+      before: { status: 'proposed' }, after: { status: 'accepted', edr_trigger_id: trigger.id, kyc_case_id: kyc.id, ...(plan ? { response: body.response, reason: responseReason, required_steps: plan.required } : {}) },
+      notes: plan
+        ? `Change of circumstances (${label}): ${RESPONSE_LABEL[body.response]} chosen by ${auth.actorName}; review ${kyc.id} opened for ${plan.required.map((n) => STEP_LABEL[n]).join(', ')}. Reason: ${responseReason}`
+        : `EDR trigger accepted (${label}) by ${auth.actorName}; event-driven review ${kyc.id} opened.`,
     });
     await E.AuditEvent.create({
       tenant_id: tenantId, case_id: kyc.id, client_id: client.id, actor_user_id: auth.actorUserId, actor_name: auth.actorName,
@@ -87,7 +117,7 @@ export default async function (req) {
         body: `An Event-Driven Review has been opened for ${client.full_name} (${label}). Due: ${dueDate}`, link_case_id: kyc.id,
       }).catch(() => {});
     }
-    return Response.json({ ok: true, status: 'accepted', kyc_case_id: kyc.id });
+    return Response.json({ ok: true, status: 'accepted', kyc_case_id: kyc.id, ...(plan ? { response: body.response, required_steps: plan.required } : {}) });
   } catch (error) {
     console.error('decideEdrTrigger error:', error?.message);
     return errorResponse(error);

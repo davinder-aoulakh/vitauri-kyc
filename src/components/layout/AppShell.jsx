@@ -15,7 +15,7 @@ import {
   LayoutDashboard, FolderOpen, Users, Search, Shield,
   Settings, BarChart3, AlertTriangle, Calendar, Archive,
   ChevronLeft, ChevronRight, Menu, X,
-  Building2, UserCircle, ClipboardList, ScanSearch, Mail, Send, Activity, SlidersHorizontal, ShieldCheck, Briefcase, FileText, Inbox, PieChart
+  Building2, UserCircle, ClipboardList, ScanSearch, Mail, Send, Activity, SlidersHorizontal, ShieldCheck, Briefcase, FileText, Inbox, PieChart, RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { amlNavItems, selectNav } from '@/lib/amlNav';
