@@ -3,6 +3,7 @@
 // Keep role lists in sync with tmManageIngest / tmWorkCase / tmManageAccounts in src/lib/permissions.js.
 import { sha256Hex } from './tmCanonical.js';
 import { withDiditCredentials } from './diditCredentials.js';
+import { canAml, canKyc, domainOf } from './workDomain.js';
 
 export const INGEST_ROLES = ['Tenant Admin', 'Compliance Admin']; // tmManageIngest
 export const WORK_ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager']; // tmWorkCase
@@ -26,7 +27,7 @@ export function errorResponse(error) {
  * Throws httpError on any failure. A payload tenant_id that differs from the verified scope is rejected.
  */
 export async function authenticate(base44, req, body, options = {}) {
-  const { roles = [], allowApiKey = true, scope = 'ingest:write' } = options;
+  const { roles = [], allowApiKey = true, scope = 'ingest:write', domain = null } = options;
   const payloadTenant = body?.tenant_id;
   const rawKey = req.headers.get('x-api-key') || body?.api_key;
 
@@ -54,8 +55,14 @@ export async function authenticate(base44, req, body, options = {}) {
   const role = user.app_role || user.data?.app_role;
   if (!role || !roles.includes(role)) throw httpError(403, 'Forbidden');
   if (payloadTenant && payloadTenant !== tenantId) throw httpError(403, 'tenant_id does not match your tenant');
+  // Need-to-know (phase 6): options.domain 'aml' | 'kyc' refuses users who work on the other side only.
+  if (domain === 'aml' || domain === 'kyc') {
+    const t = await loadTenant(base44, tenantId);
+    const ok = domain === 'aml' ? canAml(user, t) : canKyc(user, t);
+    if (!ok) throw httpError(403, domain === 'aml' ? 'Not available: AML content is restricted to AML and Compliance' : 'Not available: this is KYC work');
+  }
   return {
-    mode: 'user', tenantId, role, actorType: 'User', actorName: user.full_name || user.email,
+    mode: 'user', tenantId, role, workDomain: domainOf(user), actorType: 'User', actorName: user.full_name || user.email,
     actorUserId: user.id, apiKeyId: undefined, apiKeyRaw: undefined,
   };
 }

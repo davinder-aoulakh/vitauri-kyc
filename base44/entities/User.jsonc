@@ -45,6 +45,16 @@
         "nl"
       ],
       "default": "en"
+    },
+    "work_domain": {
+      "type": "string",
+      "enum": [
+        "both",
+        "kyc",
+        "aml"
+      ],
+      "default": "both",
+      "description": "Need-to-know: which side this user works on when the tenant's role model is 'separate'. Compliance and admin roles always see both."
     }
   },
   "required": [

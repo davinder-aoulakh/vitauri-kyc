@@ -2,7 +2,7 @@
 import { asList, httpError } from './tmAuth.js';
 import { writeAudit } from './tmAudit.js';
 import { caseClock, loadFiuProfile } from './tmDeadline.js';
-import { assertClientNotLocked } from './tippingOff.js';
+import { assertNoFiuLock, refreshAmlHoldForCase } from './tippingOff.js';
 
 export const OPEN_CASE = ['open', 'investigating', 'pending_co'];
 export const WORKABLE_CASE = ['open', 'investigating'];
@@ -34,6 +34,8 @@ export async function commit(ctx, tmCase, patch, entry, audit) {
     tenantId: ctx.tenantId, clientId: tmCase.primary_client_id, eventType: audit.type,
     before: audit.before || {}, after: audit.after || {}, notes: audit.notes || entry.text,
   });
+  // AML hold mirror follows the case status and its customers (phase 6).
+  if ('status' in patch || 'client_ids' in patch) await refreshAmlHoldForCase(ctx.base44, ctx.tenantId, { ...tmCase, ...patch }, ctx.auth);
   return { ...tmCase, ...patch, timeline };
 }
 
@@ -70,7 +72,8 @@ export async function fiuUnderway(E, tenantId, tmCaseId) {
 export async function assertCustomerRequestAllowed(ctx, tmCase) {
   const client = asList(await ctx.E.Client.filter({ tenant_id: ctx.tenantId, id: tmCase.primary_client_id }))[0];
   if (!client) throw httpError(404, 'Client not found');
-  await assertClientNotLocked(ctx.base44, ctx.tenantId, client.id);
+  // The investigation's own request stays possible during its AML hold; only an FIU report in progress blocks it.
+  await assertNoFiuLock(ctx.base44, ctx.tenantId, client.id);
   if (await fiuUnderway(ctx.E, ctx.tenantId, tmCase.id)) throw httpError(423, 'Customer requests are locked once an FIU report is being prepared.');
   return client;
 }
