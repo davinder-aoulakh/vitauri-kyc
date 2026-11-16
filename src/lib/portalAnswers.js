@@ -22,6 +22,31 @@ export function selectedFromItem(item) {
 
 const ANSWER_KEYS = ['text', 'value', 'selected', 'confirmed', 'prefilled', 'signerName'];
 
+// ---- Structured answers: response_value is a string on the record ----
+/**
+ * Value to store for an answer. A structured answer (address) is kept as JSON text, because response_value only
+ * accepts a string; anything else is stored as given. Null when there is nothing to store.
+ */
+export function encodeResponseValue(fieldType, value) {
+  if (value == null || value === '') return null;
+  if (fieldType === 'address' || typeof value === 'object') {
+    if (typeof value === 'object' && !Object.values(value).some((v) => String(v || '').trim())) return null;
+    return JSON.stringify(value);
+  }
+  return value;
+}
+
+/** Read a stored answer back: an address returns as an object, whether saved as JSON text or (older) as an object. */
+export function decodeResponseValue(fieldType, raw) {
+  if (raw == null || raw === '') return null;
+  if (fieldType !== 'address') return raw;
+  if (typeof raw === 'object') return raw;
+  try {
+    const o = JSON.parse(String(raw));
+    return o && typeof o === 'object' ? o : null;
+  } catch { return null; }
+}
+
 /**
  * State of one item after a reload. The server decides status, verification result and files; what the client changed in
  * this session (dirty) is kept. A local draft (unsaved answer from before a redirect) is applied the same way.

@@ -199,7 +199,11 @@ function extractFromOutreach(outreaches: any[], isOrg: boolean, templateFields: 
         const pf = String(linkedField);
         // Expected-use answers belong to the client profile step (step 4), not to the identity fields grid
         if (pf.startsWith('expected_use.')) continue;
-        const structured = item.response_value;
+        // A structured answer (address) is stored as JSON text on the record; older records hold the object itself.
+        let structured = item.response_value;
+        if (typeof structured === 'string' && structured.trim().startsWith('{')) {
+          try { structured = JSON.parse(structured); } catch { /* keep the text */ }
+        }
         if (pf === 'residential_address' || pf === 'postal_address' || pf === 'registered_address') {
           const a = structured && typeof structured === 'object' ? structured : null;
           if (pf === 'registered_address') {

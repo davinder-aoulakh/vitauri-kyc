@@ -15,7 +15,7 @@ import PortalAddressInput, { isAddressComplete } from '@/components/portal/Porta
 import PhoneInput from '@/components/shared/PhoneInput';
 import CountrySelect from '@/components/shared/CountrySelect';
 import { responseText } from '@/lib/profileFieldMap';
-import { selectedFromItem, mergeItemState, createSaveQueue, readDraft, writeDraftItem, clearDraft } from '@/lib/portalAnswers';
+import { selectedFromItem, mergeItemState, createSaveQueue, readDraft, writeDraftItem, clearDraft, encodeResponseValue, decodeResponseValue } from '@/lib/portalAnswers';
 import { format, isPast, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -314,7 +314,7 @@ export default function ClientPortal() {
         const ftInit = item.field_type || '';
         const answered = item.response_value != null || !!item.response_text;
         const prefilled = item.prefill_value != null && !answered;
-        const value = item.response_value ?? (prefilled ? item.prefill_value : null);
+        const value = decodeResponseValue(ftInit, item.response_value) ?? (prefilled ? item.prefill_value : null);
         map[req.id][item.item_id] = {
           text: item.response_text || (prefilled ? responseText(ftInit, item.prefill_value) : ''),
           value,
@@ -359,7 +359,7 @@ export default function ClientPortal() {
       const isMulti = it.field_type === 'multi_select';
       saveQueue.current?.schedule(reqId, itemId, isMulti
         ? { response_text: (d.selected || []).join(', ') }
-        : { ...(d.value != null ? { response_value: d.value } : {}), response_text: d.text || '', confirmed_unchanged: !!d.confirmed });
+        : { ...(d.value != null ? { response_value: encodeResponseValue(it.field_type, d.value) } : {}), response_text: d.text || '', confirmed_unchanged: !!d.confirmed });
     }
 
     await Promise.all([
@@ -411,7 +411,7 @@ export default function ClientPortal() {
   function setItemValue(outreachId, itemId, ft, value) {
     const text = responseText(ft, value);
     setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [itemId]: { ...s[outreachId]?.[itemId], value, text, prefilled: false, confirmed: false, dirty: true } } }));
-    scheduleAutoSave(outreachId, itemId, { response_value: value, response_text: text, confirmed_unchanged: false }, { text, value, confirmed: false });
+    scheduleAutoSave(outreachId, itemId, { response_value: encodeResponseValue(ft, value), response_text: text, confirmed_unchanged: false }, { text, value, confirmed: false });
   }
 
   // "This is correct": the client confirms the data we hold without changing it
@@ -419,7 +419,7 @@ export default function ClientPortal() {
     const ft = item.field_type || '';
     const text = responseText(ft, item.prefill_value);
     setItemStateMap(s => ({ ...s, [outreachId]: { ...s[outreachId], [item.item_id]: { ...s[outreachId]?.[item.item_id], value: item.prefill_value, text, confirmed: true, dirty: true } } }));
-    scheduleAutoSave(outreachId, item.item_id, { response_value: item.prefill_value, response_text: text, confirmed_unchanged: true }, { text, value: item.prefill_value, confirmed: true });
+    scheduleAutoSave(outreachId, item.item_id, { response_value: encodeResponseValue(ft, item.prefill_value), response_text: text, confirmed_unchanged: true }, { text, value: item.prefill_value, confirmed: true });
   }
 
   function setItemSelected(outreachId, itemId, selected) {
@@ -548,7 +548,7 @@ export default function ClientPortal() {
       const isDone = isItemCompleted(item, s) || ft === 'section_header';
       // KYC-linked / structured answers keep their structure for Profile Verification
       const structured = (item.profile_field || ['phone', 'address', 'country'].includes(ft))
-        ? { response_value: ft === 'address' ? (s.value || null) : (s.value ?? (responseTextValue || null)), confirmed_unchanged: !!s.confirmed }
+        ? { response_value: encodeResponseValue(ft, s.value ?? (responseTextValue || null)), confirmed_unchanged: !!s.confirmed }
         : {};
       return {
         ...item,

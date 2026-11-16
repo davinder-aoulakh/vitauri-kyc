@@ -10,6 +10,14 @@ const has = (v) => v != null && String(v).trim() !== '' && v !== 'null';
 // Phone numbers are equal when their digits are ("+31 6 47…" = "+31647…")
 const digits = (v) => String(v || '').replace(/\D/g, '').replace(/^00/, '');
 const same = (key, a, b) => (/phone/.test(key) ? !!digits(a) && digits(a) === digits(b) : sameProfileValue(key, a, b));
+/** A structured address answer (an object, or its JSON text on the record); null when there is none. */
+function answerAddress(raw) {
+  if (raw && typeof raw === 'object') return raw;
+  if (typeof raw === 'string' && raw.trim().startsWith('{')) {
+    try { const o = JSON.parse(raw); return o && typeof o === 'object' ? o : null; } catch { return null; }
+  }
+  return null;
+}
 
 /** KYC field keys an outreach item fills: by its profile_field link, else by its label. [] when it is a free question. */
 export function linkedFieldKeys(item, fieldLabels) {
@@ -33,10 +41,11 @@ export function linkedItemState(item, fieldLabels, suggestions, client) {
   const statuses = keys.map((k) => fields[k]?.status || null);
   if (statuses.some((s) => OPEN.includes(s))) return { state: 'open', keys, conflict: statuses.includes('conflict') };
   const decided = statuses.some((s) => s === 'confirmed' || s === 'rejected');
-  const answer = item.response_value != null && typeof item.response_value !== 'object' ? item.response_value : item.response_text;
+  // A structured address is stored as JSON text on the record; older records hold the object itself.
+  const addr = answerAddress(item.response_value);
+  const answer = addr ? item.response_text : (item.response_value != null && typeof item.response_value !== 'object' ? item.response_value : item.response_text);
   const equalsFile = keys.length === 1 && has(answer) && same(keys[0], getNestedValue(client, keys[0]), answer);
   // Structured address: every part the client gave equals the file
-  const addr = item.response_value && typeof item.response_value === 'object' ? item.response_value : null;
   const addrEquals = !!addr && keys.length > 1 && keys.some((k) => has(addr[k.split('.')[1]]))
     && keys.every((k) => { const part = addr[k.split('.')[1]]; return !has(part) || same(k, getNestedValue(client, k), part); });
   return { state: decided || equalsFile || addrEquals ? 'settled' : 'waiting', keys };
