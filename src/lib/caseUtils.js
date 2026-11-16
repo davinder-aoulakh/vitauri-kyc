@@ -3,7 +3,7 @@
  * Use these everywhere instead of direct kycCase[`step_${id}_status`] access.
  */
 
-import { deltaSkipped } from '@/lib/cocResponse';
+import { deltaSkipped } from './cocResponse.js';
 
 // Steps that can be marked as not required
 // Step 2 removed — Didit now covers both NP and ORG, so it is always required
