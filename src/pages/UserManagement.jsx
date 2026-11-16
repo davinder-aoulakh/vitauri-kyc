@@ -129,9 +129,16 @@ export default function UserManagement() {
           title="User Management"
           subtitle="Manage team members, roles and access for this institution"
           actions={
-            <Button onClick={() => setInviteOpen(true)} className="gap-2">
-              <Plus className="w-4 h-4" /> Invite User
-            </Button>
+            <>
+              {separateRoles && users.some((u) => !u.work_domain_set) && (
+                <Button variant="outline" onClick={backfillWorkDomains} disabled={saving} title="Users without a work domain get 'KYC and AML'">
+                  Set missing work domains
+                </Button>
+              )}
+              <Button onClick={() => setInviteOpen(true)} className="gap-2">
+                <Plus className="w-4 h-4" /> Invite User
+              </Button>
+            </>
           }
         />
 

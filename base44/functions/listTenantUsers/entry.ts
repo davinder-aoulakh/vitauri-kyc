@@ -34,6 +34,7 @@ export default async function(req) {
       role: u.role || u.data?.role,
       app_role: u.app_role || u.data?.app_role,
       work_domain: u.work_domain || u.data?.work_domain || 'both',
+      work_domain_set: !!(u.work_domain || u.data?.work_domain),
       is_active: (u.is_active !== undefined ? u.is_active : u.data?.is_active) !== false,
       mfa_enabled: !!(u.mfa_enabled !== undefined ? u.mfa_enabled : u.data?.mfa_enabled),
       tenant_id: u.tenant_id || u.data?.tenant_id,
