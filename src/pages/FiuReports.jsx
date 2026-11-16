@@ -16,7 +16,7 @@ import DeadlineCell from '@/components/tm/alerts/DeadlineCell';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { hasPermission } from '@/lib/permissions';
+import { hasPermission, canAml } from '@/lib/permissions';
 import { toast } from '@/components/ui/use-toast';
 import { errorMessage } from '@/lib/tmAlerts';
 import { FIU_TYPE_CODES, FIU_TYPES, normaliseType, typeCode, typeLabel, ORIGIN_LABEL } from '@/lib/fiuTypes';
@@ -47,7 +47,7 @@ export default function FiuReports() {
   const tenantId = currentUser?.tenant_id;
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const allowed = isFeatureEnabled(tenant, 'tm_core') && isFeatureEnabled(tenant, 'tm_fiu') && FIU_READERS.includes(currentUser?.app_role);
+  const allowed = isFeatureEnabled(tenant, 'tm_core') && isFeatureEnabled(tenant, 'tm_fiu') && FIU_READERS.includes(currentUser?.app_role) && canAml(currentUser, tenant);
   const [searchParams] = useSearchParams();
   const initialStatus = searchParams.get('status');
   const [status, setStatus] = useState(STATUSES.includes(initialStatus) ? initialStatus : 'all');

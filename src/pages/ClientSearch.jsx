@@ -5,6 +5,7 @@ import { useTenant } from '@/lib/tenantContext';
 import AppShell from '@/components/layout/AppShell';
 import PageHeader from '@/components/shared/PageHeader';
 import RiskBadge from '@/components/shared/RiskBadge';
+import AmlHoldBadge from '@/components/shared/AmlHoldBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -260,7 +261,7 @@ export default function ClientSearch() {
                             {client.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3"><RiskBadge risk={client.risk_classification} /></td>
+                        <td className="px-4 py-3"><div className="flex items-center gap-1.5 flex-wrap"><RiskBadge risk={client.risk_classification} /><AmlHoldBadge client={client} /></div></td>
                         <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums">
                           {casesCounts[client.id] || 0}
                         </td>
@@ -360,7 +361,7 @@ export default function ClientSearch() {
                                   {client.status}
                                 </span>
                               </td>
-                              <td className="px-4 py-3"><RiskBadge risk={client.risk_classification} /></td>
+                              <td className="px-4 py-3"><div className="flex items-center gap-1.5 flex-wrap"><RiskBadge risk={client.risk_classification} /><AmlHoldBadge client={client} /></div></td>
                               <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums">
                                 {casesCounts[client.id] || 0}
                               </td>

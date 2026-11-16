@@ -27,6 +27,8 @@ import { cn } from '@/lib/utils';
 import { CLIENT_STATUS_COLORS } from '@/lib/riskColors';
 import { deleteCase } from '@/lib/caseDelete';
 import TippingOffBanner from '@/components/shared/TippingOffBanner';
+import AmlHoldBadge from '@/components/shared/AmlHoldBadge';
+import { canAml } from '@/lib/permissions';
 import ClientTmHeader from '@/components/client/overview/ClientTmHeader';
 import { useCustomerFile } from '@/components/client/overview/useCustomerFile';
 import KycScreenerPanel from '@/components/client/KycScreenerPanel';
@@ -60,6 +62,9 @@ export default function ClientDetail() {
   const showMonitoring = isFeatureEnabled(tenant, 'tm_core') && hasPermission(userRole, 'createRunCase');
 
   const amlTabs = showMonitoring && amlLayoutOn(tenant);
+  // Need-to-know (phase 6): without AML access the alerts tab and TM header are not shown; the AML hold badge is.
+  const seesAml = canAml(currentUser, tenant);
+  const v2Tabs = CLIENT_TABS_V2.filter((t) => seesAml || t.value !== 'alerts');
 
   // TM on: 'overview' is the first and default tab; ?tab= wins and ?tab=monitoring is an alias for 'overview'.
   const location = useLocation();
@@ -228,7 +233,8 @@ export default function ClientDetail() {
                     {client.status}
                   </span>
                   <RiskBadge risk={client.risk_classification} />
-                  {showMonitoring && <ClientTmHeader client={client} />}
+                  <AmlHoldBadge client={client} />
+                  {showMonitoring && seesAml && <ClientTmHeader client={client} />}
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
                   {client.registered_country || client.nationality || '—'}
@@ -297,7 +303,7 @@ export default function ClientDetail() {
         {/* ── Tabs ── */}
         <Tabs value={activeTab} onValueChange={v => { tabTouched.current = true; setActiveTab(v); }}>
           <TabsList className="bg-card border border-border h-auto p-1 gap-1 flex-wrap">
-            {(amlTabs ? CLIENT_TABS_V2.map((t) => ({
+            {(amlTabs ? v2Tabs.map((t) => ({
               value: t.value,
               label: t.value === 'cases' ? `${t.label} (${cases.length})`
                 : t.value === 'alerts' && tmCaseCount ? `${t.label} (${tmCaseCount})`
@@ -366,7 +372,7 @@ export default function ClientDetail() {
               <MonitoringTab client={client} section={amlTabs ? 'summary' : undefined} />
             </TabsContent>
           )}
-          {amlTabs && CLIENT_TABS_V2.filter((t) => t.monitoring && t.value !== 'overview').map((t) => (
+          {amlTabs && v2Tabs.filter((t) => t.monitoring && t.value !== 'overview').map((t) => (
             <TabsContent key={t.value} value={t.value}>
               <MonitoringTab client={client} section={t.monitoring} />
             </TabsContent>

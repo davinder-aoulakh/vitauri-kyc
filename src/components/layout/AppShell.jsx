@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTenant } from '@/lib/tenantContext';
 import { base44 } from '@/api/base44Client';
-import { hasPermission, isVitauriOps } from '@/lib/permissions';
+import { hasPermission, isVitauriOps, canAml, canKyc } from '@/lib/permissions';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import OpsBanner from '@/components/layout/OpsBanner';
 import SessionWatcher from '@/components/layout/SessionWatcher';
@@ -218,10 +218,14 @@ export default function AppShell({ children }) {
           if (group.outreachOnly && !OUTREACH_ROLES.includes(userRole)) return null;
           // Hide entire group if its feature flag is disabled
           if (group.featureKey && !isFeatureEnabled(tenant, group.featureKey)) return null;
+          // Need-to-know: a group or item marked for one side is hidden from users who work on the other side only
+          const domainOk = (d) => !d || (d === 'aml' ? canAml(currentUser, tenant) : canKyc(currentUser, tenant));
+          if (!domainOk(group.domain)) return null;
 
           const tmCoreOn = isFeatureEnabled(tenant, 'tm_core');
           const visibleItems = group.items.filter(item =>
             !(item.tmMoved && tmCoreOn) &&
+            domainOk(item.domain) &&
             !(item.outreachOnly && !OUTREACH_ROLES.includes(userRole)) &&
             (!item.permission || hasPermission(userRole, item.permission)) &&
             (!item.anyPermission || item.anyPermission.some(p => hasPermission(userRole, p))) &&

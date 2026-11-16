@@ -6,7 +6,7 @@ import { useTenant } from '@/lib/tenantContext';
 import { useTenantClients } from '@/hooks/useTenantData';
 import { useCaseUsers } from '@/hooks/useTmCase';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import { hasPermission } from '@/lib/permissions';
+import { hasPermission, canAml } from '@/lib/permissions';
 import { CASE_STATUS_LABEL } from '@/lib/tmCase';
 import AppShell from '@/components/layout/AppShell';
 import PageHeader from '@/components/shared/PageHeader';
@@ -45,7 +45,7 @@ export default function TmCases() {
   const tenantId = currentUser?.tenant_id;
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const allowed = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmViewAlerts');
+  const allowed = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmViewAlerts') && canAml(currentUser, tenant);
   const [searchParams] = useSearchParams();
   const initialFilter = searchParams.get('filter');
   const [filter, setFilter] = useState(FILTERS.some((f) => f.key === initialFilter) ? initialFilter : 'all');

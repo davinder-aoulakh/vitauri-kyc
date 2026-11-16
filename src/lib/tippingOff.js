@@ -3,6 +3,12 @@ import { base44 } from '@/api/base44Client';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 
 export const LOCK_BANNER = 'Customer communications locked — FIU report in progress (no tipping-off)';
+// AML hold (phase 6): the same block while an investigation is open. Mirror text set by base44/shared/tippingOff.js.
+export const HOLD_REASON = 'AML hold: investigation open';
+export const HOLD_BANNER = 'AML hold — an investigation is open. Customer communications and verification links are blocked (no tipping-off)';
+export const HOLD_BANNER_NEUTRAL = 'AML hold — customer communications and verification links are blocked for this customer';
+/** 'investigation' | 'fiu' | null, from the display mirror on the client. */
+export const holdKind = (client) => (!client?.tipping_off_lock ? null : client.tipping_off_reason === HOLD_REASON ? 'investigation' : 'fiu');
 
 /** Quick display hint only (Client mirror). Never use it to authorise a send. */
 export const isLocked = (client) => !!client?.tipping_off_lock;

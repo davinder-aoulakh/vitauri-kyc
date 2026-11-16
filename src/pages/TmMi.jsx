@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTenant } from '@/lib/tenantContext';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import { hasPermission } from '@/lib/permissions';
+import { hasPermission, canAml } from '@/lib/permissions';
 import AppShell from '@/components/layout/AppShell';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
@@ -11,7 +11,7 @@ import { Lock } from 'lucide-react';
 /** Transaction monitoring MI as its own page (also still available as a tab on the MI dashboard). */
 export default function TmMi() {
   const { currentUser, tenant } = useTenant();
-  const allowed = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'viewMIDashboard');
+  const allowed = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'viewMIDashboard') && canAml(currentUser, tenant);
   if (!allowed) {
     return <AppShell><EmptyState icon={Lock} title="Not available" description="Monitoring MI needs Transaction Monitoring and the MI permission." /></AppShell>;
   }

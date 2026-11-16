@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTenant } from '@/lib/tenantContext';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import { hasPermission } from '@/lib/permissions';
+import { hasPermission, canAml } from '@/lib/permissions';
 import { useFiuReportData, useFiuAct, useFiuEndpointMissing } from '@/hooks/useFiuReport';
 import DiditConsoleFallback from '@/components/tm/report/DiditConsoleFallback';
 import { useCaseUsers } from '@/hooks/useTmCase';
@@ -30,7 +30,7 @@ export default function FiuReportWorkspace() {
 
   const isCO = hasPermission(role, 'tmApproveFiuReport');
   const canWork = hasPermission(role, 'tmWorkCase');
-  const allowed = isFeatureEnabled(tenant, 'tm_core') && isFeatureEnabled(tenant, 'tm_fiu') && (canWork || isCO);
+  const allowed = isFeatureEnabled(tenant, 'tm_core') && isFeatureEnabled(tenant, 'tm_fiu') && (canWork || isCO) && canAml(currentUser, tenant);
   const { report, fiu, checks } = useFiuReportData(tenantId, id, allowed);
   const { data: users = [] } = useCaseUsers(tenantId, allowed);
   const { act, busy } = useFiuAct(tenantId, id);

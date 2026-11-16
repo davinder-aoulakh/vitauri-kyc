@@ -1,6 +1,7 @@
 // Sidebar for the KYC + AML layout (flag aml_nav_v2, build spec section 2 and decision D1). Data only: AppShell adds
 // the icons and applies the same permission / feature checks it uses for the other two sidebars.
 // No route moves in this phase: every href is an existing page.
+// `domain` ('kyc' | 'aml') on a group or item: hidden for users who work on the other side only (phase 6).
 import { isFeatureEnabled } from './featureFlags.js';
 
 export { librariesFor, libraryCodesFor, normaliseJurisdictions } from '../../base44/shared/tmLibraryScope.js';
@@ -19,8 +20,8 @@ export const amlNavItems = [
     group: 'OVERVIEW',
     items: [
       { label: 'My Work', icon: 'Inbox', href: '/work', permission: null, badge: 'myWork' },
-      { label: 'KYC Dashboard', icon: 'LayoutDashboard', href: '/', permission: null, featureKey: 'dashboard' },
-      { label: 'AML Dashboard', icon: 'PieChart', href: '/tm/mi', permission: 'viewMIDashboard', featureKey: 'tm_core' },
+      { label: 'KYC Dashboard', domain: 'kyc', icon: 'LayoutDashboard', href: '/', permission: null, featureKey: 'dashboard' },
+      { label: 'AML Dashboard', domain: 'aml', icon: 'PieChart', href: '/tm/mi', permission: 'viewMIDashboard', featureKey: 'tm_core' },
     ],
   },
   {
@@ -32,6 +33,7 @@ export const amlNavItems = [
   },
   {
     group: 'KYC',
+    domain: 'kyc',
     items: [
       { label: 'My Reviews', icon: 'FolderOpen', href: '/my-cases', permission: null, featureKey: 'my_cases' },
       { label: 'Reviews', icon: 'FolderOpen', href: '/all-cases', permission: 'viewAllTenantCases', featureKey: 'all_cases' },
@@ -45,6 +47,7 @@ export const amlNavItems = [
   },
   {
     group: 'AML',
+    domain: 'aml',
     items: [
       { label: 'Alerts', icon: 'AlertTriangle', href: '/tm/alerts', permission: 'tmViewAlerts', badge: 'tmAlerts', featureKey: 'tm_core' },
       { label: 'Investigations', icon: 'Briefcase', href: '/tm/cases', permission: 'tmViewAlerts', badge: 'tmCases', featureKey: 'tm_core' },
@@ -53,6 +56,7 @@ export const amlNavItems = [
   },
   {
     group: 'REPORTING',
+    domain: 'aml',
     items: [
       { label: 'FIU Reports', icon: 'FileText', href: '/tm/reports', permission: 'createRunCase', badge: 'fiu', featureKey: 'tm_fiu' },
       { label: 'MI Dashboard', icon: 'BarChart3', href: '/mi-dashboard', permission: 'viewMIDashboard', featureKey: 'mi_dashboard' },
@@ -67,9 +71,9 @@ export const amlNavItems = [
       { label: 'Users', icon: 'UserCircle', href: '/user-management', permission: 'userManagement', featureKey: 'user_management' },
       { label: 'Archive', icon: 'Archive', href: '/archive', permission: 'viewArchive', featureKey: 'archive' },
       // These three move into Tenant Config and the AML Dashboard in phase 9; until then they stay reachable here.
-      { label: 'Rules', icon: 'SlidersHorizontal', href: '/tm/rules', anyPermission: ['tmManageRules', 'tmApproveRules'], featureKey: 'tm_rules' },
-      { label: 'Data Coverage', icon: 'Activity', href: '/tm/coverage', permission: 'tmViewAlerts', featureKey: 'tm_core' },
-      { label: 'Quality', icon: 'ShieldCheck', href: '/tm/quality', permission: 'tmQuality', featureKey: 'tm_quality' },
+      { label: 'Rules', domain: 'aml', icon: 'SlidersHorizontal', href: '/tm/rules', anyPermission: ['tmManageRules', 'tmApproveRules'], featureKey: 'tm_rules' },
+      { label: 'Data Coverage', domain: 'aml', icon: 'Activity', href: '/tm/coverage', permission: 'tmViewAlerts', featureKey: 'tm_core' },
+      { label: 'Quality', domain: 'aml', icon: 'ShieldCheck', href: '/tm/quality', permission: 'tmQuality', featureKey: 'tm_quality' },
     ],
   },
 ];

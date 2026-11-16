@@ -6,7 +6,7 @@ import { useTenant } from '@/lib/tenantContext';
 import { useTenantClients } from '@/hooks/useTenantData';
 import { useTmAlerts } from '@/hooks/useTmAlerts';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import { hasPermission } from '@/lib/permissions';
+import { hasPermission, canAml } from '@/lib/permissions';
 import { errorMessage, FILTERS } from '@/lib/tmAlerts';
 import { useToast } from '@/components/ui/use-toast';
 import AppShell from '@/components/layout/AppShell';
@@ -37,7 +37,7 @@ export default function TmAlerts() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const allowed = isFeatureEnabled(tenant, 'tm_core') && hasPermission(role, 'tmViewAlerts');
+  const allowed = isFeatureEnabled(tenant, 'tm_core') && hasPermission(role, 'tmViewAlerts') && canAml(currentUser, tenant);
   const canWork = hasPermission(role, 'tmWorkCase');
 
   // ?alert=<id> opens that alert's side panel on load; ?filter=<key> preselects a filter pill.

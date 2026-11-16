@@ -3,7 +3,7 @@ import { useTenant } from '@/lib/tenantContext';
 import { useTenantClients } from '@/hooks/useTenantData';
 import { useCoverageData } from '@/hooks/useCoverageData';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import { hasPermission } from '@/lib/permissions';
+import { hasPermission, canAml } from '@/lib/permissions';
 import { monthOptions } from '@/lib/tmCoverage';
 import AppShell from '@/components/layout/AppShell';
 import PageHeader from '@/components/shared/PageHeader';
@@ -24,7 +24,7 @@ export default function TmCoverage() {
   const [month, setMonth] = useState(months[0].value);
   const [showUpload, setShowUpload] = useState(false);
 
-  const allowed = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmViewAlerts');
+  const allowed = isFeatureEnabled(tenant, 'tm_core') && hasPermission(currentUser?.app_role, 'tmViewAlerts') && canAml(currentUser, tenant);
   const canUpload = hasPermission(currentUser?.app_role, 'tmManageAccounts');
   const { data: clients } = useTenantClients(tenantId, { enabled: allowed });
   const { data, isLoading, error, refetch, isFetching } = useCoverageData(tenantId, month, clients, allowed);

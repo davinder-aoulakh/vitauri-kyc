@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTenant } from '@/lib/tenantContext';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import { hasPermission } from '@/lib/permissions';
+import { hasPermission, canAml } from '@/lib/permissions';
 import { useTmCaseData, useCaseAction, useCaseUsers } from '@/hooks/useTmCase';
 import { clockPill } from '@/lib/tmCase';
 import TippingOffBanner from '@/components/shared/TippingOffBanner';
@@ -26,7 +26,7 @@ export default function TmCaseWorkspace() {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t); }, []);
 
-  const allowed = isFeatureEnabled(tenant, 'tm_core') && (hasPermission(role, 'tmWorkCase') || hasPermission(role, 'tmFourEyes'));
+  const allowed = isFeatureEnabled(tenant, 'tm_core') && (hasPermission(role, 'tmWorkCase') || hasPermission(role, 'tmFourEyes')) && canAml(currentUser, tenant);
   const canWork = hasPermission(role, 'tmWorkCase');
   const isCO = hasPermission(role, 'tmApproveFiuReport');
   const { tmCase, alerts, scenarios, client, decisions, fiuReports } = useTmCaseData(tenantId, id, allowed);

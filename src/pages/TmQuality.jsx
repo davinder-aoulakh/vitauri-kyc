@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useTenant } from '@/lib/tenantContext';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import { hasPermission } from '@/lib/permissions';
+import { hasPermission, canAml } from '@/lib/permissions';
 import { useTmQualityData, useQualityCall } from '@/hooks/useTmQuality';
 import { useCaseUsers } from '@/hooks/useTmCase';
 import { PERIODS, RELEASE_ROLES, DEFAULT_MAX_WRONGLY_CLOSED_PCT, periodRange, buildMatrix, latestShadowByScenario, inPeriod } from '@/lib/tmQuality';
@@ -25,7 +25,7 @@ export default function TmQuality() {
   const { currentUser, tenant } = useTenant();
   const tenantId = currentUser?.tenant_id;
   const role = currentUser?.app_role;
-  const allowed = isFeatureEnabled(tenant, 'tm_quality') && hasPermission(role, 'tmQuality');
+  const allowed = isFeatureEnabled(tenant, 'tm_quality') && hasPermission(role, 'tmQuality') && canAml(currentUser, tenant);
   const canRelease = RELEASE_ROLES.includes(role);
   const maxPct = Number(tenant?.tm_settings?.max_wrongly_closed_pct ?? DEFAULT_MAX_WRONGLY_CLOSED_PCT);
 
