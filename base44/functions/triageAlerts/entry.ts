@@ -107,7 +107,7 @@ export default async function (req) {
     const serviceCall = !user && !hasKey && !!body.tenant_id;
     const auth = serviceCall
       ? { mode: 'service', tenantId: String(body.tenant_id), actorType: 'System', actorName: 'Auto-triage', actorUserId: undefined }
-      : await authenticate(base44, req, body, { roles: VIEW_ROLES, allowApiKey: false });
+      : await authenticate(base44, req, body, { domain: 'aml', roles: VIEW_ROLES, allowApiKey: false });
     const tenantId = auth.tenantId;
     const ids = [...new Set(Array.isArray(body.alert_ids) ? body.alert_ids : [])].slice(0, serviceCall ? 1 : MAX_ALERTS);
     if (!ids.length) throw httpError(400, 'alert_ids is required');

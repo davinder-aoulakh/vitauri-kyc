@@ -3,6 +3,7 @@ import { asList } from './tmAuth.js';
 import { writeAudit } from './tmAudit.js';
 import { fetchAll } from './tmCoverage.js';
 import { tenantUsers, roleOf, CO_ROLES } from './tmCaseCommon.js';
+import { HOLD_CASE_STATUSES, refreshAmlHold } from './tippingOff.js';
 
 const DAY = 24 * 3600000;
 const SYSTEM = { actorType: 'System', actorName: 'System (deadlineSweep)', actorUserId: undefined };
@@ -31,6 +32,14 @@ export async function checkTippingOffMirror(base44, tenantId) {
     restored.push({ clientId, name: client.full_name });
   }
 
+  // AML hold (phase 6): customers of an investigation that holds get the display flag too.
+  let holdsSet = 0;
+  try {
+    const cases = asList(await E.TmCase.filter({ tenant_id: tenantId, status: { $in: HOLD_CASE_STATUSES } }, undefined, 500));
+    const ids = [...new Set(cases.flatMap((c) => [c.primary_client_id, ...(c.client_ids || [])]).filter(Boolean))];
+    for (const id of ids) if ((await refreshAmlHold(base44, tenantId, id, SYSTEM)) === 'set') holdsSet += 1;
+  } catch (e) { console.warn('AML hold mirror check failed', e?.message || e); }
+
   if (restored.length) {
     const cos = (await tenantUsers(E, tenantId)).filter((u) => CO_ROLES.includes(roleOf(u)));
     const day = new Date().toISOString().slice(0, 10);
@@ -52,5 +61,5 @@ export async function checkTippingOffMirror(base44, tenantId) {
     tenantId, eventType: 'tipping_off_mirror_checked', before: {}, after: { active_locks: locks.length, restored: restored.length },
     notes: `Daily tipping-off mirror check: ${restored.length} restored.`,
   });
-  return { skipped: false, restored: restored.length };
+  return { skipped: false, restored: restored.length, aml_holds_set: holdsSet };
 }

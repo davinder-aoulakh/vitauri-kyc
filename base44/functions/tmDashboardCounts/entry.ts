@@ -14,7 +14,7 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json().catch(() => ({}));
-    const auth = await authenticate(base44, req, body, { roles: TM_VIEW_ALERTS, allowApiKey: false });
+    const auth = await authenticate(base44, req, body, { domain: 'aml', roles: TM_VIEW_ALERTS, allowApiKey: false });
     const tenantId = auth.tenantId;
     const tenant = await loadTenant(base44, tenantId);
     if (!isTmEnabled(tenant, 'tm_core')) throw httpError(403, 'Feature tm_core is not enabled');

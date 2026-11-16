@@ -8,6 +8,7 @@ import { CO_ROLES } from '../../shared/tmCaseCommon.js';
 import { loadReport } from '../../shared/tmFiuActions.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import { safeFileArtefacts } from '../../shared/tmFiuArtefacts.js';
+import { refreshAmlHoldForCase } from '../../shared/tippingOff.js';
 
 const METHODS = ['portal_upload', 'xml_upload', 'm2m'];
 const FROM = { submitted: ['generated'], received: ['submitted'], accepted: ['received'], rejected: ['submitted', 'received'] };
@@ -24,7 +25,7 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
-    const auth = await authenticate(base44, req, body, { roles: CO_ROLES, allowApiKey: false });
+    const auth = await authenticate(base44, req, body, { domain: 'aml', roles: CO_ROLES, allowApiKey: false });
     const tenantId = auth.tenantId;
     const tenant = await loadTenant(base44, tenantId);
     if (!isTmEnabled(tenant, 'tm_core')) throw httpError(403, 'Feature tm_core is not enabled');
@@ -76,6 +77,7 @@ export default async function (req) {
           await E.TmCase.update(tmCase.id, { status: 'closed', timeline: [...(tmCase.timeline || []), entry] });
           await writeAudit(base44, auth, { tenantId, clientId: tmCase.primary_client_id, eventType: 'tm_case_closed', before: { status: tmCase.status }, after: { status: 'closed' }, notes: `TM case ${tmCase.case_ref || tmCase.id} closed: all FIU reports received.` });
           caseClosed = true;
+          await refreshAmlHoldForCase(base44, tenantId, { ...tmCase, status: 'closed' }, auth);
         }
       }
     }

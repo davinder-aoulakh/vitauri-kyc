@@ -7,6 +7,7 @@ import { authenticate, errorResponse, httpError, loadTenant, asList, WORK_ROLES 
 import { writeAudit } from '../../shared/tmAudit.js';
 import { caseGroupingSettings, pickCase, groupingKeyFor, aiFollowed } from '../../shared/tmCaseGrouping.js';
 import { createCase, addAlerts } from '../../shared/tmCaseCore.js';
+import { refreshAmlHold } from '../../shared/tippingOff.js';
 
 const OPEN_ALERT = ['new', 'triaged', 'in_review'];
 const OPEN_CASE = ['open', 'investigating', 'pending_co'];
@@ -15,7 +16,7 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
-    const auth = await authenticate(base44, req, body, { roles: WORK_ROLES, allowApiKey: false });
+    const auth = await authenticate(base44, req, body, { domain: 'aml', roles: WORK_ROLES, allowApiKey: false });
     const tenantId = auth.tenantId;
     const E = base44.asServiceRole.entities;
     const tenant = await loadTenant(base44, tenantId);
@@ -59,6 +60,7 @@ export default async function (req) {
         timeline: [...(tmCase.timeline || []), { at: new Date().toISOString(), kind: 'alert_added', text: `Alert ${alert.id} added by ${auth.actorName}.` }],
       });
       await E.TmAlert.update(alert.id, { tm_case_id: tmCase.id, status: 'in_review' });
+      await refreshAmlHold(base44, tenantId, alert.client_id, auth);
       await audit('tm_alert_added_to_case', { tm_case_id: null }, { tm_case_id: tmCase.id, case_ref: tmCase.case_ref }, `Alert ${alert.id} added to case ${tmCase.case_ref}.`);
       return Response.json({ ok: true, tm_case_id: tmCase.id, case_ref: tmCase.case_ref });
     }

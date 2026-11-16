@@ -9,6 +9,7 @@ import {
   OPEN_CASE, WORKABLE_CASE, OPEN_ALERT, FOUR_EYES_ROLES, CO_ROLES, roleOf, tenantUsers, tlEntry, commit,
   clockPatch, distinct, caseClients, nextCaseRef,
 } from './tmCaseCommon.js';
+import { refreshAmlHoldForCase } from './tippingOff.js';
 
 const KINDS = ['risk', 'ok', 'unclear', 'gap'];
 const DECISION_TYPES = ['kyc_approval', 'aml_assessment', 'payment_release'];
@@ -53,6 +54,7 @@ export async function createCase(ctx, _c, body) {
     timeline: [tlEntry(auth, 'created', `Case created from ${ids.length} alert(s) by ${auth.actorName}. Assigned to ${users.get(assignee)?.full_name || 'investigator'}${reviewer ? `, four-eyes reviewer ${users.get(reviewer)?.full_name}` : ''}.`)],
   });
   for (const a of alerts) await E.TmAlert.update(a.id, { tm_case_id: created.id, status: 'in_review', assigned_to_user_id: a.assigned_to_user_id || assignee });
+  await refreshAmlHoldForCase(ctx.base44, tenantId, created, auth);
   await ctx.base44.asServiceRole.entities.AuditEvent.create({
     tenant_id: tenantId, client_id: primary, actor_user_id: auth.actorUserId, actor_name: auth.actorName, actor_type: auth.actorType,
     event_type: 'tm_case_created', before_state: {}, after_state: { tm_case_id: created.id, case_ref: created.case_ref, alert_ids: ids, assigned_to_user_id: assignee, four_eyes_user_id: reviewer },

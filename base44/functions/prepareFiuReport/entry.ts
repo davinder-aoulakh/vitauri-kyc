@@ -19,7 +19,7 @@ export default async function (req) {
     let auth;
     let tenantId;
     if (user) {
-      auth = await authenticate(base44, req, body, { roles: WORK_ROLES, allowApiKey: false });
+      auth = await authenticate(base44, req, body, { domain: 'aml', roles: WORK_ROLES, allowApiKey: false });
       auth.role = roleOf(user);
       tenantId = auth.tenantId;
     } else {

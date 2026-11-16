@@ -14,7 +14,7 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
-    const auth = await authenticate(base44, req, body, { roles: CO_ROLES, allowApiKey: false });
+    const auth = await authenticate(base44, req, body, { domain: 'aml', roles: CO_ROLES, allowApiKey: false });
     const tenantId = auth.tenantId;
     const tenant = await loadTenant(base44, tenantId);
     if (!isTmEnabled(tenant, 'tm_fiu')) throw httpError(403, 'Feature tm_fiu is not enabled');

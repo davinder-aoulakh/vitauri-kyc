@@ -32,7 +32,7 @@ export default async function (req) {
     const body = await req.json();
     const run = ACTIONS[body.action];
     if (!run) throw httpError(400, 'Unknown action');
-    const auth = await authenticate(base44, req, body, { roles: WORK_ROLES, allowApiKey: false });
+    const auth = await authenticate(base44, req, body, { domain: 'aml', roles: WORK_ROLES, allowApiKey: false });
     const user = await base44.auth.me();
     const tenant = await loadTenant(base44, auth.tenantId);
     if (!isTmEnabled(tenant, 'tm_core')) throw httpError(403, 'Feature tm_core is not enabled');

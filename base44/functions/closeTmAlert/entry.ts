@@ -17,7 +17,7 @@ export default async function (req) {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
     if (String(body.actor_type || '').toLowerCase() === 'ai_agent') throw httpError(403, 'AI agents cannot close alerts');
-    const auth = await authenticate(base44, req, body, { roles: WORK_ROLES, allowApiKey: false });
+    const auth = await authenticate(base44, req, body, { domain: 'aml', roles: WORK_ROLES, allowApiKey: false });
     if (auth.actorType === 'AI_Agent') throw httpError(403, 'AI agents cannot close alerts');
     const tenantId = auth.tenantId;
     const E = base44.asServiceRole.entities;

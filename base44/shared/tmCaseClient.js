@@ -3,6 +3,7 @@ import { asList, httpError } from './tmAuth.js';
 import { fetchAll } from './tmCoverage.js';
 import { pickWorkflow, parseWorkflows } from './diditWorkflows.js';
 import { OPEN_CASE, WORKABLE_CASE, tlEntry, commit, assertCustomerRequestAllowed, createOutreach, nextCaseRef, distinct } from './tmCaseCommon.js';
+import { refreshAmlHoldForCase } from './tippingOff.js';
 
 const isoDate = (d) => d.toISOString().slice(0, 10);
 const plusDays = (n) => new Date(Date.now() + n * 86400000);
@@ -122,6 +123,7 @@ export async function openNetworkCase(ctx, tmCase) {
     tenant_id: tenantId, client_id: tmCase.primary_client_id, actor_user_id: auth.actorUserId, actor_name: auth.actorName, actor_type: auth.actorType,
     event_type: 'tm_network_case_created', before_state: {}, after_state: { tm_case_id: net.id, origin: tmCase.id, client_ids: others }, notes: `Network case ${net.case_ref} opened from ${tmCase.case_ref}.`,
   });
+  await refreshAmlHoldForCase(ctx.base44, tenantId, net, auth);
   await commit(ctx, tmCase, {}, tlEntry(auth, 'network_case', `Network case ${net.case_ref} opened with ${others.length} additional client(s).`, { ref_id: net.id }),
     { type: 'tm_case_network_opened', after: { network_case_id: net.id, client_ids: others } });
   return { tm_case_id: tmCase.id, network_case_id: net.id, case_ref: net.case_ref, added_clients: others.length };

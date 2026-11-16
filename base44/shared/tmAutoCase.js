@@ -3,6 +3,7 @@
 import { asList } from './tmAuth.js';
 import { caseGroupingSettings, autoCaseReason, pickCase, groupingKeyFor } from './tmCaseGrouping.js';
 import { nextCaseRef, clockPatch } from './tmCaseCommon.js';
+import { refreshAmlHold } from './tippingOff.js';
 
 const OPEN_CASE = ['open', 'investigating', 'pending_co'];
 const ACTOR = { actor_type: 'System', actor_name: 'Vitauri (automatic investigation)' };
@@ -38,6 +39,7 @@ export async function autoCaseForAlert(base44, tenant, alert) {
       caseId = rec.id; caseRef = rec.case_ref; created = true;
     }
     await E.TmAlert.update(alert.id, { tm_case_id: caseId, status: 'in_review' });
+    await refreshAmlHold(base44, tenantId, alert.client_id);
     await E.AuditEvent.create({
       tenant_id: tenantId, client_id: alert.client_id, ...ACTOR, event_type: created ? 'tm_case_created' : 'tm_alert_added_to_case',
       before_state: { tm_case_id: null }, after_state: { tm_case_id: caseId, case_ref: caseRef, alert_id: alert.id, automatic: true, reason },

@@ -39,7 +39,7 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
-    const auth = await authenticate(base44, req, body, { roles: CREATE_RUN_CASE, allowApiKey: false });
+    const auth = await authenticate(base44, req, body, { domain: 'aml', roles: CREATE_RUN_CASE, allowApiKey: false });
     const tenantId = auth.tenantId;
     const agent = body.agent || 'TmEvidence';
     if (agent !== 'TmEvidence') throw httpError(400, `Unsupported agent ${agent}`);
