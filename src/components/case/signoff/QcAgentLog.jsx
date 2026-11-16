@@ -6,7 +6,7 @@ const RESULT = { passed: 'text-emerald-700', failed: 'text-red-700', paused: 'te
 const fmt = (d) => { try { return d ? format(new Date(d), 'd MMM HH:mm:ss') : '—'; } catch { return '—'; } };
 
 /** Agent activity log: one line per QC round with checker, model, rule set, duration and counts. */
-export default function QcAgentLog({ history = [], actions = [] }) {
+export default function QcAgentLog({ history = [], actions = [], overrules = [] }) {
   if (!history.length) return null;
   return (
     <details className="rounded-xl border border-border bg-card p-3 text-xs">
@@ -32,6 +32,12 @@ export default function QcAgentLog({ history = [], actions = [] }) {
           <li key={a.id} className="border-l-2 border-amber-300 pl-3">
             <div><span className="font-medium">{a.decided_by_name || 'Analyst'}</span> decided <span className="font-medium">{a.choice}</span> · {fmt(a.decided_at)}</div>
             <div className="text-muted-foreground">{a.question}</div>
+          </li>
+        ))}
+        {overrules.map((f) => (
+          <li key={f.id} className="border-l-2 border-violet-400 pl-3">
+            <div><span className="font-medium">{f.resolved_by_name || 'QC Officer'}</span> overruled <span className="font-medium">{f.code}</span> ({f.severity}) · {fmt(f.resolved_at)}</div>
+            <div className="text-muted-foreground">{f.resolution_text}</div>
           </li>
         ))}
       </ol>

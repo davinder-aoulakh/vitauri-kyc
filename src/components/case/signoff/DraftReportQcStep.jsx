@@ -47,6 +47,8 @@ export default function DraftReportQcStep({ kycCase, client, currentUser, onCase
   const maxRounds = qc?.max_rounds || 3;
   const openOf = (check) => findings.filter((f) => f.check === check && ['open', 'returned', 'needs_human'].includes(f.status)).length;
   const ready = qcPassed;
+  const overruledCount = findings.filter((f) => f.status === 'overruled').length;
+  const overrule = (list, rationale) => qcAct('overrule_findings', { finding_ids: list.map((f) => f.id), rationale }, list.length === 1 ? 'Finding overruled' : `${list.length} findings overruled`);
   const submitter = users.find((u) => u.id === kycCase.sign_off_submitted_by);
   const returned = isDraft && (kycCase.returned_reason || kycCase.sign_off_rejection_reason);
 
@@ -119,7 +121,7 @@ export default function DraftReportQcStep({ kycCase, client, currentUser, onCase
               {qcBusy === 'run' || running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : run ? <RefreshCw className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
               {run && roundsUsed ? 'Re-run QC' : 'Run QC'} (round {Math.min(roundsUsed + 1, maxRounds)} of {maxRounds})
             </Button>
-            {roundsUsed >= maxRounds && !ready && <span className="text-[11px] text-red-700">Maximum rounds reached. Fix the findings manually; a return from review starts a new cycle.</span>}
+            {roundsUsed >= maxRounds && !ready && <span className="text-[11px] text-red-700">Maximum rounds reached. {qc?.can_overrule ? 'Overrule the remaining findings below with a rationale, or fix them manually' : 'Fix the findings manually or ask a QC Officer to overrule them'}; a return from review starts a new cycle.</span>}
             {!draftReport && <span className="text-[11px] text-muted-foreground">Generate the draft report first.</span>}
             {rc?.status === 'skipped' && <span className="text-[11px] text-muted-foreground">{rc.summary}</span>}
             <span className="ml-auto text-[11px] text-muted-foreground">Strictness: {qc?.strictness || 'light'}</span>
@@ -130,15 +132,16 @@ export default function DraftReportQcStep({ kycCase, client, currentUser, onCase
       {/* QC findings (by step) and human decisions */}
       {run && !legacy && !running && (
         <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-          <div className="text-sm font-semibold">QC findings · round {run.round || 1}</div>
+          <div className="text-sm font-semibold">QC findings · round {run.round || 1}{overruledCount ? <span className="ml-2 text-xs font-normal text-violet-800">{run.result === 'passed' ? 'passed with ' : ''}{overruledCount} finding{overruledCount === 1 ? '' : 's'} overruled by the QC Officer</span> : null}</div>
           {rc?.summary && rc.status === 'done' && <p className="rounded-lg bg-muted/40 p-2 text-xs text-muted-foreground"><span className="font-medium">Report Check ({rc.engine}):</span> {rc.summary}</p>}
           <QcFindingsPanel findings={findings} strictness={run.strictness || qc?.strictness} busy={qcBusy} readOnly={!isDraft}
             onNavigateToStep={onNavigateToStep}
             onDecide={(p) => qcAct('record_human_action', p, 'Decision recorded')}
-            onDismiss={(f, reason) => qcAct('dismiss_finding', { finding_id: f.id, reason }, 'Finding dismissed')} />
+            onDismiss={(f, reason) => qcAct('dismiss_finding', { finding_id: f.id, reason }, 'Finding dismissed')}
+            canOverrule={!!qc?.can_overrule} overruleMin={qc?.overrule_min || 30} onOverrule={overrule} />
         </section>
       )}
-      <QcAgentLog history={qc?.history || []} actions={qc?.actions || []} />
+      <QcAgentLog history={qc?.history || []} actions={qc?.actions || []} overrules={findings.filter((f) => f.status === 'overruled')} />
 
       {/* Submit for review */}
       {isDraft && route?.level && (
