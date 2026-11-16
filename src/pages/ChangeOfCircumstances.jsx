@@ -16,7 +16,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Loader2, Lock, RefreshCw, ArrowUpRight, ShieldAlert } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { RESPONSES, RESPONSE_LABEL, RESPONSE_HELP, STATUS_LABEL, STEP_LABEL, stepsForResponse } from '../../base44/shared/cocResponse.js';
+import { RESPONSES, RESPONSE_LABEL, RESPONSE_HELP, STATUS_LABEL, STEP_LABEL, stepsForResponse } from '@/lib/cocResponse';
 
 const STATUS_STYLE = {
   proposed: 'bg-orange-100 text-orange-700',

@@ -9,7 +9,7 @@ import EvidenceDialog from '@/components/tm/report/EvidenceDialog';
 import { rank } from '@/lib/fiuReport';
 import { useTenant } from '@/lib/tenantContext';
 import { amlLayoutOn } from '@/lib/amlNav';
-import { referenceOf } from '../../../../base44/shared/tmFiuSubmission.js';
+import { referenceOf } from '@/lib/tmFiuSubmission';
 
 export default function ReportFooter({ report, isCO, isPreparer, editing, setEditing, pastDue, act, busy }) {
   const { toast } = useToast();

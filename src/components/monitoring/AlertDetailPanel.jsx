@@ -8,13 +8,13 @@ import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { amlLayoutOn } from '@/lib/amlNav';
-import { isScreeningAlert } from '../../../base44/shared/cocResponse.js';
+import { isScreeningAlert } from '@/lib/cocResponse';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   X, AlertTriangle, CheckCircle, Loader2, Sparkles,
-  Eye, MessageSquare, Shield, ArrowUpRight, UserCheck, UserX
+  Eye, Shield, ArrowUpRight, UserCheck, UserX
 } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { cn } from '@/lib/utils';

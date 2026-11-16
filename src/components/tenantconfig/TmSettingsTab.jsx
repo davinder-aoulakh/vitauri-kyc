@@ -9,8 +9,7 @@ import { hasPermission, isVitauriOps, roleModel as roleModelOf } from '@/lib/per
 import RegressionRefFields from '@/components/tenantconfig/tm/RegressionRefFields';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { normaliseJurisdictions } from '@/lib/amlNav';
-import { detectionSettings } from '../../../base44/shared/tmDetection.js';
-import { caseGroupingSettings } from '../../../base44/shared/tmCaseGrouping.js';
+import { detectionSettings, caseGroupingSettings } from '@/lib/tmTenantSettings';
 import AiModelCard from '@/components/tenantconfig/tm/AiModelCard';
 import { MODEL_CHANGE_ROLES, MIN_NOTE } from '@/lib/tmAiModels';
 import Psd2PartnerSelect from '@/components/tenantconfig/tm/Psd2PartnerSelect';

@@ -1,7 +1,7 @@
 // Role-based permission matrix for Vitauri KYC
 // app_role drives ALL in-app permissions
 
-export { canAml, canKyc, roleModel, domainOf, WORK_DOMAINS, WORK_DOMAIN_LABEL, ALWAYS_BOTH_ROLES } from '../../base44/shared/workDomain.js';
+export { canAml, canKyc, roleModel, domainOf, WORK_DOMAINS, WORK_DOMAIN_LABEL, ALWAYS_BOTH_ROLES } from './workDomain.js';
 
 export const APP_ROLES = [
   'Analyst',
