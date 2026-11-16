@@ -31,6 +31,8 @@ export default function FinalSignOffStep({ kycCase, client, currentUser, onCaseU
   const [dlg, setDlg] = useState('');
   const [preview, setPreview] = useState(null);
   const [amlAssessment, setAmlAssessment] = useState(null);
+  // Phase 7: result of the draft FIU report started by a decline / termination with "report to be filed".
+  const [fiuNote, setFiuNote] = useState(null);
   const [freezing, setFreezing] = useState(false);
   const [sampleNote, setSampleNote] = useState('');
   const ctx = useMemo(() => reportContext({ kycCase, route, advice, decisions, users }), [kycCase, route, advice, decisions, users]);
@@ -62,8 +64,6 @@ export default function FinalSignOffStep({ kycCase, client, currentUser, onCaseU
   const selfSignOff = route?.level === 'analyst';
   const canDecide = perms.canApprove && !adviceOutdated;
 
-  // Phase 7: result of the draft FIU report started by a decline / termination with "report to be filed".
-  const [fiuNote, setFiuNote] = useState(null);
   const run = async (action, payload, okText) => {
     const res = await act(action, payload, okText);
     if (!res) return false;
