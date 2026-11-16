@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { base44 } from '@/api/base44Client';
@@ -7,6 +7,7 @@ import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { planAdvance, isRunDead, progressText } from '@/lib/kycScreenerSteps';
 import { Bot, Download, Loader2, RefreshCw, AlertTriangle, ExternalLink } from 'lucide-react';
 
 const list = (r) => (Array.isArray(r) ? r : r?.items || []);
@@ -19,7 +20,6 @@ const AGREE = {
   review: ['Review', 'bg-sky-50 text-sky-800 border-sky-200'],
   claude_only_clear: ['Didit not screened', 'bg-muted text-muted-foreground border-border'],
 };
-const STAGE = { doc_reader: 'Reading documents (isolated)', screening: 'Screening parties (web search)', rules: 'Applying the rules grid', export: 'Building Excel and PDF', done: 'Done' };
 const RATING_TONE = { low: 'bg-emerald-100 text-emerald-800', medium: 'bg-amber-100 text-amber-900', high: 'bg-red-100 text-red-800' };
 const RESULT_TONE = { hit: 'text-red-700 font-semibold', clear: 'text-emerald-700', no_match: 'text-emerald-700', inconclusive: 'text-amber-800', not_screened: 'text-muted-foreground' };
 
@@ -144,6 +144,34 @@ export default function KycScreenerPanel({ client }) {
   });
   const run = runs.find((r) => r.id === selectedId) || runs[0];
 
+  // A run is done in short steps. While the panel is open it asks the server for the next step whenever none is working
+  // (the server decides; this only avoids needless calls). Closing the panel pauses the run; reopening continues it.
+  const advancing = useRef(false);
+  const active = runs.find((r) => r.status === 'running') || null;
+  const activeKey = active ? `${active.id}:${active.updated_date}:${active.heartbeat_at}` : '';
+  useEffect(() => {
+    if (!open || !active || advancing.current) return undefined;
+    const tick = async () => {
+      if (advancing.current) return;
+      const plan = planAdvance(active);
+      if (plan.action === 'none' || plan.action === 'wait') return;
+      advancing.current = true;
+      try {
+        await base44.functions.invoke('runKycScreener', { action: 'advance', run_id: active.id });
+        qc.invalidateQueries({ queryKey: key });
+      } catch (e) {
+        console.warn('KYC Screener advance failed', e?.response?.data?.error || e?.message);
+      } finally {
+        advancing.current = false;
+      }
+    };
+    tick();
+    const t = setInterval(tick, 8000); // also catches a step that stopped without a result (no data change to react to)
+    return () => clearInterval(t);
+  }, [open, activeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const busyRun = run?.status === 'running' && !isRunDead(run);
+  const incompleteParties = run?.status === 'completed' ? (run.screening?.parties || []).filter((p) => p.incomplete).map((p) => p.name) : [];
+
   const start = async () => {
     setStarting(true);
     try {
@@ -152,7 +180,7 @@ export default function KycScreenerPanel({ client }) {
       setSelectedId(res.run_id);
       setOpen(true);
       qc.invalidateQueries({ queryKey: key });
-      toast({ title: res.already_running ? 'A KYC Screener run is already in progress' : 'KYC Screener started', description: 'This takes 1–3 minutes. You can keep working.' });
+      toast({ title: res.already_running ? 'A KYC Screener run is already in progress' : 'KYC Screener started', description: 'This takes a few minutes. Keep this panel open: the run moves step by step and pauses when the panel is closed.' });
     } catch (e) {
       toast({ variant: 'destructive', title: 'Could not start the KYC Screener', description: e?.response?.data?.error || e?.message });
     } finally {
@@ -173,8 +201,8 @@ export default function KycScreenerPanel({ client }) {
           </SheetHeader>
           <div className="mt-4 space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" className="gap-1.5" disabled={starting || run?.status === 'running'} onClick={start}>
-                {starting || run?.status === 'running' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} {runs.length ? 'Run again' : 'Run KYC Screener'}
+              <Button size="sm" className="gap-1.5" disabled={starting || busyRun} onClick={start}>
+                {starting || busyRun ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} {runs.length ? 'Run again' : 'Run KYC Screener'}
               </Button>
               {run?.status === 'completed' && (
                 <>
@@ -191,7 +219,13 @@ export default function KycScreenerPanel({ client }) {
             {!run && <p className="text-sm text-muted-foreground">No run yet. Running it sends this client's documents and profile to Claude (Anthropic).</p>}
             {run?.status === 'running' && (
               <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" /> {STAGE[run.stage] || 'Working'}…
+                <Loader2 className="h-4 w-4 animate-spin text-primary" /> {isRunDead(run) ? 'This run stopped. Press "Run again".' : `${progressText(run)}…`}
+                {!isRunDead(run) && run.progress?.attempts > 1 && <span className="text-xs text-muted-foreground">(second try)</span>}
+              </div>
+            )}
+            {incompleteParties.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Screening by Claude could not be completed for: {incompleteParties.join(', ')}. These parties are shown as inconclusive, not as "no match". Run again to retry.
               </div>
             )}
             {run?.status === 'failed' && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">The run failed: {run.error}</div>}
