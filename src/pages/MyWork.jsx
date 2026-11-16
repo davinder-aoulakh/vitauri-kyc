@@ -4,6 +4,7 @@ import { useTenant } from '@/lib/tenantContext';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { useMyWork, WORK_KINDS, workItemRoute } from '@/hooks/useMyWork';
 import { toClient } from '@/lib/routes';
+import { amlLayoutOn, bySection, workSection, WORK_SECTIONS } from '@/lib/amlNav';
 import AppShell from '@/components/layout/AppShell';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
@@ -42,8 +43,14 @@ export default function MyWork() {
     for (const k of WORK_KINDS) c[k.key] = items.filter((i) => i.kind === k.key).length;
     return c;
   }, [items, now]);
-  const shown = useMemo(() => items.filter((i) => (filter === 'all' ? true
-    : filter === 'due' ? i.due_at && new Date(i.due_at).getTime() < now + DAY : i.kind === filter)), [items, filter, now]);
+  // KYC + AML layout: two sections, My KYC work and My AML work (each still sorted by deadline).
+  const twoSections = amlLayoutOn(tenant);
+  const shown = useMemo(() => {
+    const list = items.filter((i) => (filter === 'all' ? true
+      : filter === 'due' ? i.due_at && new Date(i.due_at).getTime() < now + DAY : i.kind === filter));
+    return twoSections ? bySection(list) : list;
+  }, [items, filter, now, twoSections]);
+  const sectionCount = (key) => shown.filter((i) => workSection(i.kind) === key).length;
 
   useEffect(() => { setActive(0); }, [filter]);
   useEffect(() => {
@@ -103,8 +110,15 @@ export default function MyWork() {
             {shown.map((item, i) => {
               const Icon = ICON[item.kind] || FolderOpen;
               const to = workItemRoute(item);
+              const section = workSection(item.kind);
+              const heading = twoSections && (i === 0 || workSection(shown[i - 1].kind) !== section) ? WORK_SECTIONS.find((s) => s.key === section) : null;
               return (
                 <li key={`${item.kind}-${item.id}`} ref={(el) => { rowRefs.current[i] = el; }}>
+                  {heading && (
+                    <div className="px-4 py-2 bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center justify-between">
+                      <span>{heading.label}</span><span className="tabular-nums">{sectionCount(section)}</span>
+                    </div>
+                  )}
                   <div
                     role="button" tabIndex={0} aria-current={i === active ? 'true' : undefined}
                     onClick={() => to && navigate(to)} onKeyDown={(e) => { if (e.key === 'Enter' && to) navigate(to); }}

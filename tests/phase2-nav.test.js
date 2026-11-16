@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { selectNav, amlNavItems, CLIENT_TABS_V2, clientTabFor } from '../src/lib/amlNav.js';
+import { selectNav, amlNavItems, CLIENT_TABS_V2, clientTabFor, MOVED_ROUTES } from '../src/lib/amlNav.js';
 import { librariesFor, libraryCodesFor, normaliseJurisdictions, scenarioInScope } from '../base44/shared/tmLibraryScope.js';
 import { PERMISSIONS } from '../src/lib/permissions.js';
 import { FEATURE_DEFINITIONS, isFeatureEnabled } from '../src/lib/featureFlags.js';
@@ -34,7 +34,7 @@ test('groups follow spec section 2', () => {
 
 test('every link is an existing route, and no link appears twice', () => {
   const routes = new Set([...read('src/App.jsx').matchAll(/path="([^"]+)"/g)].map((m) => m[1]));
-  for (const i of items) assert.ok(routes.has(i.href), `no route for ${i.label} → ${i.href}`);
+  for (const i of items) assert.ok(routes.has(i.href.split('?')[0]), `no route for ${i.label} → ${i.href}`);
   assert.equal(new Set(items.map((i) => i.href)).size, items.length);
 });
 
@@ -51,7 +51,8 @@ test('nothing reachable in the current tm sidebar is lost', () => {
   const current = new Set([...shell.matchAll(/href: '([^']+)'/g)].map((m) => m[1]));
   const kept = new Set(items.map((i) => i.href));
   // Batch Screening becomes a button on the Screening page (decision D1); Monitoring MI is the AML Dashboard link.
-  const moved = new Set(['/batch-screening']);
+  // Phase 9: these pages became dashboard tabs or a Tenant Config tab; their routes redirect (MOVED_ROUTES).
+  const moved = new Set(['/batch-screening', ...Object.keys(MOVED_ROUTES)]);
   for (const href of current) assert.ok(kept.has(href) || moved.has(href), `${href} is no longer reachable`);
 });
 

@@ -8,7 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Save, Lock, AlertTriangle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { amlLayoutOn, groupTenantTabs } from '@/lib/amlNav';
+import { EmbeddedContext } from '@/lib/embedded';
+import TmRules from './TmRules';
 import { hasPermission } from '@/lib/permissions';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import ApiKeysTab from '@/components/tenantconfig/ApiKeysTab';
@@ -73,7 +76,18 @@ export default function TenantConfig() {
   const showApiKeys = isFeatureEnabled(tenant, 'tm_ingest_api') && hasPermission(userRole, 'tmManageIngest');
   const showFiu = isFeatureEnabled(tenant, 'tm_fiu') && canConfig;
   const showTmSettings = isFeatureEnabled(tenant, 'tm_core') && canConfig;
-  const visibleTabs = [...TABS, ...(showApiKeys ? [{ id: 'api_keys', label: 'API keys' }] : []), ...(showFiu ? [{ id: 'fiu_profiles', label: 'FIU profiles' }] : []), ...(showTmSettings ? [{ id: 'tm_settings', label: 'TM settings' }] : [])];
+  const configTabs = [...TABS, ...(showApiKeys ? [{ id: 'api_keys', label: 'API keys' }] : []), ...(showFiu ? [{ id: 'fiu_profiles', label: 'FIU profiles' }] : []), ...(showTmSettings ? [{ id: 'tm_settings', label: 'TM settings' }] : [])];
+  // KYC + AML layout (phase 9): tabs grouped General / KYC / AML, and the rules screen is the AML tab "Rules & scenarios".
+  // Rule managers and approvers who may not configure the tenant (Compliance Officer) get that one tab.
+  const v2 = amlLayoutOn(tenant);
+  const showRules = v2 && isFeatureEnabled(tenant, 'tm_rules') && (hasPermission(userRole, 'tmManageRules') || hasPermission(userRole, 'tmApproveRules'));
+  const rulesTab = showRules ? [{ id: 'rules', label: 'Rules & scenarios' }] : [];
+  const visibleTabs = canConfig ? [...configTabs, ...rulesTab] : rulesTab;
+  const tabGroups = v2 ? groupTenantTabs(visibleTabs) : null;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const wanted = searchParams.get('tab');
+  const activeTab = visibleTabs.some((t) => t.id === wanted) ? wanted : (visibleTabs[0]?.id || 'branding');
+  const selectTab = (id) => { const next = new URLSearchParams(searchParams); next.set('tab', id); setSearchParams(next, { replace: true }); };
 
   useEffect(() => {
     if (tenant && !hydrated.current) {
@@ -114,7 +128,7 @@ export default function TenantConfig() {
     setSaving(false);
   }
 
-  if (!canConfig) {
+  if (!canConfig && !showRules) {
     return (
       <AppShell>
         <div className="flex flex-col items-center justify-center h-64 gap-3">
@@ -127,20 +141,37 @@ export default function TenantConfig() {
 
   return (
     <AppShell>
-      <div className="p-6 max-w-5xl mx-auto space-y-5">
+      <div className={`p-6 mx-auto space-y-5 ${activeTab === 'rules' ? 'max-w-7xl' : 'max-w-5xl'}`}>
         <PageHeader
           title="Tenant Configuration"
           subtitle="Configure branding, roles, risk model, and integrations for your institution"
-          actions={
+          actions={canConfig ? (
             <Link to="/ai-prompts">
               <Button size="sm" variant="outline" className="text-xs gap-1.5">
                 AI Prompt Library
               </Button>
             </Link>
-          }
+          ) : null}
         />
 
-        <Tabs defaultValue="branding">
+        <Tabs value={activeTab} onValueChange={selectTab}>
+          {tabGroups ? (
+            <TabsList className="bg-card border border-border p-2 flex flex-col items-stretch gap-1.5 h-auto">
+              {tabGroups.map(g => (
+                <div key={g.key} className="flex flex-wrap items-center gap-1">
+                  <span className="w-16 flex-shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{g.label}</span>
+                  {g.tabs.map(t => (
+                    <TabsTrigger
+                      key={t.id} value={t.id}
+                      className="text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap"
+                    >
+                      {t.label}
+                    </TabsTrigger>
+                  ))}
+                </div>
+              ))}
+            </TabsList>
+          ) : (
           <TabsList className="bg-card border border-border p-1 flex flex-wrap gap-1 h-auto">
             {visibleTabs.map(t => (
               <TabsTrigger
@@ -151,6 +182,13 @@ export default function TenantConfig() {
               </TabsTrigger>
             ))}
           </TabsList>
+          )}
+
+          {showRules && (
+            <TabsContent value="rules" className="mt-5">
+              <EmbeddedContext.Provider value><TmRules /></EmbeddedContext.Provider>
+            </TabsContent>
+          )}
 
           <TabsContent value="branding" className="mt-5">
             <BrandingTab tenant={tenant} form={form} setForm={setForm} onSave={() => saveTenant()} saving={saving} />
