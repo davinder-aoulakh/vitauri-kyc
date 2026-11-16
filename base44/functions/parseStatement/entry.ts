@@ -18,6 +18,7 @@ import { nowFor } from '../../shared/tmNow.js';
 import { historicalWindowDays, resolveHistorical } from '../../shared/tmHistorical.js';
 import { assignKeys, execAt } from '../../shared/tmStatementRows.js';
 import { STATEMENT_SCHEMA, STATEMENT_SYSTEM_PROMPT, STATEMENT_SOURCE } from '../../shared/tmStatementAgent.js';
+import { parseStatements, groupByAccount, pickAccount } from '../../shared/tmBulkImport.js';
 
 const acctNorm = (v) => String(v ?? '').toUpperCase().replace(/[\s-]/g, '');
 const DAY_MS = 86400000;
@@ -105,6 +106,21 @@ export default async function (req) {
     else if (format === 'mt940') parsed = parseMt940(new TextDecoder().decode(bytes));
     else if (format === 'camt053') parsed = parseCamt053(new TextDecoder().decode(bytes));
     else parsed = await parseTabular(E, tenantId, format, bytes);
+
+    // A file can hold statements for several accounts (phase 8). An upload made by the bulk import names the one
+    // account to read (account_filter); a normal upload is read as before, with a warning.
+    if (format === 'mt940' || format === 'camt053') {
+      let groups = [];
+      try { groups = groupByAccount(parseStatements(format, new TextDecoder().decode(bytes))); } catch { groups = []; }
+      const named = groups.filter((g) => g.iban);
+      if (upload.account_filter) {
+        const one = pickAccount(groups, upload.account_filter);
+        if (!one) throw httpError(422, `The file holds no statement for account ${upload.account_filter}`);
+        parsed = one;
+      } else if (named.length > 1) {
+        warnings.push(`This file holds statements for ${named.length} accounts (${named.map((g) => g.iban).slice(0, 5).join(', ')}). Use "Import file" on the Transactions page to process them per account.`);
+      }
+    }
 
     if (!parsed.rows.length) throw httpError(422, 'No transactions were found in this file');
     if (parsed.rows.length > MAX_ROWS) throw httpError(413, `This statement has ${parsed.rows.length} rows; the limit is ${MAX_ROWS}. Split it by period.`);

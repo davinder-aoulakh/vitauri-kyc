@@ -1,0 +1,124 @@
+{
+  "name": "UnmatchedStatement",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "iban": {
+      "type": "string",
+      "description": "Account reference in the file (normalised); empty when the statement names none"
+    },
+    "currency": {
+      "type": "string"
+    },
+    "period_from": {
+      "type": "string"
+    },
+    "period_to": {
+      "type": "string"
+    },
+    "tx_count": {
+      "type": "number"
+    },
+    "opening_balance": {
+      "type": "number"
+    },
+    "closing_balance": {
+      "type": "number"
+    },
+    "parsed_rows": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Rows held until the statement is linked to a customer"
+    },
+    "file_url": {
+      "type": "string",
+      "description": "Private file reference of the imported file"
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "file_hash": {
+      "type": "string"
+    },
+    "format": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "unknown_iban",
+        "ambiguous",
+        "no_account_reference",
+        "no_transactions"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "linked",
+        "dismissed"
+      ],
+      "default": "open"
+    },
+    "linked_client_id": {
+      "type": "string"
+    },
+    "bank_account_id": {
+      "type": "string"
+    },
+    "statement_upload_id": {
+      "type": "string"
+    },
+    "uploaded_by_user_id": {
+      "type": "string"
+    },
+    "resolved_by_user_id": {
+      "type": "string"
+    },
+    "resolved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "dismiss_reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "file_url"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    }
+  }
+}

@@ -160,6 +160,10 @@
         "type": "string"
       },
       "type": "array"
+    },
+    "account_filter": {
+      "type": "string",
+      "description": "IBAN of the one account to read from a file that holds statements for several accounts (bulk import)"
     }
   },
   "required": [

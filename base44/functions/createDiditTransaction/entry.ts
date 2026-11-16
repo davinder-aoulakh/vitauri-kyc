@@ -10,6 +10,8 @@ import { postTransaction, buildTransactionBody, diditTxnUuid, normaliseTxnStatus
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { afterTransactionUpdate } from '../../shared/diditTxnActions.js';
 import { applyTxnDecision, TM_ALERT_STATUSES } from '../../shared/tmTxnDecision.js';
+import { amlV2On } from '../../shared/tmFiuSubmission.js';
+import { manualTxnCheck, ibanNorm } from '../../shared/tmBulkImport.js';
 
 // Case workers only (createRunCase in src/lib/permissions.js)
 const WORKER_ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'];
@@ -48,6 +50,17 @@ export default async function(req) {
     const client = clients?.[0];
     if (!client || client.tenant_id !== tenantId) return Response.json({ error: 'Client not found' }, { status: 404 });
 
+    // Phase 8 (spec test 14): with the KYC + AML layout a manual transaction needs the customer's account and its
+    // execution date. Without the layout both stay optional and the row is dated now, as before.
+    const extra = manualTxnCheck(body, { v2: amlV2On(tenant) });
+    if (extra.error) return Response.json({ error: extra.error }, { status: 400 });
+    let bankAccount = null;
+    if (extra.bank_account_id) {
+      const accts = await base44.asServiceRole.entities.BankAccount.filter({ tenant_id: tenantId, id: extra.bank_account_id });
+      bankAccount = accts?.[0] || null;
+      if (!bankAccount || bankAccount.tenant_id !== tenantId || bankAccount.client_id !== client_id) return Response.json({ error: 'The account does not belong to this customer' }, { status: 400 });
+    }
+
     const entityType = subject_entity_type === 'company' || (!subject_entity_type && client.client_type === 'ORG') ? 'company' : 'person';
     const ourTransactionId = `vt_m_${crypto.randomUUID().replace(/-/g, '')}`;
     const nowIso = new Date().toISOString();
@@ -58,7 +71,8 @@ export default async function(req) {
       transaction_category, direction, amount, currency, currency_kind,
       counterparty_name, counterparty_account_id, counterparty_method_type, counterparty_country: counterparty_country || undefined,
       subject_entity_type: entityType, subject_full_name: subject_full_name || client.full_name,
-      status: 'PENDING', executed_at: nowIso, source_type: 'manual', didit_submission_status: 'not_submitted',
+      status: 'PENDING', executed_at: extra.executed_at || nowIso, source_type: 'manual', didit_submission_status: 'not_submitted',
+      ...(bankAccount ? { bank_account_id: bankAccount.id, account_ref: ibanNorm(bankAccount.iban_or_number) || undefined } : {}),
       submitted_by_user_id: user.id,
     });
 
