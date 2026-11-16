@@ -29,7 +29,9 @@ test('AML Dashboard tabs follow the permissions of the pages they show', () => {
   assert.deepEqual(amlDashboardTabs({ app_role: 'Compliance Officer' }, on).map((t) => t.label), ['Overview', 'Data coverage', 'Detection quality']);
   assert.deepEqual(shown(amlDashboardTabs({ app_role: 'Compliance Officer' }, on)), ['overview', 'coverage', 'quality']);
   assert.deepEqual(shown(amlDashboardTabs({ app_role: 'Analyst' }, on)), ['coverage']);
-  assert.deepEqual(shown(amlDashboardTabs({ app_role: 'Tenant Admin' }, on)), ['coverage']);
+  // The admin roles see the Overview (first, so it is the default tab); Detection quality stays with QC / Compliance / Director.
+  assert.deepEqual(shown(amlDashboardTabs({ app_role: 'Tenant Admin' }, on)), ['overview', 'coverage']);
+  assert.deepEqual(shown(amlDashboardTabs({ app_role: 'Compliance Admin' }, on)), ['overview', 'coverage']);
   assert.deepEqual(shown(amlDashboardTabs({ app_role: 'Analyst', work_domain: 'kyc' }, separate)), []);
   assert.deepEqual(shown(amlDashboardTabs({ app_role: 'Director' }, { ...on, features_enabled: { ...on.features_enabled, tm_quality: false } })), ['overview', 'coverage']);
 });
@@ -37,6 +39,8 @@ test('AML Dashboard tabs follow the permissions of the pages they show', () => {
 test('KYC Dashboard: everyone gets Reviews & backlog; MI and Risk need the MI permission', () => {
   assert.deepEqual(shown(kycDashboardTabs({ app_role: 'Analyst' }, on)), ['reviews']);
   assert.deepEqual(shown(kycDashboardTabs({ app_role: 'Manager' }, on)), ['reviews', 'mi', 'risk']);
+  assert.deepEqual(shown(kycDashboardTabs({ app_role: 'Tenant Admin' }, on)), ['reviews', 'mi', 'risk']);
+  assert.deepEqual(shown(kycDashboardTabs({ app_role: 'Compliance Admin' }, on)), ['reviews', 'mi', 'risk']);
 });
 
 test('old routes redirect to their new place, and every target exists', () => {
