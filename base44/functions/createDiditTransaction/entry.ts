@@ -11,7 +11,7 @@ import { isTmEnabled } from '../../shared/tmGuards.js';
 import { afterTransactionUpdate } from '../../shared/diditTxnActions.js';
 import { applyTxnDecision, TM_ALERT_STATUSES } from '../../shared/tmTxnDecision.js';
 import { amlV2On } from '../../shared/tmFiuSubmission.js';
-import { manualTxnCheck, ibanNorm } from '../../shared/tmBulkImport.js';
+import { manualTxnCheck } from '../../shared/tmBulkImport.js';
 
 // Case workers only (createRunCase in src/lib/permissions.js)
 const WORKER_ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'];
@@ -72,7 +72,7 @@ export default async function(req) {
       counterparty_name, counterparty_account_id, counterparty_method_type, counterparty_country: counterparty_country || undefined,
       subject_entity_type: entityType, subject_full_name: subject_full_name || client.full_name,
       status: 'PENDING', executed_at: extra.executed_at || nowIso, source_type: 'manual', didit_submission_status: 'not_submitted',
-      ...(bankAccount ? { bank_account_id: bankAccount.id, account_ref: ibanNorm(bankAccount.iban_or_number) || undefined } : {}),
+      ...(bankAccount ? { bank_account_id: bankAccount.id } : {}),
       submitted_by_user_id: user.id,
     });
 
