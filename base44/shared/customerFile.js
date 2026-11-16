@@ -3,6 +3,7 @@
 import { authenticate, httpError, asList, chunk } from './tmAuth.js';
 import { fetchAll } from './tmCoverage.js';
 import { summariseTxns, countableTxns, amountInReporting, profileLimits, compareToProfile } from './tmActuals.js';
+import { canAml } from './workDomain.js';
 
 export const CREATE_RUN_CASE = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'];
 // Same list as the FiuArtefact read rule (plus Vitauri Ops).
@@ -23,11 +24,15 @@ export async function authorizeCaller(base44, req, body, resolveOpsTenantId) {
   const role = user.app_role || user.data?.app_role;
   if (role === OPS_ROLE) {
     const tenantId = await resolveOpsTenantId();
-    return { tenantId, role };
+    return { tenantId, role, user };
   }
   const auth = await authenticate(base44, req, body, { roles: CREATE_RUN_CASE, allowApiKey: false });
-  return { tenantId: auth.tenantId, role };
+  return { tenantId: auth.tenantId, role, user };
 }
+
+/** Need-to-know (phase 6): may this caller see alerts, investigations and FIU content of the tenant? */
+export const callerSeesAml = (user, tenant) => canAml(user, tenant);
+const AML_AUDIT = /^(tm |fiu |tipping off|aml hold)/i;
 
 /** Client copy without Didit, tipping-off or secret-like fields. */
 export function stripClient(client) {
@@ -74,7 +79,8 @@ export function buildMonitoringTimeline({ cases, profiles, alerts, scores, audit
 }
 
 /** Exact response body of getClientMonitoring. */
-export async function buildMonitoringModel(base44, tenantId, tenant, client) {
+export async function buildMonitoringModel(base44, tenantId, tenant, client, opts = {}) {
+  const aml = opts.aml !== false;
   const E = base44.asServiceRole.entities;
   const cid = client.id;
   const cur = tenant.tm_reporting_currency || 'USD';
@@ -148,9 +154,13 @@ export async function buildMonitoringModel(base44, tenantId, tenant, client) {
     coverage: { covered, of: 30 },
     fx_missing: Number(fxMissing) || 0,
     monthly: months.map((m) => ({ month: m, inbound: Math.round(monthly[m]) })),
-    open_tm_case: tmCases[0] ? { id: tmCases[0].id, case_ref: tmCases[0].case_ref } : null,
+    open_tm_case: aml && tmCases[0] ? { id: tmCases[0].id, case_ref: tmCases[0].case_ref } : null,
     open_edr_case_id: openEdr?.id || null,
-    timeline: buildMonitoringTimeline({ cases, profiles, alerts, scores, audits }),
+    timeline: aml
+      ? buildMonitoringTimeline({ cases, profiles, alerts, scores, audits })
+      : buildMonitoringTimeline({ cases, profiles, alerts: [], scores, audits }).filter((i) => !(i.kind === 'audit' && AML_AUDIT.test(i.title))),
+    // Without AML access the caller gets the hold flag only, never investigation or alert content.
+    ...(aml ? {} : { aml_restricted: true, aml_hold: !!client.tipping_off_lock }),
   };
 }
 
@@ -244,7 +254,7 @@ function buildFileTimeline({ cases, profiles, alerts, tmCases, reports, decision
 }
 
 /** Full customer file. sections: optional array limiting what is computed. */
-export async function buildCustomerFile(base44, { tenantId, client, role, sections }) {
+export async function buildCustomerFile(base44, { tenantId, client, role, sections, aml = true }) {
   // `sections` is read below for the opt-in counterparty_hits section.
   const E = base44.asServiceRole.entities;
   const cid = client.id;
@@ -257,16 +267,17 @@ export async function buildCustomerFile(base44, { tenantId, client, role, sectio
   const cases = memo(() => E.KycCase.filter({ tenant_id: tenantId, client_id: cid }, '-created_date', 100).then(asList));
   const profiles = memo(() => E.ExpectedProfile.filter({ tenant_id: tenantId, client_id: cid }, '-version', 50).then(asList));
   const scores = memo(() => E.CustomerRiskScore.filter({ tenant_id: tenantId, client_id: cid }, '-computed_at', 200).then(asList));
-  const alerts = memo(() => E.TmAlert.filter({ tenant_id: tenantId, client_id: cid }, '-created_date', 100).then(asList));
-  const tmCases = memo(() => E.TmCase.filter({ tenant_id: tenantId, client_ids: cid }, '-created_date', 20).then(asList));
-  const reports = memo(async () => (fiuAllowed ? E.FiuReport.filter({ tenant_id: tenantId, client_id: cid }, '-created_date', 20).then(asList) : []));
+  // Without AML access (phase 6) alerts, investigations and FIU reports are never loaded: every section built on them stays empty.
+  const alerts = memo(async () => (aml ? E.TmAlert.filter({ tenant_id: tenantId, client_id: cid }, '-created_date', 100).then(asList) : []));
+  const tmCases = memo(async () => (aml ? E.TmCase.filter({ tenant_id: tenantId, client_ids: cid }, '-created_date', 20).then(asList) : []));
+  const reports = memo(async () => (fiuAllowed && aml ? E.FiuReport.filter({ tenant_id: tenantId, client_id: cid }, '-created_date', 20).then(asList) : []));
   const triggers = memo(() => E.EdrTrigger.filter({ tenant_id: tenantId, client_id: cid }, '-created_date', 100).then(asList));
   const decisions = memo(async () => {
     const [c, a, r] = await Promise.all([cases(), alerts(), reports()]);
     return loadDecisions(E, tenantId, cid, [...c, ...a, ...r].map((x) => x.id));
   });
 
-  const out = { client_id: cid };
+  const out = { client_id: cid, ...(aml ? {} : { aml_restricted: true, aml_hold: !!client.tipping_off_lock }) };
   const jobs = [];
   const run = (key, fn) => jobs.push(fn().then((v) => { Object.assign(out, key === null ? v : { [key]: v }); }));
 
@@ -391,7 +402,11 @@ export async function buildReviewPeriod(base44, { tenantId, tenant, client, kycC
   };
 }
 
-export async function buildCaseTmContext(base44, { tenantId, tenant, kycCase, role }) {
+export async function buildCaseTmContext(base44, { tenantId, tenant, kycCase, role, aml = true }) {
+  if (!aml) {
+    const c = asList(await base44.asServiceRole.entities.Client.filter({ tenant_id: tenantId, id: kycCase.client_id }, undefined, 1))[0];
+    return { has_context: false, aml_restricted: true, aml_hold: !!c?.tipping_off_lock };
+  }
   const E = base44.asServiceRole.entities;
   const cid = kycCase.client_id;
   const fiuAllowed = FIU_READ_ROLES.includes(role);
