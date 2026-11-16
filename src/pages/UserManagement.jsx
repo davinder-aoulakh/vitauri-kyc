@@ -81,6 +81,16 @@ export default function UserManagement() {
     await loadUsers();
   }
 
+  async function backfillWorkDomains() {
+    setSaving(true);
+    try {
+      const res = await base44.functions.invoke('setUserWorkDomain', { action: 'backfill' });
+      window.alert(`Work domain set to "KYC and AML" for ${res?.data?.updated ?? 0} user(s) that had none.`);
+      await loadUsers();
+    } catch (e) { window.alert(e?.response?.data?.error || 'The work domains could not be set.'); }
+    setSaving(false);
+  }
+
   async function updateUser(userId, updates, workDomain) {
     setSaving(true);
     await base44.entities.User.update(userId, updates);
