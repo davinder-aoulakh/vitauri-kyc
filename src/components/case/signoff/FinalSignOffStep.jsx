@@ -174,6 +174,13 @@ export default function FinalSignOffStep({ kycCase, client, currentUser, onCaseU
               )}
             </div>
           )}
+          {fiuNote && (
+            <p className="text-xs">
+              {fiuNote.report_id
+                ? <>FIU report {fiuNote.report_ref || ''} {fiuNote.created ? 'was started as a draft' : 'is already linked to this review'}: <a className="underline" href={`/tm/report/${fiuNote.report_id}`}>open the report</a>.</>
+                : <>No draft FIU report was created ({fiuNote.reason || 'unknown reason'}). Prepare it from FIU Reports.</>}
+            </p>
+          )}
           {finalDecision.reporting_obligation_assessment && <p className="text-xs">Reporting obligation: {finalDecision.reporting_obligation_assessment.replace(/_/g, ' ')} · Neutral letter: {finalDecision.neutral_letter_sent ? 'yes' : 'no'}</p>}
           {perms.canReopen && <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setDlg('reopen')}><RotateCcw className="h-3.5 w-3.5" /> Reopen case</Button>}
         </section>

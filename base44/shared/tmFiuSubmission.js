@@ -52,9 +52,12 @@ export function hasOpenEventForCase(triggers, tmCaseId) {
   return (triggers || []).some((t) => t.status === 'proposed' && (t.after?.tm_case_id === tmCaseId || t.source_ref === `tm_case:${tmCaseId}`));
 }
 
-/** Report type for a report that comes from a KYC review (no transactions): the first the FIU profile allows. */
+/**
+ * Report type for a report that comes from a KYC review. Such a report has no transactions, so only the activity
+ * report (SAR) fits; STR and UTR need at least one transaction. null when the FIU profile does not allow SAR.
+ */
 export function kycReportType(enabled) {
-  return ['SAR', 'STR', 'UTR'].find((t) => (enabled || []).includes(t)) || null;
+  return (enabled || []).includes('SAR') ? 'SAR' : null;
 }
 
 /** Does this sign-off decision ask for an FIU report draft? */

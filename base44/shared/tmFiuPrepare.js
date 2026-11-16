@@ -220,7 +220,7 @@ export async function prepareKycCaseReport(ctx, { kycCase, client, rationale }) 
   const fiu = asList(await E.FiuProfile.filter({ tenant_id: tenantId, code }))[0];
   if (!fiu) return { created: false, reason: `No ${code} FIU profile is configured` };
   const type = kycReportType(enabledTypes(fiu));
-  if (!type) return { created: false, reason: `No activity report type (SAR, STR, UTR) is enabled in the ${code} FIU profile` };
+  if (!type) return { created: false, reason: `The activity report (SAR) is not enabled in the ${code} FIU profile; a report without transactions needs it` };
   const text = String(rationale || '').trim().slice(0, 4000);
   const res = await prepareReport(ctx, {
     clientId: client.id, reportType: type, profileCode: code, origin: 'kyc_case', refresh: false,
