@@ -7,12 +7,14 @@ import { Link } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
 import { isFeatureEnabled } from '@/lib/featureFlags';
+import { amlLayoutOn } from '@/lib/amlNav';
+import { isScreeningAlert } from '../../../base44/shared/cocResponse.js';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   X, AlertTriangle, CheckCircle, Loader2, Sparkles,
-  Eye, MessageSquare, Shield, ArrowUpRight
+  Eye, MessageSquare, Shield, ArrowUpRight, UserCheck, UserX
 } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -36,6 +38,7 @@ const STATUS_STYLE = {
   Under_Review:     'bg-blue-100 text-blue-700',
   Dismissed:        'bg-slate-100 text-slate-500',
   Escalated_to_EDR: 'bg-red-100 text-red-700',
+  Confirmed_Match:  'bg-red-100 text-red-700',
 };
 
 export default function AlertDetailPanel({ alert, currentUser, onClose, onUpdated, onNavigateCase }) {
@@ -49,6 +52,27 @@ export default function AlertDetailPanel({ alert, currentUser, onClose, onUpdate
   const [action, setAction]               = useState(null); // 'dismiss' | 'acknowledge' | 'escalate'
   const [reviewStatus, setReviewStatus]   = useState(alert?.details?.review_status || 'Unreviewed');
   const [updatingReview, setUpdatingReview] = useState(false);
+  // KYC + AML layout: a screening alert gets one decision — is it this person?
+  const screeningDecision = amlLayoutOn(tenant) && isScreeningAlert(alert);
+  const [rationale, setRationale] = useState('');
+  const [decisionError, setDecisionError] = useState('');
+  const [decided, setDecided] = useState(null);
+
+  async function decideScreening(decision) {
+    if (rationale.trim().length < 10) return;
+    setSubmitting(true); setDecisionError('');
+    try {
+      const res = await base44.functions.invoke('decideScreeningAlert', { alert_id: alert.id, decision, rationale: rationale.trim() });
+      const data = res?.data || res;
+      if (data?.error) throw new Error(data.error);
+      onUpdated();
+      if (decision === 'true_match') setDecided(data); else onClose();
+    } catch (e) {
+      setDecisionError(e?.response?.data?.error || e?.message || 'Could not save the decision');
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function updateReviewStatus(newStatus) {
     setUpdatingReview(true);
@@ -207,7 +231,7 @@ Tone: professional, regulatory-grade.`,
   }
 
   if (!alert) return null;
-  const isResolved = ['Dismissed', 'Escalated_to_EDR'].includes(alert.status);
+  const isResolved = ['Dismissed', 'Escalated_to_EDR', 'Confirmed_Match'].includes(alert.status) || !!decided;
   // TM mirror alerts are worked in Transaction Monitoring, not in this queue.
   const tmMirror = tmCoreOn && alert.alert_type === 'Transaction_Rule_Hit';
   const tmHref = alert.tm_alert_id ? `/tm/alerts?alert=${alert.tm_alert_id}` : '/tm/alerts';
@@ -240,7 +264,7 @@ Tone: professional, regulatory-grade.`,
               </span>
               {tmMirror && <span className="text-xs font-semibold px-2 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary">TM</span>}
               <span className={cn('text-xs font-medium px-2.5 py-1 rounded-full', STATUS_STYLE[alert.status])}>
-                {alert.status?.replace(/_/g,' ')}
+                {alert.status === 'Confirmed_Match' ? 'True match' : alert.status?.replace(/_/g,' ')}
               </span>
             </div>
 
@@ -340,8 +364,64 @@ Tone: professional, regulatory-grade.`,
           )}
         </div>
 
+        {/* True match recorded: point to the Change of circumstances page */}
+        {(decided || (screeningDecision && alert.status === 'Confirmed_Match')) && (
+          <div className="border-t border-border p-5 space-y-2 flex-shrink-0">
+            <div className="text-xs font-semibold text-foreground flex items-center gap-1.5"><UserCheck className="w-3.5 h-3.5 text-destructive" /> True match recorded</div>
+            <div className="text-xs text-muted-foreground">
+              {decided && decided.change_event_created === false ? 'A change of circumstances already existed for this match.' : 'A change of circumstances was created for this customer.'}
+              {' '}The response (and whether a review opens) is chosen there.
+              {decided?.investigation?.case_ref ? ` Investigation ${decided.investigation.case_ref} was ${decided.investigation.created ? 'started' : 'extended'} (confirmed sanctions match).` : ''}
+            </div>
+            <Button asChild size="sm" className="w-full gap-2 text-xs justify-start">
+              <Link to="/kyc/changes"><ArrowUpRight className="w-3.5 h-3.5" /> Open Change of circumstances</Link>
+            </Button>
+          </div>
+        )}
+
+        {/* KYC + AML layout: screening alerts are decided as True match / Not this person */}
+        {!isResolved && screeningDecision && !tmMirror && (
+          <div className="border-t border-border p-5 space-y-3 flex-shrink-0">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Is it this person?</div>
+            {!action && (
+              <div className="flex flex-col gap-2">
+                <Button size="sm" className="w-full gap-2 text-xs justify-start bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                  onClick={() => setAction('true_match')}>
+                  <UserCheck className="w-3.5 h-3.5" /> True match
+                </Button>
+                <Button size="sm" variant="outline" className="w-full gap-2 text-xs justify-start border-slate-300 hover:bg-slate-50"
+                  onClick={() => setAction('not_this_person')}>
+                  <UserX className="w-3.5 h-3.5 text-emerald-600" /> Not this person
+                </Button>
+              </div>
+            )}
+            {(action === 'true_match' || action === 'not_this_person') && (
+              <div className="space-y-3">
+                <div className="text-xs">
+                  {action === 'true_match'
+                    ? 'The hit is recorded as a confirmed match and a change of circumstances is created. No review is opened here.'
+                    : 'The alert is closed. Nothing else changes.'}
+                </div>
+                <div className="text-xs font-semibold">Rationale * <span className="font-normal text-muted-foreground">(at least 10 characters)</span></div>
+                <Textarea value={rationale} onChange={e => setRationale(e.target.value)}
+                  placeholder={action === 'true_match' ? 'Which identifiers match (name, date of birth, country, role)…' : 'Why this is a different person (date of birth, country, role…)'}
+                  className="text-xs min-h-16 resize-none" />
+                {decisionError && <div className="text-xs text-destructive">{decisionError}</div>}
+                <div className="flex gap-2">
+                  <Button size="sm" variant="ghost" className="text-xs" onClick={() => { setAction(null); setDecisionError(''); }} disabled={submitting}>Back</Button>
+                  <Button size="sm" className={cn('flex-1 text-xs gap-1', action === 'true_match' ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground' : 'bg-success hover:bg-success/90 text-success-foreground')}
+                    onClick={() => decideScreening(action)} disabled={rationale.trim().length < 10 || submitting}>
+                    {submitting ? <Loader2 className="w-3 h-3 animate-spin" /> : action === 'true_match' ? <UserCheck className="w-3 h-3" /> : <UserX className="w-3 h-3" />}
+                    {action === 'true_match' ? 'Confirm true match' : 'Confirm: not this person'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Action footer — only for active alerts */}
-        {!isResolved && (
+        {!isResolved && !(screeningDecision && !tmMirror) && (
           <div className="border-t border-border p-5 space-y-3 flex-shrink-0">
             {!action && (
               <div className="flex flex-col gap-2">

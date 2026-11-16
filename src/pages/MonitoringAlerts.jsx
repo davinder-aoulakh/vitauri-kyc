@@ -7,6 +7,7 @@ import AppShell from '@/components/layout/AppShell';
 import PageHeader from '@/components/shared/PageHeader';
 import { amlLayoutOn } from '@/lib/amlNav';
 import { hasPermission } from '@/lib/permissions';
+import { isScreeningAlert } from '../../base44/shared/cocResponse.js';
 import KpiCard from '@/components/shared/KpiCard';
 import EmptyState from '@/components/shared/EmptyState';
 import AlertDetailPanel from '@/components/monitoring/AlertDetailPanel';
@@ -35,6 +36,7 @@ const STATUS_STYLE = {
   Under_Review:     'bg-blue-100 text-blue-700',
   Dismissed:        'bg-slate-100 text-slate-500',
   Escalated_to_EDR: 'bg-red-100 text-red-700',
+  Confirmed_Match:  'bg-red-100 text-red-700',
 };
 
 // Neutral token-based pill for the "Didit" source badge — used in both the tabs and table rows.
@@ -58,7 +60,11 @@ export default function MonitoringAlerts() {
   const isTmMirror = (a) => isFeatureEnabled(tenant, 'tm_core') && a.alert_type === 'Transaction_Rule_Hit';
   const navigate = useNavigate();
   const amlLayout = amlLayoutOn(tenant);
-  const [alerts, setAlerts]       = useState([]);
+  const [allAlerts, setAlerts]    = useState([]);
+  // KYC + AML layout: this page lists screening alerts; register changes and other signals sit behind a chip.
+  const [showOther, setShowOther] = useState(false);
+  const otherCount = amlLayout ? allAlerts.filter(a => !isScreeningAlert(a)).length : 0;
+  const alerts = amlLayout ? allAlerts.filter(a => (showOther ? !isScreeningAlert(a) : isScreeningAlert(a))) : allAlerts;
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
   const { data: activeClients = [] } = useTenantClients(currentUser?.tenant_id);
@@ -160,7 +166,7 @@ export default function MonitoringAlerts() {
       <div className="p-6 space-y-5 max-w-screen-xl mx-auto">
         <PageHeader
           title={amlLayout ? 'Screening' : 'Monitoring Alerts'}
-          subtitle="Continuous monitoring for PEP/sanctions changes, register updates, and manual flags"
+          subtitle={amlLayout ? 'Screening hits from ongoing monitoring and manual flags. Decide per alert: is it this person?' : 'Continuous monitoring for PEP/sanctions changes, register updates, and manual flags'}
           actions={
             <>
               {amlLayout && isFeatureEnabled(tenant, 'batch_screening') && hasPermission(currentUser?.app_role, 'createEditClient') && (
@@ -228,6 +234,13 @@ export default function MonitoringAlerts() {
 
         {/* Filters */}
         <div className="flex gap-3 flex-wrap">
+          {amlLayout && (otherCount > 0 || showOther) && (
+            <button type="button" onClick={() => { setShowOther(v => !v); setSourceTab('all'); }}
+              className={cn('h-8 px-3 rounded-md border text-xs font-medium transition-colors',
+                showOther ? 'bg-primary border-primary text-primary-foreground' : 'bg-card border-border text-muted-foreground hover:bg-muted')}>
+              {showOther ? 'Back to screening alerts' : `Other signals (${otherCount})`}
+            </button>
+          )}
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-muted-foreground" />
             <Input
@@ -254,6 +267,7 @@ export default function MonitoringAlerts() {
               <SelectItem value="Under_Review">Under Review</SelectItem>
               <SelectItem value="Dismissed">Dismissed</SelectItem>
               <SelectItem value="Escalated_to_EDR">Escalated to EDR</SelectItem>
+              {amlLayout && <SelectItem value="Confirmed_Match">True match</SelectItem>}
             </SelectContent>
           </Select>
           <Select value={filter.client} onValueChange={v => setFilter(f => ({ ...f, client: v }))}>
@@ -318,7 +332,7 @@ export default function MonitoringAlerts() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', STATUS_STYLE[alert.status])}>
-                        {alert.status?.replace(/_/g,' ')}
+                        {alert.status === 'Confirmed_Match' ? 'True match' : alert.status?.replace(/_/g,' ')}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
