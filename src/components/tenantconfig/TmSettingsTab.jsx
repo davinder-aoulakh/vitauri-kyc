@@ -11,6 +11,9 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 import { normaliseJurisdictions } from '@/lib/amlNav';
 import { detectionSettings, caseGroupingSettings } from '@/lib/tmTenantSettings';
 import AiModelCard from '@/components/tenantconfig/tm/AiModelCard';
+import { BehaviourThresholdField, SegmentDefaultsEditor, CsvTemplatesEditor } from '@/components/tenantconfig/tm/ProfileAndImportSettings';
+import { segmentDefaults, SEGMENT_KEYS, LIMIT_FIELDS } from '@/lib/tmProfileSources';
+import { templatesOf } from '@/lib/tmCsvTemplates';
 import { MODEL_CHANGE_ROLES, MIN_NOTE } from '@/lib/tmAiModels';
 import Psd2PartnerSelect from '@/components/tenantconfig/tm/Psd2PartnerSelect';
 import FxRatesCard from '@/components/tenantconfig/tm/FxRatesCard';
@@ -56,6 +59,11 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
   const [caseGrouping, setCaseGrouping] = useState(grp0.case_grouping);
   const [autoObjective, setAutoObjective] = useState(grp0.auto_case_objective);
   const [autoSanctions, setAutoSanctions] = useState(grp0.auto_case_sanctions);
+  // Phase 10: behaviour-score threshold, segment defaults for the expected profile, CSV mapping templates.
+  const [behaviourThr, setBehaviourThr] = useState(s.behaviour_proposal_threshold != null ? String(s.behaviour_proposal_threshold) : '');
+  const [segDefaults, setSegDefaults] = useState(() => segmentDefaults(tenant));
+  const [csvTemplates, setCsvTemplates] = useState(() => templatesOf(tenant));
+  const thrOk = behaviourThr === '' || (Number(behaviourThr) >= 1 && Number(behaviourThr) <= 100);
   const posInt = (v, min = 1) => Number.isInteger(Number(v)) && Number(v) >= min;
   const detOk = !amlV2 || (Number(det.amount_min) > 0 && Number(det.amount_below) > Number(det.amount_min) && posInt(det.window_days) && ['Low', 'Medium', 'High', 'PEP'].every((c) => posInt(det[c], 2))
     && posInt(det.window_hours) && Number(det.min_ratio_pct) >= 1 && Number(det.min_ratio_pct) <= 1000 && posInt(cocMonths));
@@ -71,7 +79,7 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
 
   const sum = WEIGHTS.reduce((t, [k]) => t + (Number(weights[k]) || 0), 0);
   const pct = Number(maxPct);
-  const valid = /^[A-Za-z]{3}$/.test(currency) && tz.trim() && Math.abs(sum - 1) < 0.011 && Number.isFinite(pct) && pct >= 0 && pct <= 100 && histOk && detOk && (!modelChanged || modelNote.trim().length >= MIN_NOTE);
+  const valid = /^[A-Za-z]{3}$/.test(currency) && tz.trim() && Math.abs(sum - 1) < 0.011 && Number.isFinite(pct) && pct >= 0 && pct <= 100 && histOk && detOk && (!amlV2 || thrOk) && (!modelChanged || modelNote.trim().length >= MIN_NOTE);
 
   async function save() {
     setSaving(true);
@@ -87,6 +95,11 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
         psd2_partner: psd2Partner,
         auto_triage_new_alerts: autoTriage,
         ...(amlV2 ? { historical_window_days: Number(histDays), role_model: roleModel } : {}),
+        ...(amlV2 ? {
+          behaviour_proposal_threshold: behaviourThr === '' ? undefined : Number(behaviourThr),
+          segment_defaults: Object.fromEntries(SEGMENT_KEYS.map((k) => [k, Object.fromEntries(LIMIT_FIELDS.map((f) => [f, Number(segDefaults[k]?.[f]) || 0]))])),
+          csv_templates: csvTemplates,
+        } : {}),
         ...(amlV2 ? {
           case_grouping: caseGrouping, auto_case_objective: autoObjective, auto_case_sanctions: autoSanctions,
           detection_in_vitauri: detOn, profile_coc_mode: cocMode, profile_coc_months: Number(cocMonths),
@@ -173,6 +186,9 @@ export default function TmSettingsTab({ tenant, currentUser, setTenant }) {
             <p className="mt-1 text-xs text-muted-foreground">Country codes this tenant operates under. The rule libraries on the Rules page follow this list; leave empty to show all.</p>
           </div>
         )}
+        {amlV2 && <BehaviourThresholdField value={behaviourThr} onChange={setBehaviourThr} />}
+        {amlV2 && <SegmentDefaultsEditor value={segDefaults} onChange={setSegDefaults} currency={currency.toUpperCase()} />}
+        {amlV2 && <CsvTemplatesEditor value={csvTemplates} onChange={setCsvTemplates} />}
         {amlV2 && (
           <div className="max-w-md">
             <Label className="text-xs mb-1.5 block">Role model</Label>

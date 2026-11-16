@@ -11,6 +11,7 @@ import { toast } from '@/components/ui/use-toast';
 import { ChevronDown, ChevronUp, LineChart, Loader2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { limitsFromBehavior } from '@/lib/tmProfileMap';
+import { declaredValues, fillFromSegment, profileGap, segmentOf, LIMIT_FIELDS } from '@/lib/tmProfileSources';
 
 const list = (r) => (Array.isArray(r) ? r : r?.items || []);
 
@@ -44,6 +45,8 @@ export default function ExpectedProfileEditor({ kycCase, client, readOnly = fals
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [filledFromUse, setFilledFromUse] = useState(null);   // { keys, notes } of the last "fill from expected use"
+  const [filledFromSegment, setFilledFromSegment] = useState([]); // limits taken from the segment default (phase 10)
+  const sourcesOn = isFeatureEnabled(tenant, 'aml_nav_v2');
   const key = ['case-expected-profile', kycCase?.id];
 
   const { data, isLoading } = useQuery({
@@ -92,6 +95,21 @@ export default function ExpectedProfileEditor({ kycCase, client, readOnly = fals
     });
     setFilledFromUse({ keys, notes });
   };
+
+  // Phase 10 (G20): limits still empty can come from the segment default; the gap between the client's declaration
+  // and the proposed limits is shown as a finding (the backend stores both when the profile is proposed).
+  const fillSegment = () => {
+    const current = {};
+    for (const f of LIMIT_FIELDS) current[f] = String(form[f] ?? '').trim() === '' ? undefined : Number(form[f]);
+    const { fields, filled } = fillFromSegment(current, client, tenant);
+    if (!filled.length) { toast({ title: 'Nothing to fill', description: 'Every limit already has a value.' }); return; }
+    setForm((s) => { const next = { ...s }; for (const f of filled) next[f] = String(fields[f]); return next; });
+    setFilledFromSegment(filled);
+  };
+  const declared = sourcesOn ? declaredValues(limitsFromBehavior(behavior || {}, homeCountry).fields) : {};
+  const gap = sourcesOn && form
+    ? profileGap(declared, Object.fromEntries(LIMIT_FIELDS.map((f) => [f, String(form[f] ?? '').trim() === '' ? undefined : Number(form[f])])))
+    : null;
 
   const save = async () => {
     setSaving(true);
@@ -185,6 +203,27 @@ export default function ExpectedProfileEditor({ kycCase, client, readOnly = fals
                   </tbody>
                 </table>
               </div>
+              {sourcesOn && !locked && (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={fillSegment}>Fill empty limits from the segment default</Button>
+                  <span className="text-muted-foreground">Segment: {segmentOf(client).replace('NP_', 'Person · ').replace('ORG_', 'Organisation · ')}</span>
+                  {filledFromSegment.length > 0 && <span className="text-teal-700">From the segment default: {filledFromSegment.map((k) => PROFILE_FIELDS.find((f) => f.key === k)?.label || k).join(', ')}.</span>}
+                </div>
+              )}
+              {gap && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  <div className="font-semibold mb-1">Finding: the proposed limits differ from the client&apos;s declaration</div>
+                  <ul className="space-y-0.5">
+                    {gap.fields.map((g) => (
+                      <li key={g.field}>
+                        {PROFILE_FIELDS.find((f) => f.key === g.field)?.label || g.field}: declared {g.declared.toLocaleString('en-GB')} {cur}, proposed {g.proposed.toLocaleString('en-GB')} {cur}
+                        {g.ratio ? ` (${Math.round(g.ratio * 100)}% of the declaration)` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-1">Explain the difference in the rationale. It is stored with the profile for the approver.</div>
+                </div>
+              )}
               <div>
                 <label className="text-xs font-medium mb-1 block" htmlFor="profile-rationale">Rationale (why these limits fit this customer)</label>
                 <Textarea id="profile-rationale" value={form.rationale} disabled={locked} onChange={(e) => setForm((s) => ({ ...s, rationale: e.target.value }))}
