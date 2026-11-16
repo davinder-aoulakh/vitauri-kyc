@@ -30,7 +30,7 @@ export const PERMISSIONS = {
   deleteAnyDocument:    ['Manager', 'Director', 'Compliance Admin', 'Tenant Admin'],
   deleteClient:         ['Compliance Admin', 'Tenant Admin'],
   deleteCase:           ['Tenant Admin'],
-  viewMIDashboard:      ['Manager', 'Director', 'Compliance Officer'],
+  viewMIDashboard:      ['Manager', 'Director', 'Compliance Officer', 'Compliance Admin', 'Tenant Admin'],
   viewArchive:          ['Compliance Officer', 'Tenant Admin'],
   manageArchive:        ['Compliance Admin', 'Tenant Admin'],
   tmViewAlerts:         ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'],
