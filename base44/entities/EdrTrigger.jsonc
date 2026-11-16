@@ -19,7 +19,12 @@
         "risk_band_rise",
         "profile_breach",
         "tm_case",
-        "transaction_verification"
+        "transaction_verification",
+        "id_expiry",
+        "address_change",
+        "tm_alert_frequency",
+        "tm_new_country",
+        "tm_investigation_outcome"
       ]
     },
     "source_ref": {
@@ -55,6 +60,28 @@
     },
     "dedupe_key": {
       "type": "string"
+    },
+    "response": {
+      "type": "string",
+      "enum": [
+        "no_action",
+        "targeted_check",
+        "risk_reassessment",
+        "full_cdd_refresh"
+      ],
+      "description": "Graduated response chosen on the Change of circumstances page"
+    },
+    "response_reason": {
+      "type": "string"
+    },
+    "restricted": {
+      "type": "boolean",
+      "default": false,
+      "description": "Details are for AML and Compliance only"
+    },
+    "source_label": {
+      "type": "string",
+      "description": "Where the event came from, e.g. Screening, Investigation, Register"
     }
   },
   "required": [

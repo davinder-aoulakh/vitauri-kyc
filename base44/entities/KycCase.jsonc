@@ -375,6 +375,30 @@
     "trigger_reason": {
       "description": "EDR trigger description",
       "type": "string"
+    },
+    "step_1_not_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Left out of a review opened by a graduated response"
+    },
+    "step_3_not_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Left out of a review opened by a graduated response"
+    },
+    "step_4_not_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Left out of a review opened by a graduated response"
+    },
+    "step_6_not_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Left out of a review opened by a graduated response"
+    },
+    "delta_response": {
+      "type": "string",
+      "description": "Graduated response that opened this review (targeted_check, risk_reassessment, full_cdd_refresh)"
     }
   },
   "required": [

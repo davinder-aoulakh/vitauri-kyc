@@ -36,6 +36,7 @@ export const amlNavItems = [
       { label: 'My Reviews', icon: 'FolderOpen', href: '/my-cases', permission: null, featureKey: 'my_cases' },
       { label: 'Reviews', icon: 'FolderOpen', href: '/all-cases', permission: 'viewAllTenantCases', featureKey: 'all_cases' },
       { label: 'Screening', icon: 'Shield', href: '/monitoring', permission: null, badge: 'alerts', featureKey: 'monitoring' },
+      { label: 'Change of circumstances', icon: 'RefreshCw', href: '/kyc/changes', permission: null, featureKey: 'tm_core' },
       { label: 'Review Planner', icon: 'Calendar', href: '/review-planner', permission: 'viewAllTenantCases', featureKey: 'review_planner' },
       // Outreach keeps its own role gate (OUTREACH_ROLES) and feature flag
       { label: 'New Outreach', icon: 'Send', href: '/outreach/new', permission: null, featureKey: 'outreach', outreachOnly: true },

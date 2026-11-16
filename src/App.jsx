@@ -52,6 +52,7 @@ import TmQuality from './pages/TmQuality';
 import TmRegression from './pages/TmRegression';
 import MyWork from './pages/MyWork';
 import TmMi from './pages/TmMi';
+import ChangeOfCircumstances from './pages/ChangeOfCircumstances';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -120,6 +121,7 @@ const AuthenticatedApp = () => {
 
       {/* Monitoring / Planning */}
       <Route path="/review-planner" element={<ReviewPlanner />} />
+      <Route path="/kyc/changes" element={<ChangeOfCircumstances />} />
       <Route path="/mi-dashboard" element={<MIDashboard />} />
       <Route path="/risk-dashboard" element={<RiskDashboard />} />
 

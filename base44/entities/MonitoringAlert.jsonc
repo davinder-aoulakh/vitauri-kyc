@@ -56,7 +56,8 @@
         "New",
         "Under_Review",
         "Dismissed",
-        "Escalated_to_EDR"
+        "Escalated_to_EDR",
+        "Confirmed_Match"
       ],
       "default": "New"
     },

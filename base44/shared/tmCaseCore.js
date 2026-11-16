@@ -198,7 +198,7 @@ export async function coDecide(ctx, tmCase, body) {
         await proposeTriggers(E, {
           tenantId, client, sourceRef: `tm_case:${tmCase.id}`, actor: auth,
           findings: [{
-            type: 'tm_case', key: `tm_case:${tmCase.id}:report`, before: {},
+            type: 'tm_case', key: `tm_case:${tmCase.id}:report`, before: {}, restricted: true, source_label: 'Investigation',
             after: { tm_case_id: tmCase.id, tm_case_ref: tmCase.case_ref || null, co_decision: 'report', tm_alert_ids: tmCase.alert_ids || [] },
             summary: `TM case ${tmCase.case_ref || tmCase.id} decided: report to FIU. Review the KYC file and expected profile.`,
           }],

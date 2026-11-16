@@ -65,5 +65,6 @@ export function aiFollowed(aiProposal, action) {
 /** Should a case be started automatically for a newly created alert? Returns a reason string or ''. */
 export function autoCaseReason(alert, settings) {
   if (settings.auto_case_objective && alert?.indicator_type === 'objective') return 'objective indicator';
+  if (settings.auto_case_sanctions && alert?.sanctions_confirmed === true) return 'confirmed sanctions hit';
   return '';
 }

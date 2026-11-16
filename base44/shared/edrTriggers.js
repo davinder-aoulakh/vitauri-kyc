@@ -6,6 +6,8 @@ export const TRIGGER_LABEL = {
   ubo_change: 'UBO change', director_change: 'Director change', business_activity_change: 'Business activity change',
   country_change: 'Country change', screening_hit: 'Confirmed screening hit', risk_band_rise: 'Risk band rise',
   profile_breach: 'Profile breach', tm_case: 'TM case', transaction_verification: 'Transaction re-verification',
+  id_expiry: 'ID document expiry', address_change: 'Address change', tm_alert_frequency: 'Repeated TM alerts',
+  tm_new_country: 'New country in transactions', tm_investigation_outcome: 'Investigation outcome',
 };
 
 const OWNERSHIP_PP = 10;
@@ -123,6 +125,7 @@ export async function proposeTriggers(E, { tenantId, client, findings, sourceRef
     const t = await E.EdrTrigger.create({
       tenant_id: tenantId, client_id: client.id, trigger_type: f.type, source_ref: f.source_ref || sourceRef || undefined,
       before: f.before || {}, after: { ...(f.after || {}), summary: f.summary }, status: 'proposed', dedupe_key: dedupeKey,
+      ...(f.restricted ? { restricted: true } : {}), ...(f.source_label ? { source_label: f.source_label } : {}),
     });
     created.push(t);
     const label = TRIGGER_LABEL[f.type] || f.type;

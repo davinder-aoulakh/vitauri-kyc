@@ -4,6 +4,7 @@
 // "human" findings are judgements only a person can make (spec: QC pauses, the human-action card asks for a decision).
 // QC never decides a screening hit or a risk score itself; it points to the step that owns it.
 import { outreachAnswers, isPepYes } from './riskSignals.js';
+import { deltaSkipped } from './cocResponse.js';
 
 export const QC_RULESET_VERSION = 'qc-1';
 export const QC_MAX_ROUNDS = 3;
@@ -26,7 +27,7 @@ const parseJson = (v) => { if (v && typeof v === 'object') return v; try { retur
 const clean = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
 const money = (n, cur = 'EUR') => (Number.isFinite(n) ? `${cur === 'EUR' ? '€' : `${cur} `}${Math.round(n).toLocaleString('en-GB')}` : '—');
 
-export const stepDone = (kc, id) => (NOT_REQ.includes(id) && kc[`step_${id}_not_required`] === true) || kc[`step_${id}_status`] === 'complete';
+export const stepDone = (kc, id) => (NOT_REQ.includes(id) && kc[`step_${id}_not_required`] === true) || deltaSkipped(kc, id) || kc[`step_${id}_status`] === 'complete';
 
 /** Numbers in an income/turnover answer like "€70.000 - €100.000", "100k+", "€100.000 and above" -> { low, high } (annual). */
 export function parseAmountRange(text) {
@@ -123,7 +124,7 @@ export function runCaseCheck(data, strictness = 'light') {
   }
 
   // C4 — risk classification and rationale per selected indicator.
-  if (!cls) out.push(f('C4', 6, 'blocker', 'No risk classification. Finish the Consolidated View and press Proceed.', { key: 'cls', ref: 'risk_classification' }));
+  if (!cls && !deltaSkipped(kc, 6)) out.push(f('C4', 6, 'blocker', 'No risk classification. Finish the Consolidated View and press Proceed.', { key: 'cls', ref: 'risk_classification' }));
   for (const ra of (data.riskAssessments || []).filter((r) => RANK[r.score] >= 3 && !clean(r.analyst_narrative || r.ai_narrative))) {
     out.push(f('C4', 6, strict ? 'major' : 'minor', `Indicator "${ra.indicator_name}" (${ra.score}) for ${ra.entity_name || 'the client'} has no rationale.`, { key: ra.id, ref: `RiskAssessment/${ra.id}` }));
   }
@@ -142,7 +143,7 @@ export function runCaseCheck(data, strictness = 'light') {
   if (RANK[cls] >= 3 && !(data.controlMeasures || []).length) out.push(f('C6', 7, 'blocker', `The case is ${cls} but has no control measures.`, { key: 'cm' }));
 
   // C7 — purpose and nature.
-  if (!clean(kc.purpose_nature_text)) out.push(f('C7', 4, 'major', 'Purpose & nature of the relationship is empty.', { key: 'purpose', ref: 'purpose_nature_text' }));
+  if (!clean(kc.purpose_nature_text) && !deltaSkipped(kc, 4)) out.push(f('C7', 4, 'major', 'Purpose & nature of the relationship is empty.', { key: 'purpose', ref: 'purpose_nature_text' }));
 
   // C8 — documents the AI checker flagged high risk and nobody reviewed.
   for (const doc of (data.documents || []).filter((x) => x.ai_check?.verdict === 'high_risk' && x.review_status === 'Pending_Review' && !x.is_deleted)) {

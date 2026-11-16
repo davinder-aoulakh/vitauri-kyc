@@ -3,6 +3,8 @@
  * Use these everywhere instead of direct kycCase[`step_${id}_status`] access.
  */
 
+import { deltaSkipped } from '../../base44/shared/cocResponse.js';
+
 // Steps that can be marked as not required
 // Step 2 removed — Didit now covers both NP and ORG, so it is always required
 const NOT_REQUIRED_STEPS = [5, 7, 11];
@@ -21,6 +23,8 @@ export function getStepStatus(kycCase, stepId) {
   if (NOT_REQUIRED_STEPS.includes(stepId) && kycCase?.[`step_${stepId}_not_required`] === true) {
     return 'not_required';
   }
+  // A review opened by a graduated response (Change of circumstances) leaves out the steps the event does not touch.
+  if (deltaSkipped(kycCase, stepId)) return 'not_required';
   const key = `step_${stepId}_status`;
   return kycCase?.[key] || 'not_started';
 }

@@ -87,7 +87,7 @@ const groupOf = (name) => navItems.find((g) => g.group === name);
 // Sidebar when tm_core and aml_nav_v2 are on (structure in src/lib/amlNav.js; the icons are attached here).
 const NAV_ICONS = {
   LayoutDashboard, FolderOpen, Users, Search, Shield, Settings, BarChart3, AlertTriangle, Calendar, Archive,
-  UserCircle, ClipboardList, Mail, Send, Activity, SlidersHorizontal, ShieldCheck, Briefcase, FileText, Inbox, PieChart,
+  UserCircle, ClipboardList, Mail, Send, Activity, SlidersHorizontal, ShieldCheck, Briefcase, FileText, Inbox, PieChart, RefreshCw,
 };
 const amlNav = amlNavItems.map((g) => ({ ...g, items: g.items.map((i) => ({ ...i, icon: NAV_ICONS[i.icon] || FolderOpen })) }));
 

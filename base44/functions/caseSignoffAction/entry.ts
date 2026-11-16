@@ -12,10 +12,11 @@ import { matchDeclined, subjectFromClient, requiresReview } from '../../shared/d
 import { transition, routeKey, adviceOutdated, FINAL_STATES } from '../../shared/signoffState.js';
 import { caseFacts, draftAdvice, draftRationale } from '../../shared/signoffAi.js';
 import { loadQcData, qcInputHash } from '../../shared/qcData.js';
+import { deltaSkipped } from '../../shared/cocResponse.js';
 
 const CORE_STEPS = [1, 2, 3, 4, 5, 6, 7];
 const NOT_REQ = [5, 7];
-const stepDone = (kc, id) => (NOT_REQ.includes(id) && kc[`step_${id}_not_required`] === true) || kc[`step_${id}_status`] === 'complete' || (id === 2 && kc.step_2_not_required === true);
+const stepDone = (kc, id) => (NOT_REQ.includes(id) && kc[`step_${id}_not_required`] === true) || deltaSkipped(kc, id) || kc[`step_${id}_status`] === 'complete' || (id === 2 && kc.step_2_not_required === true);
 const roleOf = (u) => u?.app_role || u?.data?.app_role;
 const clip = (v, n = 4000) => String(v ?? '').trim().slice(0, n);
 
