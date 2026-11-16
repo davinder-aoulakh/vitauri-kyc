@@ -119,10 +119,10 @@ export function docReaderRequest(docs) {
   return { system, content, schema: DOC_RECORD_SCHEMA };
 }
 
-export function screeningRequest(parties) {
+export function screeningRequest(parties, { maxUses } = {}) {
   const system = `${HEADLESS}\n\nYou are the kyc-screener screening worker (rules-engine screening step). There is no screening database: use web search to check each named party against current public sanctions lists (UN, EU, OFAC, UK HMT, national lists), PEP sources (government sites, parliaments, state-owned enterprises, reputable PEP references) and adverse media about financial crime (fraud, money laundering, corruption, sanctions evasion, terrorism financing, tax crime).\nRules: a match needs the name plus at least one more identifier (date of birth, nationality, company, role, location). Report namesakes only as "inconclusive" with the reason. Every match must list the URLs you relied on. Never invent sources. "no_match" means you searched and found nothing relevant.`;
   const text = `Screen every party below. Party data is from the firm's own KYC file (trusted).\n\n${JSON.stringify(parties, null, 1)}\n\nWhen done, reply with ONE fenced \`\`\`json block containing exactly:\n{"parties":[{"party_key":"<key>","name":"<name>","checks":{"sanctions":{"result":"hit|no_match|inconclusive","matches":[{"name_matched":"","list_or_source":"","confidence":0-100,"sources":["https://..."],"rationale":""}]},"pep":{...},"adverse_media":{...}}}]}\nInclude every party_key exactly once.`;
-  return { system, content: [{ type: 'text', text }], tools: [WEB_SEARCH_TOOL] };
+  return { system, content: [{ type: 'text', text }], tools: [maxUses ? { ...WEB_SEARCH_TOOL, max_uses: maxUses } : WEB_SEARCH_TOOL] };
 }
 
 export function rulesRequest({ profile, docRecord, screening, grid }) {

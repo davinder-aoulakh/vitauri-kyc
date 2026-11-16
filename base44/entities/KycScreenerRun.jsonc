@@ -24,6 +24,15 @@
     "error": {
       "type": "string"
     },
+    "heartbeat_at": {
+      "description": "Refreshed every 20 s while a step works; a step without it for 90 s is dead",
+      "format": "date-time",
+      "type": "string"
+    },
+    "progress": {
+      "description": "Step runner state: { step, party_index, parties[], screening_raw[], attempts, active, started_at, last_error, usage }",
+      "type": "object"
+    },
     "finished_at": {
       "format": "date-time",
       "type": "string"

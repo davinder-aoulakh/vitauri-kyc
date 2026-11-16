@@ -44,13 +44,16 @@ export function extractJson(text) {
 /**
  * One stage call. Returns { json, text, model, usage, stop_reason }.
  * schema: structured-output JSON schema (no tools allowed with it here). tools: server tools (web search) for free-text stages.
- * client: injectable for tests.
+ * client: injectable for tests. timeoutMs (optional): the whole call is aborted after this time and fails with code 'timeout'.
  */
-export async function callClaude({ system, content, schema, tools, model = DEFAULT_CLAUDE_MODEL, effort = 'high', maxTokens = 32000, client }) {
+export async function callClaude({ system, content, schema, tools, model = DEFAULT_CLAUDE_MODEL, effort = 'high', maxTokens = 32000, client, timeoutMs = 0 }) {
   const c = client || claudeClient();
   const messages = [{ role: 'user', content }];
   const usage = { input_tokens: 0, output_tokens: 0 };
   let msg;
+  const abort = timeoutMs > 0 ? new AbortController() : null;
+  const timer = abort ? setTimeout(() => abort.abort(), timeoutMs) : null;
+  try {
   for (let turn = 0; turn < 4; turn++) {
     const params = {
       model, max_tokens: maxTokens, system, messages,
@@ -60,8 +63,9 @@ export async function callClaude({ system, content, schema, tools, model = DEFAU
       betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
     };
     try {
-      msg = await c.beta.messages.stream(params).finalMessage();
+      msg = await (abort ? c.beta.messages.stream(params, { signal: abort.signal }) : c.beta.messages.stream(params)).finalMessage();
     } catch (e) {
+      if (abort?.signal.aborted) throw new ClaudeStageError(`Claude did not answer within ${Math.round(timeoutMs / 1000)} seconds.`, { status: 504, code: 'timeout' });
       if (e instanceof Anthropic.AuthenticationError) throw new ClaudeStageError('The Anthropic API key was rejected.', { status: 412, code: 'bad_api_key' });
       if (e instanceof Anthropic.RateLimitError) throw new ClaudeStageError('Claude is rate limited; try again in a minute.', { status: 429, code: 'rate_limited' });
       if (e instanceof Anthropic.APIError) throw new ClaudeStageError(`Claude API error ${e.status}: ${String(e.message).slice(0, 200)}`, { status: 502 });
@@ -71,6 +75,9 @@ export async function callClaude({ system, content, schema, tools, model = DEFAU
     usage.output_tokens += msg.usage?.output_tokens || 0;
     if (msg.stop_reason !== 'pause_turn') break;
     messages.push({ role: 'assistant', content: msg.content }); // server tool paused: continue the same turn
+  }
+  } finally {
+    if (timer) clearTimeout(timer);
   }
   if (msg.stop_reason === 'refusal') throw new ClaudeStageError(`Claude declined this request${msg.stop_details?.category ? ` (${msg.stop_details.category})` : ''}.`, { code: 'refusal' });
   if (msg.stop_reason === 'max_tokens') throw new ClaudeStageError('Claude ran out of output space for this stage.', { code: 'max_tokens' });
