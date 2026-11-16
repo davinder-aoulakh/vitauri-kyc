@@ -3,6 +3,7 @@
 // No route moves in this phase: every href is an existing page.
 // `domain` ('kyc' | 'aml') on a group or item: hidden for users who work on the other side only (phase 6).
 import { isFeatureEnabled } from './featureFlags.js';
+import { hasPermission, canAml } from './permissions.js';
 
 export { librariesFor, libraryCodesFor, normaliseJurisdictions } from './tmLibraryScope.js';
 
@@ -21,7 +22,7 @@ export const amlNavItems = [
     items: [
       { label: 'My Work', icon: 'Inbox', href: '/work', permission: null, badge: 'myWork' },
       { label: 'KYC Dashboard', domain: 'kyc', icon: 'LayoutDashboard', href: '/', permission: null, featureKey: 'dashboard' },
-      { label: 'AML Dashboard', domain: 'aml', icon: 'PieChart', href: '/tm/mi', permission: 'viewMIDashboard', featureKey: 'tm_core' },
+      { label: 'AML Dashboard', domain: 'aml', icon: 'PieChart', href: '/aml/dashboard', permission: null, anyPermission: ['viewMIDashboard', 'tmViewAlerts', 'tmQuality'], featureKey: 'tm_core' },
     ],
   },
   {
@@ -59,21 +60,16 @@ export const amlNavItems = [
     domain: 'aml',
     items: [
       { label: 'FIU Reports', icon: 'FileText', href: '/tm/reports', permission: 'createRunCase', badge: 'fiu', featureKey: 'tm_fiu' },
-      { label: 'MI Dashboard', icon: 'BarChart3', href: '/mi-dashboard', permission: 'viewMIDashboard', featureKey: 'mi_dashboard' },
-      { label: 'Risk Dashboard', icon: 'Shield', href: '/risk-dashboard', permission: 'viewMIDashboard', featureKey: 'mi_dashboard' },
     ],
   },
   {
     group: 'ADMIN',
     items: [
       { label: 'Audit Log', icon: 'ClipboardList', href: '/audit-logs', permission: 'tenantConfig', featureKey: 'audit_logs' },
-      { label: 'Tenant Config', icon: 'Settings', href: '/tenant-config', permission: 'tenantConfig', featureKey: 'tenant_config' },
+      // Rules & scenarios live in Tenant Config (AML group), so rule managers and approvers also get the link
+      { label: 'Tenant Config', icon: 'Settings', href: '/tenant-config', permission: null, anyPermission: ['tenantConfig', 'tmManageRules', 'tmApproveRules'], featureKey: 'tenant_config' },
       { label: 'Users', icon: 'UserCircle', href: '/user-management', permission: 'userManagement', featureKey: 'user_management' },
       { label: 'Archive', icon: 'Archive', href: '/archive', permission: 'viewArchive', featureKey: 'archive' },
-      // These three move into Tenant Config and the AML Dashboard in phase 9; until then they stay reachable here.
-      { label: 'Rules', domain: 'aml', icon: 'SlidersHorizontal', href: '/tm/rules', anyPermission: ['tmManageRules', 'tmApproveRules'], featureKey: 'tm_rules' },
-      { label: 'Data Coverage', domain: 'aml', icon: 'Activity', href: '/tm/coverage', permission: 'tmViewAlerts', featureKey: 'tm_core' },
-      { label: 'Quality', domain: 'aml', icon: 'ShieldCheck', href: '/tm/quality', permission: 'tmQuality', featureKey: 'tm_quality' },
     ],
   },
 ];
@@ -106,4 +102,65 @@ export function clientTabFor(tab, view) {
     return { tab: 'overview', view: ['network', 'timeline'].includes(view) ? view : null };
   }
   return { tab: CLIENT_TABS_V2.some((x) => x.value === t) ? t : 'overview', view: null };
+}
+
+// ── Phase 9: dashboards, My Work sections, Tenant Config groups ──
+const roleOf = (user) => user?.app_role || user?.data?.app_role;
+
+/** Tabs of the AML Dashboard a user may open (each tab is the existing page; its own check stays in place). */
+export function amlDashboardTabs(user, tenant) {
+  const role = roleOf(user);
+  const aml = canAml(user, tenant) && isFeatureEnabled(tenant, 'tm_core');
+  return [
+    { id: 'overview', label: 'Overview', show: aml && hasPermission(role, 'viewMIDashboard') },
+    { id: 'coverage', label: 'Data coverage', show: aml && hasPermission(role, 'tmViewAlerts') },
+    { id: 'quality', label: 'Detection quality', show: aml && isFeatureEnabled(tenant, 'tm_quality') && hasPermission(role, 'tmQuality') },
+  ];
+}
+
+/** Tabs of the KYC Dashboard a user may open. */
+export function kycDashboardTabs(user, tenant) {
+  const mi = isFeatureEnabled(tenant, 'mi_dashboard') && hasPermission(roleOf(user), 'viewMIDashboard');
+  return [
+    { id: 'reviews', label: 'Reviews & backlog', show: true },
+    { id: 'mi', label: 'Management information', show: mi },
+    { id: 'risk', label: 'Risk portfolio', show: mi },
+  ];
+}
+
+/** Old routes and where they live in the new layout (used by the route redirects and tested against App.jsx). */
+export const MOVED_ROUTES = {
+  '/tm/mi': { to: '/aml/dashboard' },
+  '/tm/coverage': { to: '/aml/dashboard', tab: 'coverage' },
+  '/tm/quality': { to: '/aml/dashboard', tab: 'quality' },
+  '/mi-dashboard': { to: '/', tab: 'mi' },
+  '/risk-dashboard': { to: '/', tab: 'risk' },
+  '/tm/rules': { to: '/tenant-config', tab: 'rules' },
+};
+
+/** My Work (spec section 10): which of the two sections an item belongs to. */
+export const WORK_SECTIONS = [{ key: 'kyc', label: 'My KYC work' }, { key: 'aml', label: 'My AML work' }];
+const AML_WORK_KINDS = new Set(['alert', 'tm_case', 'fiu_report', 'profile']);
+export const workSection = (kind) => (AML_WORK_KINDS.has(kind) ? 'aml' : 'kyc');
+/** Items ordered KYC first, then AML, keeping the order (deadline) inside each section. */
+export function bySection(items) {
+  const list = items || [];
+  return [...list.filter((i) => workSection(i.kind) === 'kyc'), ...list.filter((i) => workSection(i.kind) === 'aml')];
+}
+
+/** Tenant Config (spec section 11): the existing tabs under General, KYC and AML. Unknown tabs go to General. */
+export const TENANT_CONFIG_GROUPS = [
+  { key: 'general', label: 'General', tabs: ['branding', 'roles', 'retention', 'fiu_profiles', 'integrations'] },
+  { key: 'kyc', label: 'KYC', tabs: ['indicators', 'scoring', 'cycles', 'signoff', 'outreach', 'form_tmpl', 'email_tmpl'] },
+  { key: 'aml', label: 'AML', tabs: ['tm_settings', 'rules', 'api_keys'] },
+];
+export function groupTenantTabs(visibleTabs) {
+  const known = new Set(TENANT_CONFIG_GROUPS.flatMap((g) => g.tabs));
+  return TENANT_CONFIG_GROUPS.map((g) => ({
+    ...g,
+    tabs: [
+      ...g.tabs.map((id) => (visibleTabs || []).find((t) => t.id === id)).filter(Boolean),
+      ...(g.key === 'general' ? (visibleTabs || []).filter((t) => !known.has(t.id)) : []),
+    ],
+  })).filter((g) => g.tabs.length);
 }

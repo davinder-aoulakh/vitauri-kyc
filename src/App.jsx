@@ -53,6 +53,9 @@ import TmRegression from './pages/TmRegression';
 import MyWork from './pages/MyWork';
 import TmMi from './pages/TmMi';
 import ChangeOfCircumstances from './pages/ChangeOfCircumstances';
+import AmlDashboard from './pages/AmlDashboard';
+import KycDashboard from './pages/KycDashboard';
+import { LayoutSwitch, V2Redirect } from '@/components/layout/LayoutSwitch';
 
 // Redirects Vitauri Ops → /ops, blocks /ops for non-Ops roles
 function OpsRouteGuard({ children }) {
@@ -84,7 +87,9 @@ const AuthenticatedApp = () => {
     <OpsRouteGuard>
     <Routes>
       {/* Main */}
-      <Route path="/" element={<Dashboard />} />
+      {/* KYC + AML layout: the dashboards are tabbed pages and the old routes move into them (MOVED_ROUTES in amlNav.js) */}
+      <Route path="/" element={<LayoutSwitch v2={<KycDashboard />} legacy={<Dashboard />} />} />
+      <Route path="/aml/dashboard" element={<AmlDashboard />} />
 
       {/* Ops */}
       <Route path="/ops" element={<OpsDashboard />} />
@@ -108,22 +113,22 @@ const AuthenticatedApp = () => {
       <Route path="/outreach-dashboard" element={<OutreachDashboard />} />
       <Route path="/outreach/new" element={<StandaloneOutreach />} />
       <Route path="/transaction-monitoring" element={<TransactionMonitoring />} />
-      <Route path="/tm/coverage" element={<TmCoverage />} />
+      <Route path="/tm/coverage" element={<V2Redirect to="/aml/dashboard" tab="coverage" legacy={<TmCoverage />} />} />
       <Route path="/tm/alerts" element={<TmAlerts />} />
       <Route path="/tm/cases" element={<TmCases />} />
       <Route path="/tm/case/:id" element={<TmCaseWorkspace />} />
       <Route path="/tm/reports" element={<FiuReports />} />
       <Route path="/tm/report/:id" element={<FiuReportWorkspace />} />
-      <Route path="/tm/rules" element={<TmRules />} />
-      <Route path="/tm/quality" element={<TmQuality />} />
-      <Route path="/tm/mi" element={<TmMi />} />
+      <Route path="/tm/rules" element={<V2Redirect to="/tenant-config" tab="rules" legacy={<TmRules />} />} />
+      <Route path="/tm/quality" element={<V2Redirect to="/aml/dashboard" tab="quality" legacy={<TmQuality />} />} />
+      <Route path="/tm/mi" element={<V2Redirect to="/aml/dashboard" legacy={<TmMi />} />} />
       <Route path="/work" element={<MyWork />} />
 
       {/* Monitoring / Planning */}
       <Route path="/review-planner" element={<ReviewPlanner />} />
       <Route path="/kyc/changes" element={<ChangeOfCircumstances />} />
-      <Route path="/mi-dashboard" element={<MIDashboard />} />
-      <Route path="/risk-dashboard" element={<RiskDashboard />} />
+      <Route path="/mi-dashboard" element={<V2Redirect to="/" tab="mi" legacy={<MIDashboard />} />} />
+      <Route path="/risk-dashboard" element={<V2Redirect to="/" tab="risk" legacy={<RiskDashboard />} />} />
 
       {/* Admin */}
       <Route path="/tenant-config" element={<TenantConfig />} />

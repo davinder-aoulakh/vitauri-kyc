@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTenant } from '@/lib/tenantContext';
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { amlNavItems, selectNav } from '@/lib/amlNav';
+import { EmbeddedContext } from '@/lib/embedded';
 
 const navItems = [
   {
@@ -134,7 +135,13 @@ const tmNavItems = [
   groupOf('REPORTS & ADMIN'),
 ];
 
+/** Inside another page (dashboard tab, Tenant Config tab) only the content is drawn: the shell is already there. */
 export default function AppShell({ children }) {
+  const embedded = useContext(EmbeddedContext);
+  return embedded ? <>{children}</> : <AppShellFrame>{children}</AppShellFrame>;
+}
+
+function AppShellFrame({ children }) {
   const { currentUser, tenant } = useTenant();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
