@@ -260,6 +260,10 @@
         },
         "method": {
           "type": "string"
+        },
+        "fiu_reference": {
+          "type": "string",
+          "description": "Reference the FIU gave at submission (required with the KYC + AML layout)"
         }
       },
       "type": "object"

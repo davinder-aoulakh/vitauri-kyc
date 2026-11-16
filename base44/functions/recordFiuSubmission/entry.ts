@@ -1,6 +1,8 @@
 // recordFiuSubmission — records the FIU submission, receipt and outcome of a generated report, with evidence.
 // Auth: signed-in Compliance Officer (tmApproveFiuReport); tenant from the user.
-// Actions: submitted {method, at, evidence_file}, received {fiu_reference, at, evidence_file?}, accepted, rejected {reason}.
+// Actions: submitted {method, at, evidence_file, fiu_reference?}, received {fiu_reference?, at, evidence_file?}, accepted, rejected {reason}.
+// With the KYC + AML layout (aml_nav_v2) the FIU reference is required at submission, the receipt may reuse it, and a
+// receipt proposes a restricted change-of-circumstances event (base44/shared/tmFiuSubmission.js).
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { isTmEnabled } from '../../shared/tmGuards.js';
 import { authenticate, errorResponse, httpError, loadTenant, asList } from '../../shared/tmAuth.js';
@@ -9,8 +11,9 @@ import { loadReport } from '../../shared/tmFiuActions.js';
 import { writeAudit } from '../../shared/tmAudit.js';
 import { safeFileArtefacts } from '../../shared/tmFiuArtefacts.js';
 import { refreshAmlHoldForCase } from '../../shared/tippingOff.js';
+import { proposeTriggers } from '../../shared/edrTriggers.js';
+import { amlV2On, submissionCheck, receiptReference, outcomeFinding, hasOpenEventForCase } from '../../shared/tmFiuSubmission.js';
 
-const METHODS = ['portal_upload', 'xml_upload', 'm2m'];
 const FROM = { submitted: ['generated'], received: ['submitted'], accepted: ['received'], rejected: ['submitted', 'received'] };
 
 const when = (v) => {
@@ -37,13 +40,14 @@ export default async function (req) {
     if (!FROM[action].includes(report.status)) throw httpError(409, `A ${report.status} report cannot be marked ${action}`);
 
     const evidence = String(body.evidence_file || '').trim();
+    const v2 = amlV2On(tenant);
     let patch;
     if (action === 'submitted') {
-      if (!METHODS.includes(body.method)) throw httpError(400, 'method must be portal_upload, xml_upload or m2m');
-      if (!evidence) throw httpError(400, 'Evidence of the submission is required');
-      patch = { status: 'submitted', submitted: { at: when(body.at), method: body.method, by_user_id: auth.actorUserId, evidence_url: evidence } };
+      const chk = submissionCheck(body, { v2 });
+      if (chk.error) throw httpError(400, chk.error);
+      patch = { status: 'submitted', submitted: { at: when(body.at), method: chk.method, by_user_id: auth.actorUserId, evidence_url: chk.evidence, ...(chk.reference ? { fiu_reference: chk.reference } : {}) } };
     } else if (action === 'received') {
-      const ref = String(body.fiu_reference || '').trim();
+      const ref = receiptReference(report, body);
       if (!ref) throw httpError(400, 'The FIU reference is required');
       patch = { status: 'received', received: { fiu_reference: ref, at: when(body.at), ...(evidence ? { evidence_url: evidence } : {}) } };
     } else {
@@ -54,7 +58,7 @@ export default async function (req) {
     await E.FiuReport.update(report.id, patch);
     await writeAudit(base44, auth, {
       tenantId, clientId: report.client_id, eventType: `fiu_report_${action}`,
-      before: { status: report.status }, after: { status: patch.status, method: patch.submitted?.method, fiu_reference: patch.received?.fiu_reference, reason: patch.rejection_reason, evidence: !!evidence },
+      before: { status: report.status }, after: { status: patch.status, method: patch.submitted?.method, fiu_reference: patch.received?.fiu_reference || patch.submitted?.fiu_reference, reason: patch.rejection_reason, evidence: !!evidence },
       notes: `FIU report ${report.report_ref} marked ${action} by ${auth.actorName}.`,
     });
 
@@ -81,7 +85,26 @@ export default async function (req) {
         }
       }
     }
-    return Response.json({ ok: true, report_id: report.id, status: patch.status, case_closed: caseClosed });
+    // Receipt by the FIU is a change of circumstances for the KYC file (restricted). Not when an event for the same
+    // investigation is still waiting for a response: that one stands.
+    let changeEvent = false;
+    if (v2 && action === 'received' && report.client_id) {
+      try {
+        const client = asList(await E.Client.filter({ tenant_id: tenantId, id: report.client_id }, undefined, 1))[0];
+        const tmCase = report.tm_case_id ? asList(await E.TmCase.filter({ tenant_id: tenantId, id: report.tm_case_id }))[0] || null : null;
+        const open = asList(await E.EdrTrigger.filter({ tenant_id: tenantId, client_id: report.client_id, status: 'proposed' }, '-created_date', 100));
+        if (client && !hasOpenEventForCase(open, report.tm_case_id)) {
+          const created = await proposeTriggers(E, {
+            tenantId, client, sourceRef: `fiu_report:${report.id}`, actor: auth,
+            findings: [outcomeFinding(report, tmCase, patch.received.fiu_reference)],
+          });
+          changeEvent = created.length > 0;
+        }
+      } catch (e) {
+        console.warn('recordFiuSubmission: change-of-circumstances event failed', e?.message || e);
+      }
+    }
+    return Response.json({ ok: true, report_id: report.id, status: patch.status, case_closed: caseClosed, change_event_created: changeEvent });
   } catch (error) {
     console.error('recordFiuSubmission error:', error?.message);
     return errorResponse(error);

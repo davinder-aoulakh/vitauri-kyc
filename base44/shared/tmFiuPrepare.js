@@ -11,6 +11,7 @@ import { writeNarrative } from './tmFiuNarrative.js';
 import { resolveProfileCode, buildFields, missingFields, buildAttachments, buildSnapshot, distinct, mappedTxnCount } from './tmFiuMap.js';
 import { lockClient, isLockingStatus } from './tippingOff.js';
 import { FIU_TYPES, normaliseType, enabledTypes, reportCodeFor } from './fiuTypes.js';
+import { kycReportType } from './tmFiuSubmission.js';
 
 const earliest = (arr) => arr.filter(Boolean).sort()[0];
 const HOUR = 3600000;
@@ -203,4 +204,28 @@ export async function prepareReport(ctx, opts) {
     await E.TmCase.update(tmCase.id, { timeline: [...(tmCase.timeline || []), entry] });
   }
   return summary({ ...report, status: body.status }, tmCase, { locked: locked || (!!d.client.tipping_off_lock && (isLockingStatus(body.status) || type === 'TFR')) });
+}
+
+/**
+ * Draft FIU report for a KYC review that was declined or terminated with "report to be filed" (phase 7, plan task 2).
+ * No investigation and no transactions: a report on the customer with source "KYC review". One per review.
+ * Returns { created, report_id, report_ref } or { created: false, existing | reason }. Throws only what prepareReport throws.
+ */
+export async function prepareKycCaseReport(ctx, { kycCase, client, rationale }) {
+  const { E, tenantId } = ctx;
+  const linked = asList(await E.FiuReport.filter({ tenant_id: tenantId, kyc_case_id: kycCase.id }, '-created_date', 5)).filter((r) => r.status !== 'rejected');
+  if (linked[0]) return { created: false, existing: true, report_id: linked[0].id, report_ref: linked[0].report_ref };
+  const code = resolveProfileCode(client);
+  const fiu = asList(await E.FiuProfile.filter({ tenant_id: tenantId, code }))[0];
+  if (!fiu) return { created: false, reason: `No ${code} FIU profile is configured` };
+  const type = kycReportType(enabledTypes(fiu));
+  if (!type) return { created: false, reason: `No activity report type (SAR, STR, UTR) is enabled in the ${code} FIU profile` };
+  const text = String(rationale || '').trim().slice(0, 4000);
+  const res = await prepareReport(ctx, {
+    clientId: client.id, reportType: type, profileCode: code, origin: 'kyc_case', refresh: false,
+    narrativeText: `Report following a KYC review (${String(kycCase.case_type || 'review').replace(/_/g, ' ')}) that ended in a decision not to start or to end the relationship.${text ? ` Decision rationale: ${text}` : ''}`,
+  });
+  const id = res?.report_id || res?.id;
+  if (id) await E.FiuReport.update(id, { kyc_case_id: kycCase.id, status: 'draft' }).catch(() => {});
+  return { created: true, report_id: id || null, report_ref: res?.report_ref || null };
 }
