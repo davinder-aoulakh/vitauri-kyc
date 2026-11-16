@@ -16,3 +16,8 @@
   Lint and typecheck had errors before this work started (14 Nov 2026: lint 74 errors, typecheck 2,560 error lines); a phase passes when it adds none.
 - If the spec and the code disagree in a way the plan does not cover, stop and ask.
 - Never publish the app; the owner publishes after their own checks.
+
+## Shared rules on both sides
+- The frontend (`src/`) does not import from `base44/shared`. A rule needed on both sides lives in `base44/shared/<name>.js` with a copy in `src/lib/<name>.js` (`cocResponse`, `workDomain`, `tmFiuSubmission`, `tmLibraryScope`, and the settings readers in `tmTenantSettings`).
+- Change both in the same commit. `tests/shared-copies.test.js` fails when a copy differs from its original.
+- Inside `src/lib`, files that tests load import each other with relative paths (`./cocResponse.js`), not the `@/` alias.
