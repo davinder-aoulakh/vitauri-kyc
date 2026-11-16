@@ -130,7 +130,7 @@ export default async function (req) {
       const confirmedHits = asList(await E.ScreeningHit.filter({ tenant_id: tenantId, client_id: kycCase.client_id, status: 'Confirmed_Match' }, undefined, 5).catch(() => [])).length;
       auto = autoApprovalCheck({ cfg, route, kycCase, confirmedHits, qc: {
         passed: qcPassed && kycCase.qc_state !== 'legacy',
-        humanFindings: fs.filter((f) => f.kind === 'human').length,
+        humanFindings: fs.filter((f) => f.kind === 'human' || f.status === 'overruled').length, // an overrule is a human decision: no automatic approval
         openSerious: fs.filter((f) => ['open', 'returned', 'needs_human'].includes(f.status) && f.severity !== 'minor').length,
       } });
     }

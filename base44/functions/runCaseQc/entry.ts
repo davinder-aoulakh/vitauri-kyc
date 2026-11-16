@@ -5,12 +5,13 @@
 //   run                                      -> starts round n (background); returns { run_id }
 //   record_human_action { finding_id, choice, reasons, evidence_confirmed[] }
 //   dismiss_finding { finding_id, reason }   -> minor findings only
+//   overrule_findings { finding_ids[], rationale } -> QC Officer sets aside findings of the QC Agent (not C2 / C3 / C8); audited as override
 // Every change writes an AuditEvent; secrets and document contents are never logged.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { waitUntil } from 'base44:runtime';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { ANALYST_ROLES, signoffConfig } from '../../shared/signoffRouting.js';
-import { runCaseCheck, qcOutcome, validateHumanAction, QC_RULESET_VERSION, QC_MAX_ROUNDS, STEP_LABEL } from '../../shared/qcRules.js';
+import { runCaseCheck, qcOutcome, validateHumanAction, QC_RULESET_VERSION, QC_MAX_ROUNDS, STEP_LABEL, QC_OVERRULE_ROLES, QC_OVERRULE_MIN, overruleBlock, canOverruleFinding, validateOverrule } from '../../shared/qcRules.js';
 import { runReportCheck, REPORT_CHECK_PROMPT_VERSION } from '../../shared/qcReportCheck.js';
 import { loadQcData, qcInputHash } from '../../shared/qcData.js';
 
@@ -40,9 +41,9 @@ export default async function (req) {
     const tenant = asList(await E.Tenant.filter({ id: tenantId }, undefined, 1))[0] || {};
     const cfg = signoffConfig(tenant);
     const actor = { id: user.id, name: user.full_name || user.email };
-    const audit = (event_type, notes, after = {}) => E.AuditEvent.create({
+    const audit = (event_type, notes, after = {}, extra = {}) => E.AuditEvent.create({
       tenant_id: tenantId, case_id: kycCase.id, client_id: kycCase.client_id, actor_user_id: actor.id, actor_name: actor.name, actor_type: 'User',
-      event_type, notes: clip(notes, 1000), after_state: after,
+      event_type, notes: clip(notes, 1000), after_state: after, ...extra,
     }).catch((e) => console.warn('audit failed', e?.message));
     const runs = asList(await E.QcRun.filter({ tenant_id: tenantId, case_id: kycCase.id }, '-created_date', 10));
     const latest = runs[0] || null;
@@ -55,8 +56,9 @@ export default async function (req) {
       const findings = await loadFindings(run.id);
       const result = qcOutcome(findings);
       const certificate_id = result === 'passed' ? `QC-${String(kycCase.id).slice(-6).toUpperCase()}-${run.round || 1}-${String(run.input_snapshot_hash || '').slice(0, 8)}` : null;
-      const counts = { blocker: 0, major: 0, minor: 0, human: 0, open: 0, resolved: 0 };
+      const counts = { blocker: 0, major: 0, minor: 0, human: 0, open: 0, resolved: 0, overruled: 0 };
       for (const f of findings) {
+        if (f.status === 'overruled') counts.overruled++;
         if (OPEN.includes(f.status)) { counts.open++; counts[f.severity]++; if (f.status === 'needs_human') counts.human++; } else counts.resolved++;
       }
       await E.QcRun.update(run.id, { result, certificate_id: certificate_id || undefined, summary: { ...(run.summary || {}), counts }, phase: result === 'passed' ? 'ready' : 'report_check' });
@@ -67,14 +69,15 @@ export default async function (req) {
 
     if (action === 'status') {
       const strictness = cfg.qc_strictness[kycCase.risk_classification || 'Medium'] || 'light';
-      if (!latest) return Response.json({ ok: true, run: null, findings: [], actions: [], rounds_used: 0, max_rounds: QC_MAX_ROUNDS, strictness });
+      const can_overrule = QC_OVERRULE_ROLES.includes(roleOf(user));
+      if (!latest) return Response.json({ ok: true, run: null, findings: [], actions: [], rounds_used: 0, max_rounds: QC_MAX_ROUNDS, strictness, can_overrule, overrule_min: QC_OVERRULE_MIN });
       const [findings, actions, data] = await Promise.all([
-        loadFindings(latest.id),
+        loadFindings(latest.id).then((list) => list.map((f) => ({ ...f, overrulable: canOverruleFinding(f) }))),
         E.QcHumanAction.filter({ tenant_id: tenantId, case_id: kycCase.id }, '-created_date', 50).then(asList),
         loadQcData(E, tenantId, kycCase),
       ]);
       const stale = latest.result === 'passed' && (await qcInputHash(data)) !== latest.input_snapshot_hash;
-      return Response.json({ ok: true, run: latest, findings, actions, stale, rounds_used: latest.round || runs.length, max_rounds: QC_MAX_ROUNDS, strictness, history: runs.map((r) => ({ id: r.id, round: r.round, result: r.result, started_at: r.started_at, finished_at: r.finished_at, model: r.model_version, ruleset: r.rule_set_version, report_check: r.report_check?.status, counts: r.summary?.counts })) });
+      return Response.json({ ok: true, run: latest, findings, actions, stale, can_overrule, overrule_min: QC_OVERRULE_MIN, rounds_used: latest.round || runs.length, max_rounds: QC_MAX_ROUNDS, strictness, history: runs.map((r) => ({ id: r.id, round: r.round, result: r.result, started_at: r.started_at, finished_at: r.finished_at, model: r.model_version, ruleset: r.rule_set_version, report_check: r.report_check?.status, counts: r.summary?.counts })) });
     }
 
     if (action === 'run') {
@@ -102,7 +105,7 @@ export default async function (req) {
           const prevDecided = new Map();
           for (const r of cycleRuns) {
             for (const f of await loadFindings(r.id)) {
-              if (['resolved', 'dismissed', 'carried'].includes(f.status) && f.fingerprint && !prevDecided.has(f.fingerprint) && (f.kind === 'human' || f.status !== 'resolved')) prevDecided.set(f.fingerprint, f);
+              if (['resolved', 'dismissed', 'carried', 'overruled'].includes(f.status) && f.fingerprint && !prevDecided.has(f.fingerprint) && (f.kind === 'human' || f.status !== 'resolved')) prevDecided.set(f.fingerprint, f);
             }
           }
           const caseFindings = runCaseCheck(data, strictness);
@@ -123,12 +126,14 @@ export default async function (req) {
           }
           const rows = [...caseFindings.map((x) => ({ ...x, check: 'case' })), ...reportFindings.map((x) => ({ ...x, check: 'report' }))].map((x) => {
             const prev = prevDecided.get(x.fingerprint);
-            const status = prev ? 'carried' : x.kind === 'human' ? 'needs_human' : 'open';
+            // A finding the QC Officer overruled earlier in this cycle stays overruled (same finding, same rationale).
+            const status = prev ? (prev.status === 'overruled' ? 'overruled' : 'carried') : x.kind === 'human' ? 'needs_human' : 'open';
             return {
               tenant_id: tenantId, case_id: kycCase.id, qc_run_id: run.id, round, check: x.check, code: x.code, fingerprint: x.fingerprint, kind: x.kind,
               step: x.step, step_label: x.step_label, severity: x.severity, text: clip(x.text, 1000), rule_ref: x.rule_ref, datapoint_ref: x.datapoint_ref || undefined,
               owner: x.owner, human: x.human || undefined, report_value: x.report_value || undefined, case_value: x.case_value || undefined, status,
-              ...(prev ? { resolution_text: `Carried from round ${prev.round}: ${clip(prev.resolution_text, 400)}`, resolved_in_round: prev.round } : {}),
+              ...(prev && prev.status === 'overruled' ? { resolution_text: clip(prev.resolution_text, 1000), resolved_by: prev.resolved_by, resolved_by_name: prev.resolved_by_name, resolved_at: prev.resolved_at, resolved_in_round: prev.resolved_in_round || prev.round }
+                : prev ? { resolution_text: `Carried from round ${prev.round}: ${clip(prev.resolution_text, 400)}`, resolved_in_round: prev.round } : {}),
             };
           });
           if (rows.length) await E.QcFinding.bulkCreate(rows);
@@ -144,6 +149,31 @@ export default async function (req) {
       })();
       waitUntil(work);
       return Response.json({ ok: true, run_id: run.id, round });
+    }
+
+    if (action === 'overrule_findings') {
+      if (!QC_OVERRULE_ROLES.includes(roleOf(user))) throw httpError(403, 'Only a QC Officer (QC Reviewer, Manager, Director, Compliance or Tenant Admin) can overrule a QC finding');
+      if (!['draft', undefined, null].includes(kycCase.signoff_status)) throw httpError(409, 'QC findings can only be overruled while the case is in draft');
+      if (!latest || latest.result === 'running') throw httpError(409, 'There is no finished QC round to overrule');
+      const invalid = validateOverrule(body.rationale);
+      if (invalid) throw httpError(400, invalid);
+      const ids = [...new Set((Array.isArray(body.finding_ids) ? body.finding_ids : [body.finding_id]).filter(Boolean).map(String))];
+      if (!ids.length || ids.length > 100) throw httpError(400, 'Choose the findings to overrule');
+      const all = await loadFindings(latest.id);
+      const chosen = ids.map((id) => all.find((f) => f.id === id));
+      if (chosen.some((f) => !f)) throw httpError(409, 'A finding belongs to an earlier QC round. Reload and try again.');
+      const blocked = chosen.map((f) => overruleBlock(f)).find(Boolean);
+      if (blocked) throw httpError(409, blocked);
+      const rationale = clip(body.rationale, 1000);
+      const at = now();
+      for (const f of chosen) {
+        await E.QcFinding.update(f.id, { status: 'overruled', resolution_text: rationale, resolved_by: actor.id, resolved_by_name: actor.name, resolved_at: at, resolved_in_round: latest.round });
+        await audit('qc.finding_overruled', `QC Agent finding ${f.code} (${f.severity}, ${f.check === 'report' ? 'Report Check' : 'Case Check'}) overruled by the QC Officer. Finding: ${clip(f.text, 300)} Rationale: ${clip(rationale, 500)}`,
+          { status: 'overruled', finding_id: f.id, qc_run_id: latest.id, round: latest.round, rationale },
+          { is_override: true, before_state: { status: f.status, severity: f.severity, code: f.code, check: f.check } });
+      }
+      const s = await settle(latest);
+      return Response.json({ ok: true, result: s.result, overruled: chosen.length });
     }
 
     if (action === 'record_human_action' || action === 'dismiss_finding') {

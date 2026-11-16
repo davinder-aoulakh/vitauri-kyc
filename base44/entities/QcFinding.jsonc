@@ -82,7 +82,8 @@
         "needs_human",
         "resolved",
         "dismissed",
-        "carried"
+        "carried",
+        "overruled"
       ],
       "type": "string"
     },

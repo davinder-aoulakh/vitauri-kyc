@@ -212,7 +212,7 @@ export function runCaseCheck(data, strictness = 'light') {
 }
 
 /**
- * Outcome of a round from its findings (status open / needs_human / resolved / dismissed).
+ * Outcome of a round from its findings (status open / needs_human / resolved / dismissed / overruled).
  * failed: an open blocker or major; paused: only human findings waiting; passed: nothing open but minors.
  */
 export function qcOutcome(findings) {
@@ -220,6 +220,29 @@ export function qcOutcome(findings) {
   if (open.some((x) => x.severity === 'blocker' || x.severity === 'major')) return 'failed';
   if (findings.some((x) => x.status === 'needs_human')) return 'paused';
   return 'passed';
+}
+
+// ── Overrule by the QC Officer ──────────────────────────────────────────────────────────────────────────────────────
+// A person may set aside a finding of the QC Agent with a rationale (audited). Three hard facts keep their own decision
+// screen and cannot be overruled: undecided screening hits (C2), verification not done (C3), high-risk document not reviewed (C8).
+export const QC_OVERRULE_ROLES = ['QC Reviewer', 'Manager', 'Director', 'Compliance Officer', 'Compliance Admin', 'Tenant Admin'];
+export const QC_NOT_OVERRULABLE = ['C2', 'C3', 'C8'];
+export const QC_OVERRULE_MIN = 30;
+
+/** null when the finding may be overruled, else the reason why not. */
+export function overruleBlock(finding) {
+  if (!finding) return 'Finding not found.';
+  if (!['open', 'returned'].includes(finding.status)) return 'Only an open finding can be overruled.';
+  if (finding.kind === 'human') return 'This finding asks for a decision; use its decision card.';
+  const code = String(finding.code || '');
+  if (code.endsWith('-NP')) return 'This finding follows from a "Not plausible" decision by a person; resolve it in its step.';
+  if (QC_NOT_OVERRULABLE.includes(code)) return `${STEP_LABEL[finding.step] || 'This check'}: this must be settled in its step and cannot be overruled.`;
+  return null;
+}
+export const canOverruleFinding = (finding) => overruleBlock(finding) === null;
+
+export function validateOverrule(rationale) {
+  return clean(rationale).length < QC_OVERRULE_MIN ? `Give a rationale (at least ${QC_OVERRULE_MIN} characters).` : null;
 }
 
 /** Validation of a human decision (spec: strict = every evidence box + reason ≥ 30 characters). */
