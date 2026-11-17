@@ -1,0 +1,65 @@
+DESIGN TOKENS AND UX NOTES (taken from the prototype)
+
+The prototype is the visual reference. The values below are what it uses. Use the tenant's brand tokens where the platform has them; keep the structure.
+
+1. COLOR TOKENS (CSS custom properties; dark mode follows the system setting and can be forced with data-theme)
+  --bg          light #eef3f0                      dark #0e1814
+  --surface     light #ffffff                      dark #15231e
+  --surface2    light #f5f9f7                      dark #1a2a24
+  --ink         light #12342b                      dark #e3eee8
+  --muted       light #5b7167                      dark #97aea3
+  --line        light #d9e4de                      dark #26382f
+  --brand       light #13503f                      dark #46c093
+  --brand-ink   light #ffffff                      dark #052116
+  --brand-soft  light #e1f0e9                      dark #1c3a30
+  --me          light #13503f                      dark #2b8f6d
+  --me-ink      light #fff                         dark #fff
+  --ok          light #1b7a4d                      dark #5fd09a
+  --ok-soft     light #e0f3e8                      dark #173528
+  --warn        light #8a5a00                      dark #f0be5c
+  --warn-soft   light #fff1d6                      dark #3a2f12
+  --bad         light #b0372b                      dark #ff8f84
+  --bad-soft    light #fde6e3                      dark #3d1c19
+  --ai          light #3f4fa8                      dark #9aa8ff
+  --ai-soft     light #e8ebfa                      dark #222a52
+  --shadow      light 0 1px 2px rgba(18,52,43,.06),0 6px 18px rgba(18,52,43,.06) dark 0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.25)
+  --font        light -apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif dark (same)
+  --mono        light ui-monospace,'SF Mono',Menlo,Consolas,monospace dark (same)
+
+Usage: --bg page background; --surface cards and bubbles' base; --surface2 bank bubble and subtle fills; --ink text; --muted secondary text; --line borders; --brand primary action, client bubble, active section; --ok / --warn / --bad / --ai for pills and checks (each with a -soft background).
+
+2. TYPE
+System font stack: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif. Mono for small labels and pills: ui-monospace, 'SF Mono', Menlo, Consolas. Base size 15 px, line-height 1.5. No web fonts (the prototype loads nothing external).
+
+3. LAYOUT
+- Max width 1120 px, centred. Two columns on wide screens: left rail (about 300 px) and the conversation card.
+- Cards: radius 12-16 px, 1 px --line border, soft shadow.
+- Bubbles: bank bubble left with round avatar "N" (analyst messages use initials, for example "SV"), client bubble right in --me color. Max width of a bubble about 70% of the thread.
+- Widgets sit left-aligned under the question, same max width as bubbles (review and tracker may be wider, up to 620 px).
+- Pills: mono 10.5 px, rounded, with soft background in ok/warn/bad/ai/brand.
+
+4. RESPONSIVE (phone, below about 860 px wide)
+- One column. The left rail collapses: hide greeting text, deadline card, help line, open-requests box, section list and the saved indicator; keep the progress bar and percentage sticky at the top.
+- The message composer (after submission) is sticky at the bottom.
+- Demo controls are collapsed (prototype only).
+- ID&V: below 760 px (the smaller of window width and screen width) show the button instead of the QR code.
+- Keep a 16 px side gutter and honour safe-area insets (iPhone notch and home bar). Set viewport-fit=cover.
+
+5. INPUTS
+- Font size 16 px minimum in inputs (prevents zoom on iOS Safari).
+- Touch targets at least 40 px high. Chips wrap to several lines.
+- Keyboard: Enter sends a single-line text answer; labels via aria-label when there is no visible label.
+- Focus ring: 2 px --brand, 2 px offset.
+
+6. ACCESSIBILITY
+- The thread is an aria-live="polite" region. New bank messages are announced.
+- Structure card: SVG with role="img" and aria-label; the text list that follows is the accessible alternative.
+- Do not rely on color alone: pills carry text; checks carry a symbol (check mark or exclamation mark).
+- Respect prefers-reduced-motion (spinner and typing dots stop animating).
+- Contrast: target at least 4.5:1 for body text in both themes. The prototype's contrast was not measured with a tool: run a contrast check on the final colors, and on any tenant brand color.
+
+7. MOTION
+Typing indicator before every bank message (3 dots). Auto-scroll the last element into view after each message (smooth). Document checks reveal one by one (about 0.5 s apart). Keep total delays short: the delays exist to feel like a conversation, not to slow the client down. Make them skippable when prefers-reduced-motion is set.
+
+8. PHONE TESTING NOTE
+Test on a real iPhone (Safari) and a real Android phone: the signature canvas (touch), the QR hand-off to the phone, safe areas, and scroll behaviour in the thread. The prototype was tested in a desktop browser with phone emulation only.

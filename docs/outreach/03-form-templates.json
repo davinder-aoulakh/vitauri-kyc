@@ -1,0 +1,173 @@
+{
+ "_readme": "Form Templates (assembled from blocks). Order is the order of the conversation. A block that is inactive or whose show_if is false is skipped and logged (block.skipped). Progress total = number of counted blocks, see build spec section 5.5.",
+ "templates": [
+  {
+   "id": "onboarding_np",
+   "name": "Onboarding NP",
+   "client_type": "NP",
+   "case_types": [
+    "Onboarding"
+   ],
+   "channel": "email invitation, link opens the portal",
+   "default_deadline_days": 14,
+   "expected_minutes": 6,
+   "sections": [
+    [
+     "id",
+     "Identity"
+    ],
+    [
+     "contact",
+     "Contact"
+    ],
+    [
+     "rel",
+     "Purpose of relationship"
+    ],
+    [
+     "fin",
+     "Financial situation"
+    ],
+    [
+     "act",
+     "Expected activity"
+    ],
+    [
+     "decl",
+     "Declaration"
+    ]
+   ],
+   "blocks": [
+    "idv",
+    "name_confirm",
+    "address",
+    "address_proof",
+    "email",
+    "phone",
+    "purpose",
+    "nature",
+    "employment",
+    "income",
+    "sof",
+    "activities",
+    "pep",
+    "review",
+    "sign"
+   ],
+   "progress_total": 15,
+   "intro": [
+    "Hi {first_name}, welcome to New Age Bank.",
+    "This takes about 6 minutes. Please respond by {deadline_date}. Your answers are saved automatically, so you can stop at any time and continue later with the same link."
+   ],
+   "start_chip": "Let's begin"
+  },
+  {
+   "id": "onboarding_org",
+   "name": "Onboarding ORG (KYB)",
+   "client_type": "ORG",
+   "case_types": [
+    "Onboarding"
+   ],
+   "channel": "email invitation to the representative",
+   "default_deadline_days": 14,
+   "expected_minutes": 12,
+   "sections": [
+    [
+     "org",
+     "Organisation"
+    ],
+    [
+     "own",
+     "People and ownership"
+    ],
+    [
+     "prof",
+     "Business profile"
+    ],
+    [
+     "id",
+     "You"
+    ],
+    [
+     "decl",
+     "Declaration"
+    ]
+   ],
+   "blocks": [
+    "country",
+    "registry",
+    "directors",
+    "authreps",
+    "owners",
+    "ubo",
+    "invites",
+    "purpose_org",
+    "nature_org",
+    "activity",
+    "countries_org",
+    "volume",
+    "sof_org",
+    "sow_ubo",
+    "decl_regulated",
+    "decl_nominee",
+    "docs",
+    "rep",
+    "review_org",
+    "sign_org"
+   ],
+   "progress_total": "2 (review, sign) + 2 (idv and name_confirm inside block rep) + number of active blocks, excluding review_org and sign_org, whose show_if is true at the start. Example at Low risk with default switches: 2 + 2 + 15 = 19. See build spec section 5.5",
+   "settings": {
+    "uboThreshold": 25,
+    "ownerListThreshold": 10,
+    "releaseInvitesAfterIdv": true
+   },
+   "intro": [
+    "Hi {first_name}, welcome to New Age Bank.",
+    "We are opening an account for your organisation. This takes about 12 minutes and your answers are saved automatically. We start with the organisation. At the end we ask for your own identity, and you can invite colleagues and owners to complete their own part while you carry on."
+   ],
+   "start_chip": "Let's begin"
+  },
+  {
+   "id": "related_party_np",
+   "name": "Related party (person)",
+   "client_type": "NP (related party of an organisation)",
+   "case_types": [
+    "Onboarding (child of an ORG case)"
+   ],
+   "channel": "email invitation sent by the platform when the ORG representative has passed ID&V",
+   "default_deadline_days": 14,
+   "expected_minutes": 4,
+   "sections": [
+    [
+     "id",
+     "Identity"
+    ],
+    [
+     "contact",
+     "Contact and checks"
+    ],
+    [
+     "decl",
+     "Declaration"
+    ]
+   ],
+   "blocks": [
+    "idv",
+    "name_confirm",
+    "address",
+    "email",
+    "phone",
+    "pep",
+    "review",
+    "sign"
+   ],
+   "progress_total": 8,
+   "intro": [
+    "Hi {first_name}, {company} has asked you to complete your own details as {role_text}.",
+    "This takes about 4 minutes. Your answers are saved automatically."
+   ],
+   "start_chip": "Let's begin",
+   "notes": "Block pep sits in section 'contact' for this template. No proof of address. The completion marks the parent request answered and the party Completed."
+  }
+ ]
+}

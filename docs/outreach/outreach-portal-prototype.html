@@ -1,0 +1,1275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Outreach Portal</title>
+<style>
+/* Layout: guided conversation. Left rail = progress and deadline, right = one thread that carries questions, widgets and later analyst messages. */
+:root{
+  --bg:#eef3f0; --surface:#ffffff; --surface2:#f5f9f7; --ink:#12342b; --muted:#5b7167; --line:#d9e4de;
+  --brand:#13503f; --brand-ink:#ffffff; --brand-soft:#e1f0e9; --me:#13503f; --me-ink:#fff;
+  --ok:#1b7a4d; --ok-soft:#e0f3e8; --warn:#8a5a00; --warn-soft:#fff1d6; --bad:#b0372b; --bad-soft:#fde6e3;
+  --ai:#3f4fa8; --ai-soft:#e8ebfa; --shadow:0 1px 2px rgba(18,52,43,.06),0 6px 18px rgba(18,52,43,.06);
+  --font:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace; color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1814; --surface:#15231e; --surface2:#1a2a24; --ink:#e3eee8; --muted:#97aea3; --line:#26382f;
+  --brand:#46c093; --brand-ink:#052116; --brand-soft:#1c3a30; --me:#2b8f6d; --me-ink:#fff;
+  --ok:#5fd09a; --ok-soft:#173528; --warn:#f0be5c; --warn-soft:#3a2f12; --bad:#ff8f84; --bad-soft:#3d1c19;
+  --ai:#9aa8ff; --ai-soft:#222a52; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.25); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1814; --surface:#15231e; --surface2:#1a2a24; --ink:#e3eee8; --muted:#97aea3; --line:#26382f;
+  --brand:#46c093; --brand-ink:#052116; --brand-soft:#1c3a30; --me:#2b8f6d; --me-ink:#fff;
+  --ok:#5fd09a; --ok-soft:#173528; --warn:#f0be5c; --warn-soft:#3a2f12; --bad:#ff8f84; --bad-soft:#3d1c19;
+  --ai:#9aa8ff; --ai-soft:#222a52; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.25); color-scheme:dark}
+html{-webkit-text-size-adjust:100%}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.5;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 28px}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.chip:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.top{max-width:1120px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:14px 0;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em}
+.mark{width:30px;height:30px;border-radius:8px;background:var(--brand);display:grid;place-items:center}
+.mark svg{width:18px;height:18px}
+.tabs{display:flex;gap:4px;margin-left:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px}
+.tab{border:0;background:transparent;padding:7px 13px;border-radius:8px;font-weight:600;font-size:13.5px;color:var(--muted)}
+.tab[aria-selected="true"]{background:var(--brand);color:var(--brand-ink)}
+.demo{max-width:1120px;margin:0 auto 14px;background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:13px}
+.demo summary{cursor:pointer;list-style:none}.demo summary::-webkit-details-marker{display:none}.demo summary::after{content:' ▾';color:var(--muted)}.demo[open] summary::after{content:' ▴'}
+.demo-in{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.demo b{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.demo label{display:flex;gap:6px;align-items:center;color:var(--muted)}
+.demo select{font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);color:var(--ink)}
+.btn{border:1px solid var(--line);background:var(--surface);padding:7px 12px;border-radius:9px;font-weight:600;font-size:13px}
+.btn:hover{background:var(--surface2)}
+.btn.primary{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.grid{max-width:1120px;margin:0 auto;display:grid;grid-template-columns:300px minmax(0,1fr);gap:20px;align-items:start}
+.side{position:sticky;top:10px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
+.hello h1{font-size:22px;line-height:1.2;letter-spacing:-.02em;margin:0 0 8px}
+.hello p{margin:0;color:var(--muted);font-size:14px}
+.deadline{display:flex;gap:10px;align-items:center;font-size:13.5px}
+.deadline svg{flex:none;width:20px;height:20px;color:var(--warn)}
+.prog-h{display:flex;justify-content:space-between;align-items:baseline;font-weight:600;font-size:14px;margin-bottom:8px}
+.bar{height:6px;background:var(--brand-soft);border-radius:99px;overflow:hidden;margin-bottom:12px}
+.bar i{display:block;height:100%;background:var(--brand);border-radius:99px;transition:width .4s}
+.secs{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+.secs li{display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--muted)}
+.dot{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;flex:none}
+.secs li.cur{color:var(--ink);font-weight:600}.secs li.cur .dot{border-color:var(--brand);background:var(--brand-soft)}
+.secs li.done{color:var(--ink)}.secs li.done .dot{background:var(--brand);border-color:var(--brand)}
+.secs li.done .dot svg{display:block}.dot svg{display:none;width:10px;height:10px;color:var(--brand-ink)}
+.saved{display:flex;gap:7px;align-items:center;font-size:12.5px;color:var(--muted);margin-top:12px}
+.saved i{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.req{font-size:13px}.req h3{margin:0 0 6px;font-size:13px;font-family:var(--mono);font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.help{font-size:12.5px;color:var(--muted)}
+.chat{display:flex;flex-direction:column;min-height:640px;padding:0;overflow:hidden}
+.chat-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);font-weight:600}
+.chat-h small{font-weight:400;color:var(--muted);margin-left:auto;font-size:12.5px}
+.thread{flex:1;padding:18px;display:flex;flex-direction:column;gap:12px;max-height:70vh;overflow-y:auto;scroll-behavior:smooth}
+.row{display:flex;gap:10px;align-items:flex-end;max-width:100%}
+.row.me{justify-content:flex-end}
+.av{width:30px;height:30px;border-radius:50%;background:var(--brand);flex:none;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--brand-ink)}
+.av.an{background:var(--ai-soft);color:var(--ai)}
+.bub{max-width:min(560px,86%);padding:11px 14px;border-radius:16px 16px 16px 4px;background:var(--surface2);border:1px solid var(--line)}
+.row.me .bub{background:var(--me);color:var(--me-ink);border-color:transparent;border-radius:16px 16px 4px 16px}
+.tag{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:5px;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.pill{white-space:nowrap;display:inline-block;padding:1px 7px;border-radius:99px;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;background:var(--brand-soft);color:var(--brand)}
+.pill.ai{background:var(--ai-soft);color:var(--ai)}.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.bub p{margin:0}.bub p+p{margin-top:6px}
+.why{margin-top:7px;font-size:12.5px;color:var(--muted)}
+.why button{background:none;border:0;padding:0;text-decoration:underline;text-underline-offset:2px;color:var(--muted)}
+.why div{margin-top:5px;padding:8px 10px;background:var(--surface);border-radius:8px;border:1px solid var(--line)}
+.typing{display:flex;gap:4px;padding:14px}.typing i{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:b 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes b{0%,60%,100%{opacity:.3;transform:none}30%{opacity:1;transform:translateY(-3px)}}
+.widget{margin-left:40px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:10px;max-width:600px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1.5px solid var(--line);background:var(--surface);border-radius:99px;padding:8px 14px;font-weight:500;font-size:14px}
+.chip:hover{border-color:var(--brand)}
+.chip[aria-pressed="true"]{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.in{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;font-size:16px}
+textarea.in{min-height:84px;resize:vertical}
+.f{display:grid;gap:4px}.f label{font-size:12.5px;color:var(--muted);font-weight:500}
+.fr{display:grid;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.demo-fill{margin-left:auto;border:1px dashed var(--line);background:none;border-radius:8px;padding:5px 9px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.drop{border:1.5px dashed var(--line);border-radius:12px;padding:18px;text-align:center;color:var(--muted);font-size:14px;background:var(--surface2)}
+.checks{display:grid;gap:6px;font-size:13.5px}
+.checks div{display:flex;gap:8px;align-items:flex-start}
+.checks .ic{flex:none;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700}
+.checks .ok .ic{background:var(--ok-soft);color:var(--ok)}.checks .bad .ic{background:var(--bad-soft);color:var(--bad)}.checks .wait .ic{background:var(--surface2);color:var(--muted)}
+.idv{display:grid;gap:10px}.idv ol{margin:0;padding-left:20px;color:var(--ink)}
+.idv small{color:var(--muted)}
+.facts{display:grid;gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+.facts div{display:flex;justify-content:space-between;gap:12px;padding:9px 12px;border-top:1px solid var(--line);font-size:14px}
+.facts div:first-child{border-top:0}.facts span:first-child{color:var(--muted)}
+.facts .v{text-align:right;font-weight:600}
+.sum h4{margin:12px 0 4px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.sum .r{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.sum .r .k{color:var(--muted);flex:0 0 38%}.sum .r .vv{flex:1;font-weight:500;min-width:0;overflow-wrap:anywhere}
+.sum .r .src{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.lnk{background:none;border:0;padding:0;text-decoration:underline;text-underline-offset:2px;color:var(--brand);font-size:13px;font-weight:600}
+.sigc{width:100%;height:120px;border:1.5px dashed var(--line);border-radius:10px;background:var(--surface2);touch-action:none;display:block}
+.status{display:grid;gap:6px;padding:12px;border-radius:12px;background:var(--ok-soft);color:var(--ink);margin-left:40px;max-width:600px;border:1px solid var(--line)}
+.status b{color:var(--ok)}
+.sys{align-self:center;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.04em}
+.comp{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--line);background:var(--surface2)}
+.comp .in{flex:1}
+.back{max-width:1120px;margin:0 auto;display:grid;gap:16px}
+.back h2{font-size:17px;margin:0 0 4px;letter-spacing:-.01em}.back p.sub{margin:0 0 12px;color:var(--muted);font-size:13.5px}
+.cols{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:start}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{text-align:left;padding:7px 9px;border-top:1px solid var(--line);vertical-align:top}
+th{font-family:var(--mono);font-weight:500;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);border-top:0;white-space:nowrap}
+td code,.mono{font-family:var(--mono);font-size:11.5px}
+tr.curr td{background:var(--brand-soft)}
+.log{font-family:var(--mono);font-size:11.5px;display:grid;gap:3px;max-height:420px;overflow:auto}
+.log div{display:grid;grid-template-columns:64px 118px minmax(0,1fr);gap:8px;padding:3px 0;border-top:1px solid var(--line)}
+.log .t{color:var(--muted)}.log .e{color:var(--brand);font-weight:500}
+.rules{display:grid;gap:6px;font-size:13px}.rules div{padding:8px 10px;border-radius:9px;background:var(--surface2);border:1px solid var(--line)}
+@media (max-width:860px){
+  .grid,.cols{grid-template-columns:minmax(0,1fr)}
+  .thread{max-height:none;padding:14px 12px}.tabs{margin-left:0}.widget,.status{margin-left:0}
+  .hello,.deadline,.side>.help,#reqbox,.secs,.saved,.chat-h small{display:none}
+  .side{position:sticky;top:env(safe-area-inset-top,0px);z-index:6}
+  .side .card{border-radius:12px;padding:10px 14px}
+  .bar{margin-bottom:6px}.prog-h{margin-bottom:6px}
+  .chat{min-height:0}
+  .thread>*{scroll-margin-bottom:84px}
+  .comp{position:sticky;bottom:0;padding-bottom:max(12px,env(safe-area-inset-bottom,0px))}
+  .bub{max-width:92%}
+}
+@media (max-width:520px){.fr{grid-template-columns:minmax(0,1fr)}.sum .r{flex-direction:column;gap:2px}.sum .r .k{flex:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.thread{scroll-behavior:auto}}
+.res{display:grid;gap:8px;margin-top:10px}
+.ri{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;width:100%}
+.ri b,.ri span{grid-column:1}.ri span{color:var(--muted);font-size:13px}.ri .pill{grid-column:2;grid-row:1/3;align-self:center}.ri:hover{border-color:var(--brand)}
+.pr{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:9px 12px;background:var(--surface);margin-bottom:8px;cursor:pointer}
+.pr>span{flex:1;min-width:0}.pr small{color:var(--muted)}.pr input{width:18px;height:18px;flex:none}
+.or{display:grid;grid-template-columns:110px minmax(0,1fr) 80px auto;gap:8px;margin:8px 0;align-items:center}
+.tr{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface);margin-bottom:8px}
+.tr>span{flex:1;min-width:150px}.tr small{color:var(--muted)}
+.inv{display:flex;gap:8px;flex-wrap:wrap}
+@media (max-width:520px){.or{grid-template-columns:minmax(0,1fr) auto}.or select,.or input[placeholder="Name"]{grid-column:1/-1}}
+.qrbox{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.qr{width:152px;height:152px;flex:none;border:1px solid var(--line);border-radius:10px}
+.qrbox ol{margin:0 0 8px;padding-left:20px}
+.qrwait{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+.spin{width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--brand);border-radius:50%;display:inline-block;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.ar{grid-template-columns:minmax(0,1.1fr) 160px minmax(0,1.4fr) auto}
+@media (max-width:520px){.ar{grid-template-columns:minmax(0,1fr) auto}.ar input,.ar select{grid-column:1/-1}.ar .lnk{grid-column:1/-1;justify-self:start}}
+</style>
+<style>body{margin:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:max(28px,env(safe-area-inset-bottom,0px))}</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark"><svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16V4l12 12V4"/></svg></span>New Age Bank</div>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-client" aria-selected="true">Client portal</button>
+    <button class="tab" role="tab" id="tab-back" aria-selected="false">Behind the scenes</button>
+  </div>
+</header>
+
+<details class="demo" id="demo"><summary><b>Demo controls</b></summary><div class="demo-in">
+  <label>Client type
+    <select id="d-kind"><option value="np">Person</option><option value="org">Organisation</option></select>
+  </label>
+  <label>Client risk class
+    <select id="d-risk"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>
+  </label>
+  <label>Document check
+    <select id="d-doc"><option value="ok">First upload passes</option><option value="bad">First upload fails</option></select>
+  </label>
+  <label>Document shows (document route)
+    <select id="d-form"><option value="company">Company (N.V.)</option><option value="partnership">Partnership (V.O.F.)</option></select>
+  </label>
+  <button class="btn" id="d-analyst" disabled>Analyst asks follow-up</button>
+  <button class="btn" id="d-reset">Start over</button>
+  <span class="inv" id="d-invites"></span>
+</div></details>
+
+<main id="v-client" class="grid">
+  <aside class="side">
+    <div class="card hello">
+      <h1 id="hello-h">Hi John,</h1>
+      <p id="hello-p">To open your account we verify a few details. This is a standard requirement for all banks and protects you and us against fraud and financial crime.</p>
+    </div>
+    <div class="card deadline">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <span>Please respond by <b>20 November 2026</b></span>
+    </div>
+    <div class="card">
+      <div class="prog-h"><span>Your progress</span><span id="pct">0%</span></div>
+      <div class="bar"><i id="pbar" style="width:0%"></i></div>
+      <ul class="secs" id="secs"></ul>
+      <div class="help" id="eta" style="margin-top:10px"></div>
+      <div class="saved"><i></i><span id="saved">Your answers are saved automatically</span></div>
+    </div>
+    <div class="card req" id="reqbox" hidden><h3>Open requests</h3><div id="reqs"></div></div>
+    <div class="help">Need help? onboarding@newagebank.com or +1 234 56789</div>
+  </aside>
+  <section class="card chat">
+    <div class="chat-h"><span class="av">N</span>New Age Bank application<small>Conversation saved in your file</small></div>
+    <div class="thread" id="thread" aria-live="polite"></div>
+    <form class="comp" id="comp" hidden>
+      <input class="in" id="comp-in" placeholder="Ask a question or reply here…" aria-label="Message">
+      <button class="btn primary" type="submit">Send</button>
+    </form>
+  </section>
+</main>
+
+<main id="v-back" class="back" hidden>
+  <div class="card">
+    <h2 id="h-tpl">Template: Onboarding NP</h2>
+    <p class="sub">What the developers need to build the conversation from building blocks. The required set lives in the template; the conversation only decides order, explanation and follow-ups.</p>
+    <div class="tw"><table id="t-meta"></table></div>
+  </div>
+  <div class="card">
+    <h2>Building blocks and rules</h2>
+    <p class="sub">Rules per building block: when it is shown, which follow-ups, where the value comes from, which evidence. The highlighted row is the block the client sees now.</p>
+    <p class="sub" id="blk-note" hidden>Tenant config: use the Active checkbox to switch a block on or off for this template.</p>
+    <div class="tw"><table id="t-blocks"></table></div>
+  </div>
+  <div class="card" id="c-org" hidden><h2>Structure and related parties</h2><p class="sub">Built live from registry data and the client's answers. Related parties are derived from directors and UBOs.</p><div id="org-chart" style="max-width:640px"></div><div class="tw" style="margin-top:12px"><table id="t-parties"></table></div></div>
+  <div class="cols">
+    <div class="card"><h2>Data points and source</h2><p class="sub">Every value keeps its source. What comes from ID&amp;V is confirmed, not typed again.</p><div class="tw"><table id="t-dp"></table></div></div>
+    <div style="display:grid;gap:16px">
+      <div class="card"><h2>Active rules</h2><div class="rules" id="rules"></div></div>
+      <div class="card"><h2>Audit trail</h2><p class="sub">Everything the conversation does, including AI follow-up questions.</p><div class="log" id="log"></div></div>
+    </div>
+  </div>
+  <div class="card"><h2>Requests in the thread</h2><p class="sub">The same thread carries the intake and later analyst questions (second round).</p><div class="tw"><table id="t-req"></table></div></div>
+</main>
+
+<script>
+(function(){
+'use strict';
+const $=(s,r=document)=>r.querySelector(s);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e};
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let RUN=0;
+const sleep=ms=>{const g=RUN;return new Promise(r=>setTimeout(()=>{if(g===RUN)r();},ms));};
+const thread=$('#thread');
+const PERSONS={john:{name:'John Carter',first:'John',email:'john.carter@example.com',email2:'john.c@example.com',dob:'14 March 1987',nat:'British',doc:'Passport GBR, valid until 2 September 2031'},emma:{name:'Emma Clarke',first:'Emma',email:'emma.clarke@harbour-logistics.example',email2:'e.clarke@harbour-logistics.example',dob:'2 June 1984',nat:'British',doc:'Passport GBR, valid until 11 May 2030'},david:{name:'David Okoye',first:'David',email:'david.okoye@harbour-logistics.example',email2:'d.okoye@harbour-logistics.example',dob:'21 November 1979',nat:'Dutch',doc:'ID card NLD, valid until 4 March 2029'},tom:{name:'Tom Becker',first:'Tom',email:'tom.becker@example.com',email2:'t.becker@example.com',dob:'9 January 1981',nat:'Dutch',doc:'Passport NLD, valid until 20 July 2031'}};
+let P=Object.assign({mode:'full',company:null,role:null},PERSONS.john);
+const CHECK='<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5l2.2 2.2 4.8-5"/></svg>';
+
+/* ---------- state ---------- */
+let S;
+function fresh(kind){kind=kind||'np';return {kind:kind,sections:kind==='org'?ORG_SECTIONS:(kind==='rp'?RP_SECTIONS:NP_SECTIONS),total:kind==='org'?17:(kind==='rp'?8:15),org:null,risk:$('#d-risk').value,doc:$('#d-doc').value,dp:{},order:[],log:[],blocks:{},sec:null,secDone:{},steps:0,docTries:0,reqs:[],submitted:false,current:null,rules:[],wait:0,finished:false};}
+
+/* ---------- block library (what tenant config would hold) ---------- */
+const NP_SECTIONS=[['id','Identity'],['contact','Contact'],['rel','Purpose of relationship'],['fin','Financial situation'],['act','Expected activity'],['decl','Declaration']];
+const ORG_SECTIONS=[['org','Organisation'],['own','People and ownership'],['prof','Business profile'],['id','You'],['decl','Declaration']];
+const RP_SECTIONS=[['id','Identity'],['contact','Contact and checks'],['decl','Declaration']];
+S=fresh();
+const BLOCKS=[
+ {id:'idv',sec:'id',label:'Identity verification (ID&V)',type:'idv',kyc:'ID document, full name, date of birth, nationality',show:'always',follow:'-',source:'Didit ID check',evid:'Is itself the evidence',why:'This is how we make sure it is really you. Your ID also fills in your name, date of birth and nationality for you.'},
+ {id:'name_confirm',sec:'id',label:'Confirm identity data',type:'confirm',kyc:'-',show:'after idv',follow:'"Not correct" opens a note and flags the case for the analyst',source:'Prefilled from idv',evid:'-',why:'You do not have to type anything. You only confirm that what we read from your document is correct.'},
+ {id:'address',sec:'id',label:'Residential address',type:'address',kyc:'Residential address',show:'always',follow:'-',source:'Client declared (postcode lookup)',evid:'address_proof',why:'We are legally required to know where you live.'},
+ {id:'address_proof',sec:'id',label:'Proof of address',type:'file',kyc:'Residential address (evidence)',show:'always',follow:'Name mismatch triggers a new request',source:'Document AI check',evid:'Utility bill, bank statement or municipal extract, max 3 months',why:'A recent bill or statement shows that this address is yours.'},
+ {id:'email',sec:'contact',label:'Email address',type:'text',kyc:'Email address',show:'always',follow:'-',source:'Prefilled from invitation',evid:'-',why:'We send updates about your application here.'},
+ {id:'phone',sec:'contact',label:'Phone number',type:'phone',kyc:'Phone number',show:'always',follow:'-',source:'Client declared',evid:'-',why:'In case we need to reach you quickly.'},
+ {id:'purpose',sec:'rel',label:'Purpose of the relationship',type:'multi',kyc:'Purpose of relationship',show:'always',follow:'"Other" opens a short text',source:'Client declared',evid:'-',why:'Banks need to know what you will use the account for, so they can spot unusual transactions.'},
+ {id:'nature',sec:'rel',label:'Nature of the relationship',type:'multi',kyc:'Products and services',show:'always',follow:'-',source:'Client declared',evid:'-',why:'This tells us which products fit your situation.'},
+ {id:'employment',sec:'fin',label:'Employment status',type:'chips',kyc:'Employment status',show:'always',follow:'Self-employed: ask company name',source:'Client declared',evid:'-',why:'Your work situation helps us understand your income.'},
+ {id:'income',sec:'fin',label:'Income range',type:'chips',kyc:'Annual income range',show:'always',follow:'-',source:'Client declared',evid:'-',why:'We ask for a range, not an exact amount.'},
+ {id:'sof',sec:'fin',label:'Source of funds',type:'multi',kyc:'Source of funds',show:'always',follow:'Inheritance or property sale: request deed. "Other": AI follow-up (period, amount). High risk and salary: request payslip',source:'Client declared, document-supported',evid:'Per answer (see follow-up)',why:'We need to know where the money you put into your account comes from.'},
+ {id:'activities',sec:'act',label:'Expected activities',type:'multi',kyc:'Expected activities, risk indicators',show:'always',follow:'Cash: AI follow-up on amount and reason. Outside EU: ask countries. Crypto: AI follow-up on platforms',source:'Client declared',evid:'-',why:'This helps us monitor your account properly without blocking it unnecessarily.'},
+ {id:'pep',sec:'act',label:'Politically exposed person',type:'chips',kyc:'PEP self-declaration',show:'always',follow:'Yes: role, country, relation. "Don\'t know": explain definition and ask again',source:'Client declared, checked against screening',evid:'-',why:'By law, people in senior public roles and their close associates carry a higher risk. That does not mean it is not allowed.'},
+ {id:'review',sec:'decl',label:'Review of all answers',type:'review',kyc:'-',show:'always (last)',follow:'Client can edit any answer before declaring',source:'-',evid:'-',why:'You see everything once more before you declare it.'},
+ {id:'sign',sec:'decl',label:'Terms and signed declaration',type:'sign',kyc:'Declaration, signature',show:'always (last)',follow:'Typed name must match ID name',source:'Client signed',evid:'Signature + timestamp + IP',why:'By signing you declare that the information is true.'}
+];
+const B=Object.fromEntries(BLOCKS.map(b=>[b.id,b]));
+const SRC={idv:'Didit ID check',client:'Declared by client',ai:'Declared by client, AI follow-up',doc:'From document',pre:'Prefilled from invitation',kvk:'KvK trade register',didit:'Didit registry',prop:'Suggested from registry data, confirmed by client',calc:'Calculated by the tool',rep:'Declared by the representative'};
+
+/* ---------- audit log + data points ---------- */
+function stamp(){const d=new Date();return [d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':');}
+function log(ev,msg){S.log.push({t:stamp(),ev,msg});renderBack();}
+function setDp(key,label,val,src,block,edit){if(!S.dp[key])S.order.push(key);S.dp[key]={label,val,src,block,edit:edit||null};renderBack();saved();}
+function saved(){const d=new Date();$('#saved').textContent='Saved at '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+
+/* ---------- sidebar ---------- */
+function renderSide(){
+  const li=S.sections.map(([id,l])=>{const cls=S.secDone[id]?'done':(S.sec===id?'cur':'');return '<li class="'+cls+'"><span class="dot">'+CHECK+'</span>'+l+'</li>';}).join('');
+  $('#secs').innerHTML=li;
+  const pct=Math.min(100,Math.round(S.steps/S.total*100));
+  $('#pct').textContent=pct+'%';$('#pbar').style.width=pct+'%';
+  const left=Math.max(0,Math.round((S.total-S.steps)*0.4));
+  $('#eta').textContent=S.submitted?'Submitted. You will see here if we need anything else.':(left>0?'About '+left+' '+(left===1?'minute':'minutes')+' left':'Almost done');
+  const open=S.reqs.filter(r=>r.status==='open');
+  $('#reqbox').hidden=S.reqs.length===0;
+  $('#reqs').innerHTML=S.reqs.map(r=>'<div>'+esc(r.title)+' <span class="pill '+(r.status==='open'?'warn':'ok')+'">'+(r.status==='open'?'open':'answered')+'</span></div>').join('');
+}
+function section(id){if(S.sec&&S.sec!==id)S.secDone[S.sec]=true;S.sec=id;renderSide();}
+function step(){S.steps++;renderSide();}
+
+/* ---------- thread helpers ---------- */
+function scroll(){requestAnimationFrame(()=>{const l=thread.lastElementChild;if(l&&l.scrollIntoView)l.scrollIntoView({block:'end',behavior:'smooth'});});}
+function typing(){const r=el('div','row');r.innerHTML='<span class="av">N</span><div class="bub typing"><i></i><i></i><i></i></div>';thread.append(r);scroll();return r;}
+async function say(html,o){
+  o=o||{};
+  const t=typing();await sleep(o.fast?250:380+Math.min(800,html.length*7));t.remove();
+  const r=el('div','row');
+  const av=o.analyst?'<span class="av an">SV</span>':'<span class="av">N</span>';
+  let tag='';
+  if(o.tag||o.ai){tag='<div class="tag">'+(o.tag?esc(o.tag):'')+(o.ai?'<span class="pill ai">AI-assisted</span>':'')+'</div>';}
+  let why='';
+  if(o.why){why='<div class="why"><button type="button" aria-expanded="false">Why do we ask this?</button></div>';}
+  r.innerHTML=av+'<div class="bub">'+tag+html+why+'</div>';
+  if(o.why){const w=$('.why',r),b=$('button',w);b.addEventListener('click',()=>{const open=b.getAttribute('aria-expanded')==='true';b.setAttribute('aria-expanded',String(!open));const ex=$('div',w);if(ex)ex.remove();if(!open){w.append(el('div','',esc(o.why)));log('client.why_opened','Client opened explanation for '+(o.block||'block'));}scroll();});}
+  thread.append(r);scroll();
+}
+function me(html){const r=el('div','row me');r.innerHTML='<div class="bub">'+html+'</div>';thread.append(r);scroll();}
+function sys(txt){thread.append(el('div','sys',esc(txt)));scroll();}
+function mount(build){const s=S;s.wait=(s.wait||0)+1;return new Promise(res=>{const w=el('div','widget');thread.append(w);build(w,(val,display,extra)=>{s.wait--;w.remove();res({val,display,extra});});scroll();});}
+
+/* ---------- widgets ---------- */
+function demoBtn(fn,txt){const b=el('button','demo-fill',txt||'Demo: fill in');b.type='button';b.addEventListener('click',fn);return b;}
+function chipsW(o){return (w,done)=>{
+  const sel=new Set();const box=el('div','chips');
+  o.opts.forEach(t=>{const c=el('button','chip',esc(t));c.type='button';c.setAttribute('aria-pressed','false');
+    c.addEventListener('click',()=>{
+      if(!o.multi){done(t,esc(t));return;}
+      if(o.none&&t===o.none){sel.clear();sel.add(t);}else{sel.delete(o.none);sel.has(t)?sel.delete(t):sel.add(t);}
+      [...box.children].forEach(x=>x.setAttribute('aria-pressed',String(sel.has(x.textContent))));go.disabled=sel.size===0;});
+    box.append(c);});
+  w.append(box);
+  let go;
+  if(o.multi){const a=el('div','acts');go=el('button','btn primary','Continue');go.type='button';go.disabled=true;
+    go.addEventListener('click',()=>{const v=[...sel];done(v,esc(v.join(', ')));});a.append(go);
+    if(o.demo)a.append(demoBtn(()=>{sel.clear();o.demo.forEach(x=>sel.add(x));[...box.children].forEach(x=>x.setAttribute('aria-pressed',String(sel.has(x.textContent))));go.disabled=false;}));
+    w.append(a);}
+  else if(o.demo){/* single choice chips need no demo helper */}
+};}
+function textW(o){return (w,done)=>{
+  const inp=el(o.area?'textarea':'input','in');inp.id='w-'+Math.random().toString(36).slice(2,7);inp.placeholder=o.ph||'';if(!o.area)inp.type=o.type||'text';inp.setAttribute('aria-label',o.label||o.ph||'Answer');
+  const err=el('div','help');err.style.color='var(--bad)';
+  const a=el('div','acts');const go=el('button','btn primary','Send');go.type='button';
+  const submit=()=>{const v=inp.value.trim();if(!v){err.textContent='Please enter an answer first.';return;}if(o.validate){const m=o.validate(v);if(m){err.textContent=m;return;}}done(v,esc(v));};
+  go.addEventListener('click',submit);if(!o.area)inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submit();}});
+  a.append(go);if(o.demo)a.append(demoBtn(()=>{inp.value=o.demo;inp.focus();}));
+  w.append(inp,err,a);setTimeout(()=>inp.focus({preventScroll:true}),50);
+};}
+function phoneW(){return (w,done)=>{
+  const row=el('div','fr');row.style.gridTemplateColumns='110px minmax(0,1fr)';
+  const sel=el('select','in');sel.setAttribute('aria-label','Country code');['+44','+31','+353','+49','+1'].forEach(c=>sel.append(new Option(c,c)));
+  const n=el('input','in');n.placeholder='7700 900123';n.type='tel';n.setAttribute('aria-label','Phone number');
+  const err=el('div','help');err.style.color='var(--bad)';
+  row.append(sel,n);const a=el('div','acts');const go=el('button','btn primary','Send');go.type='button';
+  go.addEventListener('click',()=>{const d=n.value.replace(/\D/g,'');if(d.length<8){err.textContent='This number looks too short. Enter it without the leading 0.';return;}done(sel.value+' '+n.value.trim(),esc(sel.value+' '+n.value.trim()));});
+  a.append(go,demoBtn(()=>{n.value='7700 900123';}));w.append(row,err,a);
+};}
+function addressW(){return (w,done)=>{
+  w.innerHTML='<div class="f"><label for="a-c">Country</label><select class="in" id="a-c"><option>United Kingdom</option><option>Netherlands</option><option>Ireland</option><option>Other country</option></select></div>'+
+  '<div class="fr"><div class="f"><label for="a-p">Postcode</label><input class="in" id="a-p" placeholder="N1 9GU" autocomplete="postal-code"></div><div class="f"><label for="a-n">House number</label><input class="in" id="a-n" placeholder="12"></div></div>'+
+  '<div class="fr"><div class="f"><label for="a-s">Street</label><input class="in" id="a-s"></div><div class="f"><label for="a-t">City</label><input class="in" id="a-t"></div></div>'+
+  '<div class="help" id="a-h">Enter your postcode and house number and we look up the street and city for you (simulated in this demo).</div><div class="acts"><button type="button" class="btn primary" id="a-go">Send</button></div>';
+  const g=i=>$('#'+i,w);const look=()=>{if(g('a-p').value.trim()&&g('a-n').value.trim()&&!g('a-s').value){g('a-s').value='Upper Street';g('a-t').value='London';g('a-h').textContent='Address found. Change it if it is not right.';}};
+  g('a-p').addEventListener('blur',look);g('a-n').addEventListener('blur',look);
+  $('.acts',w).append(demoBtn(()=>{g('a-p').value='N1 9GU';g('a-n').value='263';look();}));
+  g('a-go').addEventListener('click',()=>{look();const v=['a-s','a-n','a-p','a-t'].map(i=>g(i).value.trim());if(v.some(x=>!x)){g('a-h').textContent='Please fill in all fields.';g('a-h').style.color='var(--bad)';return;}const s=v[0]+' '+v[1]+', '+v[2]+' '+v[3]+', '+g('a-c').value;done(s,esc(s));});
+};}
+function uploadW(o){return (w,done)=>{
+  w.innerHTML='<div class="drop" id="u-d">Drag a file here or choose one<br><small>PDF, JPG or PNG, max 25 MB</small></div><input type="file" id="u-f" accept=".pdf,.jpg,.jpeg,.png" hidden><div class="acts"><button type="button" class="btn primary" id="u-b">Choose file</button></div><div class="checks" id="u-c"></div>';
+  const a=$('.acts',w);
+  if(o.later)a.append(Object.assign(el('button','btn','I will provide this later'),{type:'button',onclick:()=>done('later','I will provide this later',{later:true})}));
+  const run=async name=>{
+    $('#u-d',w).remove();a.remove();const c=$('#u-c',w);const checks=o.check(name);
+    checks.forEach(ch=>{const d=el('div','wait','<span class="ic">…</span><span>'+esc(ch.t)+'</span>');c.append(d);ch.node=d;});
+    for(const ch of checks){await sleep(520);ch.node.className=ch.ok?'ok':'bad';ch.node.innerHTML='<span class="ic">'+(ch.ok?'✓':'!')+'</span><span>'+esc(ch.t)+(ch.ok?'':'. '+esc(ch.msg||''))+'</span>';}
+    await sleep(500);const ok=checks.every(x=>x.ok);
+    log('doc.checked',(o.block||'document')+': '+name+' — '+(ok?'all checks passed':'failed: '+checks.filter(x=>!x.ok).map(x=>x.t).join('; ')));
+    const bad=checks.filter(x=>!x.ok).map(x=>'<div class="bad" style="margin-top:5px;font-size:13px">Note: '+esc(x.t.toLowerCase())+'. '+esc(x.msg||'')+'</div>').join('');done({name,ok},'<span class="mono">'+esc(name)+'</span>'+bad,{ok});
+  };
+  $('#u-b',w).addEventListener('click',()=>$('#u-f',w).click());
+  $('#u-f',w).addEventListener('change',e=>{if(e.target.files[0])run(e.target.files[0].name);});
+  a.append(demoBtn(()=>run(o.sample||'document.pdf'),'Demo: sample file'));
+};}
+function qrSVG(){
+  const n=29,m=[];let x=20261107;const rnd=()=>{x^=x<<13;x^=x>>>17;x^=x<<5;return ((x>>>0)%100)/100;};
+  for(let i=0;i<n;i++){m.push([]);for(let j=0;j<n;j++)m[i].push(rnd()<0.48);}
+  const fin=(r,c)=>{for(let i=-1;i<=7;i++)for(let j=-1;j<=7;j++){const a=r+i,b=c+j;if(a<0||b<0||a>=n||b>=n)continue;const edge=i<0||j<0||i>6||j>6;const ring=i===0||j===0||i===6||j===6;const core=i>=2&&i<=4&&j>=2&&j<=4;m[a][b]=edge?false:(ring||core);}};
+  fin(0,0);fin(0,n-7);fin(n-7,0);
+  let d='';for(let i=0;i<n;i++)for(let j=0;j<n;j++)if(m[i][j])d+='M'+(j+2)+' '+(i+2)+'h1v1h-1z';
+  return '<svg viewBox="0 0 '+(n+4)+' '+(n+4)+'" role="img" aria-label="Fictional Didit QR code for this demo" class="qr"><rect width="'+(n+4)+'" height="'+(n+4)+'" rx="1.5" fill="#fff"/><path d="'+d+'" fill="#111" shape-rendering="crispEdges"/></svg>';
+}
+function idvW(){return (w,done)=>{
+  const wide=Math.min(window.innerWidth,screen.width||window.innerWidth)>760;
+  w.className='widget idv';
+  const small='<small>This is handled by Didit (didit.me), our verification partner. Your biometric data is processed in the EU and deleted after verification. By continuing you accept our privacy notice and Didit\'s privacy notice.</small>';
+  w.innerHTML='<b>Verify your identity</b>'+(wide?
+    '<div class="qrbox">'+qrSVG()+'<div><ol><li>Scan this QR code with your phone camera. It opens Didit.</li><li>On your phone, photograph your identity document (passport, ID card or driving licence) and take a short selfie.</li><li>Come back to this screen. The conversation continues here automatically.</li></ol><div class="qrwait" id="i-w"><span class="spin"></span>Waiting for your phone…</div><div class="help">Fictional QR code for this demo.</div></div></div>':
+    '<ol><li>Photograph your identity document (passport, ID card or driving licence)</li><li>Take a short selfie</li></ol>')+small+
+    '<div class="checks" id="i-c"></div><div class="acts">'+(wide?'':'<button type="button" class="btn primary" id="i-go">Continue with Didit</button>')+'<button type="button" class="btn" id="i-no">Not now</button></div>';
+  const finish=async()=>{
+    $('.acts',w).remove();const qw=$('#i-w',w);if(qw)qw.innerHTML='Your phone has finished.';const c=$('#i-c',w);
+    for(const t of ['ID document read','Selfie and liveness checked','Face matches document','Document is genuine and valid']){const d=el('div','wait','<span class="ic">…</span><span>'+t+'</span>');c.append(d);await sleep(650);d.className='ok';d.innerHTML='<span class="ic">✓</span><span>'+t+'</span>';}
+    await sleep(400);done({ok:true},wide?'I verified my identity on my phone':'Identity verified');
+  };
+  $('#i-no',w).addEventListener('click',()=>done('decline','I do not want to do this now',{decline:true}));
+  if(wide){$('.acts',w).append(demoBtn(finish,'Demo: phone is done'));$('.acts .demo-fill',w).id='i-demo';}
+  else $('#i-go',w).addEventListener('click',finish);
+};}
+function signW(o){o=o||{};return (w,done)=>{
+  w.innerHTML='<label class="f"><span class="help" style="font-weight:500">Terms and conditions</span></label>'+
+  '<label style="display:flex;gap:9px;align-items:flex-start;font-size:14px"><input type="checkbox" id="s-t" style="margin-top:4px"> I have read and agree to the terms and conditions and the privacy notice.</label>'+
+  '<div class="help">'+(o.decl||'I declare that the information above is true to the best of my knowledge.')+'</div>'+
+  '<div class="f"><label for="s-n">Type your full name</label><input class="in" id="s-n" placeholder="Full name"></div>'+
+  '<div class="f"><label>Draw your signature</label><canvas class="sigc" id="s-c" width="560" height="120"></canvas></div>'+
+  '<div class="help" id="s-h" style="color:var(--bad)"></div><div class="acts"><button type="button" class="btn" id="s-x">Clear</button><button type="button" class="btn primary" id="s-go" disabled>Confirm and submit</button></div>';
+  const cv=$('#s-c',w),cx=cv.getContext('2d');let drawn=false,pd=false;
+  const col=()=>getComputedStyle(document.body).color;
+  const pos=e=>{const r=cv.getBoundingClientRect();return [(e.clientX-r.left)*cv.width/r.width,(e.clientY-r.top)*cv.height/r.height];};
+  cv.addEventListener('pointerdown',e=>{pd=true;cv.setPointerCapture(e.pointerId);const [x,y]=pos(e);cx.strokeStyle=col();cx.lineWidth=2.2;cx.lineCap='round';cx.beginPath();cx.moveTo(x,y);});
+  cv.addEventListener('pointermove',e=>{if(!pd)return;const [x,y]=pos(e);cx.lineTo(x,y);cx.stroke();drawn=true;upd();});
+  cv.addEventListener('pointerup',()=>{pd=false;});
+  const upd=()=>{$('#s-go',w).disabled=!($('#s-t',w).checked&&$('#s-n',w).value.trim()&&drawn);};
+  $('#s-t',w).addEventListener('change',upd);$('#s-n',w).addEventListener('input',upd);
+  $('#s-x',w).addEventListener('click',()=>{cx.clearRect(0,0,cv.width,cv.height);drawn=false;upd();});
+  $('.acts',w).append(demoBtn(()=>{$('#s-t',w).checked=true;$('#s-n',w).value=P.name;cx.strokeStyle=col();cx.lineWidth=2.2;cx.beginPath();cx.moveTo(30,80);cx.bezierCurveTo(70,10,110,120,150,60);cx.bezierCurveTo(190,10,230,110,300,50);cx.stroke();drawn=true;upd();}));
+  $('#s-go',w).addEventListener('click',()=>{
+    if($('#s-n',w).value.trim().toLowerCase()!==P.name.toLowerCase()){$('#s-h',w).textContent='The name does not match your ID ('+P.name+'). Type your name as it appears on your ID.';log('rule','Signature name mismatch with ID name, blocked');return;}
+    done({ok:true},'I confirm my declaration and signature.');
+  });
+};}
+
+/* ---------- conversation flow ---------- */
+const act=id=>{S.current=id;S.blocks[id]=S.blocks[id]||'asked';renderBack();};
+async function ask(id,html,widget,o){
+  o=o||{};act(id);log('block.asked',id+(o.extra?' ('+o.extra+')':''));
+  await say(html,{why:o.why===false?null:B[id].why,block:id,tag:o.tag,ai:o.ai});
+  const r=await mount(widget);
+  me(r.display);return r;
+}
+function done(id){S.blocks[id]='answered';step();log('block.answered',id);}
+async function followAI(id,q,key,label,demo){
+  log('rule','Follow-up trigger on '+id+': '+label);
+  let tag='Follow-up question';
+  if(S.risk==='low'){log('ai.followup.auto','Low risk: sent automatically within template guardrails ('+id+')');}
+  else{
+    log('ai.followup.pending','Risk '+S.risk+': waiting for analyst approval ('+id+')');
+    await say('A colleague is taking a quick look at your answer. This will only take a moment.',{fast:true,tag:'One moment'});
+    await sleep(1400);
+    log('ai.followup.approved','Approved by Sanne de Vries (Compliance) before sending');tag='Follow-up question, checked by Sanne de Vries';
+  }
+  const r=await ask(id,q,textW({area:true,ph:'Type your answer…',demo:demo||'About € 800 per month, because part of my income is paid in cash by tenants.'}),{ai:true,tag:tag,why:false,extra:'follow-up'});
+  setDp(key,label,r.val,'ai',id,{type:'text'});log('ai.followup.answered',key);
+}
+
+async function idvAndConfirm(text){
+  /* 1 ID&V first */
+  let idv;
+  for(;;){
+    idv=await ask('idv',text,idvW());
+    if(idv.extra&&idv.extra.decline){log('block.declined','idv declined by client');await say('No problem. Without verification we cannot complete the application, but you can continue later with the same link. Would you like to try now?',{fast:true});continue;}
+    break;
+  }
+  done('idv');
+  setDp('full_name','Full name',P.name,'idv','idv');setDp('dob','Date of birth',P.dob,'idv','idv');setDp('nat','Nationality',P.nat,'idv','idv');setDp('doc','Identity document',P.doc,'idv','idv');
+  log('prefill','Name, date of birth, nationality, document taken from Didit result');
+  /* 2 confirm */
+  act('name_confirm');log('block.asked','name_confirm (prefilled)');
+  await say('This is what we read from your identity document. Is it correct?',{why:B.name_confirm.why,block:'name_confirm'});
+  await mount((w,d)=>{w.className='widget';w.innerHTML='<div class="facts"><div><span>Name</span><span class="v">'+esc(P.name)+'</span></div><div><span>Date of birth</span><span class="v">'+esc(P.dob)+'</span></div><div><span>Nationality</span><span class="v">'+esc(P.nat)+'</span></div></div><div class="chips"><button class="chip" type="button" data-v="y">Yes, this is correct</button><button class="chip" type="button" data-v="n">Something is wrong</button></div>';
+    w.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>d(c.dataset.v,c.textContent)));}).then(async r=>{
+    me(esc(r.display));
+    if(r.val==='n'){log('rule','Identity data disputed: case flagged for analyst');const n=await ask('name_confirm','What is wrong? A colleague will take a look.',textW({area:true,ph:'Type what is wrong…',demo:'My middle name is spelled wrong.'}),{why:false,extra:'dispute'});setDp('id_dispute','Remark on ID data',n.val,'client','name_confirm',{type:'text'});await say('Thank you. We have noted this and a colleague will look into it. You can simply continue.',{fast:true});}
+  });
+  done('name_confirm');
+}
+
+async function flow(){
+  const rp=P.mode==='rp';
+  section('id');
+  if(rp){
+    await say('Hi '+P.first+', '+esc(P.company)+' has asked you to complete your own details as '+esc(P.role)+'.');
+    await say('This takes about 4 minutes. Your answers are saved automatically.');
+  }else{
+    await say('Hi '+P.first+', welcome to New Age Bank.');
+    await say('This takes about 6 minutes. Please respond by 20 November 2026. Your answers are saved automatically, so you can stop at any time and continue later with the same link.');
+  }
+  await mount((w,d)=>{w.append(el('div','chips','<button class="chip" type="button">Let\'s begin</button>'));$('.chip',w).addEventListener('click',()=>d(1));});
+  me('Let\'s begin');
+  await idvAndConfirm('First, your identity. After that you do not have to type your name, date of birth or nationality.');
+
+  /* 3 address + proof */
+  let r=await ask('address','Where do you live?',addressW());
+  setDp('address','Residential address',r.val,'client','address');done('address');
+  if(!rp){
+  let up;
+  for(;;){
+    up=await ask('address_proof','Do you have a recent proof of this address, for example a utility bill or bank statement? Maximum 3 months old.',uploadW({block:'address_proof',sample:'utility-bill-sept.pdf',check:name=>{
+      const bad=S.doc==='bad'&&S.docTries===0;S.docTries++;
+      return [{t:'Readable and complete',ok:true},{t:'Name matches your ID',ok:!bad,msg:'The document says "M. Jansen"'},{t:'Address matches what you entered',ok:true},{t:'Not older than 3 months (dated 12 September 2026)',ok:true}];}}),{extra:'upload'});
+    if(up.extra&&up.extra.ok===false){
+      log('rule','Document name mismatch: re-request issued');
+      await say('This looks like a document in another name. Do you have a document in your own name, for example a bank statement?',{tag:'Document checked'});
+      continue;
+    }
+    break;
+  }
+  setDp('address_proof','Proof of address',up.val.name,'doc','address_proof');done('address_proof');
+
+  }
+  /* 4 contact */
+  section('contact');
+  r=await ask('email','We used '+P.email+' for your invitation. Is that email address still correct?',chipsW({opts:['Yes, that is correct','Different email address']}),{extra:'prefilled'});
+  let mail=''+P.email+'',msrc='pre';
+  if(r.val==='Different email address'){const m=await ask('email','Which email address would you like to use?',textW({type:'email',ph:'name@example.com',demo:''+P.email2+'',validate:v=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)?'':'This email address does not look right.'}),{why:false});mail=m.val;msrc='client';}
+  setDp('email','Email address',mail,msrc,'email',{type:'text'});done('email');
+  r=await ask('phone','What is your phone number?',phoneW());
+  setDp('phone','Phone number',r.val,'client','phone',{type:'text'});done('phone');
+
+  if(P.mode==='full'){
+  /* 5 relationship */
+  section('rel');
+  const purOpts=['Everyday payments','Saving','Receiving salary','Mortgage or loan','Investing','Other'];
+  r=await ask('purpose','Why would you like to become a customer of New Age Bank? Choose what applies.',chipsW({multi:true,opts:purOpts,demo:['Everyday payments','Receiving salary']}));
+  let pv=r.val.slice();
+  if(pv.includes('Other')){log('rule','"Other" selected on purpose: short text requested');const t=await ask('purpose','Could you briefly describe what you mean by "other"?',textW({ph:'Type your answer…',demo:'Payments for my daughter who studies abroad'}),{why:false,extra:'other'});pv=pv.filter(x=>x!=='Other').concat(['Other: '+t.val]);}
+  setDp('purpose','Purpose of the relationship',pv.join(', '),'client','purpose',{type:'multi',opts:purOpts});done('purpose');
+  const natOpts=['Current account','Savings account','Debit card','Credit card','International payments','Other'];
+  r=await ask('nature','Which products and services would you like to use?',chipsW({multi:true,opts:natOpts,demo:['Current account','Debit card']}));
+  setDp('nature','Products and services',r.val.join(', '),'client','nature',{type:'multi',opts:natOpts});done('nature');
+
+  /* 6 financial */
+  section('fin');
+  const empOpts=['Employed','Self-employed','Retired','Student','Not working','Other'];
+  r=await ask('employment','What is your work situation?',chipsW({opts:empOpts}));
+  const emp=r.val;setDp('employment','Work situation',emp,'client','employment',{type:'chips',opts:empOpts});
+  if(emp==='Self-employed'){log('rule','Self-employed: company name requested');const c=await ask('employment','What is the name of your company?',textW({ph:'Name of your business',demo:'Carter Consulting'}),{why:false,extra:'company'});setDp('company','Company name',c.val,'client','employment',{type:'text'});}
+  done('employment');
+  const incOpts=['Under € 25,000','€ 25,000 to € 50,000','€ 50,000 to € 100,000','€ 100,000 to € 250,000','Over € 250,000'];
+  r=await ask('income','Roughly what is your gross annual income?',chipsW({opts:incOpts}));
+  setDp('income','Annual income',r.val,'client','income',{type:'chips',opts:incOpts});done('income');
+  const sofOpts=['Salary','Own business','Savings','Sale of property','Inheritance or gift','Investments','Benefits or pension','Other'];
+  r=await ask('sof','Where does the money come from that you will put into your account?',chipsW({multi:true,opts:sofOpts,demo:['Salary','Inheritance or gift']}));
+  const sof=r.val.slice();
+  setDp('sof','Source of funds',sof.join(', '),'client','sof',{type:'multi',opts:sofOpts});
+  if(sof.includes('Inheritance or gift')||sof.includes('Sale of property')){
+    log('rule','Inheritance or property sale: supporting document requested');
+    const d=await ask('sof','Do you have a document that supports this, such as a notarial deed or certificate of inheritance?',uploadW({block:'sof',later:true,sample:'certificate-of-inheritance.pdf',check:()=>[{t:'Readable and complete',ok:true},{t:'Document is a deed or certificate',ok:true},{t:'Amount and date visible',ok:true}]}),{why:false,extra:'evidence'});
+    if(d.extra&&d.extra.later){setDp('sof_doc','Evidence of source of funds','To be provided later','client','sof');log('rule','Evidence deferred by client: open request created');S.reqs.push({title:'Evidence of source of funds',status:'open',from:'Template rule',block:'sof'});renderSide();renderBack();}
+    else setDp('sof_doc','Evidence of source of funds',d.val.name,'doc','sof');
+  }
+  if(S.risk==='high'&&sof.includes('Salary')){
+    log('rule','Risk high + salary: payslip requested (stricter evidence)');
+    const d=await ask('sof','Because we take extra care here: could you upload your latest payslip?',uploadW({block:'sof',sample:'payslip-aug.pdf',check:()=>[{t:'Readable and complete',ok:true},{t:'Employer and name visible',ok:true},{t:'Not older than 3 months',ok:true}]}),{why:false,extra:'evidence high'});
+    setDp('payslip','Payslip',d.val.name,'doc','sof');
+  }
+  if(sof.includes('Other')){await followAI('sof','You chose "other" for the source of your money. Could you say what the source is, and the amount and period involved?','sof_other','Explanation of source (other)');}
+  done('sof');
+
+  /* 7 activities */
+  section('act');
+  const actOpts=['Crypto','Real estate','Cash deposits','Gambling','Payments within the EU','Payments outside the EU','Frequent transactions above € 15,000','Adult industry','Drugs related','None of these'];
+  r=await ask('activities','Do you expect to use New Age Bank for any of these activities? Choose everything that applies.',chipsW({multi:true,none:'None of these',opts:actOpts,demo:['Cash deposits','Payments outside the EU']}));
+  const av=r.val.slice();setDp('activities','Expected activities',av.join(', '),'client','activities',{type:'multi',opts:actOpts,none:'None of these'});
+  if(av.includes('Payments outside the EU')){log('rule','Payments outside EU: countries requested');const c=await ask('activities','To or from which countries outside the EU do you expect payments?',textW({ph:'For example Turkey, India',demo:'India, Turkey'}),{why:false,extra:'countries'});setDp('countries','Countries outside the EU',c.val,'client','activities',{type:'text'});}
+  if(av.includes('Cash deposits'))await followAI('activities','You expect to deposit cash. Roughly what amount per month, and why in cash?','cash_reason','Explanation of cash deposits');
+  if(av.includes('Crypto'))await followAI('activities','You mention crypto. Via which platforms and for what purpose?','crypto_reason','Explanation of crypto use');
+  done('activities');
+
+  }
+  /* PEP */
+  if(rp)section('contact');else section('act');
+  let pep;
+  for(;;){
+    pep=await ask('pep','Are you, or is someone close to you, a politically exposed person (PEP)? Think of a minister, member of parliament, judge at a high court or ambassador, and their family or close associates.',chipsW({opts:['No','Yes',"I don't know"]}));
+    if(pep.val==="I don't know"){log('rule','PEP unsure: definition explained and asked again');await say('No worries. It concerns people with an important public function in the last 12 months, their partner, children and parents, and their close business associates. Does that apply to you or someone close to you?',{tag:'Explanation'});continue;}
+    break;
+  }
+  setDp('pep','PEP declaration',pep.val,'client','pep',{type:'chips',opts:['No','Yes']});
+  if(pep.val==='Yes'){
+    log('rule','PEP yes: role, country and relation requested; screening result will be compared');
+    const f=await ask('pep','Who is this and what position does or did that person hold?',textW({ph:'Name and position',demo:'My brother-in-law, member of the Senate'}),{why:false,extra:'pep role'});
+    const l=await ask('pep','What is your relationship to this person?',chipsW({opts:['Myself','Partner or child','Parent or sibling','Close business associate']}),{why:false,extra:'pep relation'});
+    setDp('pep_detail','PEP details',f.val+' ('+l.val+')','client','pep',{type:'text'});
+  }
+  done('pep');
+
+  /* 8 review */
+  section('decl');
+  act('review');log('block.asked','review');
+  await say('Almost done. Here is everything once more. Change anything that is not right before you declare it.',{why:B.review.why,block:'review'});
+  await mount((w,d)=>{renderReview(w,d);});
+  me('Everything is correct');done('review');
+
+  /* 9 sign */
+  r=await ask('sign','Last step: the terms and your declaration.',signW());
+  done('sign');
+  S.secDone.decl=true;S.submitted=true;renderSide();
+  const hash='sha256:'+Math.random().toString(16).slice(2,10)+'…';
+  log('case.submitted','Client declaration signed; answers frozen as version 1 ('+hash+')');
+  setDp('declaration','Declaration and signature','Signed '+new Date().toLocaleDateString('en-GB'),'client','sign');
+  await say('Thank you, John. Your application has been submitted.');
+  const st=el('div','status','<b>Received</b><span>Reference NAB-2026-004217</span><span>We will review your details and usually let you know within 1 working day how to proceed. If we need anything else, we will ask here, in this conversation, and by email.</span>');
+  thread.append(st);scroll();
+  if(rp){S.rpDone=true;log('related_party.completed',P.name+' completed own checks for '+P.company);if(P.onDone)P.onDone();await sleep(600);thread.append(el('div','sys','Demo: this was the related party\'s own link'));const bk=el('div','widget');bk.innerHTML='<button class="btn primary" type="button">Back to the organisation\'s view</button>';$('button',bk).addEventListener('click',()=>window.__nab.restoreOrg());thread.append(bk);scroll();return;}
+  $('#comp').hidden=false;$('#d-analyst').disabled=false;
+}
+
+function renderReview(w,done){
+  w.className='widget sum';w.style.maxWidth='620px';
+  const groups=S.kind==='org'?orgGroups():[['Identity',['full_name','dob','nat','doc','id_dispute','address','address_proof']],['Contact',['email','phone']],['Purpose of relationship',['purpose','nature']],['Financial',['employment','company','income','sof','sof_doc','payslip','sof_other']],['Expected activity',['activities','countries','cash_reason','crypto_reason','pep','pep_detail']]];
+  const draw=()=>{
+    w.innerHTML='';
+    groups.forEach(([g,keys])=>{
+      const ks=keys.filter(k=>S.dp[k]);if(!ks.length)return;
+      w.append(el('h4','',g));
+      ks.forEach(k=>{
+        const d=S.dp[k];const r=el('div','r');
+        r.innerHTML='<div class="k">'+esc(d.label)+'</div><div class="vv">'+esc(d.val)+'<div class="src">'+SRC[d.src]+'</div></div>';
+        if(d.edit){const b=el('button','lnk','Change');b.type='button';b.addEventListener('click',()=>editRow(k,r,draw));r.append(b);}
+        w.append(r);
+      });
+    });
+    const a=el('div','acts');a.style.marginTop='12px';const go=el('button','btn primary','Everything is correct, continue to sign');go.type='button';go.addEventListener('click',()=>done(1,'Everything is correct'));a.append(go);w.append(a);
+  };
+  draw();
+}
+function editRow(k,row,redraw){
+  const d=S.dp[k];const vv=$('.vv',row);const lnk=$('.lnk',row);if(lnk)lnk.remove();
+  vv.innerHTML='';const e=d.edit;
+  const save=v=>{const old=d.val;d.val=v;d.src='client';log('answer.edited',k+': "'+old+'" -> "'+v+'" (edited in review, previous value kept in history)');renderBack();redraw();};
+  if(e.type==='text'){const i=el('input','in');i.value=d.val;i.setAttribute('aria-label',d.label);const b=el('button','btn primary','Save');b.type='button';b.style.marginTop='6px';b.addEventListener('click',()=>{if(i.value.trim())save(i.value.trim());});vv.append(i,b);}
+  else{const box=el('div','chips');const cur=new Set(e.type==='multi'?d.val.split(', '):[d.val]);
+    e.opts.forEach(t=>{const c=el('button','chip',esc(t));c.type='button';c.setAttribute('aria-pressed',String(cur.has(t)));c.addEventListener('click',()=>{if(e.type==='chips'){save(t);return;}if(e.none&&t===e.none){cur.clear();cur.add(t);}else{if(e.none)cur.delete(e.none);cur.has(t)?cur.delete(t):cur.add(t);}[...box.children].forEach(x=>x.setAttribute('aria-pressed',String(cur.has(x.textContent))));});box.append(c);});
+    vv.append(box);if(e.type==='multi'){const b=el('button','btn primary','Save');b.type='button';b.style.marginTop='6px';b.addEventListener('click',()=>{if(cur.size)save([...cur].join(', '));});vv.append(b);}}
+}
+
+/* =====================================================================
+   ORGANISATION (KYB) FLOW
+   Blocks are data. The conversation is generated from the template.
+   ===================================================================== */
+const TENANT={uboThreshold:25,ownerListThreshold:10,releaseInvitesAfterIdv:true};
+const NL_KVK=[
+ {id:'k1',name:'Harbour Logistics B.V.',kvk:'81234567',rsin:'862345671',form:'Besloten vennootschap (B.V.)',city:'Amsterdam',status:'Active',address:'Keizersgracht 120, 1015 CW Amsterdam',sbi:'52.29 Other transportation support activities',reg:'12 March 2014',trade:'Harbour Logistics',
+  dirs:[{name:'Emma Clarke',role:'Director',auth:'May sign alone'},{name:'David Okoye',role:'Director',auth:'May sign jointly'}],parent:'Harbour Logistics Holding B.V.'},
+ {id:'k2',name:'Harbour Logistics Holding B.V.',kvk:'81234568',rsin:'862345672',form:'Besloten vennootschap (B.V.)',city:'Rotterdam',status:'Active',address:'Wilhelminakade 40, 3072 AP Rotterdam',sbi:'64.20 Activities of holding companies',reg:'3 May 2012',trade:'Harbour Holding',dirs:[{name:'Emma Clarke',role:'Director',auth:'May sign alone'}],parent:''},
+ {id:'k3',name:'Harbourview Hotels B.V.',kvk:'72345678',rsin:'851234563',form:'Besloten vennootschap (B.V.)',city:'The Hague',status:'Inactive (dissolved)',address:'Zeestraat 8, 2518 AA The Hague',sbi:'55.10 Hotels',reg:'1 October 2009',trade:'Harbourview',dirs:[],parent:''},
+ {id:'k5',name:'Harbour & Partners V.O.F.',kvk:'71234569',rsin:'',form:'Vennootschap onder firma (V.O.F.)',city:'Rotterdam',status:'Active',address:'Coolsingel 20, 3011 AD Rotterdam',sbi:'52.10 Warehousing and storage',reg:'4 April 2017',trade:'Harbour & Partners',dirs:[{name:'Emma Clarke',role:'Managing partner',auth:'May sign alone'},{name:'David Okoye',role:'Managing partner',auth:'May sign jointly'}],parent:''},
+ {id:'k4',name:'Harbour & Co Consultancy',kvk:'61234569',rsin:'',form:'Sole proprietorship (eenmanszaak)',city:'Utrecht',status:'Active',address:'Oudegracht 55, 3511 AE Utrecht',sbi:'70.22 Business and management consultancy',reg:'18 June 2018',trade:'Harbour & Co',dirs:[],parent:''}
+];
+const CW_DIDIT_UNUSED=[
+ {id:'d1',name:'Blue Coral Trading N.V.',reg:'CW-148723',form:'Naamloze Vennootschap (N.V.)',status:'Active',address:'Schottegatweg Oost 12, Willemstad, Curaçao',activity:'Import and wholesale of marine equipment',regDate:'3 June 2016',officers:[{name:'Emma Clarke',role:'Managing director',auth:'May sign alone'}]},
+ {id:'d2',name:'Blue Coral Holdings N.V.',reg:'CW-102298',form:'Naamloze Vennootschap (N.V.)',status:'Active',address:'Kaya Flamboyan 5, Willemstad, Curaçao',activity:'Holding company',regDate:'14 January 2011',officers:[]}
+];
+function newOrg(){return {country:null,route:null,co:null,people:[],owners:[],chain:{},ubos:[],parties:[],control:null};}
+const pk=n=>({'Emma Clarke':'emma','David Okoye':'david','Tom Becker':'tom'}[n]||null);
+function nj(a){return a.length<2?a.join(''):a.slice(0,-1).join(', ')+' and '+a[a.length-1];}
+function slug(n){return n.toLowerCase().replace(/[^a-z]+/g,'-');}
+
+/* ---------- ownership maths + chart ---------- */
+function effStakes(){
+  const R=S.org,res={};
+  const walk=(node,mult,seen)=>{(node||[]).forEach(o=>{
+    const pct=(parseFloat(o.pct)||0)/100*mult;
+    if(o.type==='person'){res[o.name]=(res[o.name]||0)+pct;}
+    else if(R.chain[o.id]&&!seen[o.id]){const s2=Object.assign({},seen);s2[o.id]=1;walk(R.chain[o.id],pct,s2);}
+  });};
+  walk(R.owners,1,{});
+  return Object.keys(res).map(n=>({name:n,pct:Math.round(res[n]*1000)/10})).sort((a,b)=>b.pct-a.pct);
+}
+function chartSVG(){
+  const R=S.org;if(!R.co)return '';
+  const rows=[[],[],[]];rows[2].push({t:'co',name:R.co.name,sub:'Your organisation'});
+  R.owners.forEach(o=>{rows[1].push({t:o.type,name:o.name,pct:o.pct,id:o.id});if(o.type==='company'&&R.chain[o.id])R.chain[o.id].forEach(c=>rows[0].push({t:c.type,name:c.name,pct:c.pct,parent:o.id}));});
+  const W=600,H=rows[0].length?300:210,y=[rows[0].length?40:-100,rows[0].length?135:40,rows[0].length?235:140];
+  const eff=effStakes(),isU=n=>eff.some(e=>e.name===n&&e.pct>=TENANT.uboThreshold);
+  const place=(arr,yy)=>arr.forEach((n,i)=>{n.x=W*(i+1)/(arr.length+1);n.y=yy;});
+  place(rows[0],y[0]);place(rows[1],y[1]);place(rows[2],y[2]);
+  let e='',nd='';
+  const box=(n)=>{const w=n.t==='co'?190:150,h=n.t==='co'?44:40,u=n.t==='person'&&isU(n.name);const fill=n.t==='co'?'var(--brand)':'var(--surface)';const tc=n.t==='co'?'var(--brand-ink)':'var(--ink)';
+    return '<rect x="'+(n.x-w/2)+'" y="'+(n.y-h/2)+'" width="'+w+'" height="'+h+'" rx="'+(n.t==='person'?20:8)+'" style="fill:'+fill+';stroke:'+(u?'var(--brand)':'var(--line)')+';stroke-width:'+(u?2:1.2)+'"/><text x="'+n.x+'" y="'+(n.y+4)+'" text-anchor="middle" style="fill:'+tc+';font-size:11.5px;font-weight:600">'+esc(n.name.length>22?n.name.slice(0,21)+'…':n.name)+'</text>'+(u?'<text x="'+n.x+'" y="'+(n.y+h/2+13)+'" text-anchor="middle" style="fill:var(--brand);font-size:10px;font-family:var(--mono)">UBO '+eff.find(x=>x.name===n.name).pct+'%</text>':'');};
+  const edge=(a,b,pct)=>{e+='<line x1="'+a.x+'" y1="'+(a.y+20)+'" x2="'+b.x+'" y2="'+(b.y-22)+'" style="stroke:var(--muted);stroke-width:1.2"/><text x="'+((a.x+b.x)/2+8)+'" y="'+((a.y+b.y)/2)+'" style="fill:var(--muted);font-size:10px;font-family:var(--mono)">'+(pct!==''&&pct!=null?esc(pct)+'%':'')+'</text>';};
+  rows[1].forEach(n=>edge(n,rows[2][0],n.pct));rows[0].forEach(n=>{const p=rows[1].find(x=>x.id===n.parent);if(p)edge(n,p,n.pct);});
+  [0,1,2].forEach(r=>rows[r].forEach(n=>{nd+=box(n);}));
+  const dirs=(R.people||[]).map(p=>p.name).join(', ');
+  const foot=dirs?'<text x="'+W/2+'" y="'+(H-8)+'" text-anchor="middle" style="fill:var(--muted);font-size:10.5px">Directors: '+esc(dirs)+'</text>':'';
+  return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Ownership structure" style="width:100%;height:auto;display:block">'+e+nd+foot+'</svg>';
+}
+function chartCard(){const c=el('div','status');c.style.background='var(--surface)';c.innerHTML='<b style="color:var(--ink)">Your structure so far</b>'+chartSVG()+'<span class="help">Built from registry data and your answers. Highlighted people are ultimate beneficial owners at '+TENANT.uboThreshold+'% or more.</span>';return c;}
+
+/* ---------- widgets for the org flow ---------- */
+function searchW(o){return (w,done)=>{
+  w.innerHTML='<div class="f"><label for="q-n">'+esc(o.label)+'</label><input class="in" id="q-n" placeholder="'+esc(o.ph)+'" autocomplete="off"></div><div class="res" id="q-r"></div><div class="help" id="q-h">'+esc(o.help)+'</div><div class="acts"><button type="button" class="btn" id="q-none">I cannot find my organisation</button></div>';
+  const inp=$('#q-n',w),res=$('#q-r',w);
+  const upd=()=>{const q=inp.value.trim().toLowerCase();res.innerHTML='';if(q.length<2){$('#q-h',w).textContent=o.help;return;}
+    const m=o.data.filter(x=>x.name.toLowerCase().includes(q)||String(x.kvk||x.reg).includes(q));
+    $('#q-h',w).textContent=m.length?m.length+' match'+(m.length>1?'es':'')+'. Pick yours.':'No match yet. Keep typing or check the spelling.';
+    m.forEach(x=>{const b=el('button','ri','<b>'+esc(x.name)+'</b><span>'+esc(x.form)+' · '+esc(x.city||'Willemstad')+' · '+esc(x.kvk||x.reg)+'</span><i class="pill '+(/^Active/.test(x.status)?'ok':'bad')+'">'+esc(x.status)+'</i>');b.type='button';b.addEventListener('click',()=>done(x,esc(x.name)));res.append(b);});};
+  inp.addEventListener('input',upd);
+  $('#q-none',w).addEventListener('click',()=>done(null,'I cannot find my organisation',{none:true}));
+  $('.acts',w).append(demoBtn(()=>{inp.value=o.demo;upd();},'Demo: type "'+o.demo+'"'));
+  setTimeout(()=>inp.focus({preventScroll:true}),50);
+};}
+function factsW(rows,chips,note){return (w,done)=>{
+  w.className='widget';
+  w.innerHTML='<div class="facts">'+rows.map(r=>'<div><span>'+esc(r[0])+'</span><span class="v">'+esc(r[1])+'</span></div>').join('')+'</div>'+(note?'<div class="help">'+esc(note)+'</div>':'')+'<div class="chips">'+chips.map((c,i)=>'<button class="chip" type="button" data-i="'+i+'">'+esc(c)+'</button>').join('')+'</div>';
+  w.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>done(+c.dataset.i,esc(c.textContent))));
+};}
+function formW(fields,demo){return (w,done)=>{
+  w.innerHTML=fields.map(f=>'<div class="f"><label for="fw-'+f.id+'">'+esc(f.label)+'</label><input class="in" id="fw-'+f.id+'" placeholder="'+esc(f.ph||'')+'"></div>').join('')+'<div class="help" id="fw-h" style="color:var(--bad)"></div><div class="acts"><button type="button" class="btn primary" id="fw-go">Continue</button></div>';
+  $('.acts',w).append(demoBtn(()=>{fields.forEach(f=>{$('#fw-'+f.id,w).value=demo[f.id];});}));
+  $('#fw-go',w).addEventListener('click',()=>{const v={};for(const f of fields){v[f.id]=$('#fw-'+f.id,w).value.trim();if(!v[f.id]){$('#fw-h',w).textContent='Please fill in '+f.label.toLowerCase()+'.';return;}}done(v,esc(v[fields[0].id]+' · '+v[fields[1].id]));});
+};}
+function peopleW(list,o){return (w,done)=>{
+  const items=list.map(p=>Object.assign({on:true},p));
+  const draw=()=>{w.innerHTML='';
+    items.forEach((p,i)=>{const r=el('label','pr','<input type="checkbox" '+(p.on?'checked':'')+'><span><b>'+esc(p.name)+'</b><br><small>'+esc(p.role)+(p.auth?' · '+esc(p.auth):'')+'</small></span><i class="pill '+(p.src==='rep'?'':'ai')+'">'+esc(p.srcLabel)+'</i>');
+      $('input',r).addEventListener('change',e=>{p.on=e.target.checked;});w.append(r);});
+    if(!items.length)w.append(el('div','help',esc(o.empty||'Nothing found.')));
+    const add=el('div','fr');add.innerHTML='<input class="in" id="pp-n" placeholder="Name of another person" aria-label="Name"><input class="in" id="pp-r" placeholder="Role, for example Director" aria-label="Role">';w.append(add);
+    const a=el('div','acts');const ab=el('button','btn','Add person');ab.type='button';
+    ab.addEventListener('click',()=>{const n=$('#pp-n',w).value.trim(),rl=$('#pp-r',w).value.trim()||'Director';if(!n)return;items.push({on:true,name:n,role:rl,src:'rep',srcLabel:'Added by you'});draw();});
+    const go=el('button','btn primary',o.cta||'Confirm');go.type='button';
+    go.addEventListener('click',()=>{const v=items.filter(p=>p.on);if(!v.length){alert_msg('Add at least one person.');return;}done(v,esc(v.map(p=>p.name).join(', ')));});
+    a.append(ab,go);if(o.demo)a.append(demoBtn(()=>{if(!items.some(p=>p.name===o.demo.name)){items.push(Object.assign({on:true,src:'rep',srcLabel:'Added by you'},o.demo));draw();}}, 'Demo: add '+(o.demo&&o.demo.name)));
+    w.append(a);};
+  const alert_msg=m=>{const h=el('div','help',m);h.style.color='var(--bad)';w.append(h);};
+  draw();
+};}
+function ownersW(o){return (w,done)=>{
+  const rows=(o.rows||[]).map(r=>Object.assign({},r));
+  const draw=()=>{w.innerHTML='<div class="help">'+esc(o.help)+'</div>';
+    rows.forEach((r,i)=>{const d=el('div','or');d.innerHTML='<select class="in" aria-label="Type"><option value="person"'+(r.type==='person'?' selected':'')+'>Person</option><option value="company"'+(r.type==='company'?' selected':'')+'>Company</option></select><input class="in" aria-label="Name" placeholder="Name" value="'+esc(r.name)+'"><input class="in" aria-label="Share in percent" inputmode="decimal" placeholder="%" value="'+esc(r.pct)+'"><button type="button" class="lnk" aria-label="Remove">Remove</button>';
+      const [sel,nm,pc,rm]=d.children;sel.addEventListener('change',()=>{r.type=sel.value;});nm.addEventListener('input',()=>{r.name=nm.value;});pc.addEventListener('input',()=>{r.pct=pc.value;tot();});rm.addEventListener('click',()=>{rows.splice(i,1);draw();});w.append(d);});
+    const t=el('div','help');t.id='or-t';w.append(t);
+    const a=el('div','acts');const ab=el('button','btn','Add owner');ab.type='button';ab.addEventListener('click',()=>{rows.push({type:'person',name:'',pct:''});draw();});
+    const go=el('button','btn primary','Continue');go.type='button';go.addEventListener('click',()=>{const v=rows.filter(r=>r.name.trim()&&parseFloat(r.pct)>0);const s=v.reduce((x,r)=>x+parseFloat(r.pct),0);if(!v.length){t.textContent='Add at least one owner with a percentage.';t.style.color='var(--bad)';return;}if(s>100.0001){t.textContent='The shares add up to more than 100%.';t.style.color='var(--bad)';return;}done(v.map(r=>({type:r.type,name:r.name.trim(),pct:String(parseFloat(r.pct)),src:r.src||'rep',id:slug(r.name)})),esc(v.map(r=>r.name+' '+parseFloat(r.pct)+'%').join(', ')));});
+    a.append(ab,go,demoBtn(()=>{rows.length=0;o.demo.forEach(r=>rows.push(Object.assign({},r)));draw();}));w.append(a);tot();};
+  const tot=()=>{const t=$('#or-t',w);if(!t)return;const s=rows.reduce((x,r)=>x+(parseFloat(r.pct)||0),0);t.style.color='var(--muted)';t.textContent='Total entered: '+(Math.round(s*10)/10)+'%'+(s<100&&s>0?' · the rest is held by smaller owners (under '+TENANT.ownerListThreshold+'%) and does not need to be listed':'');};
+  draw();
+};}
+function trackerW(parties){return (w,done)=>{
+  w.className='widget';
+  const draw=()=>{w.innerHTML='';
+    parties.forEach(p=>{const r=el('div','tr');r.innerHTML='<span><b>'+esc(p.name)+'</b><br><small>'+esc(p.roles)+' · '+esc(p.need)+'</small></span>';
+      const st=el('i','pill '+(p.status==='Completed'||p.status==='Verified (you)'?'ok':(p.status==='Invited'||p.status==='Queued'?'warn':'')),esc(p.status));
+      r.append(st);
+      if(p.status==='To invite'){const b=el('button','btn primary','Send invitation');b.type='button';b.addEventListener('click',()=>{inviteParty(p);renderSide();renderBack();syncInviteButtons();draw();});r.append(b);}
+      if(p.status==='Invited')r.append(demoBtn(()=>launchRP(p).catch(e=>console.error(e)),'Demo: open as '+p.name.split(' ')[0]));
+      w.append(r);});
+    const todo=parties.filter(p=>p.status==='To invite').length;
+    const a=el('div','acts');const go=el('button','btn primary','Continue');go.type='button';go.disabled=todo>0;go.addEventListener('click',()=>done(1,'Invitations sent'));
+    a.append(go);if(todo)a.append(demoBtn(()=>{parties.filter(p=>p.status==='To invite').forEach(p=>inviteParty(p));renderSide();renderBack();syncInviteButtons();draw();},'Demo: invite everyone'));
+    w.append(a);};
+  S.org.refresh=draw;draw();
+};}
+
+function repsW(o){return (w,done)=>{
+  const rows=[{name:'',scope:'May sign jointly',note:''}];
+  const SC=['May sign alone','May sign jointly','Limited authority'];
+  const draw=()=>{w.innerHTML='<div class="help">'+esc(o.help)+'</div>';
+    rows.forEach((r,i)=>{const d=el('div','or ar');
+      d.innerHTML='<input class="in" aria-label="Name" placeholder="Name" value="'+esc(r.name)+'"><select class="in" aria-label="Authority">'+SC.map(s=>'<option'+(s===r.scope?' selected':'')+'>'+s+'</option>').join('')+'</select><input class="in" aria-label="Role or limit" placeholder="Role or limit, for example Finance manager" value="'+esc(r.note)+'"><button type="button" class="lnk" aria-label="Remove">Remove</button>';
+      const [nm,sel,nt,rm]=d.children;nm.addEventListener('input',()=>{r.name=nm.value;});sel.addEventListener('change',()=>{r.scope=sel.value;});nt.addEventListener('input',()=>{r.note=nt.value;});rm.addEventListener('click',()=>{rows.splice(i,1);if(!rows.length)rows.push({name:'',scope:'May sign jointly',note:''});draw();});w.append(d);});
+    const e=el('div','help');e.style.color='var(--bad)';w.append(e);
+    const a=el('div','acts');const ab=el('button','btn','Add person');ab.type='button';ab.addEventListener('click',()=>{rows.push({name:'',scope:'May sign jointly',note:''});draw();});
+    const go=el('button','btn primary','Continue');go.type='button';go.addEventListener('click',()=>{const v=rows.filter(r=>r.name.trim());if(!v.length){e.textContent='Add at least one person.';return;}done(v.map(r=>({name:r.name.trim(),scope:r.scope,note:r.note.trim()})),esc(v.map(r=>r.name.trim()+' ('+r.scope.toLowerCase()+')').join(', ')));});
+    a.append(ab,go,demoBtn(()=>{rows.length=0;rows.push({name:'Anna Visser',scope:'May sign jointly',note:'Finance manager'});draw();}));w.append(a);};
+  draw();
+};}
+
+/* ---------- block definitions (tenant config) ---------- */
+const ORG={};
+function def(b){ORG[b.id]=b;B[b.id]=b;return b;}
+const SIMPLE='simple';
+async function simpleRun(b){
+  let widget;
+  if(b.kind==='chips')widget=chipsW({opts:b.opts});
+  if(b.kind==='multi')widget=chipsW({multi:true,opts:b.opts,demo:b.demo});
+  if(b.kind==='text')widget=textW({ph:b.ph,demo:b.demo});
+  if(b.kind==='area')widget=textW({area:true,ph:b.ph||'Type your answer…',demo:b.demo});
+  const r=await ask(b.id,b.q(),widget);
+  const val=Array.isArray(r.val)?r.val.join(', '):r.val;
+  setDp(b.key,b.label,val,'rep',b.id,{type:b.kind==='multi'?'multi':(b.kind==='chips'?'chips':'text'),opts:b.opts});
+  for(const f of (b.fu||[])){if(f.when(r.val))await followUp(b,f,r.val);}
+}
+async function followUp(b,f,val){
+  if(f.ai){await followAI(b.id,f.q(val),f.key,f.label,f.demo);return;}
+  log('rule',b.id+': '+f.rule);
+  if(f.kind==='file'){
+    const d=await ask(b.id,f.q(val),uploadW({block:b.id,later:true,sample:f.sample,check:()=>[{t:'Readable and complete',ok:true},{t:'Parties and amounts visible',ok:true},{t:'Dates visible',ok:true}]}),{why:false,extra:'evidence'});
+    if(d.extra&&d.extra.later){setDp(f.key,f.label,'To be provided later','rep',b.id);S.reqs.push({title:f.label,status:'open',from:'Template rule',block:b.id,created:new Date().toLocaleDateString('en-GB')});log('rule','Evidence deferred by client: open request created');renderSide();renderBack();}
+    else setDp(f.key,f.label,d.val.name,'doc',b.id);
+    return;
+  }
+  const t=await ask(b.id,f.q(val),textW({area:f.kind==='area',ph:f.ph,demo:f.demo}),{why:false,extra:'follow-up'});
+  setDp(f.key,f.label,t.val,'rep',b.id,{type:'text'});
+}
+async function runBlock(b){
+  if(!b.active){S.blocks[b.id]='off';log('block.skipped',b.id+': inactive in template');return;}
+  if(b.showIf&&!b.showIf()){S.blocks[b.id]='skipped';if(S.counted&&S.counted[b.id]){S.total--;renderSide();}log('block.skipped',b.id+': '+b.showTxt);return;}
+  if(b.sec&&b.sec!==S.sec)section(b.sec);
+  await (b.run||simpleRun)(b);
+  done(b.id);
+}
+
+/* ---------- custom runs ---------- */
+function formKind(f){f=String(f||'');if(/vennootschap onder firma|v\.o\.f|commanditaire|c\.v\.|maatschap|partnership/i.test(f))return 'partnership';if(/eenmanszaak|sole proprietor/i.test(f))return 'sole';return 'company';}
+const DOC_READ={
+  company:{name:'Blue Coral Trading N.V.',form:'Naamloze Vennootschap (N.V.)',activity:'Import and wholesale of marine equipment',regDate:'3 June 2016',street:'Schottegatweg Oost 12',officers:[{name:'Emma Clarke',role:'Managing director',auth:'May sign alone'}]},
+  partnership:{name:'Blue Coral Partners V.O.F.',form:'Vennootschap onder firma (V.O.F.)',activity:'Import and wholesale of marine equipment',regDate:'9 February 2019',street:'Schottegatweg Oost 12',officers:[{name:'Emma Clarke',role:'Managing partner',auth:'May sign alone'},{name:'Tom Becker',role:'Managing partner',auth:'May sign jointly'}]}
+};
+async function runCountry(){
+  const R=S.org;const o=['Netherlands','Curaçao','Other country'];
+  const r=await ask('country','Where is your organisation registered?',chipsW({opts:o}));
+  R.country=r.val;R.countryName=r.val;R.route=r.val==='Netherlands'?'nl':'manual';
+  if(r.val==='Other country'){
+    const c=await ask('country','Which country?',textW({ph:'For example Suriname',demo:'Suriname'}),{why:false,extra:'country name'});
+    R.countryName=c.val;
+  }
+  setDp('country','Country of registration',R.countryName,'rep','country');
+  log('route.selected',R.countryName+' routes to the '+(R.route==='nl'?'KvK adapter':'document route (no register link: the client supplies the documents)'));
+}
+async function runManual(){
+  const R=S.org;
+  const place=R.countryName==='Netherlands'?'the Netherlands':R.countryName;
+  await say('For an organisation registered in '+esc(place)+' we work from your documents. We start with the extract of the trade register (Chamber of Commerce). It must not be older than 3 months.',{fast:true});
+  let n=0;
+  const upload=async(label,sample,checks,extra)=>{
+    for(;;){
+      const u=await ask('registry','Please upload '+label+'.',uploadW({block:'registry (document route)',sample:sample,check:checks}),{why:false,extra:extra||'upload'});
+      if(u.extra&&u.extra.ok===false){log('rule','Document check failed: re-request issued');await say('This document does not pass our check. Please upload a current version.',{tag:'Document checked'});continue;}
+      return u.val;
+    }
+  };
+  const ex=await upload('the extract of the trade register','trade-register-extract.pdf',()=>{const bad=S.doc==='bad'&&n===0;n++;return [{t:'Readable and complete',ok:true},{t:'Issued by a trade register or Chamber of Commerce',ok:true},{t:'Not older than 3 months',ok:!bad,msg:'The extract is dated 2 March 2026'}];},'extract');
+  setDp('doc_extract','Document: extract of the trade register',ex.name,'doc','registry');
+  const kind=$('#d-form').value;const k=DOC_READ[kind];
+  const cc=R.countryName==='Curaçao'?'CW-':'REG-';const city=R.countryName==='Curaçao'?'Willemstad, Curaçao':(R.countryName==='Netherlands'?'Amsterdam':'Paramaribo, '+R.countryName);
+  let co={name:k.name,reg:cc+(kind==='company'?'148723':'166540'),form:k.form,status:'Active',address:k.street+', '+city,activity:k.activity,regDate:k.regDate,src:'doc',officers:k.officers};
+  log('ai.document.read','Extract read by AI: name, number, legal form, address, activity, officers. Client confirms; an analyst checks against the original');
+  const rows=[['Legal name',co.name],['Registration number',co.reg],['Legal form',co.form],['Registered address',co.address],['Activity',co.activity],['Registered since',co.regDate],['Listed in the extract',co.officers.map(o=>o.name+' ('+o.role+')').join(', ')]];
+  const c=await ask('registry','We read your extract. Is this correct?',factsW(rows,['Yes, this is correct','Something is wrong'],'Read from your document. A colleague checks it against the original.'),{why:false,ai:true,tag:'Read from your document',extra:'AI read'});
+  if(c.val===1){
+    log('rule','Client disputes AI reading: manual correction requested');
+    const f=await ask('registry','Please correct the details.',formW([{id:'name',label:'Legal name'},{id:'reg',label:'Registration number'},{id:'form',label:'Legal form'},{id:'addr',label:'Registered address'}],{name:co.name,reg:co.reg,form:co.form,addr:co.address}),{why:false,extra:'correction'});
+    co=Object.assign(co,{name:f.val.name,reg:f.val.reg,form:f.val.form,address:f.val.addr,src:'rep'});
+  }
+  R.co=co;
+  const ds=[['legal_name','Legal name',co.name],['reg_no','Registration number',co.reg],['legal_form','Legal form',co.form],['co_status','Status','Active (per extract)'],['co_address','Registered address',co.address],['co_activity','Registered activity',co.activity],['reg_date','Registered since',co.regDate]];
+  ds.forEach(x=>setDp(x[0],x[1],x[2],co.src,'registry'));
+  const ar=await upload('your articles of association','articles-of-association.pdf',()=>[{t:'Readable and complete',ok:true},{t:'Company name matches the extract',ok:true},{t:'Signed and dated',ok:true}],'articles');
+  setDp('doc_articles','Document: articles of association',ar.name,'doc','registry');
+}
+async function runRegistry(){
+  const R=S.org;
+  if(R.route==='manual')return runManual();
+  for(;;){
+    const r=await ask('registry','What is the name of your organisation? Start typing and pick it from the list.',searchW({label:'Organisation name or KvK number',ph:'Start typing…',help:'We search the Dutch trade register (KvK) while you type.',data:NL_KVK,demo:'Harbour'}),{extra:'KvK Zoeken'});
+    if(r.extra&&r.extra.none){log('route.fallback','No KvK match: document route');R.route='manual';await say('No problem. We will work from your documents instead.',{fast:true});return runManual();}
+    const k=r.val;
+    if(!/^Active/.test(k.status)){log('rule','Registry status "'+k.status+'": cannot continue with this organisation');await say('The trade register lists '+esc(k.name)+' as '+esc(k.status.toLowerCase())+'. We cannot open an account for an inactive organisation. Please pick another organisation, or contact your relationship manager.',{tag:'Registry check'});continue;}
+    log('kvk.zoeken','Search (free of charge), user selected KvK '+k.kvk);log('kvk.basisprofiel','Basisprofiel retrieved for '+k.kvk+' (EUR 0.02)');
+    const rows=[['Legal name',k.name],['KvK number',k.kvk],['RSIN',k.rsin||'n/a'],['Legal form',k.form],['Status',k.status],['Registered address',k.address],['Main activity',k.sbi],['Registered since',k.reg],['Trade name',k.trade]];
+    const c=await ask('registry','Is this your organisation? This is what the register shows.',factsW(rows,['Yes, this is my organisation','No, search again'],'Source: Dutch trade register (KvK).'),{why:false,extra:'confirm'});
+    if(c.val===1){log('block.declined','Registry match rejected by client');continue;}
+    R.co={name:k.name,reg:k.kvk,rsin:k.rsin,form:k.form,status:k.status,address:k.address,sbi:k.sbi,regDate:k.reg,trade:k.trade,src:'kvk',dirs:k.dirs,parent:k.parent};
+    setDp('legal_name','Legal name',k.name,'kvk','registry');setDp('reg_no','KvK number',k.kvk,'kvk','registry');setDp('rsin','RSIN',k.rsin||'n/a','kvk','registry');
+    setDp('legal_form','Legal form',k.form,'kvk','registry');setDp('co_status','Status',k.status,'kvk','registry');setDp('co_address','Registered address',k.address,'kvk','registry');
+    setDp('sbi','Registered activity',k.sbi,'kvk','registry');setDp('reg_date','Registered since',k.reg,'kvk','registry');
+    if(k.trade)setDp('trade_name','Trade name',k.trade,'kvk','registry');
+    return;
+  }
+}
+async function runDirectors(){
+  const R=S.org;let list=[],txt,demo;
+  if(R.route==='nl'){
+    log('company.info.organisatieprofiel','Proposal for management and parent company retrieved (second source; the KvK API does not return directors)');
+    list=(R.co.dirs||[]).map(d=>({name:d.name,role:d.role,auth:d.auth,src:'prop',srcLabel:'Suggested from registry data'}));
+    txt='From registry data we suggest these directors. The trade register does not list everyone, so untick anyone who is not correct and add anyone who is missing.';
+    if(!list.length){txt='Who are the directors or managing officers of your organisation? Add everyone who may act for it.';demo={name:'Emma Clarke',role:formKind(R.co.form)==='sole'?'Owner':'Managing director'};}
+  }else if(R.co.officers&&R.co.officers.length){
+    list=R.co.officers.map(d=>({name:d.name,role:d.role,auth:d.auth,src:'doc',srcLabel:'Read from your extract'}));
+    txt='Your extract lists these people. Untick anyone who is not correct and add anyone who is missing.';
+  }else{
+    txt='Who are the directors or managing officers of your organisation? Add everyone who may act for it.';demo={name:'Emma Clarke',role:'Managing director'};
+  }
+  const r=await ask('directors',txt,peopleW(list,{empty:'We found no people in the registry. Add them below.',demo:demo}));
+  R.people=r.val.map(p=>({name:p.name,role:p.role,auth:p.auth,src:p.src}));
+  setDp('directors','Directors and representatives',R.people.map(p=>p.name+' ('+p.role+')').join(', '),R.people.every(p=>p.src==='rep')?'rep':(R.people.some(p=>p.src==='doc')?'doc':'prop'),'directors');
+}
+async function runAuthReps(){
+  const R=S.org;R.authreps=[];
+  const c=await ask('authreps','Besides the directors: does anyone else act for the organisation, for example an employee with a power of attorney?',chipsW({opts:['Yes, there are others','No, only the directors']}));
+  if(c.val==='No, only the directors'){setDp('authreps','Authorised representatives','None besides the directors','rep','authreps');return;}
+  const r=await ask('authreps','Who are they, and what may they do on behalf of the organisation?',repsW({help:'Add each person who may act for the organisation but is not listed as a director.'}),{why:false,extra:'authorised reps'});
+  R.authreps=r.val;
+  for(const a of R.authreps){
+    for(;;){
+      const u=await ask('authreps','Please upload the power of attorney, or another document that shows the authority of '+esc(a.name)+'.',uploadW({block:'authreps',sample:'power-of-attorney-'+slug(a.name)+'.pdf',check:()=>[{t:'Readable and complete',ok:true},{t:'Names '+a.name+' and the authority granted',ok:true},{t:'Signed by a director',ok:true}]}),{why:false,extra:'authority evidence'});
+      if(u.extra&&u.extra.ok===false){await say('This document does not pass our check. Please upload a current version.',{tag:'Document checked'});continue;}
+      setDp('auth_doc_'+slug(a.name),'Authority of '+a.name,u.val.name,'doc','authreps');break;
+    }
+  }
+  setDp('authreps','Authorised representatives',R.authreps.map(a=>a.name+' ('+a.scope+(a.note?', '+a.note:'')+')').join(', '),'rep','authreps');
+}
+async function runOwners(){
+  const R=S.org;const part=formKind(R.co.form)==='partnership',sole=formKind(R.co.form)==='sole';
+  const sug=(R.route==='nl'&&R.co.parent)?[{type:'company',name:R.co.parent,pct:'',src:'prop'}]:[];
+  const demo=sole?[{type:'person',name:'Emma Clarke',pct:'100'}]:(R.route==='nl'&&formKind(R.co.form)!=='partnership')?[{type:'company',name:'Harbour Logistics Holding B.V.',pct:'60'},{type:'person',name:'Emma Clarke',pct:'25'},{type:'person',name:'David Okoye',pct:'15'}]:[{type:'person',name:'Emma Clarke',pct:'70'},{type:'person',name:'Tom Becker',pct:'30'}];
+  const txt=sole?'Please state who owns the business, with their share. For a sole proprietorship that is normally one person with 100%.':part?'Please list all partners, with their share in the partnership.':(R.route==='nl'?'The trade register does not publish shareholders. Registry data suggests that '+(R.co.parent?esc(R.co.parent)+' is the parent company. ':'')+'Please list everyone who owns '+TENANT.ownerListThreshold+'% or more, with their share.':'Please list everyone who owns '+TENANT.ownerListThreshold+'% or more of the organisation, with their share.');
+  const r=await ask('owners',txt,ownersW({help:'Add a person or a company for each owner. Shares are percentages of the organisation.',rows:sug,demo:demo}));
+  R.owners=r.val;
+  for(const o of R.owners.filter(x=>x.type==='company')){
+    const hit=R.route==='nl'?NL_KVK.find(x=>x.name.toLowerCase()===o.name.toLowerCase()):null;
+    if(hit&&/^Active/.test(hit.status)){
+      log('kvk.zoeken','Company owner "'+o.name+'" matched to KvK '+hit.kvk);
+      await ask('owners','We found '+esc(o.name)+' in the trade register. Is this the same company?',factsW([['Legal name',hit.name],['KvK number',hit.kvk],['Legal form',hit.form],['Registered address',hit.address],['Status',hit.status]],['Yes, same company','No, a different company'],'Source: Dutch trade register (KvK).'),{why:false,extra:'company owner'});
+      o.src='kvk';o.reg=hit.kvk;
+    }else{
+      const g=await ask('owners','Where is '+esc(o.name)+' registered, and what is its registration number?',textW({ph:'For example Curaçao, CW-102298',demo:'Curaçao, CW-102298'}),{why:false,extra:'company owner'});o.reg=g.val;
+    }
+    const sub=await ask('owners','Who owns '+esc(o.name)+'? List everyone who holds '+TENANT.ownerListThreshold+'% or more of it.',ownersW({help:'Same as before: a person or a company for each owner.',rows:[],demo:[{type:'person',name:'Emma Clarke',pct:'50'},{type:'person',name:'Tom Becker',pct:'50'}]}),{why:false,extra:'ownership chain'});
+    R.chain[o.id]=sub.val;
+  }
+  setDp('owners','Owners',R.owners.map(o=>o.name+' '+o.pct+'%').join(', '),'rep','owners');
+  Object.keys(R.chain).forEach(id=>{const o=R.owners.find(x=>x.id===id);setDp('chain_'+id,'Owners of '+(o?o.name:id),R.chain[id].map(c=>c.name+' '+c.pct+'%').join(', '),'rep','owners');});
+}
+async function runUbo(){
+  const R=S.org;const eff=effStakes();
+  let ubos=eff.filter(e=>e.pct>=TENANT.uboThreshold);
+  log('ubo.calculated',ubos.map(u=>u.name+' '+u.pct+'%').join('; ')||'no owner reaches '+TENANT.uboThreshold+'%');
+  thread.append(chartCard());scroll();
+  let fallback=false;
+  if(!ubos.length){fallback=true;ubos=(R.people||[]).map(p=>({name:p.name,pct:0}));log('rule','No owner reaches the threshold: senior managing officials recorded as UBO');}
+  R.ubos=ubos;
+  const rows=eff.map(e=>[e.name,e.pct+'%'+(e.pct>=TENANT.uboThreshold?' · UBO':' · below '+TENANT.uboThreshold+'%')]);
+  const c=await ask('ubo','Based on what you told us, these people own the organisation, directly or through other companies. At '+TENANT.uboThreshold+'% or more they count as ultimate beneficial owners (UBO). Is this complete?',factsW(rows.length?rows:[['Result','No owner reaches '+TENANT.uboThreshold+'%']],['Yes, this is complete','Someone else also controls the organisation'],'Calculated by multiplying shares along the ownership chain.'),{extra:'calculated'});
+  if(c.val===1){
+    log('rule','Control other than ownership declared: extra person requested');
+    const t=await ask('ubo','Who is this, and how do they control the organisation? For example through voting rights or the right to appoint directors.',textW({ph:'Name and how they control it',demo:'Tom Becker, holds the right to appoint two directors'}),{why:false,extra:'control'});
+    const nm=t.val.split(',')[0].trim();R.control={name:nm,how:t.val};R.ubos.push({name:nm,pct:0,control:true});setDp('control','Control other than ownership',t.val,'rep','ubo');
+  }
+  setDp('ubos','Ultimate beneficial owners',R.ubos.map(u=>u.name+(u.pct?' ('+u.pct+'%)':' (control)')).join(', '),'calc','ubo');
+}
+function buildParties(){
+  const R=S.org,map={};
+  const add=(name,role)=>{if(!map[name])map[name]={name,roles:[]};if(!map[name].roles.includes(role))map[name].roles.push(role);};
+  (R.people||[]).forEach(p=>add(p.name,p.role));
+  (R.ubos||[]).forEach(u=>add(u.name,'UBO'+(u.pct?' '+u.pct+'%':' (control)')));
+  (R.authreps||[]).forEach(a=>add(a.name,'Authorised representative ('+a.scope.toLowerCase()+')'));
+  return Object.keys(map).map(n=>{const k=pk(n);const self=R.rep&&R.rep.name===n;
+    return {name:n,roles:map[n].roles.join(' · '),need:self?'Your own check comes at the end of this conversation':'ID check and PEP declaration',email:k?PERSONS[k].email:slug(n)+'@example.com',status:self?'Your check comes last':'To invite',self:!!self};});
+}
+function releaseInvite(p){
+  p.status='Invited';
+  S.reqs.push({title:'Own checks: '+p.name,status:'open',from:p.roles,block:'invite',party:p.name,created:new Date().toLocaleDateString('en-GB')});
+  log('invitation.sent','Invitation sent to '+p.name+' ('+p.email+') for '+p.roles);
+}
+function inviteParty(p){
+  if(TENANT.releaseInvitesAfterIdv&&!S.org.repVerified){p.status='Queued';log('invitation.queued','Invitation for '+p.name+' queued. It is released after the representative has passed the ID check');return;}
+  releaseInvite(p);
+}
+async function runInvites(){
+  const R=S.org;
+  const names=[];(R.people||[]).forEach(p=>{if(!names.includes(p.name))names.push(p.name);});(R.ubos||[]).forEach(u=>{if(!names.includes(u.name))names.push(u.name);});(R.authreps||[]).forEach(a=>{if(!names.includes(a.name))names.push(a.name);});
+  const who=await ask('invites','Before we continue: which of these people are you?',chipsW({opts:names.concat(['None of these'])}),{why:false,extra:'representative'});
+  if(who.val==='None of these'){
+    const t=await ask('invites','What is your role at '+esc(R.co.name)+'?',textW({ph:'For example finance manager',demo:'Finance manager'}),{why:false,extra:'representative role'});
+    R.rep={name:null,role:t.val,declared:false};
+    setDp('rep_role','Representative (declared)','Contact person: '+t.val+'. ID check at the end','rep','invites');
+  }else{
+    const p=(R.people||[]).find(x=>x.name===who.val);
+    const ar=(R.authreps||[]).find(x=>x.name===who.val);R.rep={name:who.val,role:p?p.role:(ar?'Authorised representative':'Owner'),declared:true};
+    setDp('rep_role','Representative (declared)',who.val+' ('+R.rep.role+'). To be verified by ID check at the end','rep','invites');
+  }
+  log('rep.declared','Representative declared as '+(R.rep.name||'contact person')+', not yet verified');
+  R.parties=buildParties();
+  const noAct=effStakes().filter(e=>e.pct<TENANT.uboThreshold&&!R.parties.some(p=>p.name===e.name)).map(e=>e.name+' ('+e.pct+'%)');
+  const q=TENANT.releaseInvitesAfterIdv?'<p>Invitations go out as soon as you have verified your own identity at the end of this conversation.</p>':'';
+  await ask('invites','Each person below needs to complete a short check of their own: an identity check and a PEP declaration. Choose who to invite, so they can do it while you carry on.'+q+(noAct.length?'<p>No check needed for '+esc(noAct.join(', '))+': below the '+TENANT.uboThreshold+'% threshold. We record them as owners.</p>':''),trackerW(R.parties),{why:true});
+  setDp('invites','People to invite for own checks',R.parties.filter(p=>!p.self).map(p=>p.name).join(', ')||'None','calc','invites');
+  syncInviteButtons();
+}
+async function runRep(){
+  const R=S.org;
+  await idvAndConfirm('Finally, your own identity, as the person who submits this application. After that you do not have to type your name, date of birth or nationality.');
+  if(R.rep.name){
+    const ok=R.rep.name.toLowerCase()===P.name.toLowerCase();
+    log('rep.match',ok?'Name on ID matches the person declared as representative ('+P.name+')':'Name on ID ('+P.name+') differs from the declared representative ('+R.rep.name+'): flagged for analyst');
+    if(!ok){await say('The name on your ID ('+esc(P.name)+') differs from the person you selected ('+esc(R.rep.name)+'). A colleague will check this. You can simply continue.',{tag:'Identity check'});setDp('rep_flag','Representative mismatch','ID says '+P.name+', declared '+R.rep.name,'calc','rep');}
+  }
+  let pep;
+  for(;;){
+    pep=await ask('pep','Are you, or is someone close to you, a politically exposed person (PEP)? Think of a minister, member of parliament, judge at a high court or ambassador, and their family or close associates.',chipsW({opts:['No','Yes',"I don't know"]}));
+    if(pep.val==="I don't know"){log('rule','PEP unsure: definition explained and asked again');await say('No worries. It concerns people with an important public function in the last 12 months, their partner, children and parents, and their close business associates. Does that apply to you or someone close to you?',{tag:'Explanation'});continue;}
+    break;
+  }
+  setDp('pep','PEP declaration (representative)',pep.val,'client','pep',{type:'chips',opts:['No','Yes']});
+  if(pep.val==='Yes'){
+    log('rule','PEP yes: role and relation requested');
+    const f=await ask('pep','Who is this and what position does or did that person hold?',textW({ph:'Name and position',demo:'My brother-in-law, member of the Senate'}),{why:false,extra:'pep role'});
+    const l=await ask('pep','What is your relationship to this person?',chipsW({opts:['Myself','Partner or child','Parent or sibling','Close business associate']}),{why:false,extra:'pep relation'});
+    setDp('pep_detail','PEP details',f.val+' ('+l.val+')','client','pep',{type:'text'});
+  }
+  R.repVerified=true;
+  const self=R.parties.find(p=>p.self);if(self)self.status='Verified (you)';
+  log('rep.verified','Representative identity verified');
+  const q=R.parties.filter(p=>p.status==='Queued');
+  if(q.length){
+    q.forEach(releaseInvite);
+    renderSide();renderBack();syncInviteButtons();if(R.refresh)R.refresh();
+    await say('Thank you, you are verified. We have now sent the invitations to '+esc(nj(q.map(p=>p.name)))+'. They can complete their own checks while you finish here.',{tag:'Invitations sent'});
+  }
+}
+async function runActivity(){
+  const R=S.org;const nl=R.route==='nl';const pre=nl?R.co.sbi:R.co.activity;
+  if(pre){
+    const r=await ask('activity','The registry lists your main activity as: “'+esc(pre)+'”. Is that an accurate description?',chipsW({opts:['Yes, that is accurate','I want to add detail']}),{extra:'prefilled'});
+    if(r.val==='Yes, that is accurate'){setDp('o_activity','Business activity',pre,nl?'kvk':'doc','activity',{type:'text'});return;}
+  }
+  const t=await ask('activity','Please describe what your organisation does, in a few sentences.',textW({area:true,ph:'Type your answer…',demo:'We arrange container transport and warehousing for importers in the Port of Rotterdam.'}),{why:false});
+  setDp('o_activity','Business activity',(pre?pre+'. ':'')+t.val,'rep','activity',{type:'text'});
+}
+async function runSow(){
+  const R=S.org;const u=(R.ubos||[])[0];const nm=u?u.name:'the main owner';
+  const t=await ask('sow_ubo','Because of the structure, we also ask about '+esc(nm)+': how did they build their wealth? Think of salary, sale of a company, inheritance or investments.',textW({area:true,ph:'Type your answer…',demo:'Built the company from 2014, plus salary and a property sale in 2021.'}));
+  setDp('o_sow','Source of wealth of '+nm,t.val,'rep','sow_ubo',{type:'text'});
+  if(S.risk==='high'){
+    log('rule','Risk high: evidence of wealth requested');
+    const d=await ask('sow_ubo','As this is a higher-risk case, could you upload a document that supports this, such as a sale agreement or annual accounts?',uploadW({block:'sow_ubo',later:true,sample:'sale-agreement-2021.pdf',check:()=>[{t:'Readable and complete',ok:true},{t:'Name and amount visible',ok:true},{t:'Date visible',ok:true}]}),{why:false,extra:'evidence high'});
+    if(d.extra&&d.extra.later){setDp('o_sow_doc','Evidence of wealth','To be provided later','rep','sow_ubo');S.reqs.push({title:'Evidence of wealth',status:'open',from:'Template rule',block:'sow_ubo',created:new Date().toLocaleDateString('en-GB')});renderSide();renderBack();}
+    else setDp('o_sow_doc','Evidence of wealth',d.val.name,'doc','sow_ubo');
+  }
+}
+async function runDocs(){
+  const part=formKind(S.org.co.form)==='partnership';
+  const label=part?'the partnership agreement (or deed of partnership). It shows the partners, their shares and who may act for the partnership':'your shareholder register. It shows who owns the shares and we use it to check the ownership you described';
+  for(;;){
+    const d=await ask('docs','Last document: please upload '+label+'.',uploadW({block:'docs',sample:part?'partnership-agreement.pdf':'shareholder-register.pdf',check:()=>part?[{t:'Readable and complete',ok:true},{t:'Lists all partners and their shares',ok:true},{t:'Signed by the partners',ok:true},{t:'Shares match what you declared',ok:true}]:[{t:'Readable and complete',ok:true},{t:'Lists all shareholders and their shares',ok:true},{t:'Percentages match what you declared',ok:true}]}),{extra:part?'partnership agreement':'shareholder register'});
+    if(d.extra&&d.extra.ok===false){await say('This document does not pass our check. Please upload a current version.',{tag:'Document checked'});continue;}
+    setDp(part?'o_agreement':'o_register',part?'Partnership agreement':'Shareholder register',d.val.name,'doc','docs');break;
+  }
+}
+
+/* ---------- the template: blocks in order ---------- */
+def({id:'country',sec:'org',label:'Country of registration',type:'chips',kyc:'Jurisdiction (selects the route)',show:'always',follow:'Netherlands: KvK route. Curaçao and other countries: document route. "Other country" asks which country',source:'Declared by client',evid:'-',why:'The way we check your organisation depends on where it is registered.',active:true,run:runCountry});
+def({id:'registry',sec:'org',label:'Find and confirm the organisation',type:'registry lookup / document upload',kyc:'Legal name, registration number, legal form, status, address, activity, registration date',show:'always',follow:'NL: not found or inactive stops or falls back to documents. Document route: AI reads the extract, client confirms or corrects',source:'KvK (NL). Document route: extract read by AI, confirmed by client, checked by analyst',evid:'Document route: extract of the trade register (max 3 months) and articles of association. Required',why:'We check your organisation against the official register or your documents, so you do not have to type its details.',active:true,run:runRegistry});
+def({id:'directors',sec:'own',label:'Directors and representatives',type:'people list',kyc:'Directors, authorised representatives, signing authority',show:'always',follow:'Client unticks wrong suggestions and adds missing people',source:'NL: suggested from a second source (the KvK API returns no directors). Document route: read from the extract. Confirmed by client',evid:'-',why:'We need to know who runs the organisation and who may sign for it.',active:true,run:runDirectors});
+def({id:'authreps',sec:'own',label:'Authorised representatives',type:'people with authority',kyc:'Authorised representatives, scope of authority, evidence of authority',show:'always',follow:'Yes: name, authority (alone, jointly, limited) and a power of attorney per person. Each one gets an own person flow if not already a director or UBO',source:'Declared by client, document-supported',evid:'Power of attorney or other proof of authority. Required',why:'Besides the directors, we need to know who else may act for the organisation.',active:true,run:runAuthReps});
+def({id:'owners',sec:'own',label:'Owners and ownership chain',type:'ownership builder',kyc:'Shareholders or partners, ownership chain, percentages',show:'always',follow:'Company owner: match in KvK, then ask who owns it (repeats up the chain)',source:'Declared by client. Parent company suggested from registry data. KvK does not publish shareholders',evid:'Shareholder register (see docs)',why:'Banks must know who ultimately owns a company.',active:true,run:runOwners});
+def({id:'ubo',sec:'own',label:'Ultimate beneficial owners',type:'calculated',kyc:'UBOs at '+TENANT.uboThreshold+'% or more, control other than ownership',show:'always',follow:'"Someone else also controls it": ask who and how. No owner at threshold: senior managing officials',source:'Calculated by the tool from the chain',evid:'Shareholder register',why:'We calculate who owns '+TENANT.uboThreshold+'% or more, also through other companies, and you confirm the result.',active:true,run:runUbo});
+def({id:'invites',sec:'own',label:'Representative and related parties',type:'chips + related-party tracker',kyc:'Representative (declared), related parties, ID&V status, PEP declaration',show:'always',follow:'Each director and UBO gets an own person flow. Invitations are queued until the representative passed ID&V (tenant setting). Below threshold: recorded only',source:'Calculated by the tool',evid:'-',why:'These people must identify themselves. Inviting them now saves time.',active:true,run:runInvites});
+def({id:'purpose_org',sec:'prof',label:'Purpose of the relationship',type:'multi',kyc:'Purpose of relationship',show:'always',follow:'"Other" opens a short text',source:'Declared by representative',evid:'-',why:'Banks need to know what the account will be used for, so they can spot unusual transactions.',active:true,kind:'multi',key:'o_purpose',label2:'',opts:['Day-to-day business payments','Receiving customer payments','Payroll and supplier payments','Treasury and savings','International trade','Other'],demo:['Day-to-day business payments','Receiving customer payments'],q:()=>'What will your organisation use New Age Bank for?',fu:[{when:v=>v.includes('Other'),rule:'"Other" selected: short text requested',q:()=>'Could you briefly describe what you mean by "other"?',kind:'text',key:'o_purpose_other',label:'Other purpose',demo:'Paying contractors in several countries'}]});
+ORG.purpose_org.label='Purpose of the relationship';
+def({id:'nature_org',sec:'prof',label:'Products and services',type:'multi',kyc:'Products and services',show:'always',follow:'-',source:'Declared by representative',evid:'-',why:'This tells us which products fit your organisation.',active:true,kind:'multi',key:'o_nature',opts:['Business current account','Business savings','Debit cards','Payment terminals','International payments','Credit facility'],demo:['Business current account','Debit cards'],q:()=>'Which products and services would your organisation like to use?'});
+def({id:'activity',sec:'prof',label:'Business activity',type:'prefill and confirm',kyc:'Activities (SBI, or activity read from the extract)',show:'always',follow:'Client confirms the registry value or adds detail',source:'KvK SBI or extract, confirmed by client',evid:'-',why:'We prefill your registered activity. Add detail if it is incomplete.',active:true,run:runActivity});
+def({id:'countries_org',sec:'prof',label:'Countries of activity and payments',type:'multi',kyc:'Countries of operation and payments',show:'always',follow:'Outside the EU, UK or US: AI follow-up on countries and purpose',source:'Declared by representative',evid:'-',why:'This helps us monitor international payments properly without blocking them unnecessarily.',active:true,kind:'multi',key:'o_countries',opts:['Netherlands','Other EU countries','United Kingdom','United States','Caribbean','Asia','Africa','Other'],demo:['Netherlands','Asia'],q:()=>'In which countries does your organisation operate, or send and receive payments?',fu:[{when:v=>v.some(x=>['Caribbean','Asia','Africa','Other'].includes(x)),ai:true,q:v=>'You mention payments outside Europe and the US. Which countries, and what are the payments for?',key:'o_countries_detail',label:'Explanation of countries and payments',demo:'Suppliers in Turkey and Suriname, about 8 payments per month.'}]});
+def({id:'volume',sec:'prof',label:'Expected monthly volume',type:'chips',kyc:'Expected transaction volume',show:'always',follow:'Over € 1 million: AI follow-up on what drives it',source:'Declared by representative',evid:'-',why:'We ask for a range, not an exact amount.',active:true,kind:'chips',key:'o_volume',opts:['Under € 50,000','€ 50,000 to € 250,000','€ 250,000 to € 1 million','Over € 1 million'],q:()=>'What payment volume do you expect per month, in and out together?',fu:[{when:v=>v==='Over € 1 million',ai:true,q:()=>'You expect more than € 1 million per month. What drives this volume?',key:'o_volume_detail',label:'Explanation of volume',demo:'Seasonal container shipments for three large customers.'}]});
+def({id:'sof_org',sec:'prof',label:'Source of funds',type:'multi',kyc:'Source of funds of the organisation',show:'always',follow:'Shareholder funding: request agreement. "Other": AI follow-up',source:'Declared by representative, document-supported',evid:'Loan or capital contribution agreement',why:'We need to know where the money in the account comes from.',active:true,kind:'multi',key:'o_sof',opts:['Revenue from customers','Shareholder funding','Bank loan','Sale of assets','Investor funding','Other'],demo:['Revenue from customers','Shareholder funding'],q:()=>'Where does the money in the account come from?',fu:[{when:v=>v.includes('Shareholder funding'),rule:'Shareholder funding: supporting document requested',q:()=>'You mention shareholder funding. Do you have a loan or capital contribution agreement?',kind:'file',key:'o_sof_doc',label:'Evidence of shareholder funding',sample:'shareholder-loan-agreement.pdf'},{when:v=>v.includes('Other'),ai:true,q:()=>'You chose "other". Which source, and over which period and amount?',key:'o_sof_other',label:'Explanation of source (other)',demo:'Proceeds from a one-off sale of a warehouse in 2025.'}]});
+def({id:'sow_ubo',sec:'prof',label:'Source of wealth of the UBO',type:'area',kyc:'Source of wealth (UBO)',show:'risk medium or high',showTxt:'risk class low',showIf:()=>S.risk!=='low',follow:'High risk: evidence of wealth requested',source:'Declared by representative',evid:'High risk: sale agreement, accounts or similar',why:'For larger or more complex organisations we also ask how the owner built their wealth.',active:true,run:runSow});
+def({id:'decl_regulated',sec:'prof',label:'Regulated or listed',type:'chips',kyc:'Regulated or listed status',show:'tenant switch (off in this demo)',follow:'Yes: regulator and licence number',source:'Declared by representative',evid:'-',why:'Regulated or listed organisations carry a different risk profile.',active:false,kind:'chips',key:'o_regulated',opts:['No','Yes'],q:()=>'Is your organisation regulated, or listed on a stock exchange?',fu:[{when:v=>v==='Yes',rule:'Regulated or listed: details requested',q:()=>'Which regulator or exchange, and what is the licence number or ticker?',kind:'text',key:'o_regulated_detail',label:'Regulator or exchange',demo:'AFM, licence 12345'}]});
+def({id:'decl_nominee',sec:'prof',label:'Nominee, bearer shares or trust',type:'chips',kyc:'Opaque structure declaration',show:'tenant switch (off in this demo)',follow:'Yes: describe the arrangement',source:'Declared by representative',evid:'-',why:'These arrangements hide who owns a company, so banks must ask.',active:false,kind:'chips',key:'o_nominee',opts:['No','Yes'],q:()=>'Do any of the shares belong to nominee shareholders, bearer shares or a trust?',fu:[{when:v=>v==='Yes',rule:'Opaque structure declared: description requested',q:()=>'Please describe the arrangement and who stands behind it.',kind:'area',key:'o_nominee_detail',label:'Description of arrangement',demo:'A family trust holds 10% for the children of the owner.'}]});
+def({id:'docs',sec:'prof',label:'Ownership document',type:'file',kyc:'Shareholder register (companies) or partnership agreement (partnerships)',show:'not for sole proprietorships',showTxt:'sole proprietorship',showIf:()=>!(S.org&&S.org.co)||formKind(S.org.co.form)!=='sole',follow:'Required before submitting. Check fails: new upload requested',source:'Document AI check',evid:'Shareholder register or partnership agreement. Required',why:'It confirms the ownership you described.',active:true,run:runDocs});
+def({id:'rep',sec:'id',label:'Representative: role, ID check and PEP',type:'identity (Didit) + declaration',kyc:'Representative identity, PEP status',show:'always, placed last',follow:'Name on ID differs from declared representative: flagged. PEP unsure: explained and asked again. Passing the check releases queued invitations',source:'Didit ID check, declared by representative',evid:'-',why:'We need to know who submits this application, so we verify your identity before we process it.',active:true,run:runRep});
+const ORG_TEMPLATE=['country','registry','directors','authreps','owners','ubo','invites','purpose_org','nature_org','activity','countries_org','volume','sof_org','sow_ubo','decl_regulated','decl_nominee','docs','rep'];
+
+/* ---------- review groups for the org flow ---------- */
+function orgGroups(){
+  const chain=S.order.filter(k=>k.indexOf('chain_')===0);
+  return [['Organisation',['country','legal_name','reg_no','rsin','legal_form','co_status','co_address','reg_date','trade_name','sbi','co_activity']],
+    ['People and ownership',['directors','authreps'].concat(S.order.filter(k=>k.indexOf('auth_doc_')===0),['owners'],chain,['ubos','control','invites'])],
+    ['Business profile',['o_activity','o_purpose','o_purpose_other','o_nature','o_countries','o_countries_detail','o_volume','o_volume_detail','o_sof','o_sof_doc','o_sof_other','o_sow','o_sow_doc','o_regulated','o_regulated_detail','o_nominee','o_nominee_detail']],
+    ['Documents',['doc_extract','doc_articles','o_register','o_agreement']],
+    ['You, as representative',['rep_role','full_name','dob','nat','doc','id_dispute','rep_flag','pep','pep_detail']]];
+}
+
+/* ---------- related parties: open their own person flow, then come back ---------- */
+let STASH=null;
+function setHello(h,p){$('#hello-h').textContent=h;$('#hello-p').textContent=p;}
+function helloFor(kind){
+  if(kind==='org')setHello('Hi '+P.first+',','To open an account for your organisation we verify the organisation, the people who run it and its owners. This is a standard requirement for all banks and protects you and us against fraud and financial crime.');
+  else if(kind==='rp')setHello('Hi '+P.first+',',P.company+' has asked you to complete your own details. This is a standard requirement for all banks and protects you and us against fraud and financial crime.');
+  else setHello('Hi '+P.first+',','To open your account we verify a few details. This is a standard requirement for all banks and protects you and us against fraud and financial crime.');
+}
+function syncInviteButtons(){
+  const box=$('#d-invites');if(!box)return;box.innerHTML='';
+  if(STASH||S.kind!=='org'||!S.org)return;
+  S.org.parties.filter(p=>p.status==='Invited').forEach(p=>{const b=el('button','btn','Open invitation as '+p.name.split(' ')[0]);b.type='button';b.addEventListener('click',()=>{launchRP(p).catch(e=>console.error(e));});box.append(b);});
+}
+async function launchRP(party){
+  if(STASH||S.kind!=='org'||!S.org)return;
+  const orgS=S,orgP=P;
+  STASH={pending:true};
+  for(let i=0;i<150&&!((orgS.wait>0||orgS.finished)&&!thread.querySelector('.wait'));i++)await new Promise(r=>setTimeout(r,100));
+  const frag=document.createDocumentFragment();while(thread.firstChild)frag.append(thread.firstChild);
+  STASH={S:orgS,P:orgP,frag:frag,comp:$('#comp').hidden,an:$('#d-analyst').disabled};
+  const key=pk(party.name);
+  const base=key?PERSONS[key]:{name:party.name,first:party.name.split(' ')[0],email:party.email,email2:party.email,dob:'5 May 1982',nat:'Dutch',doc:'Passport NLD, valid until 8 June 2030'};
+  P=Object.assign({},base,{mode:'rp',company:orgS.org.co.name,role:party.roles.replace(/ · /g,' and ')});
+  P.onDone=()=>{party.status='Completed';const rq=orgS.reqs.find(r=>r.party===party.name);if(rq)rq.status='answered';orgS.log.push({t:stamp(),ev:'invitation.completed',msg:party.name+' completed own ID check and PEP declaration in their own flow'});};
+  S=fresh('rp');$('#comp').hidden=true;$('#d-analyst').disabled=true;$('#d-invites').innerHTML='';
+  helloFor('rp');renderSide();renderBack();window.scrollTo(0,0);
+  flow().catch(e=>console.error(e));
+}
+function restoreOrg(){
+  if(!STASH||STASH.pending)return;
+  const st=STASH;STASH=null;
+  thread.innerHTML='';thread.append(st.frag);S=st.S;P=st.P;
+  $('#comp').hidden=st.comp;$('#d-analyst').disabled=st.an;
+  helloFor('org');renderSide();renderBack();
+  if(S.org&&S.org.refresh)S.org.refresh();
+  sys('Back in the organisation\'s view. The invitation status is updated.');
+  syncInviteButtons();
+}
+
+/* ---------- the org conversation ---------- */
+async function flowOrg(){
+  S.org=newOrg();
+  const active=ORG_TEMPLATE.map(i=>ORG[i]).filter(b=>b.active&&(!b.showIf||b.showIf()));
+  S.total=4+active.length;S.counted={};active.forEach(b=>{S.counted[b.id]=1;});
+  section('org');
+  await say('Hi '+P.first+', welcome to New Age Bank.');
+  await say('We are opening an account for your organisation. This takes about 12 minutes and your answers are saved automatically. We start with the organisation. At the end we ask for your own identity, and you can invite colleagues and owners to complete their own part while you carry on.');
+  await mount((w,d)=>{w.append(el('div','chips','<button class="chip" type="button">Let\'s begin</button>'));$('.chip',w).addEventListener('click',()=>d(1));});
+  me('Let\'s begin');
+  for(const id of ORG_TEMPLATE){await runBlock(ORG[id]);}
+  /* review */
+  section('decl');
+  act('review');log('block.asked','review');
+  await say('Almost done. Here is everything once more. Change anything that is not right before you declare it.',{why:B.review.why,block:'review'});
+  await mount((w,d)=>{renderReview(w,d);});
+  me('Everything is correct');done('review');
+  const nm=S.org.co.name;
+  await ask('sign','Last step: the terms and your declaration. You sign on behalf of '+esc(nm)+', so please read it carefully.',signW({decl:'I declare that the information above is true and complete, and that I am authorised to submit it on behalf of '+esc(nm)+'.'}));
+  done('sign');
+  S.secDone.decl=true;S.submitted=true;renderSide();
+  const hash='sha256:'+Math.random().toString(16).slice(2,10)+'…';
+  log('case.submitted','Representative declaration signed; answers frozen as version 1 ('+hash+')');
+  setDp('declaration','Declaration and signature','Signed '+new Date().toLocaleDateString('en-GB'),'client','sign');
+  const pend=S.org.parties.filter(p=>p.status==='Invited');
+  await say('Thank you, '+P.first+'. The application for '+esc(nm)+' has been submitted.');
+  thread.append(el('div','status','<b>Received</b><span>Reference NAB-2026-ORG-0412</span><span>'+(pend.length?'We are still waiting for '+esc(nj(pend.map(p=>p.name)))+' to complete their own checks. ':'')+'We will review the file and usually let you know within 2 working days how to proceed. If we need anything else, we will ask here, in this conversation, and by email.</span>'));
+  scroll();
+  S.finished=true;$('#comp').hidden=false;$('#d-analyst').disabled=false;syncInviteButtons();
+}
+
+/* ---------- second round: analyst asks a follow-up in the same thread ---------- */
+async function analystAsk(){
+  if(!S.submitted)return;
+  $('#d-analyst').disabled=true;
+  const isOrg=S.kind==='org';
+  const self=S.dp.employment&&S.dp.employment.val==='Self-employed';
+  const what=isOrg?'the latest annual accounts of '+S.org.co.name:self?'your latest annual accounts or a recent Chamber of Commerce extract of your business':'your latest payslip or a recent bank statement showing your salary';
+  const req={title:isOrg?'Latest annual accounts':'Evidence of income',status:'open',from:'Sanne de Vries (Compliance analyst)',block:isOrg?'sof_org':'income',created:new Date().toLocaleDateString('en-GB')};
+  S.reqs.push(req);renderSide();renderBack();
+  log('request.created','Analyst Sanne de Vries asked for '+(isOrg?'the annual accounts':'income evidence')+' (second round, same thread)');
+  sys('New message from a colleague');
+  await say('Thank you for your application. One question: could you upload '+what+'? '+(isOrg?'That lets us check the expected volumes properly.':'That lets us record your income properly.')+'',{analyst:true,tag:'Sanne de Vries, Compliance analyst'});
+  const r=await mount(uploadW({block:'request: income',later:true,sample:(isOrg||self)?'annual-accounts-2025.pdf':'payslip-aug.pdf',check:()=>[{t:'Readable and complete',ok:true},{t:'Name matches your ID',ok:true},{t:'Income is visible',ok:true}]}));
+  me(r.display);
+  if(r.extra&&r.extra.later){log('request.deferred','Client will deliver later; request stays open');await say('Fine. You can upload it here as soon as you have it. The request stays open.',{analyst:true,tag:'Sanne de Vries'});$('#d-analyst').disabled=false;return;}
+  req.status='answered';renderSide();renderBack();
+  log('request.answered','Evidence received: '+r.val.name);
+  await say('Thank you, received. I will take a look and let you know if I need anything else.',{analyst:true,tag:'Sanne de Vries, Compliance analyst'});
+}
+
+/* ---------- back-of-house view ---------- */
+function renderBack(){
+  if($('#v-back').hidden)return;
+  const ROW=(a)=>'<tr>'+a.map(x=>'<td>'+x+'</td>').join('')+'</tr>';
+  const org=S.kind==='org';
+  $('#h-tpl').textContent=org?'Template: Onboarding ORG (KYB)':(S.kind==='rp'?'Template: Related party (person)':'Template: Onboarding NP');
+  const meta=org?[
+    ['Client type','ORG (organisation), related parties are NP or ORG'],['Case types','Onboarding'],['Channel','Email invitation to the representative, link opens the portal'],
+    ['Route selection','Country of registration decides the route. Netherlands: KvK for the basic profile, plus a second source for a management proposal (the KvK API returns no directors). Curaçao and other countries: no register link, so the client supplies documents (extract, articles, ownership document). AI reads the extract, the client confirms, an analyst checks the original'],
+    ['UBO threshold','<b>'+TENANT.uboThreshold+'%</b> (tenant setting). Owners to list from '+TENANT.ownerListThreshold+'%'],
+    ['Order','Organisation first (register lookup, stop rules), then people and ownership, business profile, and last the representative\'s own ID check and PEP declaration'],
+    ['Related parties','Each director and UBO gets an invitation to the person flow. Invitations are '+(TENANT.releaseInvitesAfterIdv?'<b>queued until the representative has passed the ID check</b> (tenant setting)':'sent immediately')+'. Status is tracked in the thread and here'],
+    ['Presentation','Conversation generated from the blocks below. Order, conditions and follow-ups come from the template'],['Languages','NL, EN (every block carries a translation)'],['Version','Block and template versions are frozen when the request is sent']
+  ]:[
+    ['Client type',S.kind==='rp'?'NP (related party of an organisation)':'NP (natural person)'],['Case types','Onboarding'],['Channel','Email invitation, link opens the portal'],['Default deadline','14 days from send date'],
+    ['Presentation','Guided conversation (one question or small group per step), thread stays open for follow-up'],['Languages','NL, EN (every block carries a translation)'],['Version','Block and template versions are frozen when the request is sent']
+  ];
+  $('#t-meta').innerHTML='<tr><th>Setting</th><th>Value</th></tr>'+meta.map(x=>ROW([x[0],x[1]])).join('');
+  const stateOf=b=>{
+    if(org&&!b.active)return '<span class="pill">off</span>';
+    if(S.blocks[b.id]==='skipped')return '<span class="pill">skipped</span>';
+    if(S.current===b.id)return '<span class="pill">now</span>';
+    return S.blocks[b.id]==='answered'?'<span class="pill ok">answered</span>':'<span class="pill warn">not yet</span>';};
+  const list=org?ORG_TEMPLATE.map(i=>ORG[i]):BLOCKS;
+  $('#t-blocks').innerHTML='<tr>'+(org?'<th>Active</th>':'')+'<th>Block</th><th>Type</th><th>KYC mapping</th><th>Show if</th><th>Follow-ups</th><th>Prefill / source</th><th>Evidence</th><th>State</th></tr>'+list.map(b=>{
+    const cells=[(org?'<input type="checkbox" data-blk="'+b.id+'" aria-label="Active: '+esc(b.label)+'" '+(b.active?'checked':'')+'>':null),'<b>'+esc(b.label)+'</b><div class="mono">'+b.id+'</div>','<code>'+esc(b.type)+'</code>',esc(b.kyc),esc(b.show),esc(b.follow),esc(b.source),esc(b.evid),stateOf(b)].filter(x=>x!==null);
+    return '<tr class="'+(S.current===b.id?'curr':'')+'">'+cells.map(x=>'<td>'+x+'</td>').join('')+'</tr>';}).join('');
+  $('#blk-note').hidden=!org;
+  if(org)$('#t-blocks').querySelectorAll('input[data-blk]').forEach(i=>i.addEventListener('change',e=>{const b=ORG[e.target.dataset.blk];b.active=e.target.checked;log('config.changed','Block "'+b.id+'" set to '+(b.active?'active':'inactive')+' in the template (applies to new requests; use Start over to see it)');$('#blk-note').textContent='Saved. The change applies to the next request. Use "Start over" in the demo controls to see the conversation change.';}));
+  $('#c-org').hidden=!(org&&S.org&&S.org.co);
+  if(org&&S.org&&S.org.co){
+    $('#org-chart').innerHTML=chartSVG();
+    $('#t-parties').innerHTML='<tr><th>Party</th><th>Role</th><th>Needs</th><th>Status</th></tr>'+(S.org.parties.length?S.org.parties.map(p=>ROW([esc(p.name),esc(p.roles),esc(p.need),'<span class="pill '+(p.status==='Completed'||p.status==='Verified (you)'?'ok':(p.status==='Invited'||p.status==='Queued'?'warn':''))+'">'+esc(p.status)+'</span>'])).join(''):'<tr><td colspan="4">Not determined yet. Parties are derived from directors and UBOs.</td></tr>');
+  }
+  $('#t-dp').innerHTML='<tr><th>Datapoint</th><th>Value</th><th>Source</th><th>Block</th></tr>'+(S.order.length?S.order.map(k=>{const d=S.dp[k];return ROW([esc(d.label),esc(d.val),'<span class="pill '+(d.src==='ai'?'ai':(d.src==='idv'||d.src==='doc'||d.src==='kvk'||d.src==='didit'?'ok':''))+'">'+SRC[d.src]+'</span>','<span class="mono">'+d.block+'</span>']);}).join(''):'<tr><td colspan="4">Nothing collected yet.</td></tr>');
+  const rk=S.risk;
+  const rules=['<div><b>Risk class: '+rk+'.</b> '+(rk==='low'?'AI follow-up questions are sent automatically inside the template guardrails. No analyst in the loop.':'AI follow-up questions wait for analyst approval before the client sees them.')+'</div>',
+    '<div><b>Required set is fixed.</b> The template decides which data is required. The conversation only decides order, explanation and follow-ups. AI cannot drop a block, set a risk class or mark an answer as accepted.</div>'];
+  if(org){
+    rules.push('<div><b>Blocks are data.</b> Every question in this conversation is generated from a block definition: question, options, follow-up rules, KYC mapping, evidence. Switching a block off in the table above removes its question.</div>',
+      '<div><b>Route by country.</b> '+(S.org&&S.org.route?'This case: '+esc(S.org.country)+', '+(S.org.route==='nl'?'KvK adapter':'document route')+'. ':'')+'All routes end in the same continuation: people, owners, UBO, profile, declaration.</div>',
+      '<div><b>Source per fact.</b> Registry values are labelled with their source. Directors and parent company are a proposal (second source or read from the extract) that the client confirms. Shareholders or partners and UBOs are declared by the client and checked against the shareholder register or partnership agreement.</div>',
+      '<div><b>UBO is calculated, not asked.</b> The tool multiplies shares along the chain and applies the '+TENANT.uboThreshold+'% threshold. The client confirms the result and can declare control other than ownership.</div>',
+      '<div><b>Documents are required.</b> The entity documents (extract, articles, shareholder register or partnership agreement) and proof of authority must be uploaded before the client can submit. AI checks each document.</div>',
+      '<div><b>Related parties.</b> Each director and UBO completes their own person flow. Their answers are stored on their own record, linked to this organisation.</div>');
+  }else{
+    rules.push('<div><b>Ask once.</b> Values from ID&amp;V are confirmed by the client, not typed again.</div>','<div><b>Stricter evidence at high risk.</b> '+(rk==='high'?'Active: a payslip is requested when source of funds includes salary.':'Not active at this risk class.')+'</div>');
+  }
+  rules.push('<div><b>Every AI message is labelled</b> for the client and logged with the data point it clarifies.</div>');
+  $('#rules').innerHTML=rules.join('');
+  $('#log').innerHTML=S.log.slice().reverse().map(l=>'<div><span class="t">'+l.t+'</span><span class="e">'+esc(l.ev)+'</span><span>'+esc(l.msg)+'</span></div>').join('')||'<div><span></span><span></span><span>No events yet.</span></div>';
+  $('#t-req').innerHTML='<tr><th>Request</th><th>From</th><th>Status</th><th>Created</th></tr>'+(S.reqs.length?S.reqs.map(r=>ROW([esc(r.title),esc(r.from),'<span class="pill '+(r.status==='open'?'warn':'ok')+'">'+r.status+'</span>',esc(r.created||'on submit')])).join(''):'<tr><td colspan="4">No open requests. After submission the analyst can ask follow-ups here (use the Demo button).</td></tr>');
+}
+
+/* ---------- wiring ---------- */
+function tab(which){
+  const c=which==='client';$('#v-client').hidden=!c;$('#v-back').hidden=c;
+  $('#tab-client').setAttribute('aria-selected',String(c));$('#tab-back').setAttribute('aria-selected',String(!c));
+  if(!c)renderBack();
+}
+$('#tab-client').addEventListener('click',()=>tab('client'));
+$('#tab-back').addEventListener('click',()=>tab('back'));
+$('#d-risk').addEventListener('change',e=>{S.risk=e.target.value;log('config.changed','Risk class set to '+S.risk+' (demo)');});
+$('#d-doc').addEventListener('change',e=>{S.doc=e.target.value;});
+$('#d-analyst').addEventListener('click',()=>{analystAsk().catch(e=>console.error(e));});
+$('#comp').addEventListener('submit',async e=>{
+  e.preventDefault();const i=$('#comp-in');const v=i.value.trim();if(!v)return;i.value='';
+  me(esc(v));log('client.message',v.slice(0,80));
+  await say('Thank you for your message. A colleague reads along and will respond in this conversation. Everything is saved in your file.',{tag:'Automatic reply',fast:true});
+});
+function startKind(){
+  const org=$('#d-kind').value==='org';
+  P=Object.assign({mode:org?'org':'full',company:null,role:null},org?PERSONS.emma:PERSONS.john);
+  S=fresh(org?'org':'np');helloFor(org?'org':'np');
+  (org?flowOrg():flow()).catch(e=>console.error(e));
+}
+function reset(){
+  RUN++;STASH=null;thread.innerHTML='';$('#comp').hidden=true;$('#d-analyst').disabled=true;$('#d-invites').innerHTML='';
+  const org=$('#d-kind').value==='org';
+  P=Object.assign({mode:org?'org':'full',company:null,role:null},org?PERSONS.emma:PERSONS.john);
+  S=fresh(org?'org':'np');S.org=org?newOrg():null;helloFor(org?'org':'np');renderSide();renderBack();
+  (org?flowOrg():flow()).catch(e=>console.error(e));
+}
+$('#d-kind').addEventListener('change',reset);
+$('#d-reset').addEventListener('click',reset);
+if(window.innerWidth>860)$('#demo').open=true;
+window.__nab={state:()=>S,restoreOrg:()=>restoreOrg()};
+renderSide();renderBack();
+flow().catch(e=>console.error(e));
+})();
+
+</script>
+</body>
+</html>

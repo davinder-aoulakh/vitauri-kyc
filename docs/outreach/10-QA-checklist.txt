@@ -1,0 +1,58 @@
+QA CHECKLIST (manual, for the Kanban card). Full Given/When/Then tests are in section 14 of the spec. Tick when it works in the built app, not in the prototype.
+
+GENERAL
+[ ] Link opens the conversation without login; expired link shows the expired page
+[ ] Close after a few answers, reopen: thread and progress are back, next question is correct
+[ ] Progress bar, minutes left, section list update; saved indicator updates
+[ ] "Why do we ask this?" opens and closes
+[ ] Works on iPhone Safari, Android Chrome, desktop Chrome and Safari; dark mode readable
+[ ] No horizontal scroll at 360 px width
+
+TEMPLATES
+[ ] Change a question text in Outreach Templates: new request shows it, old request keeps the old one
+[ ] Switch a block off in the Form Template: it is skipped, logged, progress total is lower
+[ ] Condition editor saves and the rule fires as expected
+
+NP
+[ ] ID&V: QR on a wide screen, button on a phone; after the phone finishes the chat continues
+[ ] Name, date of birth, nationality prefilled from ID and only confirmed
+[ ] Address lookup; proof of address check fails and re-requests; passes on the second upload
+[ ] Email prefilled from invitation; other email validated
+[ ] Self-employed asks company name
+[ ] Inheritance or property sale asks a deed; "later" creates an open request
+[ ] High risk and salary asks a payslip without "later"
+[ ] AI follow-up: Low sends at once; Medium and High wait for an analyst, then send with the approver's name
+[ ] PEP "I don't know" explains and asks again; PEP "Yes" asks who and relation
+[ ] Review: change an answer; source label changes; history kept
+[ ] Signature: typed name must equal the ID name; canvas works with a finger
+[ ] Submission: status card, reference, composer appears
+[ ] Second round: analyst asks, client uploads, analyst sees it
+
+ORG
+[ ] Country question routes: Netherlands to KvK, Curaçao and Other country to documents ("Other" asks which country)
+[ ] KvK search while typing; select; facts shown with KvK source; Basisprofiel called once
+[ ] Inactive organisation stops with the message; "I cannot find my organisation" falls back to documents
+[ ] Document route: extract (3 months), AI read shown, correction form works, articles required
+[ ] Directors proposal (KvK route) and from the extract (document route); at least one person
+[ ] Authorised representative: authority and power of attorney required, no "later"
+[ ] Owners builder: percent total, above 100% blocked, company owner asks who owns it (nested), KvK match for company owners
+[ ] UBO calculation matches the test vectors in 05-demo-fixtures.json; chart shows UBO highlight; control question works
+[ ] Partnership: "partners" wording and partnership agreement; sole proprietorship skips the ownership document
+[ ] Representative question "which of these people are you?"; mismatch with ID is flagged
+[ ] Invitations are Queued until the representative passed ID&V (setting on), then sent; setting off sends at once
+[ ] Related party flow works from its own link and updates the tracker, OpenRequest and party status
+[ ] Source and risk-based blocks: source of wealth only at Medium and High; evidence at High
+[ ] Review groups complete; signature text names the organisation; submission lists pending parties
+[ ] All required documents block submission when missing
+
+BACKSTAGE AND AUDIT
+[ ] Blocks table with Active checkbox (ORG) and state per block
+[ ] Datapoints show source pills; AI and document values are distinguishable
+[ ] Audit trail contains every event type in section 12 of the spec
+[ ] Chart and parties table visible for ORG
+[ ] AdapterCall rows with costs exist for KvK, second source, Didit and document AI
+
+SECURITY
+[ ] Token cannot open another request; rate limit on token attempts
+[ ] Uploads are private; links expire; virus scan result stored
+[ ] Webhook signature verified and idempotent

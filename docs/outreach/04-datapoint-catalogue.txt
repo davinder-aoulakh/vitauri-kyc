@@ -1,0 +1,75 @@
+DATAPOINT CATALOGUE
+key | label | source codes seen in the scenarios | block
+Source codes: idv = Didit ID check; client = Declared by client; ai = Declared by client, AI follow-up; doc = From document; pre = Prefilled from invitation; kvk = KvK trade register; prop = Suggested from registry data, confirmed by client; calc = Calculated by the tool; rep = Declared by the representative
+{slug} = lowercase name with non-letters replaced by "-", for example auth_doc_anna-visser.
+Allowed sources per datapoint are in the block library (02-block-library.json, field default_source; "kvk|doc" means kvk on the KvK route and doc on the document route).
+
+full_name | Full name | idv | idv
+dob | Date of birth | idv | idv
+nat | Nationality | idv | idv
+doc | Identity document | idv | idv
+address | Residential address | client | address
+address_proof | Proof of address | doc | address_proof
+email | Email address | pre | email
+phone | Phone number | client | phone
+purpose | Purpose of the relationship | client | purpose
+nature | Products and services | client | nature
+employment | Work situation | client | employment
+company | Company name | client | employment
+income | Annual income | client | income
+sof | Source of funds | client | sof
+sof_doc | Evidence of source of funds | doc | sof
+activities | Expected activities | client | activities
+countries | Countries outside the EU | client | activities
+cash_reason | Explanation of cash deposits | ai | activities
+pep | PEP declaration | client | pep
+declaration | Declaration and signature | client | sign
+payslip | Payslip | doc | sof
+country | Country of registration | rep | country
+legal_name | Legal name | doc, kvk | registry
+reg_no | KvK number | doc, kvk | registry
+rsin | RSIN | kvk | registry
+legal_form | Legal form | doc, kvk | registry
+co_status | Status | doc, kvk | registry
+co_address | Registered address | doc, kvk | registry
+sbi | Registered activity | kvk | registry
+reg_date | Registered since | doc, kvk | registry
+trade_name | Trade name | kvk | registry
+directors | Directors and representatives | doc, prop | directors
+auth_doc_{slug} | Authority of Anna Visser | doc | authreps
+authreps | Authorised representatives | rep | authreps
+owners | Owners | rep | owners
+chain_{slug} | Owners of Harbour Logistics Holding B.V. | rep | owners
+ubos | Ultimate beneficial owners | calc | ubo
+rep_role | Representative (declared) | rep | invites
+invites | People to invite for own checks | calc | invites
+o_purpose | Purpose of the relationship | rep | purpose_org
+o_nature | Products and services | rep | nature_org
+o_activity | Business activity | doc, kvk | activity
+o_countries | Countries of activity and payments | rep | countries_org
+o_countries_detail | Explanation of countries and payments | ai | countries_org
+o_volume | Expected monthly volume | rep | volume
+o_volume_detail | Explanation of volume | ai | volume
+o_sof | Source of funds | rep | sof_org
+o_sof_doc | Evidence of shareholder funding | doc | sof_org
+o_register | Shareholder register | doc | docs
+doc_extract | Document: extract of the trade register | doc | registry
+co_activity | Registered activity | doc | registry
+doc_articles | Document: articles of association | doc | registry
+o_sow | Source of wealth of Emma Clarke | rep | sow_ubo
+o_sow_doc | Evidence of wealth | doc | sow_ubo
+o_agreement | Partnership agreement | doc | docs
+
+Defined in the block library but not triggered in the six scenario runs
+id_dispute | Remark on ID data | client | name_confirm
+sof_other | Explanation of source (other) | ai | sof
+crypto_reason | Explanation of crypto use | ai | activities
+pep_detail | PEP details | client | pep
+control | Control other than ownership | rep | ubo
+o_purpose_other | Other purpose | rep | purpose_org
+o_sof_other | Explanation of source (other) | ai | sof_org
+o_regulated | Regulated or listed | rep | decl_regulated
+o_regulated_detail | Regulator or exchange | rep | decl_regulated
+o_nominee | Nominee, bearer shares or trust | rep | decl_nominee
+o_nominee_detail | Description of arrangement | rep | decl_nominee
+rep_flag | Representative mismatch | calc | rep

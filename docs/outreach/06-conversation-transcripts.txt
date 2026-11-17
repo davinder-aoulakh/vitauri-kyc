@@ -1,0 +1,785 @@
+CONVERSATION TRANSCRIPTS (generated from the prototype by running each scenario)
+Purpose: exact wording reference. "BANK" is a message from the platform, "CLIENT" is what the client answered, "ANALYST" is a staff message, "SYSTEM" is a small line in the thread, "STATUS CARD" is the received card. A tag above a message is shown in brackets. All persons and companies are fictional.
+The demo answers are fixed (the prototype has Demo buttons that fill them). Real clients will answer differently; the questions and rules are what matters. Client lines show the readable summary of a widget answer.
+
+====================================================================================================
+SCENARIO A: Natural person, Low risk, first document upload passes
+====================================================================================================
+BANK       Hi John, welcome to New Age Bank.
+BANK       This takes about 6 minutes. Please respond by 20 November 2026. Your answers are saved automatically, so you can stop at any time and continue later with the same link.
+CLIENT     Let's begin
+BANK       First, your identity. After that you do not have to type your name, date of birth or nationality.
+CLIENT     I verified my identity on my phone
+BANK       This is what we read from your identity document. Is it correct?
+CLIENT     Yes, this is correct
+BANK       Where do you live?
+CLIENT     Upper Street 263, N1 9GU London, United Kingdom
+BANK       Do you have a recent proof of this address, for example a utility bill or bank statement? Maximum 3 months old.
+CLIENT     utility-bill-sept.pdf
+BANK       We used john.carter@example.com for your invitation. Is that email address still correct?
+CLIENT     Yes, that is correct
+BANK       What is your phone number?
+CLIENT     +44 7700 900123
+BANK       Why would you like to become a customer of New Age Bank? Choose what applies.
+CLIENT     Everyday payments, Receiving salary
+BANK       Which products and services would you like to use?
+CLIENT     Current account, Debit card
+BANK       What is your work situation?
+CLIENT     Self-employed
+BANK       What is the name of your company?
+CLIENT     Carter Consulting
+BANK       Roughly what is your gross annual income?
+CLIENT     € 50,000 to € 100,000
+BANK       Where does the money come from that you will put into your account?
+CLIENT     Salary, Inheritance or gift
+BANK       Do you have a document that supports this, such as a notarial deed or certificate of inheritance?
+CLIENT     certificate-of-inheritance.pdf
+BANK       Do you expect to use New Age Bank for any of these activities? Choose everything that applies.
+CLIENT     Cash deposits, Payments outside the EU
+BANK       To or from which countries outside the EU do you expect payments?
+CLIENT     India, Turkey
+BANK       [Follow-up questionAI-assisted] You expect to deposit cash. Roughly what amount per month, and why in cash?
+CLIENT     About € 800 per month, because part of my income is paid in cash by tenants.
+BANK       Are you, or is someone close to you, a politically exposed person (PEP)? Think of a minister, member of parliament, judge at a high court or ambassador, and their family or close associates.
+CLIENT     I don't know
+BANK       [Explanation] No worries. It concerns people with an important public function in the last 12 months, their partner, children and parents, and their close business associates. Does that apply to you or someone close to you?
+BANK       Are you, or is someone close to you, a politically exposed person (PEP)? Think of a minister, member of parliament, judge at a high court or ambassador, and their family or close associates.
+CLIENT     No
+BANK       Almost done. Here is everything once more. Change anything that is not right before you declare it.
+CLIENT     Everything is correct
+BANK       Last step: the terms and your declaration.
+CLIENT     I confirm my declaration and signature.
+BANK       Thank you, John. Your application has been submitted.
+STATUS CARDReceivedReference NAB-2026-004217We will review your details and usually let you know within 1 working day how to proceed. If we need anything else, we will ask here, in this conversation, and by email.
+SYSTEM     New message from a colleague
+ANALYST    [Sanne de Vries, Compliance analyst] Thank you for your application. One question: could you upload your latest payslip or a recent bank statement showing your salary? That lets us record your income properly.
+CLIENT     payslip-aug.pdf
+ANALYST    [Sanne de Vries, Compliance analyst] Thank you, received. I will take a look and let you know if I need anything else.
+
+DATAPOINTS COLLECTED (key | label | value | source | block)
+  full_name | Full name | John Carter | idv | idv
+  dob | Date of birth | 14 March 1987 | idv | idv
+  nat | Nationality | British | idv | idv
+  doc | Identity document | Passport GBR, valid until 2 September 2031 | idv | idv
+  address | Residential address | Upper Street 263, N1 9GU London, United Kingdom | client | address
+  address_proof | Proof of address | utility-bill-sept.pdf | doc | address_proof
+  email | Email address | john.carter@example.com | pre | email
+  phone | Phone number | +44 7700 900123 | client | phone
+  purpose | Purpose of the relationship | Everyday payments, Receiving salary | client | purpose
+  nature | Products and services | Current account, Debit card | client | nature
+  employment | Work situation | Employed | client | employment
+  company | Company name | Carter Consulting | client | employment
+  income | Annual income | € 50,000 to € 100,000 | client | income
+  sof | Source of funds | Salary, Inheritance or gift | client | sof
+  sof_doc | Evidence of source of funds | certificate-of-inheritance.pdf | doc | sof
+  activities | Expected activities | Cash deposits, Payments outside the EU | client | activities
+  countries | Countries outside the EU | India, Turkey | client | activities
+  cash_reason | Explanation of cash deposits | About € 800 per month, because part of my income is paid in cash by tenants. | ai | activities
+  pep | PEP declaration | No | client | pep
+  declaration | Declaration and signature | Signed 08/11/2026 | client | sign
+
+AUDIT TRAIL (oldest first)
+  11:39:37 config.changed: Risk class set to low (demo)
+  11:39:38 block.asked: idv
+  11:39:43 block.answered: idv
+  11:39:43 prefill: Name, date of birth, nationality, document taken from Didit result
+  11:39:43 block.asked: name_confirm (prefilled)
+  11:39:44 block.answered: name_confirm
+  11:39:44 block.asked: address
+  11:39:45 block.answered: address
+  11:39:45 block.asked: address_proof (upload)
+  11:39:49 doc.checked: address_proof: utility-bill-sept.pdf — all checks passed
+  11:39:49 block.answered: address_proof
+  11:39:49 block.asked: email (prefilled)
+  11:39:50 block.answered: email
+  11:39:50 block.asked: phone
+  11:39:51 block.answered: phone
+  11:39:51 block.asked: purpose
+  11:39:53 block.answered: purpose
+  11:39:53 block.asked: nature
+  11:39:54 block.answered: nature
+  11:39:54 block.asked: employment
+  11:39:55 rule: Self-employed: company name requested
+  11:39:55 block.asked: employment (company)
+  11:39:55 block.answered: employment
+  11:39:55 block.asked: income
+  11:39:56 block.answered: income
+  11:39:56 block.asked: sof
+  11:39:58 rule: Inheritance or property sale: supporting document requested
+  11:39:58 block.asked: sof (evidence)
+  11:40:01 doc.checked: sof: certificate-of-inheritance.pdf — all checks passed
+  11:40:01 block.answered: sof
+  11:40:01 block.asked: activities
+  11:40:03 rule: Payments outside EU: countries requested
+  11:40:03 block.asked: activities (countries)
+  11:40:04 rule: Follow-up trigger on activities: Explanation of cash deposits
+  11:40:04 ai.followup.auto: Low risk: sent automatically within template guardrails (activities)
+  11:40:04 block.asked: activities (follow-up)
+  11:40:05 ai.followup.answered: cash_reason
+  11:40:05 block.answered: activities
+  11:40:05 block.asked: pep
+  11:40:07 rule: PEP unsure: definition explained and asked again
+  11:40:08 block.asked: pep
+  11:40:10 block.answered: pep
+  11:40:10 block.asked: review
+  11:40:13 answer.edited: employment: "Self-employed" -> "Employed" (edited in review, previous value kept in history)
+  11:40:13 block.answered: review
+  11:40:13 block.asked: sign
+  11:40:14 block.answered: sign
+  11:40:14 case.submitted: Client declaration signed; answers frozen as version 1 (sha256:f5a7e20e…)
+  11:40:15 request.created: Analyst Sanne de Vries asked for income evidence (second round, same thread)
+  11:40:18 doc.checked: request: income: payslip-aug.pdf — all checks passed
+  11:40:18 request.answered: Evidence received: payslip-aug.pdf
+
+OPEN REQUESTS
+  Evidence of income | answered | Sanne de Vries (Compliance analyst)
+
+
+====================================================================================================
+SCENARIO B: Natural person, High risk, first proof of address fails the name check
+====================================================================================================
+BANK       Hi John, welcome to New Age Bank.
+BANK       This takes about 6 minutes. Please respond by 20 November 2026. Your answers are saved automatically, so you can stop at any time and continue later with the same link.
+CLIENT     Let's begin
+BANK       First, your identity. After that you do not have to type your name, date of birth or nationality.
+CLIENT     I verified my identity on my phone
+BANK       This is what we read from your identity document. Is it correct?
+CLIENT     Yes, this is correct
+BANK       Where do you live?
+CLIENT     Upper Street 263, N1 9GU London, United Kingdom
+BANK       Do you have a recent proof of this address, for example a utility bill or bank statement? Maximum 3 months old.
+CLIENT     utility-bill-sept.pdfNote: name matches your id. The document says "M. Jansen"
+BANK       [Document checked] This looks like a document in another name. Do you have a document in your own name, for example a bank statement?
+BANK       Do you have a recent proof of this address, for example a utility bill or bank statement? Maximum 3 months old.
+CLIENT     utility-bill-sept.pdf
+BANK       We used john.carter@example.com for your invitation. Is that email address still correct?
+CLIENT     Yes, that is correct
+BANK       What is your phone number?
+CLIENT     +44 7700 900123
+BANK       Why would you like to become a customer of New Age Bank? Choose what applies.
+CLIENT     Everyday payments, Receiving salary
+BANK       Which products and services would you like to use?
+CLIENT     Current account, Debit card
+BANK       What is your work situation?
+CLIENT     Self-employed
+BANK       What is the name of your company?
+CLIENT     Carter Consulting
+BANK       Roughly what is your gross annual income?
+CLIENT     € 50,000 to € 100,000
+BANK       Where does the money come from that you will put into your account?
+CLIENT     Salary, Inheritance or gift
+BANK       Do you have a document that supports this, such as a notarial deed or certificate of inheritance?
+CLIENT     certificate-of-inheritance.pdf
+BANK       Because we take extra care here: could you upload your latest payslip?
+CLIENT     payslip-aug.pdf
+BANK       Do you expect to use New Age Bank for any of these activities? Choose everything that applies.
+CLIENT     Cash deposits, Payments outside the EU
+BANK       To or from which countries outside the EU do you expect payments?
+CLIENT     India, Turkey
+BANK       [One moment] A colleague is taking a quick look at your answer. This will only take a moment.
+BANK       [Follow-up question, checked by Sanne de VriesAI-assisted] You expect to deposit cash. Roughly what amount per month, and why in cash?
+CLIENT     About € 800 per month, because part of my income is paid in cash by tenants.
+BANK       Are you, or is someone close to you, a politically exposed person (PEP)? Think of a minister, member of parliament, judge at a high court or ambassador, and their family or close associates.
+CLIENT     I don't know
+BANK       [Explanation] No worries. It concerns people with an important public function in the last 12 months, their partner, children and parents, and their close business associates. Does that apply to you or someone close to you?
+BANK       Are you, or is someone close to you, a politically exposed person (PEP)? Think of a minister, member of parliament, judge at a high court or ambassador, and their family or close associates.
+CLIENT     No
+BANK       Almost done. Here is everything once more. Change anything that is not right before you declare it.
+CLIENT     Everything is correct
+BANK       Last step: the terms and your declaration.
+CLIENT     I confirm my declaration and signature.
+BANK       Thank you, John. Your application has been submitted.
+STATUS CARDReceivedReference NAB-2026-004217We will review your details and usually let you know within 1 working day how to proceed. If we need anything else, we will ask here, in this conversation, and by email.
+SYSTEM     New message from a colleague
+ANALYST    [Sanne de Vries, Compliance analyst] Thank you for your application. One question: could you upload your latest payslip or a recent bank statement showing your salary? That lets us record your income properly.
+CLIENT     payslip-aug.pdf
+ANALYST    [Sanne de Vries, Compliance analyst] Thank you, received. I will take a look and let you know if I need anything else.
+
+DATAPOINTS COLLECTED (key | label | value | source | block)
+  full_name | Full name | John Carter | idv | idv
+  dob | Date of birth | 14 March 1987 | idv | idv
+  nat | Nationality | British | idv | idv
+  doc | Identity document | Passport GBR, valid until 2 September 2031 | idv | idv
+  address | Residential address | Upper Street 263, N1 9GU London, United Kingdom | client | address
+  address_proof | Proof of address | utility-bill-sept.pdf | doc | address_proof
+  email | Email address | john.carter@example.com | pre | email
+  phone | Phone number | +44 7700 900123 | client | phone
+  purpose | Purpose of the relationship | Everyday payments, Receiving salary | client | purpose
+  nature | Products and services | Current account, Debit card | client | nature
+  employment | Work situation | Employed | client | employment
+  company | Company name | Carter Consulting | client | employment
+  income | Annual income | € 50,000 to € 100,000 | client | income
+  sof | Source of funds | Salary, Inheritance or gift | client | sof
+  sof_doc | Evidence of source of funds | certificate-of-inheritance.pdf | doc | sof
+  payslip | Payslip | payslip-aug.pdf | doc | sof
+  activities | Expected activities | Cash deposits, Payments outside the EU | client | activities
+  countries | Countries outside the EU | India, Turkey | client | activities
+  cash_reason | Explanation of cash deposits | About € 800 per month, because part of my income is paid in cash by tenants. | ai | activities
+  pep | PEP declaration | No | client | pep
+  declaration | Declaration and signature | Signed 08/11/2026 | client | sign
+
+AUDIT TRAIL (oldest first)
+  11:38:43 config.changed: Risk class set to high (demo)
+  11:38:44 block.asked: idv
+  11:38:49 block.answered: idv
+  11:38:49 prefill: Name, date of birth, nationality, document taken from Didit result
+  11:38:49 block.asked: name_confirm (prefilled)
+  11:38:50 block.answered: name_confirm
+  11:38:50 block.asked: address
+  11:38:51 block.answered: address
+  11:38:51 block.asked: address_proof (upload)
+  11:38:55 doc.checked: address_proof: utility-bill-sept.pdf — failed: Name matches your ID
+  11:38:55 rule: Document name mismatch: re-request issued
+  11:38:56 block.asked: address_proof (upload)
+  11:39:00 doc.checked: address_proof: utility-bill-sept.pdf — all checks passed
+  11:39:00 block.answered: address_proof
+  11:39:00 block.asked: email (prefilled)
+  11:39:02 block.answered: email
+  11:39:02 block.asked: phone
+  11:39:02 block.answered: phone
+  11:39:02 block.asked: purpose
+  11:39:04 block.answered: purpose
+  11:39:04 block.asked: nature
+  11:39:05 block.answered: nature
+  11:39:05 block.asked: employment
+  11:39:06 rule: Self-employed: company name requested
+  11:39:06 block.asked: employment (company)
+  11:39:07 block.answered: employment
+  11:39:07 block.asked: income
+  11:39:08 block.answered: income
+  11:39:08 block.asked: sof
+  11:39:09 rule: Inheritance or property sale: supporting document requested
+  11:39:09 block.asked: sof (evidence)
+  11:39:12 doc.checked: sof: certificate-of-inheritance.pdf — all checks passed
+  11:39:12 rule: Risk high + salary: payslip requested (stricter evidence)
+  11:39:12 block.asked: sof (evidence high)
+  11:39:16 doc.checked: sof: payslip-aug.pdf — all checks passed
+  11:39:16 block.answered: sof
+  11:39:16 block.asked: activities
+  11:39:17 rule: Payments outside EU: countries requested
+  11:39:17 block.asked: activities (countries)
+  11:39:18 rule: Follow-up trigger on activities: Explanation of cash deposits
+  11:39:18 ai.followup.pending: Risk high: waiting for analyst approval (activities)
+  11:39:20 ai.followup.approved: Approved by Sanne de Vries (Compliance) before sending
+  11:39:20 block.asked: activities (follow-up)
+  11:39:21 ai.followup.answered: cash_reason
+  11:39:21 block.answered: activities
+  11:39:21 block.asked: pep
+  11:39:23 rule: PEP unsure: definition explained and asked again
+  11:39:24 block.asked: pep
+  11:39:26 block.answered: pep
+  11:39:26 block.asked: review
+  11:39:29 answer.edited: employment: "Self-employed" -> "Employed" (edited in review, previous value kept in history)
+  11:39:29 block.answered: review
+  11:39:29 block.asked: sign
+  11:39:30 block.answered: sign
+  11:39:30 case.submitted: Client declaration signed; answers frozen as version 1 (sha256:522db9d6…)
+  11:39:31 request.created: Analyst Sanne de Vries asked for income evidence (second round, same thread)
+  11:39:34 doc.checked: request: income: payslip-aug.pdf — all checks passed
+  11:39:34 request.answered: Evidence received: payslip-aug.pdf
+
+OPEN REQUESTS
+  Evidence of income | answered | Sanne de Vries (Compliance analyst)
+
+
+====================================================================================================
+SCENARIO C: Organisation, Netherlands (KvK), Low risk, company with a holding structure
+====================================================================================================
+BANK       Hi Emma, welcome to New Age Bank.
+BANK       We are opening an account for your organisation. This takes about 12 minutes and your answers are saved automatically. We start with the organisation. At the end we ask for your own identity, and you can invite colleagues and owners to complete their own part while you carry on.
+CLIENT     Let's begin
+BANK       Where is your organisation registered?
+CLIENT     Netherlands
+BANK       What is the name of your organisation? Start typing and pick it from the list.
+CLIENT     Harbour Logistics B.V.
+BANK       Is this your organisation? This is what the register shows.
+CLIENT     Yes, this is my organisation
+BANK       From registry data we suggest these directors. The trade register does not list everyone, so untick anyone who is not correct and add anyone who is missing.
+CLIENT     Emma Clarke, David Okoye
+BANK       Besides the directors: does anyone else act for the organisation, for example an employee with a power of attorney?
+CLIENT     Yes, there are others
+BANK       Who are they, and what may they do on behalf of the organisation?
+CLIENT     Anna Visser (may sign jointly)
+BANK       Please upload the power of attorney, or another document that shows the authority of Anna Visser.
+CLIENT     power-of-attorney-anna-visser.pdf
+BANK       The trade register does not publish shareholders. Registry data suggests that Harbour Logistics Holding B.V. is the parent company. Please list everyone who owns 10% or more, with their share.
+CLIENT     Harbour Logistics Holding B.V. 60%, Emma Clarke 25%, David Okoye 15%
+BANK       We found Harbour Logistics Holding B.V. in the trade register. Is this the same company?
+CLIENT     Yes, same company
+BANK       Who owns Harbour Logistics Holding B.V.? List everyone who holds 10% or more of it.
+CLIENT     Emma Clarke 50%, Tom Becker 50%
+STATUS CARDYour structure so far / 60% / 25% / 15% / 50% / 50% / Emma Clarke / UBO 55% / Tom Becker / UBO 30% / Harbour Logistics Hol… / Emma Clarke / UBO 55% / David Okoye / Harbour Logistics B.V. / Directors: Emma Clarke, David Okoye / Built from registry data and your answers. Highlighted people are ultimate beneficial owners at 25% or more.
+BANK       Based on what you told us, these people own the organisation, directly or through other companies. At 25% or more they count as ultimate beneficial owners (UBO). Is this complete?
+CLIENT     Yes, this is complete
+BANK       Before we continue: which of these people are you?
+CLIENT     Emma Clarke
+BANK       Each person below needs to complete a short check of their own: an identity check and a PEP declaration. Choose who to invite, so they can do it while you carry on. / Invitations go out as soon as you have verified your own identity at the end of this conversation.
+CLIENT     Invitations sent
+BANK       What will your organisation use New Age Bank for?
+CLIENT     Day-to-day business payments, Receiving customer payments
+BANK       Which products and services would your organisation like to use?
+CLIENT     Business current account, Debit cards
+BANK       The registry lists your main activity as: “52.29 Other transportation support activities”. Is that an accurate description?
+CLIENT     Yes, that is accurate
+BANK       In which countries does your organisation operate, or send and receive payments?
+CLIENT     Netherlands, Asia
+BANK       [FOLLOW-UP QUESTION AI-ASSISTED] ED / You mention payments outside Europe and the US. Which countries, and what are the payments for?
+CLIENT     Suppliers in Turkey and Suriname, about 8 payments per month.
+BANK       What payment volume do you expect per month, in and out together?
+CLIENT     Over € 1 million
+BANK       [FOLLOW-UP QUESTION AI-ASSISTED] ED / You expect more than € 1 million per month. What drives this volume?
+CLIENT     Seasonal container shipments for three large customers.
+BANK       Where does the money in the account come from?
+CLIENT     Revenue from customers, Shareholder funding
+BANK       You mention shareholder funding. Do you have a loan or capital contribution agreement?
+CLIENT     shareholder-loan-agreement.pdf
+BANK       Last document: please upload your shareholder register. It shows who owns the shares and we use it to check the ownership you described.
+CLIENT     shareholder-register.pdf
+BANK       Finally, your own identity, as the person who submits this application. After that you do not have to type your name, date of birth or nationality.
+CLIENT     I verified my identity on my phone
+BANK       This is what we read from your identity document. Is it correct?
+CLIENT     Yes, this is correct
+BANK       Are you, or is someone close to you, a politically exposed person (PEP)? Think of a minister, member of parliament, judge at a high court or ambassador, and their family or close associates.
+CLIENT     No
+BANK       [INVITATIONS SENT] Thank you, you are verified. We have now sent the invitations to David Okoye, Tom Becker and Anna Visser. They can complete their own checks while you finish here.
+BANK       Almost done. Here is everything once more. Change anything that is not right before you declare it.
+CLIENT     Everything is correct
+BANK       Last step: the terms and your declaration. You sign on behalf of Harbour Logistics B.V., so please read it carefully.
+CLIENT     I confirm my declaration and signature.
+BANK       Thank you, Emma. The application for Harbour Logistics B.V. has been submitted.
+STATUS CARDReceived / Reference NAB-2026-ORG-0412 / We are still waiting for David Okoye, Tom Becker and Anna Visser to complete their own checks. We will review the file and usually let you know within 2 working days how to proceed. If we need anything else, we will ask here, in this conversation, and by email.
+
+DATAPOINTS COLLECTED (key | label | value | source | block)
+  country | Country of registration | Netherlands | rep | country
+  legal_name | Legal name | Harbour Logistics B.V. | kvk | registry
+  reg_no | KvK number | 81234567 | kvk | registry
+  rsin | RSIN | 862345671 | kvk | registry
+  legal_form | Legal form | Besloten vennootschap (B.V.) | kvk | registry
+  co_status | Status | Active | kvk | registry
+  co_address | Registered address | Keizersgracht 120, 1015 CW Amsterdam | kvk | registry
+  sbi | Registered activity | 52.29 Other transportation support activities | kvk | registry
+  reg_date | Registered since | 12 March 2014 | kvk | registry
+  trade_name | Trade name | Harbour Logistics | kvk | registry
+  directors | Directors and representatives | Emma Clarke (Director), David Okoye (Director) | prop | directors
+  auth_doc_anna-visser | Authority of Anna Visser | power-of-attorney-anna-visser.pdf | doc | authreps
+  authreps | Authorised representatives | Anna Visser (May sign jointly, Finance manager) | rep | authreps
+  owners | Owners | Harbour Logistics Holding B.V. 60%, Emma Clarke 25%, David Okoye 15% | rep | owners
+  chain_harbour-logistics-holding-b-v- | Owners of Harbour Logistics Holding B.V. | Emma Clarke 50%, Tom Becker 50% | rep | owners
+  ubos | Ultimate beneficial owners | Emma Clarke (55%), Tom Becker (30%) | calc | ubo
+  rep_role | Representative (declared) | Emma Clarke (Director). To be verified by ID check at the end | rep | invites
+  invites | People to invite for own checks | David Okoye, Tom Becker, Anna Visser | calc | invites
+  o_purpose | Purpose of the relationship | Day-to-day business payments, Receiving customer payments | rep | purpose_org
+  o_nature | Products and services | Business current account, Debit cards | rep | nature_org
+  o_activity | Business activity | 52.29 Other transportation support activities | kvk | activity
+  o_countries | Countries of activity and payments | Netherlands, Asia | rep | countries_org
+  o_countries_detail | Explanation of countries and payments | Suppliers in Turkey and Suriname, about 8 payments per month. | ai | countries_org
+  o_volume | Expected monthly volume | Over € 1 million | rep | volume
+  o_volume_detail | Explanation of volume | Seasonal container shipments for three large customers. | ai | volume
+  o_sof | Source of funds | Revenue from customers, Shareholder funding | rep | sof_org
+  o_sof_doc | Evidence of shareholder funding | shareholder-loan-agreement.pdf | doc | sof_org
+  o_register | Shareholder register | shareholder-register.pdf | doc | docs
+  full_name | Full name | Emma Clarke | idv | idv
+  dob | Date of birth | 2 June 1984 | idv | idv
+  nat | Nationality | British | idv | idv
+  doc | Identity document | Passport GBR, valid until 11 May 2030 | idv | idv
+  pep | PEP declaration (representative) | No | client | pep
+  declaration | Declaration and signature | Signed 08/11/2026 | client | sign
+
+AUDIT TRAIL (oldest first)
+  11:39:39 block.asked: country
+  11:39:40 route.selected: Netherlands routes to the KvK adapter
+  11:39:40 block.answered: country
+  11:39:40 block.asked: registry (KvK Zoeken)
+  11:39:41 kvk.zoeken: Search (free of charge), user selected KvK 81234567
+  11:39:41 kvk.basisprofiel: Basisprofiel retrieved for 81234567 (EUR 0.02)
+  11:39:41 block.asked: registry (confirm)
+  11:39:43 block.answered: registry
+  11:39:43 company.info.organisatieprofiel: Proposal for management and parent company retrieved (second source; the KvK API does not return directors)
+  11:39:43 block.asked: directors
+  11:39:44 block.answered: directors
+  11:39:44 block.asked: authreps
+  11:39:45 block.asked: authreps (authorised reps)
+  11:39:47 block.asked: authreps (authority evidence)
+  11:39:50 doc.checked: authreps: power-of-attorney-anna-visser.pdf — all checks passed
+  11:39:50 block.answered: authreps
+  11:39:50 block.asked: owners
+  11:39:52 kvk.zoeken: Company owner "Harbour Logistics Holding B.V." matched to KvK 81234568
+  11:39:52 block.asked: owners (company owner)
+  11:39:53 block.asked: owners (ownership chain)
+  11:39:55 block.answered: owners
+  11:39:55 ubo.calculated: Emma Clarke 55%; Tom Becker 30%
+  11:39:55 block.asked: ubo (calculated)
+  11:39:56 block.answered: ubo
+  11:39:56 block.asked: invites (representative)
+  11:39:57 rep.declared: Representative declared as Emma Clarke, not yet verified
+  11:39:57 block.asked: invites
+  11:39:59 invitation.queued: Invitation for David Okoye queued. It is released after the representative has passed the ID check
+  11:39:59 invitation.queued: Invitation for Tom Becker queued. It is released after the representative has passed the ID check
+  11:39:59 invitation.queued: Invitation for Anna Visser queued. It is released after the representative has passed the ID check
+  11:39:59 block.answered: invites
+  11:39:59 block.asked: purpose_org
+  11:40:00 block.answered: purpose_org
+  11:40:00 block.asked: nature_org
+  11:40:02 block.answered: nature_org
+  11:40:02 block.asked: activity (prefilled)
+  11:40:03 block.answered: activity
+  11:40:03 block.asked: countries_org
+  11:40:04 rule: Follow-up trigger on countries_org: Explanation of countries and payments
+  11:40:04 ai.followup.auto: Low risk: sent automatically within template guardrails (countries_org)
+  11:40:04 block.asked: countries_org (follow-up)
+  11:40:06 ai.followup.answered: o_countries_detail
+  11:40:06 block.answered: countries_org
+  11:40:06 block.asked: volume
+  11:40:07 rule: Follow-up trigger on volume: Explanation of volume
+  11:40:07 ai.followup.auto: Low risk: sent automatically within template guardrails (volume)
+  11:40:07 block.asked: volume (follow-up)
+  11:40:08 ai.followup.answered: o_volume_detail
+  11:40:08 block.answered: volume
+  11:40:08 block.asked: sof_org
+  11:40:10 rule: sof_org: Shareholder funding: supporting document requested
+  11:40:10 block.asked: sof_org (evidence)
+  11:40:13 doc.checked: sof_org: shareholder-loan-agreement.pdf — all checks passed
+  11:40:13 block.answered: sof_org
+  11:40:13 block.skipped: sow_ubo: risk class low
+  11:40:13 block.skipped: decl_regulated: inactive in template
+  11:40:13 block.skipped: decl_nominee: inactive in template
+  11:40:13 block.asked: docs (shareholder register)
+  11:40:17 doc.checked: docs: shareholder-register.pdf — all checks passed
+  11:40:17 block.answered: docs
+  11:40:17 block.asked: idv
+  11:40:21 block.answered: idv
+  11:40:21 prefill: Name, date of birth, nationality, document taken from Didit result
+  11:40:21 block.asked: name_confirm (prefilled)
+  11:40:23 block.answered: name_confirm
+  11:40:23 rep.match: Name on ID matches the person declared as representative (Emma Clarke)
+  11:40:23 block.asked: pep
+  11:40:24 rep.verified: Representative identity verified
+  11:40:24 invitation.sent: Invitation sent to David Okoye (david.okoye@harbour-logistics.example) for Director
+  11:40:24 invitation.sent: Invitation sent to Tom Becker (tom.becker@example.com) for UBO 30%
+  11:40:24 invitation.sent: Invitation sent to Anna Visser (anna-visser@example.com) for Authorised representative (may sign jointly)
+  11:40:25 block.answered: rep
+  11:40:25 block.asked: review
+  11:40:27 block.answered: review
+  11:40:27 block.asked: sign
+  11:40:29 block.answered: sign
+  11:40:29 case.submitted: Representative declaration signed; answers frozen as version 1 (sha256:13b50f64…)
+
+OPEN REQUESTS
+  Own checks: David Okoye | open | Director
+  Own checks: Tom Becker | open | UBO 30%
+  Own checks: Anna Visser | open | Authorised representative (may sign jointly)
+
+
+====================================================================================================
+SCENARIO C2: Related party (Tom Becker) in scenario C
+====================================================================================================
+BANK       Hi David, Harbour Logistics B.V. has asked you to complete your own details as Director.
+BANK       This takes about 4 minutes. Your answers are saved automatically.
+CLIENT     Let's begin
+BANK       First, your identity. After that you do not have to type your name, date of birth or nationality.
+CLIENT     I verified my identity on my phone
+BANK       This is what we read from your identity document. Is it correct?
+CLIENT     Yes, this is correct
+BANK       Where do you live?
+CLIENT     Upper Street 263, N1 9GU London, United Kingdom
+BANK       We used david.okoye@harbour-logistics.example for your invitation. Is that email address still correct?
+CLIENT     Yes, that is correct
+BANK       What is your phone number?
+CLIENT     +44 7700 900123
+BANK       Are you, or is someone close to you, a politically exposed person (PEP)? Think of a minister, member of parliament, judge at a high court or ambassador, and their family or close associates.
+CLIENT     No
+BANK       Almost done. Here is everything once more. Change anything that is not right before you declare it.
+CLIENT     Everything is correct
+BANK       Last step: the terms and your declaration.
+CLIENT     I confirm my declaration and signature.
+BANK       
+
+DATAPOINTS COLLECTED (key | label | value | source | block)
+  full_name | Full name | David Okoye | idv | idv
+  dob | Date of birth | 21 November 1979 | idv | idv
+  nat | Nationality | Dutch | idv | idv
+  doc | Identity document | ID card NLD, valid until 4 March 2029 | idv | idv
+  address | Residential address | Upper Street 263, N1 9GU London, United Kingdom | client | address
+  email | Email address | david.okoye@harbour-logistics.example | pre | email
+  phone | Phone number | +44 7700 900123 | client | phone
+  pep | PEP declaration | No | client | pep
+  declaration | Declaration and signature | Signed 08/11/2026 | client | sign
+
+AUDIT TRAIL (oldest first)
+  11:40:33 block.asked: idv
+  11:40:37 block.answered: idv
+  11:40:37 prefill: Name, date of birth, nationality, document taken from Didit result
+  11:40:37 block.asked: name_confirm (prefilled)
+  11:40:38 block.answered: name_confirm
+  11:40:38 block.asked: address
+  11:40:39 block.answered: address
+  11:40:39 block.asked: email (prefilled)
+  11:40:41 block.answered: email
+  11:40:41 block.asked: phone
+  11:40:41 block.answered: phone
+  11:40:41 block.asked: pep
+  11:40:43 block.answered: pep
+  11:40:43 block.asked: review
+  11:40:45 block.answered: review
+  11:40:45 block.asked: sign
+  11:40:46 block.answered: sign
+  11:40:46 case.submitted: Client declaration signed; answers frozen as version 1 (sha256:cc67402e…)
+
+
+====================================================================================================
+SCENARIO D: Organisation, Curaçao (document route), High risk, partnership (V.O.F.), first extract too old
+====================================================================================================
+BANK       Hi Emma, welcome to New Age Bank.
+BANK       We are opening an account for your organisation. This takes about 12 minutes and your answers are saved automatically. We start with the organisation. At the end we ask for your own identity, and you can invite colleagues and owners to complete their own part while you carry on.
+CLIENT     Let's begin
+BANK       Where is your organisation registered?
+CLIENT     Curaçao
+BANK       For an organisation registered in Curaçao we work from your documents. We start with the extract of the trade register (Chamber of Commerce). It must not be older than 3 months.
+BANK       Please upload the extract of the trade register.
+CLIENT     trade-register-extract.pdf / Note: not older than 3 months. The extract is dated 2 March 2026
+BANK       [DOCUMENT CHECKED] This document does not pass our check. Please upload a current version.
+BANK       Please upload the extract of the trade register.
+CLIENT     trade-register-extract.pdf
+BANK       [READ FROM YOUR DOCUMENT AI-ASSISTED] ED / We read your extract. Is this correct?
+CLIENT     Yes, this is correct
+BANK       Please upload your articles of association.
+CLIENT     articles-of-association.pdf
+BANK       Your extract lists these people. Untick anyone who is not correct and add anyone who is missing.
+CLIENT     Emma Clarke, Tom Becker
+BANK       Besides the directors: does anyone else act for the organisation, for example an employee with a power of attorney?
+CLIENT     Yes, there are others
+BANK       Who are they, and what may they do on behalf of the organisation?
+CLIENT     Anna Visser (may sign jointly)
+BANK       Please upload the power of attorney, or another document that shows the authority of Anna Visser.
+CLIENT     power-of-attorney-anna-visser.pdf
+BANK       Please list all partners, with their share in the partnership.
+CLIENT     Emma Clarke 70%, Tom Becker 30%
+STATUS CARDYour structure so far / 70% / 30% / Emma Clarke / UBO 70% / Tom Becker / UBO 30% / Blue Coral Partners V… / Directors: Emma Clarke, Tom Becker / Built from registry data and your answers. Highlighted people are ultimate beneficial owners at 25% or more.
+BANK       Based on what you told us, these people own the organisation, directly or through other companies. At 25% or more they count as ultimate beneficial owners (UBO). Is this complete?
+CLIENT     Yes, this is complete
+BANK       Before we continue: which of these people are you?
+CLIENT     Emma Clarke
+BANK       Each person below needs to complete a short check of their own: an identity check and a PEP declaration. Choose who to invite, so they can do it while you carry on. / Invitations go out as soon as you have verified your own identity at the end of this conversation.
+CLIENT     Invitations sent
+BANK       What will your organisation use New Age Bank for?
+CLIENT     Day-to-day business payments, Receiving customer payments
+BANK       Which products and services would your organisation like to use?
+CLIENT     Business current account, Debit cards
+BANK       The registry lists your main activity as: “Import and wholesale of marine equipment”. Is that an accurate description?
+CLIENT     Yes, that is accurate
+BANK       In which countries does your organisation operate, or send and receive payments?
+CLIENT     Netherlands, Asia
+BANK       [ONE MOMENT] A colleague is taking a quick look at your answer. This will only take a moment.
+BANK       [FOLLOW-UP QUESTION, CHECKED BY SANNE DE VRIES AI-ASSISTED] ED / You mention payments outside Europe and the US. Which countries, and what are the payments for?
+CLIENT     Suppliers in Turkey and Suriname, about 8 payments per month.
+BANK       What payment volume do you expect per month, in and out together?
+CLIENT     Over € 1 million
+BANK       [ONE MOMENT] A colleague is taking a quick look at your answer. This will only take a moment.
+BANK       [FOLLOW-UP QUESTION, CHECKED BY SANNE DE VRIES AI-ASSISTED] ED / You expect more than € 1 million per month. What drives this volume?
+CLIENT     Seasonal container shipments for three large customers.
+BANK       Where does the money in the account come from?
+CLIENT     Revenue from customers, Shareholder funding
+BANK       You mention shareholder funding. Do you have a loan or capital contribution agreement?
+CLIENT     shareholder-loan-agreement.pdf
+BANK       Because of the structure, we also ask about Emma Clarke: how did they build their wealth? Think of salary, sale of a company, inheritance or investments.
+CLIENT     Built the company from 2014, plus salary and a property sale in 2021.
+BANK       As this is a higher-risk case, could you upload a document that supports this, such as a sale agreement or annual accounts?
+CLIENT     sale-agreement-2021.pdf
+BANK       Last document: please upload the partnership agreement (or deed of partnership). It shows the partners, their shares and who may act for the partnership.
+CLIENT     partnership-agreement.pdf
+BANK       Finally, your own identity, as the person who submits this application. After that you do not have to type your name, date of birth or nationality.
+CLIENT     I verified my identity on my phone
+BANK       This is what we read from your identity document. Is it correct?
+CLIENT     Yes, this is correct
+BANK       Are you, or is someone close to you, a politically exposed person (PEP)? Think of a minister, member of parliament, judge at a high court or ambassador, and their family or close associates.
+CLIENT     No
+BANK       [INVITATIONS SENT] Thank you, you are verified. We have now sent the invitations to Tom Becker and Anna Visser. They can complete their own checks while you finish here.
+BANK       Almost done. Here is everything once more. Change anything that is not right before you declare it.
+CLIENT     Everything is correct
+BANK       Last step: the terms and your declaration. You sign on behalf of Blue Coral Partners V.O.F., so please read it carefully.
+CLIENT     I confirm my declaration and signature.
+BANK       Thank you, Emma. The application for Blue Coral Partners V.O.F. has been submitted.
+STATUS CARDReceived / Reference NAB-2026-ORG-0412 / We are still waiting for Tom Becker and Anna Visser to complete their own checks. We will review the file and usually let you know within 2 working days how to proceed. If we need anything else, we will ask here, in this conversation, and by email.
+
+DATAPOINTS COLLECTED (key | label | value | source | block)
+  country | Country of registration | Curaçao | rep | country
+  doc_extract | Document: extract of the trade register | trade-register-extract.pdf | doc | registry
+  legal_name | Legal name | Blue Coral Partners V.O.F. | doc | registry
+  reg_no | Registration number | CW-166540 | doc | registry
+  legal_form | Legal form | Vennootschap onder firma (V.O.F.) | doc | registry
+  co_status | Status | Active (per extract) | doc | registry
+  co_address | Registered address | Schottegatweg Oost 12, Willemstad, Curaçao | doc | registry
+  co_activity | Registered activity | Import and wholesale of marine equipment | doc | registry
+  reg_date | Registered since | 9 February 2019 | doc | registry
+  doc_articles | Document: articles of association | articles-of-association.pdf | doc | registry
+  directors | Directors and representatives | Emma Clarke (Managing partner), Tom Becker (Managing partner) | doc | directors
+  auth_doc_anna-visser | Authority of Anna Visser | power-of-attorney-anna-visser.pdf | doc | authreps
+  authreps | Authorised representatives | Anna Visser (May sign jointly, Finance manager) | rep | authreps
+  owners | Owners | Emma Clarke 70%, Tom Becker 30% | rep | owners
+  ubos | Ultimate beneficial owners | Emma Clarke (70%), Tom Becker (30%) | calc | ubo
+  rep_role | Representative (declared) | Emma Clarke (Managing partner). To be verified by ID check at the end | rep | invites
+  invites | People to invite for own checks | Tom Becker, Anna Visser | calc | invites
+  o_purpose | Purpose of the relationship | Day-to-day business payments, Receiving customer payments | rep | purpose_org
+  o_nature | Products and services | Business current account, Debit cards | rep | nature_org
+  o_activity | Business activity | Import and wholesale of marine equipment | doc | activity
+  o_countries | Countries of activity and payments | Netherlands, Asia | rep | countries_org
+  o_countries_detail | Explanation of countries and payments | Suppliers in Turkey and Suriname, about 8 payments per month. | ai | countries_org
+  o_volume | Expected monthly volume | Over € 1 million | rep | volume
+  o_volume_detail | Explanation of volume | Seasonal container shipments for three large customers. | ai | volume
+  o_sof | Source of funds | Revenue from customers, Shareholder funding | rep | sof_org
+  o_sof_doc | Evidence of shareholder funding | shareholder-loan-agreement.pdf | doc | sof_org
+  o_sow | Source of wealth of Emma Clarke | Built the company from 2014, plus salary and a property sale in 2021. | rep | sow_ubo
+  o_sow_doc | Evidence of wealth | sale-agreement-2021.pdf | doc | sow_ubo
+  o_agreement | Partnership agreement | partnership-agreement.pdf | doc | docs
+  full_name | Full name | Emma Clarke | idv | idv
+  dob | Date of birth | 2 June 1984 | idv | idv
+  nat | Nationality | British | idv | idv
+  doc | Identity document | Passport GBR, valid until 11 May 2030 | idv | idv
+  pep | PEP declaration (representative) | No | client | pep
+  declaration | Declaration and signature | Signed 08/11/2026 | client | sign
+
+AUDIT TRAIL (oldest first)
+  11:40:23 block.asked: country
+  11:40:24 route.selected: Curaçao routes to the document route (no register link: the client supplies the documents)
+  11:40:24 block.answered: country
+  11:40:24 block.asked: registry (extract)
+  11:40:27 doc.checked: registry (document route): trade-register-extract.pdf — failed: Not older than 3 months
+  11:40:27 rule: Document check failed: re-request issued
+  11:40:28 block.asked: registry (extract)
+  11:40:31 doc.checked: registry (document route): trade-register-extract.pdf — all checks passed
+  11:40:31 ai.document.read: Extract read by AI: name, number, legal form, address, activity, officers. Client confirms; an analyst checks against the original
+  11:40:31 block.asked: registry (AI read)
+  11:40:32 block.asked: registry (articles)
+  11:40:35 doc.checked: registry (document route): articles-of-association.pdf — all checks passed
+  11:40:35 block.answered: registry
+  11:40:35 block.asked: directors
+  11:40:37 block.answered: directors
+  11:40:37 block.asked: authreps
+  11:40:38 block.asked: authreps (authorised reps)
+  11:40:39 block.asked: authreps (authority evidence)
+  11:40:43 doc.checked: authreps: power-of-attorney-anna-visser.pdf — all checks passed
+  11:40:43 block.answered: authreps
+  11:40:43 block.asked: owners
+  11:40:44 block.answered: owners
+  11:40:44 ubo.calculated: Emma Clarke 70%; Tom Becker 30%
+  11:40:44 block.asked: ubo (calculated)
+  11:40:46 block.answered: ubo
+  11:40:46 block.asked: invites (representative)
+  11:40:47 rep.declared: Representative declared as Emma Clarke, not yet verified
+  11:40:47 block.asked: invites
+  11:40:48 invitation.queued: Invitation for Tom Becker queued. It is released after the representative has passed the ID check
+  11:40:48 invitation.queued: Invitation for Anna Visser queued. It is released after the representative has passed the ID check
+  11:40:48 block.answered: invites
+  11:40:48 block.asked: purpose_org
+  11:40:49 block.answered: purpose_org
+  11:40:49 block.asked: nature_org
+  11:40:51 block.answered: nature_org
+  11:40:51 block.asked: activity (prefilled)
+  11:40:52 block.answered: activity
+  11:40:52 block.asked: countries_org
+  11:40:54 rule: Follow-up trigger on countries_org: Explanation of countries and payments
+  11:40:54 ai.followup.pending: Risk high: waiting for analyst approval (countries_org)
+  11:40:55 ai.followup.approved: Approved by Sanne de Vries (Compliance) before sending
+  11:40:55 block.asked: countries_org (follow-up)
+  11:40:57 ai.followup.answered: o_countries_detail
+  11:40:57 block.answered: countries_org
+  11:40:57 block.asked: volume
+  11:40:58 rule: Follow-up trigger on volume: Explanation of volume
+  11:40:58 ai.followup.pending: Risk high: waiting for analyst approval (volume)
+  11:41:00 ai.followup.approved: Approved by Sanne de Vries (Compliance) before sending
+  11:41:00 block.asked: volume (follow-up)
+  11:41:01 ai.followup.answered: o_volume_detail
+  11:41:01 block.answered: volume
+  11:41:01 block.asked: sof_org
+  11:41:02 rule: sof_org: Shareholder funding: supporting document requested
+  11:41:02 block.asked: sof_org (evidence)
+  11:41:05 doc.checked: sof_org: shareholder-loan-agreement.pdf — all checks passed
+  11:41:05 block.answered: sof_org
+  11:41:05 block.asked: sow_ubo
+  11:41:07 rule: Risk high: evidence of wealth requested
+  11:41:07 block.asked: sow_ubo (evidence high)
+  11:41:10 doc.checked: sow_ubo: sale-agreement-2021.pdf — all checks passed
+  11:41:10 block.answered: sow_ubo
+  11:41:10 block.skipped: decl_regulated: inactive in template
+  11:41:10 block.skipped: decl_nominee: inactive in template
+  11:41:10 block.asked: docs (partnership agreement)
+  11:41:14 doc.checked: docs: partnership-agreement.pdf — all checks passed
+  11:41:14 block.answered: docs
+  11:41:14 block.asked: idv
+  11:41:19 block.answered: idv
+  11:41:19 prefill: Name, date of birth, nationality, document taken from Didit result
+  11:41:19 block.asked: name_confirm (prefilled)
+  11:41:20 block.answered: name_confirm
+  11:41:20 rep.match: Name on ID matches the person declared as representative (Emma Clarke)
+  11:41:20 block.asked: pep
+  11:41:22 rep.verified: Representative identity verified
+  11:41:22 invitation.sent: Invitation sent to Tom Becker (tom.becker@example.com) for Managing partner · UBO 30%
+  11:41:22 invitation.sent: Invitation sent to Anna Visser (anna-visser@example.com) for Authorised representative (may sign jointly)
+  11:41:23 block.answered: rep
+  11:41:23 block.asked: review
+  11:41:25 block.answered: review
+  11:41:25 block.asked: sign
+  11:41:27 block.answered: sign
+  11:41:27 case.submitted: Representative declaration signed; answers frozen as version 1 (sha256:c6f77f14…)
+
+OPEN REQUESTS
+  Own checks: Tom Becker | open | Managing partner · UBO 30%
+  Own checks: Anna Visser | open | Authorised representative (may sign jointly)
+
+
+====================================================================================================
+SCENARIO D2: Related party (Tom Becker) in scenario D
+====================================================================================================
+BANK       Hi Tom, Blue Coral Partners V.O.F. has asked you to complete your own details as Managing partner and UBO 30%.
+BANK       This takes about 4 minutes. Your answers are saved automatically.
+CLIENT     Let's begin
+BANK       First, your identity. After that you do not have to type your name, date of birth or nationality.
+CLIENT     I verified my identity on my phone
+BANK       This is what we read from your identity document. Is it correct?
+CLIENT     Yes, this is correct
+BANK       Where do you live?
+CLIENT     Upper Street 263, N1 9GU London, United Kingdom
+BANK       We used tom.becker@example.com for your invitation. Is that email address still correct?
+CLIENT     Yes, that is correct
+BANK       What is your phone number?
+CLIENT     +44 7700 900123
+BANK       Are you, or is someone close to you, a politically exposed person (PEP)? Think of a minister, member of parliament, judge at a high court or ambassador, and their family or close associates.
+CLIENT     No
+BANK       Almost done. Here is everything once more. Change anything that is not right before you declare it.
+CLIENT     Everything is correct
+BANK       Last step: the terms and your declaration.
+CLIENT     I confirm my declaration and signature.
+BANK       
+
+DATAPOINTS COLLECTED (key | label | value | source | block)
+  full_name | Full name | Tom Becker | idv | idv
+  dob | Date of birth | 9 January 1981 | idv | idv
+  nat | Nationality | Dutch | idv | idv
+  doc | Identity document | Passport NLD, valid until 20 July 2031 | idv | idv
+  address | Residential address | Upper Street 263, N1 9GU London, United Kingdom | client | address
+  email | Email address | tom.becker@example.com | pre | email
+  phone | Phone number | +44 7700 900123 | client | phone
+  pep | PEP declaration | No | client | pep
+  declaration | Declaration and signature | Signed 08/11/2026 | client | sign
+
+AUDIT TRAIL (oldest first)
+  11:41:30 block.asked: idv
+  11:41:35 block.answered: idv
+  11:41:35 prefill: Name, date of birth, nationality, document taken from Didit result
+  11:41:35 block.asked: name_confirm (prefilled)
+  11:41:36 block.answered: name_confirm
+  11:41:36 block.asked: address
+  11:41:37 block.answered: address
+  11:41:37 block.asked: email (prefilled)
+  11:41:38 block.answered: email
+  11:41:38 block.asked: phone
+  11:41:39 block.answered: phone
+  11:41:39 block.asked: pep
+  11:41:41 block.answered: pep
+  11:41:41 block.asked: review
+  11:41:42 block.answered: review
+  11:41:42 block.asked: sign
+  11:41:43 block.answered: sign
+  11:41:43 case.submitted: Client declaration signed; answers frozen as version 1 (sha256:0cc3409d…)
+
+

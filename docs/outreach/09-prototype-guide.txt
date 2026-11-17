@@ -1,0 +1,37 @@
+PROTOTYPE GUIDE
+
+File: outreach-portal-prototype.html (one file, no external resources, works offline in a desktop browser).
+Hosted copy: https://claude.ai/artifact/RHA2DfyK6zRy2Uh6i86ab3 (private; the owner must share it).
+
+OPENING IT
+- Desktop: double-click the file or drag it into Chrome, Edge, Firefox or Safari.
+- iPhone or WhatsApp: the Files and Quick Look previews do NOT run JavaScript, so the buttons do nothing there. Open it in Safari from a link instead (use the hosted link above, or host the file on any web server).
+- The prototype is a mockup: nothing is saved, no real vendor is called, all companies and people are fictional.
+
+THE TWO VIEWS
+- Client portal: what the client sees (the conversation).
+- Behind the scenes: what staff and developers need (template, blocks and rules, datapoints with source, active rules, audit trail, requests; for organisations also the structure chart and the parties table).
+
+DEMO CONTROLS (the box at the top; only in the prototype)
+- Client type: Person or Organisation. Changing it restarts the conversation.
+- Client risk class: Low, Medium, High. Changes which follow-ups, evidence and approvals apply.
+- Document check: "First upload passes" or "First upload fails". Fails the proof of address (person) or the extract age check (document route).
+- Document shows (document route): Company (N.V.) or Partnership (V.O.F.). Decides what the AI "reads" from the extract.
+- Analyst asks follow-up: enabled after submission. Starts the second round in the same thread.
+- Start over: restarts the current client type.
+- Open invitation as {name}: appears when related parties have been invited (and, with queued release, after the representative passed ID&V). Opens that person's own flow; the final button returns to the organisation's view.
+- "Demo:" buttons next to widgets fill in a realistic answer so you can click through fast. They are not part of the product.
+
+SCENARIOS TO CLICK THROUGH (match the transcripts in 06)
+A. Person, Low risk: all checks pass; shows prefilled data, AI follow-up sent at once, review with edit, signature, submission, second round.
+B. Person, High risk, upload fails: shows approval wait for AI follow-ups, payslip requirement, failed document check and re-request.
+C. Organisation > Netherlands > type "Harbour" > Harbour Logistics B.V.: KvK facts, director proposal, authorised representative with power of attorney, owners with a holding company (match in KvK, sub-owners), UBO calculation and chart (Emma 55%, Tom 30%), representative declaration, queued invitations, profile questions, shareholder register, representative ID&V and PEP, invitations released, review, signature, tracker.
+   Also try: pick "Harbour Logistics" results with an inactive entity (Harbourview Hotels B.V.) to see the stop message; pick Harbour & Partners V.O.F. to see partnership wording; pick Harbour & Co Consultancy (sole proprietorship) to see that the ownership document is skipped.
+D. Organisation > Curaçao (or Other country): document route; set "Document shows" to Partnership to see partners and the partnership agreement; set "Document check" to fail to see the extract rejected once.
+E. After submission of any scenario: use "Analyst asks follow-up" and the open invitations.
+
+WHAT THE PROTOTYPE DOES NOT DO (see the spec)
+Real calls to KvK, the second source, Didit or document AI; email; tokens and expiry; reminders; persistence; real QR; real signature storage; the analyst approval task for AI follow-ups (the prototype approves after 1.4 s); the jurisdiction stop list; translations.
+
+HOW IT IS BUILT (for developers who want to read the code)
+Plain HTML, CSS and JavaScript in one file. Blocks are data objects (look for ORG_TEMPLATE and the block definitions); the organisation conversation is generated from them by a small runner. The person flow is hand-written in the prototype but the spec and the JSON make it data-driven: build both from the block library. The structure chart is generated SVG. Do not copy the prototype code into production; use it as a behaviour reference.

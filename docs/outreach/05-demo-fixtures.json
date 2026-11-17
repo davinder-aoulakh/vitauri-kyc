@@ -1,0 +1,430 @@
+{
+ "_readme": "Fictional test data. Every person and company is invented. Use as seed data for development and as test vectors. KvK numbers and RSIN are made up and not valid.",
+ "persons": {
+  "john": {
+   "name": "John Carter",
+   "first": "John",
+   "email": "john.carter@example.com",
+   "email2": "john.c@example.com",
+   "dob": "14 March 1987",
+   "nat": "British",
+   "doc": "Passport GBR, valid until 2 September 2031"
+  },
+  "emma": {
+   "name": "Emma Clarke",
+   "first": "Emma",
+   "email": "emma.clarke@harbour-logistics.example",
+   "email2": "e.clarke@harbour-logistics.example",
+   "dob": "2 June 1984",
+   "nat": "British",
+   "doc": "Passport GBR, valid until 11 May 2030"
+  },
+  "david": {
+   "name": "David Okoye",
+   "first": "David",
+   "email": "david.okoye@harbour-logistics.example",
+   "email2": "d.okoye@harbour-logistics.example",
+   "dob": "21 November 1979",
+   "nat": "Dutch",
+   "doc": "ID card NLD, valid until 4 March 2029"
+  },
+  "tom": {
+   "name": "Tom Becker",
+   "first": "Tom",
+   "email": "tom.becker@example.com",
+   "email2": "t.becker@example.com",
+   "dob": "9 January 1981",
+   "nat": "Dutch",
+   "doc": "Passport NLD, valid until 20 July 2031"
+  }
+ },
+ "kvk_search_fixtures": [
+  {
+   "id": "k1",
+   "name": "Harbour Logistics B.V.",
+   "kvk": "81234567",
+   "rsin": "862345671",
+   "form": "Besloten vennootschap (B.V.)",
+   "city": "Amsterdam",
+   "status": "Active",
+   "address": "Keizersgracht 120, 1015 CW Amsterdam",
+   "sbi": "52.29 Other transportation support activities",
+   "reg": "12 March 2014",
+   "trade": "Harbour Logistics",
+   "dirs": [
+    {
+     "name": "Emma Clarke",
+     "role": "Director",
+     "auth": "May sign alone"
+    },
+    {
+     "name": "David Okoye",
+     "role": "Director",
+     "auth": "May sign jointly"
+    }
+   ],
+   "parent": "Harbour Logistics Holding B.V."
+  },
+  {
+   "id": "k2",
+   "name": "Harbour Logistics Holding B.V.",
+   "kvk": "81234568",
+   "rsin": "862345672",
+   "form": "Besloten vennootschap (B.V.)",
+   "city": "Rotterdam",
+   "status": "Active",
+   "address": "Wilhelminakade 40, 3072 AP Rotterdam",
+   "sbi": "64.20 Activities of holding companies",
+   "reg": "3 May 2012",
+   "trade": "Harbour Holding",
+   "dirs": [
+    {
+     "name": "Emma Clarke",
+     "role": "Director",
+     "auth": "May sign alone"
+    }
+   ],
+   "parent": ""
+  },
+  {
+   "id": "k3",
+   "name": "Harbourview Hotels B.V.",
+   "kvk": "72345678",
+   "rsin": "851234563",
+   "form": "Besloten vennootschap (B.V.)",
+   "city": "The Hague",
+   "status": "Inactive (dissolved)",
+   "address": "Zeestraat 8, 2518 AA The Hague",
+   "sbi": "55.10 Hotels",
+   "reg": "1 October 2009",
+   "trade": "Harbourview",
+   "dirs": [],
+   "parent": ""
+  },
+  {
+   "id": "k5",
+   "name": "Harbour & Partners V.O.F.",
+   "kvk": "71234569",
+   "rsin": "",
+   "form": "Vennootschap onder firma (V.O.F.)",
+   "city": "Rotterdam",
+   "status": "Active",
+   "address": "Coolsingel 20, 3011 AD Rotterdam",
+   "sbi": "52.10 Warehousing and storage",
+   "reg": "4 April 2017",
+   "trade": "Harbour & Partners",
+   "dirs": [
+    {
+     "name": "Emma Clarke",
+     "role": "Managing partner",
+     "auth": "May sign alone"
+    },
+    {
+     "name": "David Okoye",
+     "role": "Managing partner",
+     "auth": "May sign jointly"
+    }
+   ],
+   "parent": ""
+  },
+  {
+   "id": "k4",
+   "name": "Harbour & Co Consultancy",
+   "kvk": "61234569",
+   "rsin": "",
+   "form": "Sole proprietorship (eenmanszaak)",
+   "city": "Utrecht",
+   "status": "Active",
+   "address": "Oudegracht 55, 3511 AE Utrecht",
+   "sbi": "70.22 Business and management consultancy",
+   "reg": "18 June 2018",
+   "trade": "Harbour & Co",
+   "dirs": [],
+   "parent": ""
+  }
+ ],
+ "document_read_fixtures": {
+  "_note": "What the AI document service returns for the demo extract. 'street' plus the city of the chosen country forms the address. Registration number prefix CW- for Curaçao, REG- otherwise.",
+  "company": {
+   "name": "Blue Coral Trading N.V.",
+   "form": "Naamloze Vennootschap (N.V.)",
+   "activity": "Import and wholesale of marine equipment",
+   "regDate": "3 June 2016",
+   "street": "Schottegatweg Oost 12",
+   "officers": [
+    {
+     "name": "Emma Clarke",
+     "role": "Managing director",
+     "auth": "May sign alone"
+    }
+   ]
+  },
+  "partnership": {
+   "name": "Blue Coral Partners V.O.F.",
+   "form": "Vennootschap onder firma (V.O.F.)",
+   "activity": "Import and wholesale of marine equipment",
+   "regDate": "9 February 2019",
+   "street": "Schottegatweg Oost 12",
+   "officers": [
+    {
+     "name": "Emma Clarke",
+     "role": "Managing partner",
+     "auth": "May sign alone"
+    },
+    {
+     "name": "Tom Becker",
+     "role": "Managing partner",
+     "auth": "May sign jointly"
+    }
+   ]
+  }
+ },
+ "tenant_defaults": {
+  "uboThreshold": 25,
+  "ownerListThreshold": 10,
+  "releaseInvitesAfterIdv": true
+ },
+ "ubo_test_vectors": [
+  {
+   "name": "NL demo: holding structure",
+   "entity": "Harbour Logistics B.V.",
+   "owners": [
+    {
+     "type": "company",
+     "name": "Harbour Logistics Holding B.V.",
+     "pct": 60
+    },
+    {
+     "type": "person",
+     "name": "Emma Clarke",
+     "pct": 25
+    },
+    {
+     "type": "person",
+     "name": "David Okoye",
+     "pct": 15
+    }
+   ],
+   "chain": {
+    "Harbour Logistics Holding B.V.": [
+     {
+      "type": "person",
+      "name": "Emma Clarke",
+      "pct": 50
+     },
+     {
+      "type": "person",
+      "name": "Tom Becker",
+      "pct": 50
+     }
+    ]
+   },
+   "threshold": 25,
+   "expected_effective": {
+    "Emma Clarke": 55.0,
+    "Tom Becker": 30.0,
+    "David Okoye": 15.0
+   },
+   "expected_ubo": [
+    "Emma Clarke",
+    "Tom Becker"
+   ]
+  },
+  {
+   "name": "Partnership demo",
+   "entity": "Blue Coral Partners V.O.F.",
+   "owners": [
+    {
+     "type": "person",
+     "name": "Emma Clarke",
+     "pct": 70
+    },
+    {
+     "type": "person",
+     "name": "Tom Becker",
+     "pct": 30
+    }
+   ],
+   "chain": {},
+   "threshold": 25,
+   "expected_effective": {
+    "Emma Clarke": 70.0,
+    "Tom Becker": 30.0
+   },
+   "expected_ubo": [
+    "Emma Clarke",
+    "Tom Becker"
+   ]
+  },
+  {
+   "name": "Nobody reaches the threshold",
+   "entity": "Example Fund B.V.",
+   "owners": [
+    {
+     "type": "person",
+     "name": "A",
+     "pct": 20
+    },
+    {
+     "type": "person",
+     "name": "B",
+     "pct": 20
+    },
+    {
+     "type": "person",
+     "name": "C",
+     "pct": 20
+    },
+    {
+     "type": "person",
+     "name": "D",
+     "pct": 20
+    },
+    {
+     "type": "person",
+     "name": "E",
+     "pct": 20
+    }
+   ],
+   "chain": {},
+   "threshold": 25,
+   "expected_effective": {
+    "A": 20.0,
+    "B": 20.0,
+    "C": 20.0,
+    "D": 20.0,
+    "E": 20.0
+   },
+   "expected_ubo": [],
+   "expected_rule": "directors recorded as UBO (senior managing officials)"
+  },
+  {
+   "name": "Same person direct and indirect, two layers",
+   "entity": "X B.V.",
+   "owners": [
+    {
+     "type": "company",
+     "name": "Mid B.V.",
+     "pct": 80
+    },
+    {
+     "type": "person",
+     "name": "P",
+     "pct": 20
+    }
+   ],
+   "chain": {
+    "Mid B.V.": [
+     {
+      "type": "company",
+      "name": "Top B.V.",
+      "pct": 50
+     },
+     {
+      "type": "person",
+      "name": "P",
+      "pct": 50
+     }
+    ],
+    "Top B.V.": [
+     {
+      "type": "person",
+      "name": "P",
+      "pct": 100
+     }
+    ]
+   },
+   "threshold": 25,
+   "expected_effective": {
+    "P": 100.0
+   },
+   "expected_note": "P = 20 + 80*0.5*1.0 + 80*0.5 = 100"
+  },
+  {
+   "name": "Cycle protection",
+   "entity": "Y B.V.",
+   "owners": [
+    {
+     "type": "company",
+     "name": "A B.V.",
+     "pct": 100
+    }
+   ],
+   "chain": {
+    "A B.V.": [
+     {
+      "type": "company",
+      "name": "B B.V.",
+      "pct": 100
+     }
+    ],
+    "B B.V.": [
+     {
+      "type": "company",
+      "name": "A B.V.",
+      "pct": 50
+     },
+     {
+      "type": "person",
+      "name": "Q",
+      "pct": 50
+     }
+    ]
+   },
+   "threshold": 25,
+   "expected_effective": {
+    "Q": 50.0
+   },
+   "expected_note": "The path A > B > A is not followed a second time"
+  }
+ ],
+ "scenarios": [
+  {
+   "id": "A",
+   "desc": "NP, Low risk, passing uploads, self-employed, inheritance, cash and payments outside the EU",
+   "demo_controls": {
+    "client_type": "Person",
+    "risk": "Low",
+    "document_check": "First upload passes"
+   }
+  },
+  {
+   "id": "B",
+   "desc": "NP, High risk, first proof of address fails, payslip required",
+   "demo_controls": {
+    "client_type": "Person",
+    "risk": "High",
+    "document_check": "First upload fails"
+   }
+  },
+  {
+   "id": "C",
+   "desc": "ORG, Netherlands, Harbour Logistics B.V., Low risk",
+   "demo_controls": {
+    "client_type": "Organisation",
+    "risk": "Low",
+    "document_check": "First upload passes"
+   },
+   "clicks": "Netherlands > search Harbour > pick Harbour Logistics B.V."
+  },
+  {
+   "id": "D",
+   "desc": "ORG, Curaçao, V.O.F., High risk, first extract too old",
+   "demo_controls": {
+    "client_type": "Organisation",
+    "risk": "High",
+    "document_check": "First upload fails",
+    "document_shows": "Partnership (V.O.F.)"
+   },
+   "clicks": "Curaçao > upload extract (fails once) > confirm AI read"
+  },
+  {
+   "id": "E",
+   "desc": "ORG, Netherlands V.O.F. (Harbour & Partners V.O.F.): partnership wording and partnership agreement"
+  },
+  {
+   "id": "F",
+   "desc": "ORG, Other country (Suriname), Medium risk: asks which country, source of wealth of the UBO is asked"
+  }
+ ]
+}
