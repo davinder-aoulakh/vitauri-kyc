@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planAdvance, afterParty, afterRuleBatch, mergeRuleOutcomes, markIncomplete, isStepStale, isRunDead, progressText, MAX_STEP_ATTEMPTS, STEP_STALE_MS, RUN_DEAD_MS, RULE_BATCH_SIZE } from '../base44/shared/kycScreenerSteps.js';
+import { planAdvance, afterCheck, afterRuleBatch, mergeRuleOutcomes, markIncomplete, isStepStale, isRunDead, progressText, MAX_STEP_ATTEMPTS, STEP_STALE_MS, RUN_DEAD_MS, RULE_BATCH_SIZE, SCREEN_CHECKS } from '../base44/shared/kycScreenerSteps.js';
 
 const T0 = Date.parse('2026-11-18T10:00:00Z');
 const iso = (offsetMs) => new Date(T0 + offsetMs).toISOString();
@@ -23,10 +23,10 @@ test('a working step is left alone; a step without a heartbeat is retried once',
   assert.deepEqual(planAdvance(active, T0 + 40000 + STEP_STALE_MS), { action: 'run', step: 'screening', attempt: 2 });
 });
 
-test('screening of a party that died twice is skipped, not failed; other steps fail with a reason', () => {
+test('a screening check that died twice is skipped, not failed; other steps fail with a reason', () => {
   const dead = (step) => run({ step, attempts: MAX_STEP_ATTEMPTS, active: true, started_at: iso(0), parties, party_index: 0 }, { heartbeat_at: iso(20000) });
   const s = planAdvance(dead('screening'), T0 + 10 * 60000);
-  assert.equal(s.action, 'skip_party');
+  assert.equal(s.action, 'skip_check');
   assert.match(s.reason, /about 20 s/);
   const r = planAdvance(dead('rules'), T0 + 10 * 60000);
   assert.equal(r.action, 'fail');
@@ -34,20 +34,28 @@ test('screening of a party that died twice is skipped, not failed; other steps f
   assert.equal(planAdvance(run({ step: 'export', attempts: 2, active: false, last_error: 'boom' }), T0).action, 'fail');
 });
 
-test('one screening call per party, then rules', () => {
-  let p = { step: 'screening', party_index: 0, parties, screening_raw: [], attempts: 2, active: true };
-  p = afterParty(p, { checks: { sanctions: { result: 'no_match' } } });
+test('screening runs one call per check of each party, then the rules', () => {
+  let p = { step: 'screening', party_index: 0, check_index: 0, parties, screening_raw: [], attempts: 2, active: true };
+  p = afterCheck(p, 'sanctions', { result: 'no_match', matches: [] });
   assert.equal(p.step, 'screening');
-  assert.equal(p.party_index, 1);
+  assert.equal(p.party_index, 0);
+  assert.equal(p.check_index, 1);
   assert.equal(p.attempts, 0);
   assert.equal(p.active, false);
-  p = afterParty(p, { failed: true, error: 'timed out' });
+  // a check that could not be completed is inconclusive for that check only; the party's other checks still run
+  p = afterCheck(p, 'pep', { failed: true, error: 'Claude did not answer within 20 seconds.' });
+  assert.equal(p.screening_raw[0].checks.pep.result, 'inconclusive');
+  assert.equal(p.screening_raw[0].checks.pep.incomplete, true);
+  assert.match(p.screening_raw[0].checks.pep.note, /timed out|20 seconds/);
+  p = afterCheck(p, 'adverse_media', { result: 'hit', matches: [{ name_matched: 'X' }] });
+  // party finished: the next party starts at its first check
+  assert.equal(p.party_index, 1);
+  assert.equal(p.check_index, 0);
+  assert.equal(p.step, 'screening');
+  assert.deepEqual(p.screening_raw.map((x) => x.party_key), ['client']);
+  for (const c of SCREEN_CHECKS) p = afterCheck(p, c, { result: 'no_match', matches: [] });
   assert.equal(p.step, 'rules');
-  assert.deepEqual(p.screening_raw.map((x) => x.party_key), ['client', 'rp_1']);
-  // a retry of the same party replaces its entry
-  const again = afterParty({ ...p, party_index: 1, step: 'screening' }, { checks: {} });
-  assert.equal(again.screening_raw.length, 2);
-  assert.ok(!again.screening_raw[1].failed);
+  assert.deepEqual(Object.keys(p.screening_raw[1].checks), SCREEN_CHECKS);
 });
 
 test('a large grid is applied in parts, then the verdict', () => {
@@ -107,7 +115,8 @@ test('the two real stuck runs count as dead; a fresh run does not', () => {
 
 test('progress text', () => {
   assert.equal(progressText(run({ step: 'doc_reader' })), 'Reading documents');
-  assert.equal(progressText(run({ step: 'screening', party_index: 1, parties })), 'Screening 2 of 2: E. Zwarts');
+  assert.equal(progressText(run({ step: 'screening', party_index: 1, check_index: 2, parties })), 'Screening 2 of 2: E. Zwarts (adverse media)');
+  assert.equal(progressText(run({ step: 'screening', party_index: 0, check_index: 1, parties })), 'Screening 1 of 2: Zwarts Management B.V. (PEP)');
   assert.equal(progressText(run({ step: 'export' })), 'Building Excel and PDF');
   assert.equal(progressText({ status: 'running', stage: 'rules' }), 'Applying the rules grid');
   assert.equal(progressText(run({ step: 'rules', rule_index: 8, rule_total: 21 })), 'Applying the rules grid (part 2 of 3)');

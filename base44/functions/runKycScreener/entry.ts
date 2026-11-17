@@ -13,8 +13,8 @@ import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { aiLogFields } from '../../shared/aiLog.js';
 import { outreachAnswers } from '../../shared/riskSignals.js';
 import { callClaude, DEFAULT_CLAUDE_MODEL, claudeClient } from '../../shared/claudeClient.js';
-import { namedParties, profileFacts, DEFAULT_RULES_GRID, docReaderRequest, screeningRequest, rulesBatchRequest, rulesVerdictRequest, capDocRecord, normaliseScreening, SCREENING_SCHEMA } from '../../shared/kycScreener.js';
-import { planAdvance, afterParty, afterRuleBatch, mergeRuleOutcomes, markIncomplete, isRunDead, HEARTBEAT_MS, MAX_STEP_ATTEMPTS, STEP_CALL_TIMEOUT_MS, SCREEN_MAX_SEARCHES, RULE_BATCH_SIZE, STEP_LABEL } from '../../shared/kycScreenerSteps.js';
+import { namedParties, profileFacts, DEFAULT_RULES_GRID, docReaderRequest, screeningRequest, rulesBatchRequest, rulesVerdictRequest, capDocRecord, normaliseScreening } from '../../shared/kycScreener.js';
+import { planAdvance, afterCheck, afterRuleBatch, mergeRuleOutcomes, markIncomplete, isRunDead, HEARTBEAT_MS, MAX_STEP_ATTEMPTS, STEP_CALL_TIMEOUT_MS, SCREEN_CHECKS, SCREEN_MAX_SEARCHES, SCREEN_CALL_TIMEOUT_MS, RULE_BATCH_SIZE, STEP_LABEL } from '../../shared/kycScreenerSteps.js';
 import { compareScreening, compareRisk } from '../../shared/kycScreenerCompare.js';
 import { buildScreenerXlsx, buildScreenerPdf } from '../../shared/kycScreenerExport.js';
 import { KYC_SOURCE } from '../../shared/kycScreenerPrompts.js';
@@ -135,35 +135,32 @@ async function runStep({ base44, E, user, tenant, client, kycCase, run, step, at
       await update({
         doc_record: docRecord, model: d.model, stage: 'screening', heartbeat_at: nowIso(),
         documents_used: docs.map(({ ref, document_id, label, media_type, bytes, source }) => ({ ref, document_id, label, media_type, bytes, source })),
-        progress: idle({ ...progress, step: 'screening', party_index: 0, attempts: 0, last_error: null, screening_raw: [],
+        progress: idle({ ...progress, step: 'screening', party_index: 0, check_index: 0, attempts: 0, last_error: null, screening_raw: [],
           parties: ctx.parties.map(({ key, name, kind, role, dob, country }) => ({ key, name, kind, role, dob, country })) }),
       });
       return;
     }
 
+    // Each party's screening is split into its three checks (sanctions, PEP, adverse media), one short call each: a
+    // search loop over all three at once ran past the time a step is given, which is what made screening time out.
     if (step === 'screening') {
       const list = progress.parties || [];
       const party = list[Number(progress.party_index) || 0];
       if (!party) { await update({ stage: 'rules', heartbeat_at: nowIso(), progress: idle({ ...progress, step: 'rules', attempts: 0 }) }); return; }
-      let entry;
+      const check = SCREEN_CHECKS[Number(progress.check_index) || 0] || SCREEN_CHECKS[0];
+      let value;
       try {
-        const sc = await callFn({ ...screeningRequest([party], { maxUses: SCREEN_MAX_SEARCHES }), maxTokens: 8000 });
+        const sc = await callFn({ ...screeningRequest(party, check, { maxUses: SCREEN_MAX_SEARCHES }), effort: 'low', maxTokens: 1500, thinking: 'off', timeoutMs: SCREEN_CALL_TIMEOUT_MS });
         add(sc.usage);
-        let raw = sc.json;
-        if (!raw?.parties) {
-          const fix = await callFn({ system: 'Convert the screening notes into the JSON schema. Do not add facts.', content: [{ type: 'text', text: String(sc.text || '').slice(0, 40000) }], schema: SCREENING_SCHEMA, maxTokens: 4000 });
-          add(fix.usage);
-          raw = fix.json;
-        }
-        entry = (raw?.parties || []).find((x) => x.party_key === party.key) || (raw?.parties || [])[0];
-        if (!entry?.checks) throw new Error('The screening stage returned no result for this party.');
+        if (!sc.json?.result) throw new Error(`The ${check} check returned no result for ${party.name}.`);
+        value = { result: sc.json.result, matches: sc.json.matches || [] };
       } catch (e) {
         const msg = String(e?.message || e).slice(0, 300);
         if (e?.code === 'no_api_key' || e?.code === 'bad_api_key') throw e; // no point in retrying or skipping
         if (attempt < MAX_STEP_ATTEMPTS) { await update({ heartbeat_at: nowIso(), progress: idle({ ...progress, last_error: msg }) }); return; } // retried by the next advance
-        entry = { failed: true, error: msg };
+        value = { failed: true, error: msg };
       }
-      const next = afterParty(progress, entry);
+      const next = afterCheck(progress, check, value);
       await update({ stage: next.step, heartbeat_at: nowIso(), progress: idle(next) });
       return;
     }
@@ -274,10 +271,12 @@ async function advance({ base44, E, user, tenant, client, kycCase, run, apiKey }
     return { state: 'failed' };
   }
   const now = new Date().toISOString();
-  if (plan.action === 'skip_party') {
-    const next = afterParty(run.progress || {}, { failed: true, error: plan.reason });
+  if (plan.action === 'skip_check') {
+    const p = run.progress || {};
+    const check = SCREEN_CHECKS[Number(p.check_index) || 0] || SCREEN_CHECKS[0];
+    const next = afterCheck(p, check, { failed: true, error: plan.reason });
     await E.KycScreenerRun.update(run.id, { stage: next.step, heartbeat_at: now, progress: next });
-    return { state: 'skipped_party', step: next.step };
+    return { state: 'skipped_check', step: next.step };
   }
   const progress = { ...(run.progress || {}), step: plan.step, attempts: plan.attempt, active: true, started_at: now };
   await E.KycScreenerRun.update(run.id, { stage: plan.step, heartbeat_at: now, progress });

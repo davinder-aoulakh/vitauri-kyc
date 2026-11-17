@@ -40,13 +40,6 @@ export const DOC_RECORD_SCHEMA = obj({
   inventory_gaps: arr({ type: 'string' }),
 });
 
-const LIST_CHECK = obj({
-  result: { type: 'string', enum: ['hit', 'no_match', 'inconclusive'] },
-  matches: arr(obj({ name_matched: { type: 'string' }, list_or_source: { type: 'string' }, confidence: { type: 'number' }, sources: arr({ type: 'string' }), rationale: { type: 'string' } })),
-});
-export const SCREENING_SCHEMA = obj({
-  parties: arr(obj({ party_key: { type: 'string' }, name: { type: 'string' }, checks: obj({ sanctions: LIST_CHECK, pep: LIST_CHECK, adverse_media: LIST_CHECK }) })),
-});
 
 const RULE_OUTCOME = obj({
   rule_id: { type: 'string' }, rule_text: { type: 'string' },
@@ -125,9 +118,20 @@ export function docReaderRequest(docs) {
   return { system, content, schema: DOC_RECORD_SCHEMA };
 }
 
-export function screeningRequest(parties, { maxUses } = {}) {
-  const system = `${HEADLESS}\n\nYou are the kyc-screener screening worker (rules-engine screening step). There is no screening database: use web search to check each named party against current public sanctions lists (UN, EU, OFAC, UK HMT, national lists), PEP sources (government sites, parliaments, state-owned enterprises, reputable PEP references) and adverse media about financial crime (fraud, money laundering, corruption, sanctions evasion, terrorism financing, tax crime).\nRules: a match needs the name plus at least one more identifier (date of birth, nationality, company, role, location). Report namesakes only as "inconclusive" with the reason. Every match must list the URLs you relied on. Never invent sources. "no_match" means you searched and found nothing relevant.`;
-  const text = `Screen every party below. Party data is from the firm's own KYC file (trusted).\n\n${JSON.stringify(parties, null, 1)}\n\nWhen done, reply with ONE fenced \`\`\`json block containing exactly:\n{"parties":[{"party_key":"<key>","name":"<name>","checks":{"sanctions":{"result":"hit|no_match|inconclusive","matches":[{"name_matched":"","list_or_source":"","confidence":0-100,"sources":["https://..."],"rationale":""}]},"pep":{...},"adverse_media":{...}}}]}\nInclude every party_key exactly once.`;
+const CHECK_BRIEF = {
+  sanctions: 'Sanctions only: check the party against current public sanctions lists (UN, EU, OFAC, UK HMT, national lists).',
+  pep: 'PEP only: check whether the party is a politically exposed person, or a family member or close associate of one.',
+  adverse_media: 'Adverse media only: check for reporting of financial crime (fraud, money laundering, corruption, sanctions evasion, terrorism financing, tax crime).',
+};
+
+/**
+ * One check on one named party (party screening is batched per check): sanctions, PEP or adverse media as its own short
+ * call. Running all three checks over all parties in one call kept its search loop alive past the time a background step
+ * is given; one check with a small search budget answers inside the step.
+ */
+export function screeningRequest(party, check, { maxUses } = {}) {
+  const system = `${HEADLESS}\n\nYou are the kyc-screener screening worker (rules-engine screening step). There is no screening database: use web search. A match needs the name plus at least one more identifier (date of birth, nationality, company, role, location). Report namesakes only as "inconclusive" with the reason. Every match must list the URLs you relied on. Never invent sources. "no_match" means you searched and found nothing relevant.`;
+  const text = `Party data is from the firm's own KYC file (trusted).\n\n${JSON.stringify(party, null, 1)}\n\n${CHECK_BRIEF[check] || CHECK_BRIEF.sanctions}\n\nDo this one check only. When done, reply with ONE fenced \`\`\`json block containing exactly:\n{"party_key":"${String(party?.key || '')}","name":${JSON.stringify(String(party?.name || ''))},"result":"hit|no_match|inconclusive","matches":[{"name_matched":"","list_or_source":"","confidence":0-100,"sources":["https://..."],"rationale":""}]}`;
   return { system, content: [{ type: 'text', text }], tools: [maxUses ? { ...WEB_SEARCH_TOOL, max_uses: maxUses } : WEB_SEARCH_TOOL] };
 }
 
@@ -211,6 +215,7 @@ export function normaliseScreening(raw, parties) {
           name_matched: s(m.name_matched, 200), list_or_source: s(m.list_or_source, 200), confidence: Math.max(0, Math.min(100, Number(m.confidence) || 0)),
           sources: (m.sources || []).filter((u) => /^https?:\/\//i.test(String(u))).slice(0, 8).map((u) => s(u, 500)), rationale: s(m.rationale, 600),
         })),
+        ...(c?.incomplete ? { incomplete: true, note: s(c.note, 200) } : {}),
         ...(got.checks ? {} : { missing: true }),
       });
       return { party_key: p.key, name: p.name, role: p.role, checks: { sanctions: check(got.checks?.sanctions), pep: check(got.checks?.pep), adverse_media: check(got.checks?.adverse_media) } };

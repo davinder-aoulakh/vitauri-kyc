@@ -1,7 +1,7 @@
 // KYC Screener run control. A run is done in short steps, each its own function call, because one long background job
 // is ended by the platform without a trace. Pure: no I/O, runs in Deno and node.
-//   steps: doc_reader -> screening (one call per party) -> rules (one call per part of the grid) -> verdict -> export
-//   run.progress = { step, party_index, parties[], screening_raw[], rule_index, rule_total, rule_outcomes[], attempts, active, started_at, last_error, usage }
+//   steps: doc_reader -> screening (one call per check of each party) -> rules (one call per part of the grid) -> verdict -> export
+//   run.progress = { step, party_index, check_index, parties[], screening_raw[], rule_index, rule_total, rule_outcomes[], attempts, active, started_at, last_error, usage }
 //   run.heartbeat_at is refreshed every 20 s while a step works; a step without a heartbeat for STEP_STALE_MS is dead.
 
 export const STEPS = ['doc_reader', 'screening', 'rules', 'verdict', 'export'];
@@ -11,7 +11,13 @@ export const STEP_STALE_MS = 90 * 1000;
 export const RUN_DEAD_MS = 20 * 60 * 1000;
 export const MAX_STEP_ATTEMPTS = 2;
 export const STEP_CALL_TIMEOUT_MS = 90 * 1000;
-export const SCREEN_MAX_SEARCHES = 5;
+/** The three checks screening makes on each party, one call each: sanctions, PEP and adverse media. */
+export const SCREEN_CHECKS = ['sanctions', 'pep', 'adverse_media'];
+export const SCREEN_CHECK_LABEL = { sanctions: 'sanctions', pep: 'PEP', adverse_media: 'adverse media' };
+/** Searches per check, not per party: a small budget keeps one check inside the time a step is given. */
+export const SCREEN_MAX_SEARCHES = 2;
+/** A check slower than this is retried, or recorded as not completed, instead of being ended by the platform. */
+export const SCREEN_CALL_TIMEOUT_MS = 25 * 1000;
 /** Rules per call: a large grid is applied in parts, so no single call has to answer the whole grid at once. */
 export const RULE_BATCH_SIZE = 8;
 
@@ -39,7 +45,7 @@ export function isRunDead(run, now = Date.now()) {
  *   { action: 'none' }                       run is not running
  *   { action: 'wait', step }                 a step is working
  *   { action: 'run', step, attempt }         start (or retry) the step
- *   { action: 'skip_party', step, reason }   screening of one party failed twice: record it as not completed, go on
+ *   { action: 'skip_check', step, reason }   one check of one party failed twice: record it as not completed, go on
  *   { action: 'fail', step, reason }         give up with a clear reason
  */
 export function planAdvance(run, now = Date.now()) {
@@ -55,20 +61,35 @@ export function planAdvance(run, now = Date.now()) {
   }
   if (attempts >= MAX_STEP_ATTEMPTS) {
     const why = died || p.last_error || 'no result';
-    if (step === 'screening') return { action: 'skip_party', step, reason: why };
+    if (step === 'screening') return { action: 'skip_check', step, reason: why };
     return { action: 'fail', step, reason: `The step "${STEP_LABEL[step]}" did not finish (${why}; tried ${attempts} times). Run again.` };
   }
   return { action: 'run', step, attempt: attempts + 1 };
 }
 
-/** Progress after the screening of the current party ended (entry = Claude's result, or { failed: true } when it could not be completed). */
-export function afterParty(progress, entry) {
+/**
+ * Progress after one check of the current party was answered.
+ * value = Claude's result for that check, or { failed: true, error } when it could not be completed.
+ * Moves to the party's next check, or to the next party, or to the rules once every party has all its checks.
+ */
+export function afterCheck(progress, check, value) {
   const list = progress.parties || [];
   const i = Number(progress.party_index) || 0;
   const party = list[i] || {};
-  const raws = [...(progress.screening_raw || []).filter((x) => x.party_key !== party.key), { ...entry, party_key: party.key }];
-  const last = i + 1 >= list.length;
-  return { ...progress, screening_raw: raws, party_index: i + 1, step: last ? 'rules' : 'screening', attempts: 0, active: false, last_error: null };
+  const key = SCREEN_CHECKS.includes(check) ? check : SCREEN_CHECKS[0];
+  const raws = [...(progress.screening_raw || [])];
+  const at = raws.findIndex((x) => x.party_key === party.key);
+  const entry = at >= 0 ? { ...raws[at], checks: { ...(raws[at].checks || {}) } } : { party_key: party.key, name: party.name, checks: {} };
+  entry.checks[key] = value?.failed
+    ? { result: 'inconclusive', matches: [], incomplete: true, note: `Screening could not be completed (${String(value.error || 'no result').slice(0, 160)}).` }
+    : { result: value?.result || 'inconclusive', matches: Array.isArray(value?.matches) ? value.matches : [] };
+  if (at >= 0) raws[at] = entry; else raws.push(entry);
+  const done = SCREEN_CHECKS.indexOf(key) + 1 >= SCREEN_CHECKS.length;
+  const last = done && i + 1 >= list.length;
+  return {
+    ...progress, screening_raw: raws, check_index: done ? 0 : SCREEN_CHECKS.indexOf(key) + 1,
+    party_index: done ? i + 1 : i, step: last ? 'rules' : 'screening', attempts: 0, active: false, last_error: null,
+  };
 }
 
 /**
@@ -120,8 +141,10 @@ export function progressText(run) {
   const step = STEPS.includes(p.step) ? p.step : (STEPS.includes(run?.stage) ? run.stage : 'doc_reader');
   if (step === 'screening') {
     const list = p.parties || [];
-    const i = Math.min((Number(p.party_index) || 0) + 1, Math.max(list.length, 1));
-    return list.length ? `Screening ${i} of ${list.length}: ${list[i - 1]?.name || ''}`.trim() : STEP_LABEL.screening;
+    if (!list.length) return STEP_LABEL.screening;
+    const i = Math.min((Number(p.party_index) || 0) + 1, list.length);
+    const check = SCREEN_CHECKS[Number(p.check_index) || 0] || SCREEN_CHECKS[0];
+    return `Screening ${i} of ${list.length}: ${list[i - 1]?.name || ''} (${SCREEN_CHECK_LABEL[check] || check})`;
   }
   if (step === 'rules' && Number(p.rule_total) > 0) {
     const parts = Math.ceil(Number(p.rule_total) / RULE_BATCH_SIZE);
