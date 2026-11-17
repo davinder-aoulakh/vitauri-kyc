@@ -20,7 +20,7 @@ import { buildScreenerXlsx, buildScreenerPdf } from '../../shared/kycScreenerExp
 import { KYC_SOURCE } from '../../shared/kycScreenerPrompts.js';
 import { anthropicKeyFor } from '../../shared/anthropicCredentials.js';
 
-const ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin']; // createRunCase
+const ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin', 'Vitauri Ops']; // createRunCase
 const MAX_DOCS = 8;
 const MAX_DOC_BYTES = 8 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 24 * 1024 * 1024;
@@ -170,7 +170,9 @@ async function runStep({ base44, E, user, tenant, client, kycCase, run, step, at
 
     if (step === 'rules') {
       const screening = markIncomplete(normaliseScreening({ parties: (progress.screening_raw || []).filter((x) => !x.failed) }, ctx.parties), progress.screening_raw || []);
-      const r = await callFn(rulesRequest({ profile: ctx.profile, docRecord: run.doc_record, screening, grid: ctx.grid.grid }));
+      // This stage must answer inside one short background step: low reasoning effort and a smaller answer budget keep
+      // the call to a few seconds, and rulesRequest trims the screening detail the verdict does not need.
+      const r = await callFn({ ...rulesRequest({ profile: ctx.profile, docRecord: run.doc_record, screening, grid: ctx.grid.grid }), effort: 'low', maxTokens: 8000, thinking: 'off' });
       add(r.usage);
       if (!r.json?.disposition) throw new Error('The rules stage returned no disposition.');
       const rules = { ...r.json, summary: String(r.json.summary || '').slice(0, 2000), rule_outcomes: (r.json.rule_outcomes || []).slice(0, 60) };

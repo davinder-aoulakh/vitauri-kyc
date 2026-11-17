@@ -46,7 +46,7 @@ export function extractJson(text) {
  * schema: structured-output JSON schema (no tools allowed with it here). tools: server tools (web search) for free-text stages.
  * client: injectable for tests. timeoutMs (optional): the whole call is aborted after this time and fails with code 'timeout'.
  */
-export async function callClaude({ system, content, schema, tools, model = DEFAULT_CLAUDE_MODEL, effort = 'high', maxTokens = 32000, client, timeoutMs = 0 }) {
+export async function callClaude({ system, content, schema, tools, model = DEFAULT_CLAUDE_MODEL, effort = 'high', maxTokens = 32000, client, timeoutMs = 0, thinking = 'adaptive' }) {
   const c = client || claudeClient();
   const messages = [{ role: 'user', content }];
   const usage = { input_tokens: 0, output_tokens: 0 };
@@ -57,7 +57,7 @@ export async function callClaude({ system, content, schema, tools, model = DEFAU
   for (let turn = 0; turn < 4; turn++) {
     const params = {
       model, max_tokens: maxTokens, system, messages,
-      thinking: { type: 'adaptive' },
+      ...(thinking === 'off' ? {} : { thinking: { type: 'adaptive' } }), // 'off': mechanical stages that must answer fast
       output_config: { effort, ...(schema ? { format: { type: 'json_schema', schema } } : {}) },
       ...(tools?.length ? { tools } : {}),
       betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
