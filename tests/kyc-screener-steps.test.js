@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planAdvance, afterParty, markIncomplete, isStepStale, isRunDead, progressText, MAX_STEP_ATTEMPTS, STEP_STALE_MS, RUN_DEAD_MS } from '../base44/shared/kycScreenerSteps.js';
+import { planAdvance, afterParty, afterRuleBatch, mergeRuleOutcomes, markIncomplete, isStepStale, isRunDead, progressText, MAX_STEP_ATTEMPTS, STEP_STALE_MS, RUN_DEAD_MS, RULE_BATCH_SIZE } from '../base44/shared/kycScreenerSteps.js';
 
 const T0 = Date.parse('2026-11-18T10:00:00Z');
 const iso = (offsetMs) => new Date(T0 + offsetMs).toISOString();
@@ -50,6 +50,36 @@ test('one screening call per party, then rules', () => {
   assert.ok(!again.screening_raw[1].failed);
 });
 
+test('a large grid is applied in parts, then the verdict', () => {
+  const grid = Array.from({ length: 21 }, (_, i) => ({ id: `R${i + 1}`, text: `rule ${i + 1}` }));
+  const part = grid.slice(0, RULE_BATCH_SIZE).map((r) => ({ rule_id: r.id, outcome: 'pass', evidence: 'ok' }));
+  let p = { step: 'rules', rule_index: 0, rule_outcomes: [], attempts: 2, active: true };
+  p = afterRuleBatch(p, part, grid.length);
+  assert.equal(p.step, 'rules');
+  assert.equal(p.rule_index, RULE_BATCH_SIZE);
+  assert.equal(p.rule_total, 21);
+  assert.equal(p.attempts, 0);
+  assert.equal(p.active, false);
+  // the same part retried replaces its outcomes instead of doubling them
+  const again = afterRuleBatch({ ...p, rule_index: 0 }, [{ rule_id: 'R1', outcome: 'fail', evidence: 'x' }], grid.length);
+  assert.equal(again.rule_outcomes.filter((o) => o.rule_id === 'R1').length, 1);
+  assert.equal(again.rule_index, RULE_BATCH_SIZE);
+  // the last part hands over to the verdict
+  const last = afterRuleBatch({ ...p, rule_index: 16 }, grid.slice(16).map((r) => ({ rule_id: r.id, outcome: 'n/a', evidence: '' })), grid.length);
+  assert.equal(last.step, 'verdict');
+  assert.equal(last.rule_index, 21);
+});
+
+test('every rule of the grid gets an outcome, in grid order; a rule left out reads n/a', () => {
+  const grid = [{ id: 'R1', text: 'one' }, { id: 'R2', text: 'two' }, { id: 'R3', text: 'three' }];
+  const out = mergeRuleOutcomes(grid, [{ rule_id: 'R3', outcome: 'fail', evidence: 'hit' }, { rule_id: 'R1', outcome: 'pass', evidence: 'ok' }]);
+  assert.deepEqual(out.map((o) => o.rule_id), ['R1', 'R2', 'R3']);
+  assert.equal(out[1].outcome, 'n/a');
+  assert.match(out[1].evidence, /Not answered/);
+  assert.equal(out[2].rule_text, 'three');
+  assert.equal(mergeRuleOutcomes([], []).length, 0);
+});
+
 test('a party that could not be screened is inconclusive and says so, never "no match"', () => {
   const check = { result: 'inconclusive', matches: [], missing: true };
   const screening = { parties: [
@@ -80,4 +110,7 @@ test('progress text', () => {
   assert.equal(progressText(run({ step: 'screening', party_index: 1, parties })), 'Screening 2 of 2: E. Zwarts');
   assert.equal(progressText(run({ step: 'export' })), 'Building Excel and PDF');
   assert.equal(progressText({ status: 'running', stage: 'rules' }), 'Applying the rules grid');
+  assert.equal(progressText(run({ step: 'rules', rule_index: 8, rule_total: 21 })), 'Applying the rules grid (part 2 of 3)');
+  assert.equal(progressText(run({ step: 'rules', rule_index: 0, rule_total: 5 })), 'Applying the rules grid');
+  assert.equal(progressText(run({ step: 'verdict' })), 'Reaching the risk verdict');
 });

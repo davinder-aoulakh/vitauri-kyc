@@ -13,14 +13,14 @@ import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { aiLogFields } from '../../shared/aiLog.js';
 import { outreachAnswers } from '../../shared/riskSignals.js';
 import { callClaude, DEFAULT_CLAUDE_MODEL, claudeClient } from '../../shared/claudeClient.js';
-import { namedParties, profileFacts, DEFAULT_RULES_GRID, docReaderRequest, screeningRequest, rulesRequest, capDocRecord, normaliseScreening, SCREENING_SCHEMA } from '../../shared/kycScreener.js';
-import { planAdvance, afterParty, markIncomplete, isRunDead, HEARTBEAT_MS, MAX_STEP_ATTEMPTS, STEP_CALL_TIMEOUT_MS, SCREEN_MAX_SEARCHES, STEP_LABEL } from '../../shared/kycScreenerSteps.js';
+import { namedParties, profileFacts, DEFAULT_RULES_GRID, docReaderRequest, screeningRequest, rulesBatchRequest, rulesVerdictRequest, capDocRecord, normaliseScreening, SCREENING_SCHEMA } from '../../shared/kycScreener.js';
+import { planAdvance, afterParty, afterRuleBatch, mergeRuleOutcomes, markIncomplete, isRunDead, HEARTBEAT_MS, MAX_STEP_ATTEMPTS, STEP_CALL_TIMEOUT_MS, SCREEN_MAX_SEARCHES, RULE_BATCH_SIZE, STEP_LABEL } from '../../shared/kycScreenerSteps.js';
 import { compareScreening, compareRisk } from '../../shared/kycScreenerCompare.js';
 import { buildScreenerXlsx, buildScreenerPdf } from '../../shared/kycScreenerExport.js';
 import { KYC_SOURCE } from '../../shared/kycScreenerPrompts.js';
 import { anthropicKeyFor } from '../../shared/anthropicCredentials.js';
 
-const ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin']; // createRunCase
+const ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin', 'Vitauri Ops']; // createRunCase
 const MAX_DOCS = 8;
 const MAX_DOC_BYTES = 8 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 24 * 1024 * 1024;
@@ -168,15 +168,35 @@ async function runStep({ base44, E, user, tenant, client, kycCase, run, step, at
       return;
     }
 
-    if (step === 'rules') {
+    // The rules grid is applied in parts of RULE_BATCH_SIZE, each its own short call, and the verdict over the whole
+    // grid is one last call: a large tenant grid never needs a single answer longer than a small one. Low reasoning
+    // effort and a small answer budget keep every call to a few seconds; rulesRequest trims the screening detail.
+    if (step === 'rules' || step === 'verdict') {
       const screening = markIncomplete(normaliseScreening({ parties: (progress.screening_raw || []).filter((x) => !x.failed) }, ctx.parties), progress.screening_raw || []);
-      // This stage must answer inside one short background step: low reasoning effort and a smaller answer budget keep
-      // the call to a few seconds, and rulesRequest trims the screening detail the verdict does not need.
-      const r = await callFn({ ...rulesRequest({ profile: ctx.profile, docRecord: run.doc_record, screening, grid: ctx.grid.grid }), effort: 'low', maxTokens: 8000, thinking: 'off' });
-      add(r.usage);
-      if (!r.json?.disposition) throw new Error('The rules stage returned no disposition.');
-      const rules = { ...r.json, summary: String(r.json.summary || '').slice(0, 2000), rule_outcomes: (r.json.rule_outcomes || []).slice(0, 60) };
-      await update({ screening, rules, risk_rating: rules.risk_rating, disposition: rules.disposition, model: r.model || run.model, stage: 'export', heartbeat_at: nowIso(),
+      const grid = ctx.grid.grid;
+      const from = Number(progress.rule_index) || 0;
+      const batch = step === 'rules' ? grid.slice(from, from + RULE_BATCH_SIZE) : [];
+
+      if (batch.length) {
+        const part = Math.floor(from / RULE_BATCH_SIZE) + 1;
+        const r = await callFn({ ...rulesBatchRequest({ profile: ctx.profile, docRecord: run.doc_record, screening, rules: batch, part, parts: Math.ceil(grid.length / RULE_BATCH_SIZE) }), effort: 'low', maxTokens: 4000, thinking: 'off' });
+        add(r.usage);
+        const outcomes = (r.json?.rule_outcomes || []).filter((o) => o?.rule_id);
+        if (!outcomes.length) throw new Error(`The rules stage returned no outcome for rules part ${part}.`);
+        const next = afterRuleBatch(progress, outcomes, grid.length);
+        await update({ screening, stage: next.step, heartbeat_at: nowIso(), progress: idle(next) });
+        return;
+      }
+
+      const v = await callFn({ ...rulesVerdictRequest({ profile: ctx.profile, docRecord: run.doc_record, screening, grid, outcomes: progress.rule_outcomes || [] }), effort: 'low', maxTokens: 6000, thinking: 'off' });
+      add(v.usage);
+      if (!v.json?.disposition) throw new Error('The rules stage returned no disposition.');
+      const rules = {
+        ...v.json,
+        summary: String(v.json.summary || '').slice(0, 2000),
+        rule_outcomes: mergeRuleOutcomes(grid, progress.rule_outcomes || []),
+      };
+      await update({ screening, rules, risk_rating: rules.risk_rating, disposition: rules.disposition, model: v.model || run.model, stage: 'export', heartbeat_at: nowIso(),
         progress: idle({ ...progress, step: 'export', attempts: 0, last_error: null }) });
       return;
     }

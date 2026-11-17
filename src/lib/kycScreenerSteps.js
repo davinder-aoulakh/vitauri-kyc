@@ -1,17 +1,19 @@
 // KYC Screener run control. A run is done in short steps, each its own function call, because one long background job
 // is ended by the platform without a trace. Pure: no I/O, runs in Deno and node.
-//   steps: doc_reader -> screening (one call per party) -> rules -> export
-//   run.progress = { step, party_index, parties[], screening_raw[], attempts, active, started_at, last_error, usage }
+//   steps: doc_reader -> screening (one call per party) -> rules (one call per part of the grid) -> verdict -> export
+//   run.progress = { step, party_index, parties[], screening_raw[], rule_index, rule_total, rule_outcomes[], attempts, active, started_at, last_error, usage }
 //   run.heartbeat_at is refreshed every 20 s while a step works; a step without a heartbeat for STEP_STALE_MS is dead.
 
-export const STEPS = ['doc_reader', 'screening', 'rules', 'export'];
-export const STEP_LABEL = { doc_reader: 'Reading documents', screening: 'Screening parties', rules: 'Applying the rules grid', export: 'Building Excel and PDF' };
+export const STEPS = ['doc_reader', 'screening', 'rules', 'verdict', 'export'];
+export const STEP_LABEL = { doc_reader: 'Reading documents', screening: 'Screening parties', rules: 'Applying the rules grid', verdict: 'Reaching the risk verdict', export: 'Building Excel and PDF' };
 export const HEARTBEAT_MS = 20 * 1000;
 export const STEP_STALE_MS = 90 * 1000;
 export const RUN_DEAD_MS = 20 * 60 * 1000;
 export const MAX_STEP_ATTEMPTS = 2;
 export const STEP_CALL_TIMEOUT_MS = 90 * 1000;
 export const SCREEN_MAX_SEARCHES = 5;
+/** Rules per call: a large grid is applied in parts, so no single call has to answer the whole grid at once. */
+export const RULE_BATCH_SIZE = 8;
 
 const ms = (v) => { const t = Date.parse(v || ''); return Number.isFinite(t) ? t : 0; };
 
@@ -69,6 +71,36 @@ export function afterParty(progress, entry) {
   return { ...progress, screening_raw: raws, party_index: i + 1, step: last ? 'rules' : 'screening', attempts: 0, active: false, last_error: null };
 }
 
+/**
+ * Progress after one part of the rules grid was applied (outcomes = Claude's rule_outcomes for that part).
+ * Moves to the next part, or to the verdict once the whole grid has an outcome.
+ */
+export function afterRuleBatch(progress, outcomes, gridLength) {
+  const from = Number(progress.rule_index) || 0;
+  const got = (Array.isArray(outcomes) ? outcomes : []).filter((o) => o?.rule_id);
+  const fresh = new Set(got.map((o) => String(o.rule_id)));
+  const merged = [...(progress.rule_outcomes || []).filter((o) => !fresh.has(String(o?.rule_id))), ...got];
+  const next = from + Math.min(RULE_BATCH_SIZE, Math.max(0, gridLength - from));
+  return {
+    ...progress, rule_outcomes: merged, rule_index: next, rule_total: gridLength,
+    step: next >= gridLength ? 'verdict' : 'rules', attempts: 0, active: false, last_error: null,
+  };
+}
+
+/** The grid in its own order with every rule answered: a rule the model left out reads "n/a" instead of vanishing. */
+export function mergeRuleOutcomes(grid, outcomes = []) {
+  const byId = new Map((outcomes || []).filter((o) => o?.rule_id).map((o) => [String(o.rule_id), o]));
+  return (grid || []).map((r) => {
+    const got = byId.get(String(r.id));
+    return {
+      rule_id: String(r.id),
+      rule_text: String(r.text || '').slice(0, 500),
+      outcome: ['pass', 'fail', 'n/a'].includes(got?.outcome) ? got.outcome : 'n/a',
+      evidence: String(got?.evidence || 'Not answered by the screener.').slice(0, 400),
+    };
+  });
+}
+
 /** Marks parties whose screening could not be completed. Never "no match": the result is inconclusive and says why. */
 export function markIncomplete(screening, raws = []) {
   const failed = new Map(raws.filter((x) => x?.failed).map((x) => [x.party_key, x.error || 'not completed']));
@@ -86,8 +118,15 @@ export function markIncomplete(screening, raws = []) {
 export function progressText(run) {
   const p = run?.progress || {};
   const step = STEPS.includes(p.step) ? p.step : (STEPS.includes(run?.stage) ? run.stage : 'doc_reader');
-  if (step !== 'screening') return STEP_LABEL[step];
-  const list = p.parties || [];
-  const i = Math.min((Number(p.party_index) || 0) + 1, Math.max(list.length, 1));
-  return list.length ? `Screening ${i} of ${list.length}: ${list[i - 1]?.name || ''}`.trim() : STEP_LABEL.screening;
+  if (step === 'screening') {
+    const list = p.parties || [];
+    const i = Math.min((Number(p.party_index) || 0) + 1, Math.max(list.length, 1));
+    return list.length ? `Screening ${i} of ${list.length}: ${list[i - 1]?.name || ''}`.trim() : STEP_LABEL.screening;
+  }
+  if (step === 'rules' && Number(p.rule_total) > 0) {
+    const parts = Math.ceil(Number(p.rule_total) / RULE_BATCH_SIZE);
+    const part = Math.floor(Math.min(Number(p.rule_index) || 0, Number(p.rule_total) - 1) / RULE_BATCH_SIZE) + 1;
+    return parts > 1 ? `${STEP_LABEL.rules} (part ${part} of ${parts})` : STEP_LABEL.rules;
+  }
+  return STEP_LABEL[step];
 }
