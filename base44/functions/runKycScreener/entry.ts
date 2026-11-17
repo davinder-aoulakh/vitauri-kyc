@@ -20,7 +20,7 @@ import { buildScreenerXlsx, buildScreenerPdf } from '../../shared/kycScreenerExp
 import { KYC_SOURCE } from '../../shared/kycScreenerPrompts.js';
 import { anthropicKeyFor } from '../../shared/anthropicCredentials.js';
 
-const ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin', 'Vitauri Ops']; // createRunCase
+const ROLES = ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin']; // createRunCase
 const MAX_DOCS = 8;
 const MAX_DOC_BYTES = 8 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 24 * 1024 * 1024;
