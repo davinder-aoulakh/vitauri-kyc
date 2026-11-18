@@ -24,7 +24,7 @@ const fromLines = (t) => String(t || '').split('\n').map((x) => x.trim()).filter
 /** Editor for one OutreachBlock (spec 4.2). Saving writes a draft; Publish makes it the version new requests use. */
 export default function BlockEditor({ open, onOpenChange, entry, isNew, allBlocks, canEdit, busy, onSave, onPublish }) {
   const row = entry?.draft || entry?.published || null;
-  const [b, setB] = useState({});
+  const [b, setB] = useState(/** @type {any} */ ({}));
   const [key, setKey] = useState('');
   const [jsonErr, setJsonErr] = useState({});
   useEffect(() => {

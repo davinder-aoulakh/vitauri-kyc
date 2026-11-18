@@ -16,7 +16,7 @@ const MODES = [['off', 'Off', 'Didit for every country'], ['test', 'Test', 'KvK 
  * arrive with the KvK adapter (outreach phase 6).
  */
 export default function OutreachIntegrationsPanel({ tenant, onClose }) {
-  const [st, setSt] = useState(null);
+  const [st, setSt] = useState(/** @type {any} */ (null));
   const [mode, setMode] = useState('off');
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);

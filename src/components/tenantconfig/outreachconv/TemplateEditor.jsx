@@ -16,7 +16,7 @@ const fromLines = (t) => String(t || '').split('\n').map((x) => x.trim()).filter
 /** Editor for one OutreachFlowTemplate (spec 4.3): ordered blocks with an Active switch each, sections, settings and intro. */
 export default function TemplateEditor({ open, onOpenChange, entry, isNew, blocks, canEdit, busy, onSave, onPublish }) {
   const row = entry?.draft || entry?.published || null;
-  const [t, setT] = useState({});
+  const [t, setT] = useState(/** @type {any} */ ({}));
   const [key, setKey] = useState('');
   const [add, setAdd] = useState('');
   const [jsonErr, setJsonErr] = useState('');

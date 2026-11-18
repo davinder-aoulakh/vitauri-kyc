@@ -7,7 +7,7 @@ import { versionsByKey } from '@/lib/outreachConfigView';
 export const errText = (e) => e?.response?.data?.error || e?.message || 'Something went wrong';
 
 export function useOutreachConfig() {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState(/** @type {any} */ (null));
   const [busy, setBusy] = useState('');
   const load = useCallback(async () => {
     try {

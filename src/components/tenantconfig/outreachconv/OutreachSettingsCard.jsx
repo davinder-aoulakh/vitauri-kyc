@@ -12,7 +12,7 @@ const N = ({ label, value, onChange, disabled }) => (
 
 /** Non-secret settings of the guided conversation (Tenant.outreach_settings). Registry and keys are shown read-only (set by Vitauri Ops). */
 export default function OutreachSettingsCard({ settings, registry, canEdit, busy, onSave }) {
-  const [s, setS] = useState(settings || {});
+  const [s, setS] = useState(/** @type {any} */ (settings || {}));
   useEffect(() => { setS(settings || {}); }, [settings]);
   const set = (k, v) => setS((x) => ({ ...x, [k]: v }));
   const ro = !canEdit;
