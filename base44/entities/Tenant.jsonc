@@ -189,6 +189,10 @@
       "type": "string",
       "default": "USD"
     },
+    "outreach_settings": {
+      "type": "object",
+      "description": "Guided conversation outreach: thresholds, deadlines, reminder days, AI follow-up approval per risk class, lists. No secrets (keys live in TenantSecret)."
+    },
     "tm_settings": {
       "type": "object",
       "description": "Free-form: thresholds, risk weights, auto_draft_objective_reports (boolean)"

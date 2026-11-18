@@ -1,0 +1,239 @@
+{
+  "name": "OutreachBlock",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "description": "Owning tenant"
+    },
+    "key": {
+      "type": "string",
+      "description": "Stable block id, e.g. sof. Unique per tenant together with version"
+    },
+    "version": {
+      "type": "number",
+      "description": "Raised by 1 on every publish"
+    },
+    "status": {
+      "type": "string",
+      "description": "draft | published. Requests only use published versions",
+      "enum": [
+        "draft",
+        "published"
+      ],
+      "default": "draft"
+    },
+    "label": {
+      "type": "string"
+    },
+    "section_key": {
+      "type": "string",
+      "description": "Section of the template the block belongs to"
+    },
+    "client_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "NP",
+          "ORG",
+          "RP"
+        ]
+      }
+    },
+    "widget": {
+      "type": "string",
+      "description": "Widget of spec 5.2 (chips, multi, text, area, phone, address, upload, idv, confirm_facts, registry_search, form, people_list, reps_list, owners_builder, structure_card, tracker, review, sign)"
+    },
+    "question_template": {
+      "type": "string",
+      "description": "Question text with {placeholders}"
+    },
+    "variants": {
+      "type": "object",
+      "description": "Alternative question texts, e.g. per legal-form kind or route"
+    },
+    "why_text": {
+      "type": "string",
+      "description": "Shown under \"Why do we ask this?\""
+    },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "multi": {
+      "type": "boolean"
+    },
+    "none_option": {
+      "type": "string",
+      "description": "Exclusive \"none\" option text, or empty"
+    },
+    "datapoints": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "{ key, label, type, sources[], profile_field? }"
+    },
+    "kyc_mapping": {
+      "type": "string",
+      "description": "KYC data the block feeds"
+    },
+    "show_if": {
+      "type": "object",
+      "description": "Condition (spec 5.4); empty = always"
+    },
+    "follow_ups": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Follow-up rules (spec 6.1)"
+    },
+    "evidence": {
+      "type": "object",
+      "description": "{ required, allow_defer, defer_creates_open_request, document_checks[], max_age_months }"
+    },
+    "prefill": {
+      "type": "string",
+      "description": "Source of a prefill, if any"
+    },
+    "validation": {
+      "type": "object",
+      "description": "Rules and error texts"
+    },
+    "edit": {
+      "type": "object",
+      "description": "How the review may edit the answer"
+    },
+    "active_default": {
+      "type": "boolean",
+      "description": "Active when added to a template",
+      "default": true
+    },
+    "translations": {
+      "type": "object",
+      "description": "Language -> strings"
+    },
+    "raw": {
+      "type": "object",
+      "description": "The seed entry, unchanged"
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "published_by": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "key",
+    "version",
+    "status"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    }
+  }
+}

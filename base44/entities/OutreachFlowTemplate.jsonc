@@ -1,0 +1,201 @@
+{
+  "name": "OutreachFlowTemplate",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "description": "Owning tenant"
+    },
+    "key": {
+      "type": "string",
+      "description": "Stable template id, e.g. onboarding_np"
+    },
+    "name": {
+      "type": "string"
+    },
+    "client_type": {
+      "type": "string",
+      "description": "NP | ORG | RP",
+      "enum": [
+        "NP",
+        "ORG",
+        "RP"
+      ]
+    },
+    "case_types": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "version": {
+      "type": "number",
+      "description": "Raised by 1 on every publish"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "published"
+      ],
+      "default": "draft"
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "{ key, label } in progress order"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Ordered { block_key, block_version, active, section_key? }"
+    },
+    "settings": {
+      "type": "object",
+      "description": "Template settings, e.g. uboThreshold, releaseInvitesAfterIdv"
+    },
+    "intro_messages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "start_chip": {
+      "type": "string"
+    },
+    "expected_minutes": {
+      "type": "number"
+    },
+    "default_deadline_days": {
+      "type": "number"
+    },
+    "channel": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "raw": {
+      "type": "object",
+      "description": "The seed entry, unchanged"
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "published_by": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "key",
+    "version",
+    "status"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Compliance Admin"
+              }
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "$and": [
+            {
+              "data.tenant_id": "{{user.data.tenant_id}}"
+            },
+            {
+              "user_condition": {
+                "data.app_role": "Tenant Admin"
+              }
+            }
+          ]
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    }
+  }
+}
