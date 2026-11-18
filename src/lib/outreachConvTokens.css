@@ -1,0 +1,74 @@
+/* Guided conversation outreach portal: design tokens of 08-design-tokens-and-ux-notes.txt, scoped to .oc.
+   The tenant brand colour overrides --brand (set inline). No external fonts or images. */
+.oc{
+  --bg:#eef3f0; --surface:#ffffff; --surface2:#f5f9f7; --ink:#12342b; --muted:#5b7167; --line:#d9e4de;
+  --brand:#13503f; --brand-ink:#ffffff; --brand-soft:#e1f0e9; --me:var(--brand); --me-ink:#fff;
+  --ok:#1b7a4d; --ok-soft:#e0f3e8; --warn:#8a5a00; --warn-soft:#fff1d6; --bad:#b0372b; --bad-soft:#fde6e3;
+  --ai:#3f4fa8; --ai-soft:#e8ebfa; --shadow:0 1px 2px rgba(18,52,43,.06),0 6px 18px rgba(18,52,43,.06);
+  --font:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  min-height:100vh; min-height:100dvh; background:var(--bg); color:var(--ink); font-family:var(--font); font-size:15px; line-height:1.5;
+  padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(28px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){.oc{
+  --bg:#0e1814; --surface:#15231e; --surface2:#1a2a24; --ink:#e3eee8; --muted:#97aea3; --line:#26382f;
+  --brand-ink:#052116; --brand-soft:#1c3a30; --me-ink:#fff;
+  --ok:#5fd09a; --ok-soft:#173528; --warn:#f0be5c; --warn-soft:#3a2f12; --bad:#ff8f84; --bad-soft:#3d1c19;
+  --ai:#9aa8ff; --ai-soft:#222a52; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.25); color-scheme:dark}}
+.oc *{box-sizing:border-box}
+.oc :focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.oc-top{max-width:1120px;margin:0 auto 16px;display:flex;align-items:center;gap:10px;font-weight:600}
+.oc-top img{height:28px;width:auto}
+.oc-mark{width:28px;height:28px;border-radius:8px;background:var(--brand);color:var(--brand-ink);display:grid;place-items:center;font-size:14px}
+.oc-grid{max-width:1120px;margin:0 auto;display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;align-items:start}
+.oc-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:16px}
+.oc-side{display:grid;gap:12px;position:sticky;top:16px}
+.oc-hello h1{font-size:20px;margin:0 0 6px}
+.oc-hello p{margin:0;color:var(--muted);font-size:14px}
+.oc-deadline{display:flex;gap:8px;align-items:center;font-size:14px}
+.oc-prog-h{display:flex;justify-content:space-between;font-weight:600;font-size:14px}
+.oc-bar{height:8px;border-radius:99px;background:var(--surface2);border:1px solid var(--line);overflow:hidden;margin:8px 0 10px}
+.oc-bar i{display:block;height:100%;background:var(--brand);border-radius:99px}
+.oc-secs{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:14px}
+.oc-secs li{display:flex;align-items:center;gap:8px;color:var(--muted)}
+.oc-secs li.current{color:var(--ink);font-weight:600}
+.oc-secs li.done{color:var(--ink)}
+.oc-dot{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;font-size:10px;flex:none}
+.oc-secs li.current .oc-dot{border-color:var(--brand);background:var(--brand-soft)}
+.oc-secs li.done .oc-dot{border-color:var(--ok);background:var(--ok-soft);color:var(--ok)}
+.oc-small{font-size:13px;color:var(--muted)}
+.oc-saved{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);margin-top:8px}
+.oc-saved i{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block}
+.oc-req h3{font-size:14px;margin:0 0 6px}
+.oc-chat{padding:0;display:flex;flex-direction:column;min-height:60vh}
+.oc-chat-h{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);font-weight:600}
+.oc-chat-h small{display:block;font-weight:400;color:var(--muted);font-size:12.5px}
+.oc-av{width:32px;height:32px;border-radius:50%;background:var(--brand);color:var(--brand-ink);display:grid;place-items:center;font-size:13px;font-weight:600;flex:none}
+.oc-thread{padding:16px;display:grid;gap:12px;align-content:start;flex:1;overflow-y:auto;scroll-behavior:smooth}
+.oc-msg{display:flex;gap:8px;align-items:flex-end;max-width:70%}
+.oc-msg.client{margin-left:auto;flex-direction:row-reverse}
+.oc-bubble{background:var(--surface2);border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.oc-msg.client .oc-bubble{background:var(--me);color:var(--me-ink);border-color:transparent;border-radius:14px 14px 4px 14px}
+.oc-tag{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-bottom:2px}
+.oc-pill{font-family:var(--mono);font-size:10.5px;border-radius:99px;padding:1px 7px;background:var(--ai-soft);color:var(--ai);margin-left:6px}
+.oc-sys{text-align:center;font-size:12.5px;color:var(--muted)}
+.oc-chips{display:flex;flex-wrap:wrap;gap:8px;padding:0 16px 16px}
+.oc-chip{min-height:40px;padding:8px 14px;border-radius:99px;border:1px solid var(--brand);background:var(--surface);color:var(--brand);font:inherit;font-size:15px;cursor:pointer}
+.oc-chip:disabled{opacity:.55;cursor:not-allowed}
+.oc-btn{min-height:40px;padding:8px 16px;border-radius:10px;border:0;background:var(--brand);color:var(--brand-ink);font:inherit;cursor:pointer}
+.oc-btn:disabled{opacity:.6;cursor:not-allowed}
+.oc-center{max-width:520px;margin:12vh auto 0;text-align:center}
+.oc-center h1{font-size:22px;margin:0 0 8px}
+.oc-center p{color:var(--muted);margin:0 0 16px}
+.oc-spin{width:22px;height:22px;border-radius:50%;border:2.5px solid var(--line);border-top-color:var(--brand);animation:oc-spin 0.9s linear infinite;margin:0 auto 10px}
+@keyframes oc-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.oc *{animation:none!important;transition:none!important}.oc-thread{scroll-behavior:auto}}
+@media (max-width:860px){
+  .oc-grid{grid-template-columns:minmax(0,1fr)}
+  .oc-side{position:sticky;top:0;z-index:5;gap:0}
+  .oc-side>.oc-hello,.oc-side>.oc-deadline,.oc-side>.oc-req,.oc-side>.oc-help{display:none}
+  .oc-side .oc-secs,.oc-side .oc-saved,.oc-side .oc-eta{display:none}
+  .oc-side .oc-progress{padding:10px 14px;border-radius:12px}
+  .oc-msg{max-width:88%}
+}

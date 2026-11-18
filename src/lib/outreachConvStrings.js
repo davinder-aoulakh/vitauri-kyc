@@ -1,0 +1,27 @@
+// Guided conversation outreach: client-facing UI strings of the portal page (English only for now).
+// Question texts, options and the bank's own wording are never here: they come from the request snapshot.
+export const OC = {
+  loading: 'Loading your conversation…',
+  progress: 'Your progress',
+  respondBy: 'Please respond by',
+  saved: 'Your answers are saved automatically',
+  savedAt: (t) => `Saved at ${t}`,
+  openRequests: 'Open requests',
+  minutesLeft: (n) => (n <= 0 ? 'Almost done' : `About ${n} minute${n === 1 ? '' : 's'} left`),
+  submittedEta: 'Submitted. You will see here if we need anything else.',
+  conversationSaved: 'Conversation saved in your file',
+  application: (name) => `${name} application`,
+  startSoon: 'The questions will appear here shortly.',
+  notFoundTitle: 'This link does not work',
+  notFoundBody: 'Please use the link from your most recent email. If it still does not work, contact us.',
+  expiredTitle: 'This link has expired',
+  expiredBody: 'For your security, links stop working some time after the deadline. Ask for a new link and we will send it to you.',
+  askNewLink: 'Ask for a new link',
+  newLinkRequested: 'Thank you. A colleague will send you a new link.',
+  cancelledTitle: 'This request is no longer active',
+  cancelledBody: 'There is nothing you need to do. If you have questions, contact us.',
+  tooMany: 'Too many attempts. Please wait a few minutes and try again.',
+  error: 'Something went wrong. Please try again.',
+  retry: 'Try again',
+  needHelp: 'Need help?',
+};
