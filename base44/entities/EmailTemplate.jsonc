@@ -17,7 +17,12 @@
         "Second_Reminder",
         "Third_Reminder",
         "Additional_Info",
-        "Documentation_Request"
+        "Documentation_Request",
+        "Conversation_Invite_NP",
+        "Conversation_Invite_ORG",
+        "Conversation_Invite_Related_Party",
+        "Conversation_New_Message",
+        "Conversation_Reminder"
       ]
     },
     "subject": {

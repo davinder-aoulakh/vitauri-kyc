@@ -1,0 +1,190 @@
+{
+  "name": "OutreachConversation",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Carrier OutreachRequest (engine conversation)"
+    },
+    "case_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "party_id": {
+      "type": "string",
+      "description": "RelatedParty for a related-party conversation; empty for the main subject"
+    },
+    "parent_conversation_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "description": "Lifecycle of the conversation",
+      "enum": [
+        "Sent",
+        "Opened",
+        "In_Progress",
+        "Submitted",
+        "Expired",
+        "Cancelled"
+      ],
+      "default": "Sent"
+    },
+    "template_key": {
+      "type": "string"
+    },
+    "template_version": {
+      "type": "number"
+    },
+    "template_snapshot": {
+      "type": "object",
+      "description": "Frozen template at send (sections, items, intro, settings)"
+    },
+    "blocks_snapshot": {
+      "type": "object",
+      "description": "Frozen published blocks at send, by key"
+    },
+    "settings_snapshot": {
+      "type": "object",
+      "description": "Frozen outreach settings at send"
+    },
+    "kvk_environment": {
+      "type": "string",
+      "description": "Registry mode frozen at send",
+      "enum": [
+        "off",
+        "test",
+        "live"
+      ]
+    },
+    "language": {
+      "type": "string"
+    },
+    "risk_class": {
+      "type": "string",
+      "description": "low | medium | high (current value; AI approval reads this)",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "client_type": {
+      "type": "string",
+      "enum": [
+        "NP",
+        "ORG",
+        "RP"
+      ]
+    },
+    "invited_name": {
+      "type": "string"
+    },
+    "invited_first_name": {
+      "type": "string"
+    },
+    "invited_email": {
+      "type": "string"
+    },
+    "deadline": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "token_expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sent_by": {
+      "type": "string"
+    },
+    "first_opened_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_activity_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "submitted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "submission_hash": {
+      "type": "string"
+    },
+    "reference": {
+      "type": "string"
+    },
+    "progress_steps": {
+      "type": "number"
+    },
+    "progress_total": {
+      "type": "number"
+    },
+    "current_block_key": {
+      "type": "string"
+    },
+    "block_states": {
+      "type": "object",
+      "description": "Map block key -> { state, asked_at, answered_at, skip_reason }"
+    },
+    "org_context": {
+      "type": "object",
+      "description": "{ route, country, legal_form_kind, representative_verified, representative_name }"
+    },
+    "pending_step": {
+      "type": "object",
+      "description": "What the engine waits for"
+    },
+    "ai_followup_count": {
+      "type": "number"
+    },
+    "signature": {
+      "type": "object",
+      "description": "{ file_uri, typed_name, signed_at, ip, user_agent }"
+    },
+    "new_link_requested_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "request_id",
+    "client_id"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false
+  }
+}

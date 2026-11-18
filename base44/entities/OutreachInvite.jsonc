@@ -1,0 +1,82 @@
+{
+  "name": "OutreachInvite",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "conversation_id": {
+      "type": "string",
+      "description": "Parent conversation"
+    },
+    "party_id": {
+      "type": "string"
+    },
+    "child_request_id": {
+      "type": "string"
+    },
+    "roles_text": {
+      "type": "string"
+    },
+    "needs": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "To invite",
+        "Queued",
+        "Invited",
+        "Opened",
+        "Completed",
+        "Declined",
+        "Expired"
+      ],
+      "default": "To invite"
+    },
+    "queued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "invited_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "conversation_id"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false
+  }
+}

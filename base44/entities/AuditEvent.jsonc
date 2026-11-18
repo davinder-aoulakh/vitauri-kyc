@@ -26,7 +26,8 @@
       "enum": [
         "User",
         "AI_Agent",
-        "System"
+        "System",
+        "Client"
       ]
     },
     "event_type": {
@@ -45,6 +46,16 @@
     "is_override": {
       "type": "boolean",
       "default": false
+    },
+    "outreach_request_id": {
+      "type": "string"
+    },
+    "related_party_id": {
+      "type": "string"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Structured event data (guided conversation outreach); personal data stays here, not in notes"
     }
   },
   "required": [

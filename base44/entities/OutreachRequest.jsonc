@@ -6,7 +6,7 @@
       "type": "string"
     },
     "case_id": {
-      "description": "FK to KycCase \u2014 omitted for standalone outreach",
+      "description": "FK to KycCase — omitted for standalone outreach",
       "type": "string"
     },
     "client_id": {
@@ -26,7 +26,7 @@
       "type": "string"
     },
     "email_template_body": {
-      "description": "Resolved email template HTML body stored at creation time \u2014 used by sendEmail instead of message",
+      "description": "Resolved email template HTML body stored at creation time — used by sendEmail instead of message",
       "type": "string"
     },
     "items": {
@@ -73,7 +73,7 @@
             "type": "array"
           },
           "field_type": {
-            "description": "Rich field type \u2014 controls how the portal renders the input",
+            "description": "Rich field type — controls how the portal renders the input",
             "type": "string"
           },
           "file_url": {
@@ -138,7 +138,7 @@
             "type": "number"
           },
           "idv_docs_created_for_session": {
-            "description": "Session ID for which Document records have already been created \u2014 dedup guard",
+            "description": "Session ID for which Document records have already been created — dedup guard",
             "type": "string"
           },
           "idv_document_expiry": {
@@ -163,7 +163,7 @@
             "type": "string"
           },
           "idv_extracted_gender": {
-            "description": "Raw Didit gender code \u2014 M, F, or U",
+            "description": "Raw Didit gender code — M, F, or U",
             "type": "string"
           },
           "idv_extracted_last_name": {
@@ -197,7 +197,7 @@
             "type": "number"
           },
           "idv_profile_applied_fields": {
-            "description": "Client profile field keys already applied from this item's IDV extraction \u2014 prevents re-prompting on pipeline re-run",
+            "description": "Client profile field keys already applied from this item's IDV extraction — prevents re-prompting on pipeline re-run",
             "items": {
               "type": "string"
             },
@@ -313,7 +313,7 @@
       "type": "array"
     },
     "message": {
-      "description": "Short custom note from analyst \u2014 NOT the email template body",
+      "description": "Short custom note from analyst — NOT the email template body",
       "type": "string"
     },
     "recipient_email": {
@@ -336,7 +336,12 @@
         "Sent",
         "Viewed",
         "Partial_Response",
-        "Complete"
+        "Complete",
+        "Opened",
+        "In_Progress",
+        "Submitted",
+        "Expired",
+        "Cancelled"
       ],
       "type": "string"
     },
@@ -346,6 +351,26 @@
     "token_expires_at": {
       "format": "date-time",
       "type": "string"
+    },
+    "engine": {
+      "type": "string",
+      "description": "classic (default) or conversation (guided conversation outreach)",
+      "enum": [
+        "classic",
+        "conversation"
+      ]
+    },
+    "token_hash": {
+      "type": "string",
+      "description": "SHA-256 of the conversation link token; access_token stays empty on conversation requests"
+    },
+    "parent_request_id": {
+      "type": "string",
+      "description": "Parent request of a related-party request"
+    },
+    "conversation_id": {
+      "type": "string",
+      "description": "OutreachConversation of a conversation request"
     }
   },
   "required": [

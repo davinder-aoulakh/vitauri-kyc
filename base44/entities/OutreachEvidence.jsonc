@@ -1,0 +1,95 @@
+{
+  "name": "OutreachEvidence",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "conversation_id": {
+      "type": "string"
+    },
+    "block_key": {
+      "type": "string"
+    },
+    "datapoint_key": {
+      "type": "string"
+    },
+    "file_uri": {
+      "type": "string",
+      "description": "Private file reference"
+    },
+    "document_id": {
+      "type": "string",
+      "description": "Document row for the case review"
+    },
+    "name": {
+      "type": "string"
+    },
+    "size": {
+      "type": "number"
+    },
+    "mime": {
+      "type": "string"
+    },
+    "virus_scan": {
+      "type": "string",
+      "description": "not_scanned until a scanner exists"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "pending",
+        "deferred"
+      ]
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "[{ name, ok, message }]"
+    },
+    "read_result": {
+      "type": "object",
+      "description": "AI-read fields, model_version, confirmed_by_client, corrected_fields"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "uploaded_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "conversation_id"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false
+  }
+}

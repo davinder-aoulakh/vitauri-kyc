@@ -1,0 +1,70 @@
+{
+  "name": "OutreachAdapterCall",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "conversation_id": {
+      "type": "string"
+    },
+    "vendor": {
+      "type": "string"
+    },
+    "operation": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "test",
+        "live"
+      ]
+    },
+    "cost_eur": {
+      "type": "number"
+    },
+    "cost_basis": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "response_hash": {
+      "type": "string"
+    },
+    "duration_ms": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "vendor",
+    "operation"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false
+  }
+}

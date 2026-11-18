@@ -1,0 +1,78 @@
+{
+  "name": "OutreachOpenRequest",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "conversation_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "from_name": {
+      "type": "string"
+    },
+    "block_key": {
+      "type": "string"
+    },
+    "party_name": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "deferred_evidence",
+        "analyst_request",
+        "own_checks",
+        "ai_approval"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "answered"
+      ],
+      "default": "open"
+    },
+    "answered_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "assigned_user_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "conversation_id",
+    "title"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "name": "OutreachThreadMessage",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "conversation_id": {
+      "type": "string"
+    },
+    "seq": {
+      "type": "number",
+      "description": "Order in the thread"
+    },
+    "author_type": {
+      "type": "string",
+      "enum": [
+        "bank",
+        "client",
+        "analyst",
+        "system"
+      ]
+    },
+    "author_name": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "message",
+        "answer",
+        "follow_up",
+        "explanation",
+        "status_card",
+        "system_line"
+      ]
+    },
+    "block_key": {
+      "type": "string"
+    },
+    "tag": {
+      "type": "string",
+      "description": "Small label above the message"
+    },
+    "ai_assisted": {
+      "type": "boolean"
+    },
+    "approved_by": {
+      "type": "string"
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Structured widget answer"
+    },
+    "display_text": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "sent",
+        "held"
+      ],
+      "default": "sent"
+    },
+    "client_answer_id": {
+      "type": "string",
+      "description": "Idempotency id of a client answer"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "conversation_id",
+    "seq"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false
+  }
+}

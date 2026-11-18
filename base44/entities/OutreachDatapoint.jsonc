@@ -1,0 +1,93 @@
+{
+  "name": "OutreachDatapoint",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "conversation_id": {
+      "type": "string"
+    },
+    "case_id": {
+      "type": "string"
+    },
+    "party_id": {
+      "type": "string"
+    },
+    "key": {
+      "type": "string"
+    },
+    "label": {
+      "type": "string"
+    },
+    "value": {
+      "type": "object",
+      "description": "Structured value {v: ...}"
+    },
+    "display_value": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "idv",
+        "client",
+        "ai",
+        "doc",
+        "pre",
+        "kvk",
+        "prop",
+        "calc",
+        "rep"
+      ]
+    },
+    "block_key": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "given",
+        "edited",
+        "deferred"
+      ]
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "[{ value, source, changed_at, changed_by, reason }]; an edit never overwrites history"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "conversation_id",
+    "key"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.tenant_id": "{{user.data.tenant_id}}"
+        },
+        {
+          "user_condition": {
+            "data.app_role": "Vitauri Ops"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "data.app_role": "__backend_only__"
+      }
+    },
+    "delete": false
+  }
+}
