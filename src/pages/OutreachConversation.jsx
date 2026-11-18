@@ -114,7 +114,7 @@ export default function OutreachConversation() {
   useEffect(() => { open(); }, [open]);
   useEffect(() => { threadEnd.current?.scrollIntoView?.({ block: 'end' }); }, [v?.thread?.length]);
   useEffect(() => {
-    const m = document.querySelector('meta[name="viewport"]');
+    const m = /** @type {HTMLMetaElement | null} */ (document.querySelector('meta[name="viewport"]'));
     if (m && !/viewport-fit/.test(m.content)) m.content = `${m.content}, viewport-fit=cover`;
   }, []);
 
