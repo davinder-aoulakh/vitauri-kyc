@@ -83,7 +83,7 @@ export default async function (req) {
     // Carrier request: read by the Didit functions and every existing reader of outreach answers. No access_token.
     const request = await E.OutreachRequest.create({
       tenant_id: tenantId, case_id: kycCase.id, client_id: client.id, engine: 'conversation', status: 'Sent',
-      token_hash: tokenHash, token_expires_at: dates.token_expires_at, deadline: dates.deadline,
+      token_hash: tokenHash, token_expires_at: dates.token_expires_at, deadline: dates.deadline.slice(0, 10), // OutreachRequest.deadline is a date
       recipient_email: invitedEmail, delivery_channel: 'Email', message: `Guided conversation: ${template.name}`,
       items: [{ item_id: 'idv', label: 'Identity verification', field_type: 'id_verification', item_type: 'data_point', status: 'Pending' }],
     });
