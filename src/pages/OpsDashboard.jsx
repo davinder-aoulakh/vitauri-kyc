@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import OpsDiditPanel from '@/components/ops/OpsDiditPanel';
 import NewTenantDialog from '@/components/ops/NewTenantDialog';
 import TenantFeaturesPanel from '@/components/ops/TenantFeaturesPanel';
+import OutreachIntegrationsPanel from '@/components/ops/OutreachIntegrationsPanel';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 import TmHealthCard from '@/components/ops/TmHealthCard';
 import { base44 } from '@/api/base44Client';
 import { useTenant } from '@/lib/tenantContext';
@@ -41,6 +43,7 @@ export default function OpsDashboard() {
   const [expandedTenant, setExpandedTenant] = useState(null);
   const [diditTenant, setDiditTenant] = useState(null);
   const [featuresTenant, setFeaturesTenant] = useState(null);
+  const [outreachTenant, setOutreachTenant] = useState(null); // guided conversation outreach: registry integration
   const [newTenantOpen, setNewTenantOpen] = useState(false);
 
   useEffect(() => {
@@ -275,6 +278,11 @@ export default function OpsDashboard() {
                                 <Button variant="outline" size="sm" className="text-xs gap-1 h-7" onClick={() => setDiditTenant(t)}>
                                   🪪 Didit
                                 </Button>
+                                {isFeatureEnabled(t, 'outreach_conversation') && (
+                                  <Button variant="outline" size="sm" className="text-xs gap-1 h-7" onClick={() => setOutreachTenant(t)}>
+                                    Outreach
+                                  </Button>
+                                )}
                                 <Button variant="outline" size="sm" className="text-xs gap-1 h-7" onClick={() => handleViewTenant(t)}>
                                   View <ExternalLink className="w-3 h-3" />
                                 </Button>
@@ -536,6 +544,8 @@ export default function OpsDashboard() {
           onSaved={() => { setDiditTenant(null); loadData(); refreshOpsTenant?.(); }}
         />
       )}
+
+      {outreachTenant && <OutreachIntegrationsPanel tenant={outreachTenant} onClose={() => setOutreachTenant(null)} />}
 
       {featuresTenant && (
         <TenantFeaturesPanel
