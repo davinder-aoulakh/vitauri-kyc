@@ -28,6 +28,9 @@ import OutreachTemplatesTab from '@/components/tenantconfig/OutreachTemplatesTab
 import FormTemplatesTab     from '@/components/tenantconfig/FormTemplatesTab';
 import EmailTemplatesTab    from '@/components/tenantconfig/EmailTemplatesTab';
 import IntegrationsTab      from '@/components/tenantconfig/IntegrationsTab';
+// Guided conversation outreach (flag outreach_conversation): a Classic | Guided conversation switch on the two outreach tabs.
+import EngineSwitch from '@/components/tenantconfig/outreachconv/EngineSwitch';
+import OutreachConversationTab from '@/components/tenantconfig/outreachconv/OutreachConversationTab';
 const TABS = [
   { id: 'branding',    label: 'Branding' },
   { id: 'roles',       label: 'Roles & Permissions' },
@@ -76,6 +79,9 @@ export default function TenantConfig() {
   const showApiKeys = isFeatureEnabled(tenant, 'tm_ingest_api') && hasPermission(userRole, 'tmManageIngest');
   const showFiu = isFeatureEnabled(tenant, 'tm_fiu') && canConfig;
   const showTmSettings = isFeatureEnabled(tenant, 'tm_core') && canConfig;
+  const outreachConv = isFeatureEnabled(tenant, 'outreach_conversation');
+  const [outreachEngine, setOutreachEngine] = useState('classic');
+  const convView = outreachConv && outreachEngine === 'conversation';
   const configTabs = [...TABS, ...(showApiKeys ? [{ id: 'api_keys', label: 'API keys' }] : []), ...(showFiu ? [{ id: 'fiu_profiles', label: 'FIU profiles' }] : []), ...(showTmSettings ? [{ id: 'tm_settings', label: 'TM settings' }] : [])];
   // KYC + AML layout (phase 9): tabs grouped General / KYC / AML, and the rules screen is the AML tab "Rules & scenarios".
   // Rule managers and approvers who may not configure the tenant (Compliance Officer) get that one tab.
@@ -240,11 +246,13 @@ export default function TenantConfig() {
           </TabsContent>
 
           <TabsContent value="outreach" className="mt-5">
-            <OutreachTemplatesTab tenant={tenant} />
+            {outreachConv && <EngineSwitch value={outreachEngine} onChange={setOutreachEngine} />}
+            {convView ? <OutreachConversationTab view="blocks" /> : <OutreachTemplatesTab tenant={tenant} />}
           </TabsContent>
 
           <TabsContent value="form_tmpl" className="mt-5">
-            <FormTemplatesTab tenant={tenant} />
+            {outreachConv && <EngineSwitch value={outreachEngine} onChange={setOutreachEngine} />}
+            {convView ? <OutreachConversationTab view="templates" /> : <FormTemplatesTab tenant={tenant} />}
           </TabsContent>
 
           <TabsContent value="email_tmpl" className="mt-5">
