@@ -30,7 +30,8 @@ test('deadline and expiry: deadline plus grace days', () => {
   const d = linkDates('2026-11-18T10:00:00.000Z', 14, 7);
   assert.equal(d.deadline, '2026-12-02T10:00:00.000Z');
   assert.equal(d.token_expires_at, '2026-12-09T10:00:00.000Z');
-  assert.equal(linkDates('2026-11-18T10:00:00.000Z', 0, 0).deadline, '2026-11-19T10:00:00.000Z'); // at least one day
+  assert.equal(linkDates('2026-11-18T10:00:00.000Z', 0, 0).deadline, '2026-12-02T10:00:00.000Z'); // no or invalid days: 14
+  assert.equal(linkDates('2026-11-18T10:00:00.000Z', 1, 0).token_expires_at, '2026-11-19T10:00:00.000Z');
 });
 
 test('link state: valid, expired after grace, submitted stays open, cancelled', () => {
