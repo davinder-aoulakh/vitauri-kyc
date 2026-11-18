@@ -30,6 +30,7 @@ import UserManagement from './pages/UserManagement';
 import BatchUpload from './pages/BatchUpload';
 import BatchScreening from './pages/BatchScreening';
 import ClientPortal from './pages/ClientPortal';
+import OutreachConversation from './pages/OutreachConversation';
 import ReviewPlanner from './pages/ReviewPlanner';
 import MIDashboard from './pages/MIDashboard';
 import AiPromptLibrary from './pages/AiPromptLibrary';
@@ -153,6 +154,8 @@ function App() {
           <Routes>
             {/* Public client portal — no auth required, token-only */}
             <Route path="/portal/:token" element={<ClientPortal />} />
+            {/* Public guided conversation outreach — token-only; talks to the outreachPortal function, never to entities */}
+            <Route path="/o/:token" element={<OutreachConversation />} />
             {/* Public onboarding — token-gated, handles its own auth redirect */}
             <Route path="/onboard/:token" element={<TenantOnboarding />} />
 
