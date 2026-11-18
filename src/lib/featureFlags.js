@@ -26,6 +26,7 @@ export const FEATURE_DEFINITIONS = [
     group: 'Outreach',
     features: [
       { key: 'outreach', label: 'Outreach Module', description: 'New Outreach creation and Outreach Dashboard' },
+      { key: 'outreach_conversation', label: 'Guided conversation outreach', description: 'Conversation-style outreach built from blocks and templates; the classic outreach stays available', defaultOff: true },
     ],
   },
   {

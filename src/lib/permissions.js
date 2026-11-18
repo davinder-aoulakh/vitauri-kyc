@@ -23,6 +23,8 @@ export const PERMISSIONS = {
   approveMedium:        ['Manager', 'Director', 'Compliance Officer', 'Compliance Admin', 'Tenant Admin'],
   approveHighUnacceptable: ['Director', 'Compliance Admin', 'Tenant Admin'],
   tenantConfig:         ['Compliance Admin', 'Tenant Admin'],
+  outreachConfig:       ['Tenant Admin', 'Compliance Admin'], // guided conversation outreach: blocks, templates, settings
+  outreachConversationWork: ['Analyst', 'QC Reviewer', 'Compliance Officer', 'Manager', 'Director', 'Compliance Admin', 'Tenant Admin'], // same roles as the classic outreach email
   userManagement:       ['Tenant Admin'],
   crossTenantOps:       ['Vitauri Ops'],
   bulkActions:          ['Manager', 'Director', 'Compliance Admin', 'Tenant Admin'],
