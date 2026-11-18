@@ -30,6 +30,7 @@ import CaseTypeBanner       from '@/components/case/views/CaseTypeBanner';
 import TmContextCard        from '@/components/case/TmContextCard';
 import KybStep              from '@/components/case/kyb/KybStep';
 import { isFeatureEnabled } from '@/lib/featureFlags';
+import ConversationPanel from '@/components/outreachconv/backstage/ConversationPanel'; // guided conversation outreach (flag outreach_conversation)
 import CaseAssignmentPicker from '@/components/case/CaseAssignmentPicker';
 import CaseNoteThread       from '@/components/case/CaseNoteThread';
 import DeleteCaseConfirmDialog from '@/components/case/DeleteCaseConfirmDialog';
@@ -753,6 +754,7 @@ export default function CaseWorkspace() {
                   </div>
                 ) : (
                   <>
+                    {activeStep === 1 && isFeatureEnabled(tenant, 'outreach_conversation') && <ConversationPanel kycCase={kycCase} client={client} currentUser={currentUser} />}
                     {activeStep === 1 && <OutreachStep isNewCase={isNewCase} kycCase={kycCase} client={client} currentUser={currentUser} tenant={tenant} onNavigateToStep={setActiveStep} onCaseUpdate={setKycCase} onClientUpdate={mergeClient} />}
                     {activeStep === 2 && client?.client_type === 'ORG' && isFeatureEnabled(tenant, 'didit_kyb') && (
                       <KybStep
