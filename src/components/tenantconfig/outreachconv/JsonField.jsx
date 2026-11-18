@@ -1,12 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { toJsonText, fromJsonText } from '@/lib/outreachConfigView';
 
-/** A structured block field edited as JSON. Reports its parsed value (or an error) to the parent. */
+/**
+ * A structured block field edited as JSON. Reports its parsed value (or an error) to the parent. The text is only replaced
+ * from outside when the value changes for another reason than this field's own typing (e.g. another block opened).
+ */
 export default function JsonField({ label, hint, value, kind = 'object', onChange, rows = 5 }) {
   const [text, setText] = useState(toJsonText(value));
   const [error, setError] = useState('');
-  useEffect(() => { setText(toJsonText(value)); setError(''); }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  const own = useRef(JSON.stringify(value ?? null));
+  useEffect(() => {
+    const v = JSON.stringify(value ?? null);
+    if (v !== own.current) { own.current = v; setText(toJsonText(value)); setError(''); }
+  }, [value]);
   return (
     <div className="space-y-1">
       <label className="text-xs font-medium">{label}</label>
@@ -16,6 +23,7 @@ export default function JsonField({ label, hint, value, kind = 'object', onChang
           setText(e.target.value);
           const r = fromJsonText(e.target.value, { kind });
           setError(r.error || '');
+          if (!r.error) own.current = JSON.stringify(r.value ?? null);
           onChange(r.error ? { error: r.error } : { value: r.value });
         }} />
       {error && <p className="text-[11px] text-red-700">{error}</p>}

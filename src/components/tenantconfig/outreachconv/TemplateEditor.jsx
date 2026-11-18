@@ -25,7 +25,7 @@ export default function TemplateEditor({ open, onOpenChange, entry, isNew, block
     setKey(row?.key || '');
     setT(row ? { ...row } : { name: '', client_type: 'NP', case_types: ['Onboarding'], sections: [], items: [], settings: {}, intro_messages: [], start_chip: "Let's begin" });
     setJsonErr('');
-  }, [open, row?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, row?.id]);
   const set = (k, v) => setT((x) => ({ ...x, [k]: v }));
   const items = t.items || [];
   const move = (i, d) => { const n = [...items]; const j = i + d; if (j < 0 || j >= n.length) return; [n[i], n[j]] = [n[j], n[i]]; set('items', n); };

@@ -32,7 +32,7 @@ export default function BlockEditor({ open, onOpenChange, entry, isNew, allBlock
     setKey(row?.key || '');
     setB(row ? { ...row } : { label: '', client_types: ['NP'], widget: 'chips', options: [], datapoints: [], follow_ups: [], active_default: true, multi: false });
     setJsonErr({});
-  }, [open, row?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, row?.id]);
   const set = (k, v) => setB((x) => ({ ...x, [k]: v }));
   const setJson = (k) => (r) => { setJsonErr((e) => ({ ...e, [k]: r.error || '' })); if (!r.error) set(k, r.value); };
   const condBlocks = useMemo(() => allBlocks.map((x) => ({ key: x.key, label: x.label, options: x.options || [] })), [allBlocks]);

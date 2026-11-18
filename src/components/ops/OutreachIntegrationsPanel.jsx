@@ -25,7 +25,7 @@ export default function OutreachIntegrationsPanel({ tenant, onClose }) {
   useEffect(() => {
     call({ action: 'integration_status' }).then((d) => { setSt(d); setMode(d.kvk_mode || 'off'); })
       .catch((e) => setSt({ error: e?.response?.data?.error || e?.message }));
-  }, [tenant.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tenant.id]);
 
   async function save(payload, okText) {
     setBusy(true);
