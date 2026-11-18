@@ -25,6 +25,8 @@ test('tmProfileSources copy matches base44/shared', async () => { assert.ok(awai
 test('tmCsvTemplates copy matches base44/shared', async () => { assert.ok(await compare('tmCsvTemplates.js', ['tmCsvTemplates.js']) >= 4); });
 test('tmBehaviourProposal copy matches base44/shared', async () => { assert.ok(await compare('tmBehaviourProposal.js', ['tmBehaviourProposal.js']) >= 3); });
 test('kycScreenerSteps copy matches base44/shared', async () => { assert.ok(await compare('kycScreenerSteps.js', ['kycScreenerSteps.js']) >= 8); });
+test('outreachConditions copy matches base44/shared', async () => { assert.ok(await compare('outreachConditions.js', ['outreachConditions.js']) >= 7); });
+test('outreachSettings copy matches base44/shared', async () => { assert.ok(await compare('outreachSettings.js', ['outreachSettings.js']) >= 6); });
 test('tenant settings readers match tmDetection and tmCaseGrouping', async () => {
   const f = await import('../src/lib/tmTenantSettings.js');
   const d = await import('../base44/shared/tmDetection.js');
