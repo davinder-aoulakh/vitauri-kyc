@@ -1,11 +1,12 @@
 // Public page of the guided conversation outreach: /o/:token. No sign-in. Talks to the backend function outreachPortal only,
-// never to entities. The server decides what is asked; this page renders the rail, the thread and (from phase 3) the widgets.
+// never to entities. The server decides what is asked; this page renders the rail, the thread and the widget of the current step.
 // No external fonts, scripts or images (the tenant logo is the tenant's own URL).
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { OC } from '@/lib/outreachConvStrings';
 import '@/lib/outreachConvTokens.css';
+import Widget from '@/components/outreachconv/widgets';
 
 const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return ''; } };
 const fmtTime = (iso) => { try { return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
@@ -77,8 +78,18 @@ function Rail({ v }) {
   );
 }
 
-function Message({ m, tenantName }) {
+function Message({ m, tenantName, onWhy }) {
+  const [open, setOpen] = useState(false);
   if (m.kind === 'system_line') return <div className="oc-sys">{m.text}</div>;
+  if (m.kind === 'status_card') {
+    return (
+      <div className="oc-status" role="status">
+        <h3>{m.card?.title || ''}</h3>
+        {m.card?.reference && <p>{OC.reference}: <b>{m.card.reference}</b></p>}
+        <p>{m.text}</p>
+      </div>
+    );
+  }
   const client = m.author_type === 'client';
   return (
     <div className={`oc-msg${client ? ' client' : ''}`}>
@@ -86,10 +97,30 @@ function Message({ m, tenantName }) {
       <div>
         {(m.tag || m.ai_assisted) && <div className="oc-tag">{m.tag}{m.ai_assisted && <span className="oc-pill">AI-assisted</span>}</div>}
         <div className="oc-bubble">{m.text}</div>
+        {!client && m.why && (
+          <div className="oc-why">
+            <button type="button" className="oc-link" aria-expanded={open} onClick={() => { if (!open && m.block_key) onWhy(m.block_key); setOpen(!open); }}>{OC.whyAsk}</button>
+            {open && <div className="oc-whytext">{m.why}</div>}
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
+function Typing({ tenantName }) {
+  return (
+    <div className="oc-msg" aria-label={OC.typing}>
+      <span className="oc-av" aria-hidden="true">{initial(tenantName)}</span>
+      <div><div className="oc-bubble oc-typing" aria-hidden="true"><span /><span /><span /></div></div>
+    </div>
+  );
+}
+
+const reducedMotion = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
+/** Spec 5.1: 250 ms for a short message, else 380 ms + 7 ms per character (at most 800 ms extra); none with reduced motion. */
+const typingDelay = (text) => (reducedMotion() ? 0 : String(text || '').length <= 40 ? 250 : 380 + Math.min(800, 7 * String(text || '').length));
+const newAnswerId = () => { try { return crypto.randomUUID(); } catch { return `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`; } };
 
 export default function OutreachConversation() {
   const { token } = useParams();
@@ -97,31 +128,88 @@ export default function OutreachConversation() {
   const [err, setErr] = useState(null);
   const [asked, setAsked] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [shown, setShown] = useState(0); // number of thread messages revealed (new bank messages appear one by one)
+  const [typing, setTyping] = useState(false);
+  const [saveErr, setSaveErr] = useState(false);
+  const [fieldErr, setFieldErr] = useState('');
+  const pending = useRef(null); // the last request that did not reach the server, resent as is (same client_answer_id)
   const threadEnd = useRef(null);
+
+  const call = useCallback((action, extra = {}) => base44.functions.invoke('outreachPortal', { token, action, ...extra }), [token]);
 
   const open = useCallback(async () => {
     setErr(null);
     try {
-      const r = await base44.functions.invoke('outreachPortal', { token, action: 'open' });
+      const r = await call('open');
       if (r?.data?.error) throw Object.assign(new Error(r.data.error), { status: r.status });
       setV(r.data);
+      setShown(r.data?.thread?.length || 0);
       setAsked(!!r.data?.new_link_requested);
     } catch (e) {
       setErr(errOf(e));
     }
-  }, [token]);
+  }, [call]);
 
   useEffect(() => { open(); }, [open]);
-  useEffect(() => { threadEnd.current?.scrollIntoView?.({ block: 'end' }); }, [v?.thread?.length]);
+  useEffect(() => { threadEnd.current?.scrollIntoView?.({ block: 'end' }); }, [shown, typing]);
   useEffect(() => {
     const m = /** @type {HTMLMetaElement | null} */ (document.querySelector('meta[name="viewport"]'));
     if (m && !/viewport-fit/.test(m.content)) m.content = `${m.content}, viewport-fit=cover`;
   }, []);
 
+  // Reveal new messages: client and system lines at once, bank messages after a typing indicator.
+  useEffect(() => {
+    const thread = v?.thread || [];
+    if (shown >= thread.length) { setTyping(false); return undefined; }
+    const next = thread[shown];
+    if (next.author_type !== 'bank') { setShown(shown + 1); return undefined; }
+    const ms = typingDelay(next.text);
+    if (!ms) { setShown(shown + 1); return undefined; }
+    setTyping(true);
+    const t = setTimeout(() => { setTyping(false); setShown((n) => n + 1); }, ms);
+    return () => clearTimeout(t);
+  }, [v?.thread, shown]);
+
+  const send = useCallback(async (req) => {
+    setBusy(true);
+    setFieldErr('');
+    try {
+      const r = await call(req.action, req.body);
+      pending.current = null;
+      setSaveErr(false);
+      setV(r.data);
+      return true;
+    } catch (e) {
+      const { status, message } = errOf(e);
+      const data = e?.response?.data;
+      if (status === 409) { pending.current = null; setSaveErr(false); await open(); return false; }
+      if (status === 422 || status === 400) {
+        pending.current = null;
+        if (data && data.thread) setV(data);
+        setFieldErr(data?.error || message);
+        return false;
+      }
+      pending.current = req; // network or server error: keep the request (same id) for the retry
+      setSaveErr(true);
+      return false;
+    } finally { setBusy(false); }
+  }, [call, open]);
+
+  useEffect(() => {
+    const retry = () => { if (pending.current) send(pending.current); };
+    window.addEventListener('online', retry);
+    return () => window.removeEventListener('online', retry);
+  }, [send]);
+
+  const onAnswer = (value) => send({ action: 'answer', body: { client_answer_id: newAnswerId(), step_id: v.step?.id, value } });
+  const onEdit = (key, value) => send({ action: 'edit', body: { client_answer_id: newAnswerId(), datapoint_key: key, value } });
+  const onStart = () => send({ action: 'start', body: {} });
+  const onWhy = (blockKey) => { call('why_opened', { block_key: blockKey }).catch(() => {}); };
+
   async function askNewLink() {
     setBusy(true);
     try {
-      await base44.functions.invoke('outreachPortal', { token, action: 'request_new_link' });
+      await call('request_new_link');
       setAsked(true);
     } catch (e) {
       setErr(errOf(e));
@@ -143,6 +231,8 @@ export default function OutreachConversation() {
   }
   if (v.state === 'cancelled') return <Centered tenant={v.tenant} title={OC.cancelledTitle} body={OC.cancelledBody} />;
 
+  const thread = v.thread || [];
+  const revealed = shown >= thread.length && !typing;
   return (
     <Shell tenant={v.tenant}>
       <div className="oc-grid">
@@ -153,14 +243,21 @@ export default function OutreachConversation() {
             <div>{OC.application(v.tenant?.name || '')}<small>{OC.conversationSaved}</small></div>
           </div>
           <div className="oc-thread" aria-live="polite">
-            {(v.thread || []).map((m) => <Message key={m.id} m={m} tenantName={v.tenant?.name} />)}
+            {thread.slice(0, shown).map((m) => <Message key={m.id} m={m} tenantName={v.tenant?.name} onWhy={onWhy} />)}
+            {typing && <Typing tenantName={v.tenant?.name} />}
             <div ref={threadEnd} />
           </div>
-          {!v.started && !v.submitted && v.start_chip && (
+          {revealed && !v.started && !v.submitted && v.start_chip && (
             <div className="oc-chips">
-              {/* The conversation engine arrives in the next phase; until then the start chip is shown but cannot be used. */}
-              <button type="button" className="oc-chip" disabled title={OC.startSoon}>{v.start_chip}</button>
-              <span className="oc-small" style={{ alignSelf: 'center' }}>{OC.startSoon}</span>
+              <button type="button" className="oc-chip" disabled={busy} onClick={onStart}>{v.start_chip}</button>
+            </div>
+          )}
+          {revealed && v.step && !v.submitted && <Widget key={v.step.id} step={v.step} view={v} busy={busy} onAnswer={onAnswer} onEdit={onEdit} />}
+          {fieldErr && <p className="oc-err" role="alert">{fieldErr}</p>}
+          {saveErr && (
+            <div className="oc-chips" role="alert">
+              <span className="oc-err" style={{ padding: 0, alignSelf: 'center' }}>{OC.notSaved}</span>
+              <button type="button" className="oc-btn" disabled={busy} onClick={() => pending.current && send(pending.current)}>{busy ? OC.saving : OC.retry}</button>
             </div>
           )}
         </section>
