@@ -27,22 +27,15 @@ const ASK_ACTIONS = ['ask_text', 'ask_area', 'ask_choice', 'ai_followup', 'ask_f
 
 /** A fresh state for a conversation. */
 export function initialState({ risk = 'medium', route = null, legal_form_kind = null } = {}) {
-  return { block_states: {}, queue: [], fired: [], datapoints: {}, risk, route, legal_form_kind, failed_checks: [] };
+  return { block_states: {}, queue: [], fired: [], answers: {}, datapoints: {}, risk, route, legal_form_kind, failed_checks: [] };
 }
 
 function items(snapshot) { return (snapshot?.template_snapshot?.items || []); }
 function blockOf(snapshot, key) { return snapshot?.blocks_snapshot?.[key] || null; }
 
-/** Answers per block for the condition language: the main datapoint of each answered block. */
+/** Answers per block for the condition language: the client's answer to the block itself (not to its follow-ups). */
 export function answersOf(snapshot, state) {
-  const out = {};
-  for (const it of items(snapshot)) {
-    const b = blockOf(snapshot, it.block_key);
-    const main = b?.datapoints?.[0]?.key;
-    const dp = main ? state.datapoints[main] : null;
-    if (dp && dp.block_key === it.block_key) out[it.block_key] = dp.raw_answer ?? dp.value;
-  }
-  return out;
+  return { ...(state.answers || {}) };
 }
 function condCtx(snapshot, state) {
   return { answers: answersOf(snapshot, state), risk: state.risk, route: state.route, legal_form_kind: state.legal_form_kind, failed_checks: state.failed_checks || [] };
@@ -99,6 +92,12 @@ export function advance(snapshot, prev, vars = {}) {
     const f = (blockOf(snapshot, block)?.follow_ups || []).find((x) => x.id === fu);
     const step = followUpStep(snapshot, state, block, f, vars);
     state.block_states[block] = { ...(state.block_states[block] || {}), state: 'asked', asks: askCount(state, block) + 1 };
+    // The rule that triggered this follow-up is logged when the follow-up is asked (audit order of spec 12 / transcript A).
+    if (!state.queue[0].logged) {
+      events.push({ event: 'rule', notes: `Follow-up on ${block}: ${f.label || f.key || f.id}`, payload: { block, follow_up: fu, action: f.action } });
+      if (f.action === 'ai_followup') events.push({ event: 'ai.followup.default', notes: `Asked with the template's default text; AI phrasing and approval arrive later (${block})`, payload: { block, follow_up: fu } });
+      state.queue[0] = { ...state.queue[0], logged: true };
+    }
     events.push({ event: 'block.asked', notes: `${block} (${f.action === 'ai_followup' ? 'follow-up' : UPLOAD_ACTIONS.includes(f.action) ? 'evidence' : f.key || f.id})`, payload: { block, follow_up: fu } });
     messages.push({ author_type: 'bank', kind: f.action === 'ai_followup' ? 'follow_up' : 'message', block_key: block, text: step.text, tag: step.tag || null });
     return { state, step, done: false, messages, events };
@@ -242,7 +241,11 @@ export function applyAnswer(snapshot, prev, step, value, extra = {}) {
       putDatapoint(state, { key: 'declaration', label: labelFor(snapshot, key, 'declaration', 'Declaration and signature'), value: { typed_name: value.typed_name, signed_at: now }, display: signed, source: 'client', block_key: key }, now);
       changed.push('declaration');
     } else {
-      const main = b.datapoints?.[0];
+      state.answers = { ...(state.answers || {}), [key]: value };
+      // The block's own datapoint: the first one, unless that key belongs to a follow-up (e.g. name_confirm -> id_dispute).
+      const main0 = b.datapoints?.[0];
+      const fuKeys = (b.follow_ups || []).map((f) => f.key).filter(Boolean);
+      const main = main0 && (main0.key === key || !fuKeys.includes(main0.key)) ? main0 : null;
       if (main) {
         let source = sourceFor(snapshot, key, main.key);
         let v = value;
@@ -296,7 +299,7 @@ export function applyAnswer(snapshot, prev, step, value, extra = {}) {
     const fired = triggeredFollowUps(snapshot, state, key);
     for (const f of fired) {
       state.fired.push(`${key}:${f.id}`);
-      events.push({ event: 'rule', notes: `Follow-up on ${key}: ${f.label || f.key || f.id}`, payload: { block: key, follow_up: f.id, action: f.action } });
+      if (f.action === 'explain_and_reask' || f.action === 'rule') events.push({ event: 'rule', notes: `Follow-up on ${key}: ${f.label || f.key || f.id}`, payload: { block: key, follow_up: f.id, action: f.action } });
       if (f.action === 'explain_and_reask') {
         messages.push({ author_type: 'bank', kind: 'explanation', block_key: key, text: f.message, tag: f.tag || MESSAGES.explanationTag });
         state.block_states[key] = { ...(state.block_states[key] || {}), state: 'not_asked' };
@@ -305,7 +308,6 @@ export function applyAnswer(snapshot, prev, step, value, extra = {}) {
         return { state, clientText, messages, events, datapoints: changed, reask: true };
       }
       if (f.action === 'rule') continue;
-      if (f.action === 'ai_followup') events.push({ event: 'ai.followup.default', notes: `Asked with the template's default text (AI phrasing and approval arrive later) (${key})`, payload: { block: key, follow_up: f.id } });
       if (ASK_ACTIONS.includes(f.action) || UPLOAD_ACTIONS.includes(f.action)) state.queue.push({ block: key, fu: f.id });
     }
   }
@@ -349,12 +351,12 @@ export function applyEdit(snapshot, prev, datapointKey, value, extra = {}) {
   const display = displayOf(widget, value);
   const old = dp.display;
   putDatapoint(state, { ...dp, value: widget === 'text' ? String(value).trim() : value, display, raw_answer: value, source: 'client' }, now, 'edited in review');
+  state.answers = { ...(state.answers || {}), [dp.block_key]: value };
   const events = [{ event: 'answer.edited', notes: `${dp.block_key}: "${old}" -> "${display}" (edited in review, previous value kept in history)`, payload: { key: datapointKey, old, new: display } }];
   for (const f of triggeredFollowUps(snapshot, state, dp.block_key)) {
     if (!ASK_ACTIONS.includes(f.action) && !UPLOAD_ACTIONS.includes(f.action)) continue;
     state.fired.push(`${dp.block_key}:${f.id}`);
     state.queue.push({ block: dp.block_key, fu: f.id });
-    events.push({ event: 'rule', notes: `Follow-up on ${dp.block_key} after an edit: ${f.label || f.key || f.id}`, payload: { block: dp.block_key, follow_up: f.id } });
   }
   return { state, events, display, queued: state.queue.length };
 }
