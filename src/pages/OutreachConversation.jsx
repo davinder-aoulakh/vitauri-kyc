@@ -10,7 +10,7 @@ import Widget from '@/components/outreachconv/widgets';
 
 const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return ''; } };
 const fmtTime = (iso) => { try { return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
-const errOf = (e) => ({ status: e?.response?.status || e?.status || 0, message: e?.response?.data?.error || e?.message || '' });
+const errOf = (e) => ({ status: e?.response?.status || e?.status || 0, message: e?.response?.data?.error || e?.data?.error || e?.message || '' });
 const initial = (name) => String(name || '').trim().charAt(0).toUpperCase() || '·';
 
 function Shell({ tenant, children }) {
@@ -181,7 +181,7 @@ export default function OutreachConversation() {
       return true;
     } catch (e) {
       const { status, message } = errOf(e);
-      const data = e?.response?.data;
+      const data = e?.response?.data || e?.data;
       if (status === 409) { pending.current = null; setSaveErr(false); await open(); return false; }
       if (status === 422 || status === 400) {
         pending.current = null;

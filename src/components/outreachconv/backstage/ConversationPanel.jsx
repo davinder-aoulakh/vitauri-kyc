@@ -82,7 +82,7 @@ export default function ConversationPanel({ kycCase, client, currentUser }) {
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id} className="border-b border-border/60">
-                  <td className="py-1.5 pr-3">{c.template_snapshot?.name || c.template_key} <span className="text-muted-foreground">v{c.template_version}</span>{c.kvk_environment === 'test' && <Badge variant="outline" className="ml-1 text-[10px]">KvK test data</Badge>}</td>
+                  <td className="py-1.5 pr-3">{c.template_snapshot?.name || c.template_key} <span className="text-muted-foreground">v{c.template_version}</span>{c.kvk_environment === 'test' && <Badge variant="outline" className="ml-1 text-[10px]">KvK test data</Badge>}{c.pending_step?.test_data && <Badge variant="outline" className="ml-1 text-[10px] border-amber-300 text-amber-800">Test data</Badge>}</td>
                   <td className="py-1.5 pr-3">{c.invited_name}<span className="block text-muted-foreground">{c.invited_email}</span></td>
                   <td className="py-1.5 pr-3"><span className={`rounded-full border px-2 py-0.5 text-[11px] ${STATUS_TONE[c.status] || STATUS_TONE.Sent}`}>{String(c.status || 'Sent').replace(/_/g, ' ')}</span></td>
                   <td className="py-1.5 pr-3">{fmt(c.sent_at)}<span className="block text-muted-foreground">{c.sent_by}</span></td>
