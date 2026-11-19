@@ -2,17 +2,12 @@
 // Keywords come from the tenant settings (legalFormKeywords); anything else counts as a company. Pure.
 import { OUTREACH_DEFAULTS } from './outreachSettings.js';
 
-const fold = (s) => ` ${String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()} `;
+const fold = (s) => ` ${String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\./g, '').replace(/[^a-z0-9]+/g, ' ').trim()} `;
 
 export function legalFormKind(text, keywords = OUTREACH_DEFAULTS.legalFormKeywords) {
   const t = fold(text);
   if (!t.trim()) return null;
-  const has = (list) => (list || []).some((k) => {
-    const kk = String(k).toLowerCase().trim();
-    if (!kk) return false;
-    const plain = kk.replace(/\./g, '');
-    return t.includes(` ${kk} `) || t.includes(kk.length > 4 ? kk : ` ${kk}`) || t.replace(/\./g, '').includes(` ${plain} `);
-  });
+  const has = (list) => (list || []).some((k) => fold(k).trim() && t.includes(fold(k)));
   if (has(keywords?.sole)) return 'sole';
   if (has(keywords?.partnership)) return 'partnership';
   return 'company';
