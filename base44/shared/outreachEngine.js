@@ -13,6 +13,7 @@
 import { evaluateCondition } from './outreachConditions.js';
 import { fillPlaceholders, minutesLeft } from './outreachSnapshot.js';
 import { MESSAGES } from './outreachMessages.js';
+import { sameName } from './outreachIdv.js';
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const asList = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v === '' ? [] : [v]);
@@ -143,7 +144,7 @@ function displayOf(widget, v) {
 /** Validation per widget. Returns an error message or null. step: the current step; value: the client's answer. */
 export function validateAnswer(step, value, state = {}) {
   const w = step.widget;
-  if (w === 'idv') return value?.stub === true || value?.session_done === true ? null : MESSAGES.required;
+  if (w === 'idv') return value?.session_done === true || value?.declined === true ? null : MESSAGES.required;
   if (w === 'chips' || w === 'confirm_facts') {
     if (!value) return MESSAGES.chooseOne;
     if ((step.options || []).length && !step.options.includes(value)) return MESSAGES.chooseOne;
@@ -179,7 +180,7 @@ export function validateAnswer(step, value, state = {}) {
   if (w === 'sign') {
     if (!value?.terms || !String(value?.typed_name || '').trim() || !value?.signature) return MESSAGES.signIncomplete;
     const idName = state.datapoints?.full_name?.display || '';
-    if (idName && String(value.typed_name).trim().toLowerCase() !== idName.trim().toLowerCase()) return fillPlaceholders(MESSAGES.signNameMismatch, { name: idName });
+    if (idName && !sameName(value.typed_name, idName)) return fillPlaceholders(MESSAGES.signNameMismatch, { name: idName });
     return null;
   }
   return null;
@@ -208,7 +209,7 @@ export function triggeredFollowUps(snapshot, state, blockKey) {
 /**
  * Applies the client's answer to the current step. Returns { error } or
  * { state, clientText, messages (after the answer), events, datapoints: [changed keys] }. Call advance() next.
- * extra: { now, invitation_email, idv: { full_name, dob, nat, doc } (ID stub / Didit result), test_stub }
+ * extra: { now, invitation_email, idv: { full_name, dob, nat, doc } (Didit result, see outreachIdv.idvFromItem), idv_outcome: 'approved'|'in_review', test_stub }
  */
 export function applyAnswer(snapshot, prev, step, value, extra = {}) {
   const err = validateAnswer(step, value, prev);
@@ -223,15 +224,24 @@ export function applyAnswer(snapshot, prev, step, value, extra = {}) {
   let clientText = displayOf(step.widget, value);
 
   if (step.kind === 'block') {
+    if (step.widget === 'idv' && value?.declined) {
+      // "Not now": a neutral reply and the same step again (spec 5.3, state `declined`).
+      state.block_states[key] = { ...(state.block_states[key] || {}), state: 'declined', declined: (state.block_states[key]?.declined || 0) + 1 };
+      events.push({ event: 'block.declined', notes: `${key}: client chose "Not now"`, payload: { block: key } });
+      messages.push({ author_type: 'bank', kind: 'message', block_key: key, text: MESSAGES.idvLaterReply });
+      return { state, clientText: MESSAGES.clientIdvLater, messages, events, datapoints: changed, reask: true };
+    }
     if (step.widget === 'idv') {
       const id = extra.idv || {};
+      const inReview = extra.idv_outcome === 'in_review';
       for (const k of ['full_name', 'dob', 'nat', 'doc']) {
         if (!id[k]) continue;
-        putDatapoint(state, { key: k, label: labelFor(snapshot, key, k), value: id[k], display: String(id[k]), source: 'idv', block_key: key, ...(extra.test_stub ? { test_stub: true } : {}) }, now);
+        putDatapoint(state, { key: k, label: labelFor(snapshot, key, k), value: id[k], display: String(id[k]), source: 'idv', block_key: key, ...(inReview ? { status: 'in_review' } : {}), ...(extra.test_stub ? { test_stub: true } : {}) }, now);
         changed.push(k);
       }
-      clientText = extra.test_stub ? MESSAGES.clientIdvStub : (extra.clientText || MESSAGES.clientIdvStub);
-      events.push({ event: 'prefill', notes: `Name, date of birth, nationality, document taken from ${extra.test_stub ? 'the test stand-in (test mode, not a real ID check)' : 'the Didit result'}`, payload: { keys: changed, test_stub: !!extra.test_stub } });
+      clientText = MESSAGES.clientIdvDone;
+      if (inReview) messages.push({ author_type: 'bank', kind: 'message', block_key: key, text: MESSAGES.idvInReview });
+      events.push({ event: 'prefill', notes: `Name, date of birth, nationality, document taken from the Didit result${inReview ? ' (in review at Didit)' : ''}`, payload: { keys: changed, outcome: extra.idv_outcome || 'approved' } });
     } else if (step.widget === 'review') {
       clientText = MESSAGES.clientReview;
     } else if (step.widget === 'sign') {
