@@ -262,6 +262,11 @@ export function triggeredFollowUps(snapshot, state, blockKey) {
  * extra: { now, invitation_email, idv: { full_name, dob, nat, doc } (Didit result, see outreachIdv.idvFromItem), idv_outcome: 'approved'|'in_review', test_stub }
  */
 export function applyAnswer(snapshot, prev, step, value, extra = {}) {
+  const r = applyAnswerCore(snapshot, prev, step, value, extra);
+  return r.error ? r : repChecks(snapshot, step, r);
+}
+
+function applyAnswerCore(snapshot, prev, step, value, extra = {}) {
   const err = validateAnswer(step, value, prev);
   if (err) return { error: err };
   const state = clone(prev);
@@ -511,11 +516,19 @@ export function referenceNumber(prefix, now = new Date(), rnd = Math.random()) {
 }
 
 /** Messages after submission: thank-you line and the status card. */
-export function submissionMessages({ first_name, response_time, reference }) {
+export function submissionMessages({ first_name, response_time, reference, company = '', pending = [] }) {
+  const names = joinNames(pending);
+  const body = [names ? fillPlaceholders(MESSAGES.statusPendingParties, { names }) : '', fillPlaceholders(MESSAGES.statusBody, { response_time })].filter(Boolean).join(' ');
   return [
-    { author_type: 'bank', kind: 'message', text: fillPlaceholders(MESSAGES.submitted, { first_name }) },
-    { author_type: 'system', kind: 'status_card', text: fillPlaceholders(MESSAGES.statusBody, { response_time }), payload: { title: MESSAGES.statusTitle, reference } },
+    { author_type: 'bank', kind: 'message', text: fillPlaceholders(company ? MESSAGES.submittedOrg : MESSAGES.submitted, { first_name, company }) },
+    { author_type: 'system', kind: 'status_card', text: body, payload: { title: MESSAGES.statusTitle, reference, pending } },
   ];
+}
+
+/** "A", "A and B", "A, B and C". */
+export function joinNames(list = []) {
+  const l = list.filter(Boolean);
+  return l.length <= 1 ? (l[0] || '') : `${l.slice(0, -1).join(', ')} and ${l[l.length - 1]}`;
 }
 
 
@@ -574,6 +587,20 @@ function orgBlockStep(snapshot, state, key, vars, step) {
     const parent = state.reg?.parent || '';
     const text = state.legal_form_kind === 'partnership' ? b.variants?.question_partnership : (state.route === 'nl' && parent ? b.variants?.question_nl : b.variants?.question_company);
     return { ...step, text: fillPlaceholders(text || '', { ...v, parent }), rows: parent && state.legal_form_kind !== 'partnership' ? [{ type: 'company', name: parent, pct: '' }] : null, mode: state.legal_form_kind === 'partnership' ? 'partners' : 'owners', threshold: v.ownerListThreshold, rest_note: fillPlaceholders(MESSAGES.ownersRest, v), over_note: MESSAGES.ownersOver };
+  }
+  if (key === 'activity') {
+    const reg = state.datapoints.sbi?.display || state.datapoints.co_activity?.display || '';
+    const detail = (b.follow_ups || []).find((f) => f.action === 'ask_area');
+    if (!reg) return { ...step, sub: 'open', widget: 'area', text: fillPlaceholders(detail?.question || '', v), options: [] };
+    return { ...step, sub: 'confirm', text: fillPlaceholders(step.text, { ...v, activity: reg }) };
+  }
+  if (key === 'sow_ubo') {
+    const first = asList(state.datapoints.ubos?.value?.ubos)[0] || MESSAGES.mainOwner;
+    return { ...step, text: fillPlaceholders(b.question_template || '', { ...v, ubo_name: first }) };
+  }
+  if (key === 'docs') {
+    const partnership = state.legal_form_kind === 'partnership';
+    return { ...step, text: fillPlaceholders((partnership ? b.variants?.question_partnership : b.variants?.question_company) || '', v), checks: (b.evidence?.document_checks_by_form || {})[partnership ? 'partnership' : 'company'] || [], allow_defer: false, datapoint_key: partnership ? 'o_agreement' : 'o_register' };
   }
   if (key === 'invites') {
     const st = state.inv?.stage || 'who';
@@ -816,6 +843,24 @@ function orgApply(snapshot, state, step, value, extra, ctx) {
     return done(value);
   }
 
+  if (key === 'activity' && step.kind === 'block') {
+    const regDp = state.datapoints.sbi?.display ? state.datapoints.sbi : state.datapoints.co_activity;
+    if (step.sub === 'open') { put('o_activity', String(value).trim(), String(value).trim(), 'rep'); return done(String(value).trim()); }
+    if (value === step.options?.[0]) { put('o_activity', regDp?.value ?? regDp?.display, regDp?.display || '', regDp?.source || 'doc'); state.answers = { ...(state.answers || {}), [key]: value }; return done(value); }
+    return null; // "I want to add detail": the follow-up asks the description
+  }
+  if (key === 'activity' && step.kind === 'follow_up' && step.fu_id === 'detail') {
+    const reg = state.datapoints.sbi?.display || state.datapoints.co_activity?.display || '';
+    const text = [reg, String(value).trim()].filter(Boolean).join('. ');
+    put('o_activity', text, text, 'rep');
+    state.queue = state.queue.slice(1);
+    return done(String(value).trim());
+  }
+  if (key === 'docs' && step.kind === 'block' && step.datapoint_key) {
+    uploadEffects(state, key, step, value, labelFor(snapshot, key, step.datapoint_key), events, extra);
+    put(step.datapoint_key, fileValue(value), value.name, 'doc', { status: evidenceStatus(value.checks || []) });
+    return done(displayOf('upload', value));
+  }
   if (key === 'invites' && step.kind === 'block' && step.sub === 'who') {
     state.inv = { ...(state.inv || {}), stage: 'tracker' };
     if (value === MESSAGES.noneOfThese) {
@@ -904,3 +949,35 @@ function queueCompanies(state, list, path, matches = {}) {
   state.queue.unshift(...add);
 }
 
+
+
+/**
+ * ORG representative (block `rep` and its step blocks name_confirm / pep): after the identity is confirmed, the name on the
+ * ID is compared with the person declared in `invites` (AT 30); when the PEP question is answered the representative is
+ * verified and the queued invitations are to be released (result.release_invites; the portal sends them).
+ */
+function repChecks(snapshot, step, r) {
+  if (snapshot?.template_snapshot?.client_type !== 'ORG') return r;
+  const state = r.state;
+  const key = step.block_key;
+  if (key === 'name_confirm' && state.block_states.name_confirm?.state === 'answered' && !state.inv?.rep_checked) {
+    state.inv = { ...(state.inv || {}), rep_checked: true };
+    const idName = state.datapoints.full_name?.display || '';
+    const declared = state.inv?.rep || '';
+    if (declared && idName && !sameName(idName, declared)) {
+      putDatapoint(state, { key: 'rep_flag', label: labelFor(snapshot, 'rep', 'rep_flag', 'Representative check'), value: { declared, id_name: idName }, display: `ID name ${idName} differs from declared ${declared}`, source: 'calc', block_key: 'rep' }, new Date().toISOString());
+      r.datapoints = [...(r.datapoints || []), 'rep_flag'];
+      r.messages = [...(r.messages || []), { author_type: 'bank', kind: 'message', block_key: 'rep', text: fillPlaceholders(MESSAGES.repMismatch, { id_name: idName, declared }) }];
+      r.events = [...(r.events || []), { event: 'rep.match', notes: `Name on the ID (${idName}) differs from the declared representative (${declared}); flagged for the analyst`, payload: { match: false, declared, id_name: idName } }];
+      r.rep_flag = { declared, id_name: idName };
+    } else if (declared) {
+      r.events = [...(r.events || []), { event: 'rep.match', notes: `Name on the ID matches the declared representative (${declared})`, payload: { match: true } }];
+    }
+  }
+  if (key === 'pep' && state.block_states.pep?.state === 'answered' && !state.inv?.verified) {
+    state.inv = { ...(state.inv || {}), verified: true };
+    r.events = [...(r.events || []), { event: 'rep.verified', notes: `Representative verified: ${state.datapoints.full_name?.display || ''}`, payload: { name: state.datapoints.full_name?.display || '' } }];
+    r.release_invites = true;
+  }
+  return r;
+}

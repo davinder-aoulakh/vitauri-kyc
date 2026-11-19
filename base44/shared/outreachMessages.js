@@ -56,5 +56,12 @@ export const MESSAGES = {
   repDeclared: '{name} ({role}). To be verified by ID check at the end',
   invitesPending: 'Please send an invitation to everyone in the list first.',
   ownChecks: 'Own checks: {name}',
+  repMismatch: 'The name on your ID ({id_name}) differs from the person you selected ({declared}). A colleague will check this. You can simply continue.',
+  repVerifiedInvites: 'Thank you, you are verified. We have now sent the invitations to {names}. They can complete their own checks while you finish here.',
+  repVerified: 'Thank you, you are verified.',
+  invitationsSentTag: 'Invitations sent',
+  mainOwner: 'the main owner',
+  submittedOrg: 'Thank you, {first_name}. The application for {company} has been submitted.',
+  statusPendingParties: 'We are still waiting for {names} to complete their own checks.',
   notCurrent: 'This question was already answered. The conversation has been reloaded.',
 };
