@@ -370,6 +370,7 @@ export default async function (req) {
         const sha = await submissionHash(engine);
         const reference = referenceNumber(settings.referencePrefix || 'REF', now);
         const responseTime = conversation.client_type === 'ORG' ? settings.responseTimeTexts?.ORG : settings.responseTimeTexts?.NP;
+        if (isOrg) await writeParties(); // relations and related parties are recorded at the latest at submission
         const pendingParties = isOrg ? (await inviteRows()).filter((x) => x.status !== 'Completed').map((x) => String(x.roles_text || '').split('|')[0]).filter(Boolean) : [];
         submissionMessages({ first_name: vars.first_name, response_time: responseTime || '', reference, company: isOrg ? (engine.datapoints?.legal_name?.display || '') : '', pending: pendingParties }).forEach((m) => addMsg(m));
         events.push({ event: 'case.submitted', notes: `Client declaration signed; answers frozen as version 1 (sha256:${sha.slice(0, 8)}…)`, payload: { sha256: sha, reference, test_data: testData } });

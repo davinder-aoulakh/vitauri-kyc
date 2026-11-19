@@ -3,8 +3,8 @@
 //   list_pending { case_id }                                  -> AI follow-ups held for approval and the case's uploaded evidence
 //   approve { conversation_id, text?, use_default? }          -> posts the held follow-up, tagged "checked by {name}" (spec 6.2)
 //   evidence_url { evidence_id }                              -> 5-minute signed URL of an uploaded file
-//   release_invites { conversation_id, portal_origin }       -> Queued invitations -> Invited (child requests + emails); until phase 8
-//                                                               releases them at the representative's ID check, staff do it here (audited)
+//   release_invites { conversation_id, portal_origin }       -> Queued invitations -> Invited (child requests + emails) before the
+//                                                               representative's ID check releases them (audited as manual)
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { conversationOn } from '../../shared/outreachSettings.js';
@@ -84,7 +84,7 @@ export default async function (req) {
         const r = await createChildConversation({ base44, tenant, parent: { conversation: c, request }, party: { name, role_text: roleText, related_party_id: inv.party_id }, email: inv.email, origin, actor: { type: 'User', id: user.id, name: actorName } });
         if (r.ok) { await E.OutreachInvite.update(inv.id, { status: 'Invited', invited_at: new Date().toISOString(), child_request_id: r.child_request_id }); done.push(name); }
       }
-      await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'invitation.released', actor: { type: 'User', id: user.id, name: actorName }, conversation: { id: c.id, request_id: c.request_id, case_id: c.case_id, client_id: c.client_id }, payload: { released: done, manual: true }, notes: `Queued invitations released manually by ${actorName} (before the representative's ID check exists): ${done.join(', ') || 'none'}` }));
+      await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'invitation.released', actor: { type: 'User', id: user.id, name: actorName }, conversation: { id: c.id, request_id: c.request_id, case_id: c.case_id, client_id: c.client_id }, payload: { released: done, manual: true }, notes: `Queued invitations released manually by ${actorName}: ${done.join(', ') || 'none'}` }));
       return Response.json({ ok: true, released: done });
     }
 

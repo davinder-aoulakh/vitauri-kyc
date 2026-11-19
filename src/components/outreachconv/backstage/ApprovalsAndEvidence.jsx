@@ -78,7 +78,7 @@ export default function ApprovalsAndEvidence({ kycCase, canWork, reloadKey }) {
       {invites.length > 0 && (
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold">Invitations for own checks
-            {queuedConvs.map((cid) => <Button key={cid} size="sm" variant="outline" className="ml-auto h-6 text-xs" onClick={() => release(cid)} title="Until the representative's ID check releases them (phase 8), staff can send queued invitations here. Audited.">Release queued invitations</Button>)}
+            {queuedConvs.map((cid) => <Button key={cid} size="sm" variant="outline" className="ml-auto h-6 text-xs" onClick={() => release(cid)} title="Queued invitations go out when the representative passes the ID check. Staff can send them earlier here (audited as a manual release).">Release queued invitations</Button>)}
           </div>
           <ul className="mt-1 divide-y divide-border rounded-lg border border-border text-xs">
             {invites.map((i) => (
