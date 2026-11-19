@@ -19,6 +19,9 @@ const STATUS_TONE = {
 };
 const errText = (e) => e?.response?.data?.error || e?.message || 'Something went wrong';
 
+const IDV_LABEL = { Pass: 'Approved', Fail: 'Declined', Inconclusive: 'In review', Expired: 'Expired', Pending: 'Pending' };
+const IDV_TONE = { Pass: 'border-emerald-300 text-emerald-800', Fail: 'border-red-300 text-red-800', Inconclusive: 'border-amber-300 text-amber-800', Expired: 'border-slate-300 text-slate-700' };
+
 export default function ConversationPanel({ kycCase, client, currentUser }) {
   const [rows, setRows] = useState(null);
   const [open, setOpen] = useState(false);
@@ -28,12 +31,18 @@ export default function ConversationPanel({ kycCase, client, currentUser }) {
   const [sendEmail, setSendEmail] = useState(true);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(null);
+  const [idv, setIdv] = useState({});
   const canWork = hasPermission(currentUser?.app_role, 'outreachConversationWork');
 
   const load = useCallback(async () => {
     try {
       setRows(list(await base44.entities.OutreachConversation.filter({ case_id: kycCase.id }, '-created_date', 20)));
     } catch { setRows([]); }
+    try {
+      // Didit ID check status of each conversation, from the carrier's 'idv' item.
+      const reqs = list(await base44.entities.OutreachRequest.filter({ case_id: kycCase.id, engine: 'conversation' }, '-created_date', 20));
+      setIdv(Object.fromEntries(reqs.filter((r) => r.conversation_id).map((r) => [r.conversation_id, (r.items || []).find((i) => i.item_id === 'idv') || null])));
+    } catch { setIdv({}); }
   }, [kycCase?.id]);
   useEffect(() => { load(); }, [load]);
 
@@ -82,7 +91,7 @@ export default function ConversationPanel({ kycCase, client, currentUser }) {
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id} className="border-b border-border/60">
-                  <td className="py-1.5 pr-3">{c.template_snapshot?.name || c.template_key} <span className="text-muted-foreground">v{c.template_version}</span>{c.kvk_environment === 'test' && <Badge variant="outline" className="ml-1 text-[10px]">KvK test data</Badge>}{c.pending_step?.test_data && <Badge variant="outline" className="ml-1 text-[10px] border-amber-300 text-amber-800">Test data</Badge>}</td>
+                  <td className="py-1.5 pr-3">{c.template_snapshot?.name || c.template_key} <span className="text-muted-foreground">v{c.template_version}</span>{c.kvk_environment === 'test' && <Badge variant="outline" className="ml-1 text-[10px]">KvK test data</Badge>}{c.pending_step?.test_data && <Badge variant="outline" className="ml-1 text-[10px] border-amber-300 text-amber-800">Test data</Badge>}{idv[c.id]?.didit_session_id && <Badge variant="outline" className={`ml-1 text-[10px] ${IDV_TONE[idv[c.id].idv_status] || ''}`}>ID check: {IDV_LABEL[idv[c.id].idv_status] || 'Pending'}</Badge>}</td>
                   <td className="py-1.5 pr-3">{c.invited_name}<span className="block text-muted-foreground">{c.invited_email}</span></td>
                   <td className="py-1.5 pr-3"><span className={`rounded-full border px-2 py-0.5 text-[11px] ${STATUS_TONE[c.status] || STATUS_TONE.Sent}`}>{String(c.status || 'Sent').replace(/_/g, ' ')}</span></td>
                   <td className="py-1.5 pr-3">{fmt(c.sent_at)}<span className="block text-muted-foreground">{c.sent_by}</span></td>
