@@ -15,14 +15,17 @@
 //   idv_status                                    -> pulls the Didit result when the webhook is late (getDiditSessionResult) and
 //                                                    applies a stored decision: approved / in review continue, declined re-offers
 //   request_new_link                              -> on an expired link: notifies the assigned analyst (once)
-// The ID&V step uses the real Didit session of the carrier's 'idv' item (phase 4). Test stand-in until phase 5: an upload sends
-// only its name; it is marked test_stub and the conversation gets pending_step.test_data = true.
+// The ID&V step uses the real Didit session of the carrier's 'idv' item (phase 4). Uploads go to outreachUpload (private storage,
+// checks); the answer then names the OutreachEvidence row. AI follow-ups are phrased here and, for Medium/High risk, held for an
+// analyst's approval (manageOutreachConversation); the client sees a short waiting line meanwhile (spec 6.2).
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { looksLikeToken, hashToken, linkState, createAttemptLimiter } from '../../shared/outreachToken.js';
 import { fillPlaceholders, sectionsView } from '../../shared/outreachSnapshot.js';
 import { outreachAuditRow, writeOutreachAudit } from '../../shared/outreachAudit.js';
-import { initialState, advance, applyAnswer, applyEdit, reviewRows, progress, submissionHash, referenceNumber, submissionMessages, sourceLabel } from '../../shared/outreachEngine.js';
+import { initialState, advance, applyAnswer, applyEdit, reviewRows, progress, submissionHash, referenceNumber, submissionMessages, sourceLabel, setPhrasing, dropQueued } from '../../shared/outreachEngine.js';
+import { phraseFollowUp, approvalMode, phrasePrompt } from '../../shared/outreachAiFollowup.js';
+import { aiLogFields } from '../../shared/aiLog.js';
 import { MESSAGES } from '../../shared/outreachMessages.js';
 import { idvFromItem, idvChecks, idvState } from '../../shared/outreachIdv.js';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
@@ -128,7 +131,7 @@ export default async function (req) {
     let messages = asList(await E.OutreachThreadMessage.filter({ tenant_id: tenantId, conversation_id: conversation.id }, 'seq', 1000));
     let seq = messages.reduce((m, x) => Math.max(m, x.seq || 0), 0);
     const pendingMsgs = [];
-    const addMsg = (m, extra = {}) => { seq += 1; pendingMsgs.push({ tenant_id: tenantId, conversation_id: conversation.id, seq, author_type: m.author_type, author_name: m.author_type === 'bank' ? (tenant?.name || '') : m.author_type === 'client' ? (conversation.invited_name || '') : '', kind: m.kind || 'message', block_key: m.block_key || undefined, tag: m.tag || undefined, display_text: m.text, status: 'sent', ...(m.why || m.payload ? { payload: { ...(m.payload || {}), ...(m.why ? { why: m.why } : {}) } } : {}), ...extra }); };
+    const addMsg = (m, extra = {}) => { seq += 1; pendingMsgs.push({ tenant_id: tenantId, conversation_id: conversation.id, seq, author_type: m.author_type, author_name: m.author_type === 'bank' ? (tenant?.name || '') : m.author_type === 'client' ? (conversation.invited_name || '') : '', kind: m.kind || 'message', block_key: m.block_key || undefined, tag: m.tag || undefined, ...(m.ai_assisted ? { ai_assisted: true } : {}), display_text: m.text, status: 'sent', ...(m.why || m.payload ? { payload: { ...(m.payload || {}), ...(m.why ? { why: m.why } : {}) } } : {}), ...extra }); };
     const flushMsgs = async () => { if (pendingMsgs.length) { await E.OutreachThreadMessage.bulkCreate(pendingMsgs.splice(0)); } };
 
     // Datapoint rows mirror the engine's datapoints (one row per key, history kept on the row).
@@ -245,11 +248,56 @@ export default async function (req) {
     };
 
     // Moves on to the next step; at the end, submits.
+    // Open requests the engine asked for (a deferred document) and the AI-approval request.
+    const caseRow = async () => (conversation.case_id ? asList(await E.KycCase.filter({ tenant_id: tenantId, id: conversation.case_id }, undefined, 1))[0] : null);
+    const openRequests = async (list) => {
+      for (const o of list || []) {
+        const kc = await caseRow();
+        await E.OutreachOpenRequest.create({ tenant_id: tenantId, conversation_id: conversation.id, title: o.title, block_key: o.block_key, kind: o.kind, status: 'open', from_name: conversation.invited_name || '', ...(kc?.assigned_analyst_id ? { assigned_user_id: kc.assigned_analyst_id } : {}) }).catch((e) => console.warn('open request failed', e?.message));
+      }
+    };
+    const maxAi = Number.isFinite(Number(settings.aiFollowUpMaxPerRequest)) ? Number(settings.aiFollowUpMaxPerRequest) : 3;
+    const invokeLLM = (payload) => base44.asServiceRole.integrations.Core.InvokeLLM(payload);
+
+    // Moves on to the next step; phrases AI follow-ups on the way; at the end, submits.
     const moveOn = async () => {
-      const a = advance(snap, engine, { ...vars, now: nowIso });
+      const events = [];
+      let a = advance(snap, engine, { ...vars, now: nowIso });
+      for (let guard = 0; a.needs_phrasing && guard < 10; guard++) {
+        const np = a.needs_phrasing;
+        engine = a.state;
+        if ((engine.ai_count || 0) >= maxAi) {
+          const d = dropQueued(engine, `limit of ${maxAi} AI follow-up(s) per request reached`);
+          engine = d.state;
+          events.push(...d.events);
+        } else {
+          const ph = await phraseFollowUp(invokeLLM, np);
+          await E.AiAgentRun.create({
+            tenant_id: tenantId, agent_type: 'ClientOutreachCopilot', case_id: conversation.case_id || undefined, model_used: 'platform_default',
+            prompt_version: 'outreach-followup-1', sources: [`outreach_conversation:${conversation.id}`], output_summary: `${np.block}: ${ph.ai ? 'AI phrasing used' : `default text (${ph.reason || 'no AI'})`}`,
+            ...aiLogFields({ prompt: phrasePrompt(np), output: ph.raw || { error: ph.reason }, tenant }),
+          }).catch(() => {});
+          const mode = approvalMode(settings, engine.risk);
+          engine = setPhrasing(engine, { text: ph.text, ai: ph.ai, mode });
+          if (mode === 'approval') {
+            addMsg({ author_type: 'bank', kind: 'message', block_key: np.block, text: MESSAGES.waitText, tag: MESSAGES.waitTag });
+            events.push({ event: 'ai.followup.pending', notes: `Held for approval (${engine.risk} risk): ${np.block}${ph.ai ? '' : '; default text proposed'}`, payload: { block: np.block, follow_up: np.fu, proposal: ph.text, default_text: np.default_text, ai: ph.ai } });
+            await openRequests([{ kind: 'ai_approval', title: `Approve follow-up question (${np.label})`, block_key: np.block }]);
+            const kc = await caseRow();
+            if (kc?.assigned_analyst_id) {
+              await E.Notification.create({
+                tenant_id: tenantId, user_id: kc.assigned_analyst_id, type: 'outreach_response', is_read: false,
+                title: 'A follow-up question waits for your approval', body: `${conversation.invited_name || 'The client'} is waiting in the guided conversation (${np.label}).`,
+                link_case_id: kc.id, link_client_id: conversation.client_id, dedupe_key: `outreach_ai_approval:${conversation.id}:${np.block}:${np.fu}`,
+              }).catch((e) => console.warn('notification failed', e?.message));
+            }
+          }
+        }
+        a = advance(snap, engine, { ...vars, now: nowIso });
+      }
       engine = a.state;
       a.messages.forEach((m) => addMsg(m));
-      const events = [...a.events];
+      events.push(...a.events);
       if (a.done) {
         step = null;
         const sha = await submissionHash(engine);
@@ -369,9 +417,13 @@ export default async function (req) {
         if (value?.declined !== true) throw httpError(409, MESSAGES.notCurrent);
         value = { declined: true };
       } else if (step.widget === 'upload') {
-        // Test stand-in until real uploads and checks (phase 5): only name, size and type are kept; no file is stored.
-        value = value?.deferred ? { deferred: true } : { name: String(value?.name || '').slice(0, 200), size: Number(value?.size) || 0, mime: String(value?.mime || '').slice(0, 100), test_stub: true };
-        if (!value.deferred) testData = true;
+        // The file was stored and checked by outreachUpload; the answer names its OutreachEvidence row.
+        if (value?.deferred) value = { deferred: true };
+        else {
+          const ev = asList(await E.OutreachEvidence.filter({ tenant_id: tenantId, conversation_id: conversation.id, id: String(value?.evidence_id || '') }, undefined, 1))[0];
+          if (!ev || ev.block_key !== `${step.block_key}${step.fu_id ? `:${step.fu_id}` : ''}`) throw httpError(400, MESSAGES.required);
+          value = { evidence_id: ev.id, name: ev.name, size: ev.size, mime: ev.mime, checks: ev.checks || [] };
+        }
       } else if (step.widget === 'sign') {
         const sig = String(value?.signature || '');
         if (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(sig) || sig.length > MAX_SIGNATURE_BYTES * 1.4) throw httpError(400, MESSAGES.signIncomplete);
@@ -392,6 +444,7 @@ export default async function (req) {
       addMsg({ author_type: 'client', kind: 'answer', block_key: step.block_key, text: r.clientText }, { client_answer_id: answerId, payload: { step_id: step.id, value: step.widget === 'sign' ? { typed_name: value.typed_name } : value } });
       r.messages.forEach((m) => addMsg(m));
       await syncDatapoints(r.datapoints);
+      await openRequests(r.open_requests);
       const events = [...r.events, ...(await moveOn())];
       await flushMsgs();
       await audit(toAudit(events));
