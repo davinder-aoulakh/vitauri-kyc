@@ -7,7 +7,8 @@ const fold = (s) => ` ${String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
 export function legalFormKind(text, keywords = OUTREACH_DEFAULTS.legalFormKeywords) {
   const t = fold(text);
   if (!t.trim()) return null;
-  const has = (list) => (list || []).some((k) => fold(k).trim() && t.includes(fold(k)));
+  // Short keywords ("cv", "vof") must be whole words; longer ones may start a word ("sole proprietor" in "sole proprietorship").
+  const has = (list) => (list || []).some((k) => { const w = fold(k).trim(); return !!w && (w.length > 4 ? t.includes(` ${w}`) : t.includes(` ${w} `)); });
   if (has(keywords?.sole)) return 'sole';
   if (has(keywords?.partnership)) return 'partnership';
   return 'company';
