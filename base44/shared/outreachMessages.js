@@ -64,4 +64,12 @@ export const MESSAGES = {
   submittedOrg: 'Thank you, {first_name}. The application for {company} has been submitted.',
   statusPendingParties: 'We are still waiting for {names} to complete their own checks.',
   notCurrent: 'This question was already answered. The conversation has been reloaded.',
+  // Phase 9: second round and composer (spec 5.7)
+  newMessageLine: 'New message from a colleague',
+  analystReceived: 'Thank you, received. I will take a look and let you know if I need anything else.',
+  autoReply: 'Thank you for your message. A colleague reads along and will respond in this conversation. Everything is saved in your file.',
+  autoReplyTag: 'Automatic reply',
+  composerPlaceholder: 'Ask a question or reply here…',
+  requestDeferred: 'No problem. This request stays open here, so you can upload it whenever you are ready.',
+  aiFollowUpTimeout: 'Default question sent: no approval within {minutes} minutes',
 };
