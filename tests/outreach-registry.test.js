@@ -121,7 +121,7 @@ test('scenario C (KvK Test): every bank line up to the UBO question as in the tr
   assert.equal(s.datapoints.legal_name.source, 'kvk');
   assert.equal(s.datapoints.rsin.display, '862345671');
   assert.equal(s.datapoints.directors.source, 'prop');
-  assert.equal(s.datapoints.chain_harbour_logistics_holding_b_v.source, 'kvk');
+  assert.equal(s.datapoints.chain_harbour_logistics_holding_b_v.value.registration, 'KvK 81234568'); // from the trade register; the owners are declared (rep)
   assert.deepEqual(s.datapoints.ubos.value.ubos, ['Emma Clarke', 'Tom Becker']);
   assert.ok(audit.includes('route.selected'));
 });
