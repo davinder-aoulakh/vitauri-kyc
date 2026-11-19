@@ -10,6 +10,8 @@ import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { assertNotLocked } from '../../shared/tippingOff.js';
 import { conversationOn, outreachSettings } from '../../shared/outreachSettings.js';
 import { OUTREACH_WORK_ROLES } from '../../shared/outreachAuth.js';
+
+const ORG_TEST_ROLES = ['Tenant Admin', 'Vitauri Ops'];
 import { newToken, hashToken, linkDates } from '../../shared/outreachToken.js';
 import { pickTemplate, buildSnapshot, firstNameOf, initialProgressTotal } from '../../shared/outreachSnapshot.js';
 import { outreachAuditRow, writeOutreachAudit } from '../../shared/outreachAudit.js';
@@ -50,6 +52,8 @@ export default async function (req) {
     if (!origin) throw httpError(400, 'portal_origin must be the https address of the app');
 
     const clientType = client.client_type === 'ORG' ? 'ORG' : 'NP';
+    // Until phase 8 an organisation conversation is a staff test: it stops after the UBO step and submits nothing.
+    if (clientType === 'ORG' && !ORG_TEST_ROLES.includes(role)) throw httpError(403, 'Guided conversations for organisations are in test: only a Tenant Admin can send one for now');
     const [templates, blocks, secret, emailTemplates] = await Promise.all([
       E.OutreachFlowTemplate.filter({ tenant_id: tenantId }, undefined, 500).then(asList),
       E.OutreachBlock.filter({ tenant_id: tenantId }, undefined, 2000).then(asList),
@@ -90,6 +94,7 @@ export default async function (req) {
     const conversation = await E.OutreachConversation.create({
       tenant_id: tenantId, request_id: request.id, case_id: kycCase.id, client_id: client.id, status: 'Sent',
       ...snap, language: client.language === 'nl' ? 'nl' : 'en', risk_class: risk, client_type: clientType,
+      ...(clientType === 'ORG' ? { pending_step: { test_data: true } } : {}),
       invited_name: invitedName, invited_first_name: firstName, invited_email: invitedEmail,
       deadline: dates.deadline, token_expires_at: dates.token_expires_at, sent_at: now.toISOString(), sent_by: actor.name,
       progress_steps: 0, progress_total: initialProgressTotal(snap), block_states: {}, ai_followup_count: 0,
