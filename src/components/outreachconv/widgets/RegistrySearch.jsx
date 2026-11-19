@@ -32,7 +32,7 @@ export default function RegistrySearch({ step, busy, onAnswer, onRegistry }) {
     if (q.trim().length < 2) { setList(null); return undefined; }
     timer.current = setTimeout(() => search(q.trim()), 350);
     return () => clearTimeout(timer.current);
-  }, [q, kvk]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [q, kvk]);
 
   async function pick(c) {
     setLoading(true); setErr('');
