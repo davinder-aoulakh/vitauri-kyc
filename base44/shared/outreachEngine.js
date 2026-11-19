@@ -15,6 +15,9 @@ import { fillPlaceholders, minutesLeft } from './outreachSnapshot.js';
 import { MESSAGES } from './outreachMessages.js';
 import { sameName } from './outreachIdv.js';
 import { failedNames, evidenceStatus } from './outreachDocRules.js';
+import { effectiveShares, ubos as uboList, structureTree, structureText, normName } from './outreachUbo.js';
+import { legalFormKind } from './outreachLegalForm.js';
+import { slug } from './outreachParties.js';
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const asList = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v === '' ? [] : [v]);
@@ -41,7 +44,7 @@ export function answersOf(snapshot, state) {
   return { ...(state.answers || {}) };
 }
 function condCtx(snapshot, state) {
-  return { answers: answersOf(snapshot, state), risk: state.risk, route: state.route, legal_form_kind: state.legal_form_kind, failed_checks: state.failed_checks || [] };
+  return { answers: answersOf(snapshot, state), risk: state.risk, route: state.route, legal_form_kind: state.legal_form_kind, failed_checks: state.failed_checks || [], calculations: state.calculations || {} };
 }
 
 function stepId(blockKey, fu, n) { return `${blockKey}${fu ? `:${fu}` : ''}:${n}`; }
@@ -65,7 +68,7 @@ function blockStep(snapshot, state, key, vars) {
   if (b.widget === 'phone') step.validation = b.validation || null;
   if (b.widget === 'review') step.rows = reviewRows(snapshot, state);
   if (b.widget === 'sign') step.declaration = fillPlaceholders(b.variants?.declaration || '', vars);
-  return step;
+  return orgBlockStep(snapshot, state, key, vars, step);
 }
 
 function followUpStep(snapshot, state, blockKey, fu, vars, phrased = null) {
@@ -95,6 +98,11 @@ export function advance(snapshot, prev, vars = {}) {
   if (state.queue.length) {
     const { block, fu } = state.queue[0];
     const f = (blockOf(snapshot, block)?.follow_ups || []).find((x) => x.id === fu);
+    if (state.queue[0].kind || f?.action === 'ask_file_per_person' || f?.action === 'ask_people') {
+      const org = orgQueueStep(snapshot, state, vars, now);
+      if (org) return { state: org.state, step: org.step, done: false, messages: org.messages, events: org.events };
+      return advance(snapshot, org === null ? state : state, vars); // the entry was dropped (no people): continue
+    }
     if (f?.action === 'ai_followup' && !state.queue[0].phrased) {
       // AI follow-up (spec 6.2): the server phrases it (setPhrasing) and, for Medium/High, holds it for approval.
       if (state.queue[0].held) {
@@ -132,12 +140,19 @@ export function advance(snapshot, prev, vars = {}) {
       events.push({ event: 'block.skipped', notes: `${key}: condition not met`, payload: { block: key, reason: 'show_if', show_if: b.show_if } });
       continue;
     }
+    if ((vars.pause_before || []).includes(key)) {
+      state.pending_block = null;
+      return { state, step: null, done: false, paused: true, messages, events };
+    }
     const step = blockStep(snapshot, state, key, vars);
+    for (const m of step.pre_messages || []) messages.push(m);
+    for (const e of step.pre_events || []) events.push(e);
+    delete step.pre_messages; delete step.pre_events;
     state.block_states[key] = { ...(bs || {}), state: 'asked', asked_at: bs?.asked_at || now, asks: askCount(state, key) + 1 };
     state.pending_block = key;
     const prefilled = !!step.prefill || !!step.facts;
     events.push({ event: 'block.asked', notes: `${key}${prefilled ? ' (prefilled)' : b.widget === 'upload' ? ' (upload)' : ''}`, payload: { block: key } });
-    messages.push({ author_type: 'bank', kind: 'message', block_key: key, text: step.text, why: step.why });
+    if (step.text) messages.push({ author_type: 'bank', kind: 'message', block_key: key, text: step.text, why: step.why, tag: step.tag || null, ai_assisted: !!step.ai_assisted });
     return { state, step, done: false, messages, events };
   }
   state.pending_block = null;
@@ -150,6 +165,9 @@ function displayOf(widget, v) {
   if (widget === 'phone') return `${v?.code || ''} ${v?.number || ''}`.trim();
   if (widget === 'address') return `${v.street} ${v.number}, ${v.postcode} ${v.city}, ${v.country}`;
   if (widget === 'upload') return v?.deferred ? MESSAGES.clientDeferred : (v?.name || '');
+  if (widget === 'people_list') return asList(v).map((p) => p.name + (p.authority || p.note ? ` (${[p.authority, p.note].filter(Boolean).join(', ')})` : '')).join(', ');
+  if (widget === 'owners_builder') return asList(v).map((o) => `${o.name} ${Number(o.pct)}%`).join(', ');
+  if (widget === 'form') return Object.values(v || {}).filter(Boolean).join(', ');
   return String(v ?? '');
 }
 
@@ -189,6 +207,21 @@ export function validateAnswer(step, value, state = {}) {
     return value?.name ? null : MESSAGES.required;
   }
   if (w === 'review') return value === 'confirmed' ? null : MESSAGES.required;
+  if (w === 'people_list') {
+    const l = Array.isArray(value) ? value.filter((p) => String(p?.name || '').trim()) : [];
+    return l.length ? null : MESSAGES.peopleRequired;
+  }
+  if (w === 'owners_builder') {
+    const l = Array.isArray(value) ? value.filter((o) => String(o?.name || '').trim()) : [];
+    if (!l.length) return MESSAGES.peopleRequired;
+    if (l.some((o) => !(Number(o.pct) > 0 && Number(o.pct) <= 100))) return MESSAGES.sharesInvalid;
+    if (l.reduce((t, o) => t + Number(o.pct), 0) > 100.0001) return MESSAGES.ownersOver;
+    return null;
+  }
+  if (w === 'form') {
+    const keys = (step.fields || []).map((f) => f.key);
+    return value && keys.every((k) => String(value[k] ?? '').trim()) ? null : MESSAGES.required;
+  }
   if (w === 'sign') {
     if (!value?.terms || !String(value?.typed_name || '').trim() || !value?.signature) return MESSAGES.signIncomplete;
     const idName = state.datapoints?.full_name?.display || '';
@@ -234,6 +267,8 @@ export function applyAnswer(snapshot, prev, step, value, extra = {}) {
   const key = step.block_key;
   const b = blockOf(snapshot, key);
   let clientText = displayOf(step.widget, value);
+  const org = orgApply(snapshot, state, step, value, extra, { now, events, messages, changed });
+  if (org) return org;
 
   if (step.kind === 'block') {
     if (step.widget === 'idv' && value?.declined) {
@@ -475,4 +510,261 @@ export function submissionMessages({ first_name, response_time, reference }) {
     { author_type: 'bank', kind: 'message', text: fillPlaceholders(MESSAGES.submitted, { first_name }) },
     { author_type: 'system', kind: 'status_card', text: fillPlaceholders(MESSAGES.statusBody, { response_time }), payload: { title: MESSAGES.statusTitle, reference } },
   ];
+}
+
+
+// ── Organisation (ORG) blocks — phase 6a: document route, people, ownership and UBO ───────────────────────────────
+// The registry block runs as sub-steps (state.reg.stage): extract upload -> confirm what the AI read -> (correct) -> articles.
+// Owners of a company and per-person documents are queue entries with a `kind`. Texts come from the block (variants) or,
+// where the pack has them only in prose, from outreachMessages.js.
+
+const ORG_PEOPLE_FIELDS = ['legal_name', 'reg_no', 'legal_form', 'co_address'];
+const routeDoc = (b) => b?.variants?.route_document || {};
+const fmtList = (l) => asList(l).join(', ');
+const ownerVars = (vars) => ({ ...vars, ownerListThreshold: vars.ownerListThreshold ?? 10, uboThreshold: vars.uboThreshold ?? 25 });
+
+function orgBlockStep(snapshot, state, key, vars, step) {
+  const b = blockOf(snapshot, key);
+  const v = ownerVars(vars);
+  if (b.widget === 'registry_search') {
+    // 6a: every country takes the document route (providers arrive in 6b)
+    const rd = routeDoc(b);
+    const st = state.reg?.stage || 'extract';
+    const n = askCount(state, key) + 1;
+    const base = { ...step, id: `${key}:${st}:${n}`, why: b.why_text || null, sub: st };
+    if (st === 'extract') {
+      const pre = !state.reg?.intro_done ? [{ author_type: 'bank', kind: 'message', block_key: key, text: fillPlaceholders(rd.intro || '', { ...v, country: state.country || '' }) }] : [];
+      return { ...base, widget: 'upload', text: rd.steps?.[0]?.ask || '', checks: rd.steps?.[0]?.document_checks || [], allow_defer: false, read_extract: true, datapoint_key: 'doc_extract', pre_messages: pre };
+    }
+    if (st === 'confirm') {
+      const c = rd.steps?.[1]?.confirm || {};
+      const facts = ORG_PEOPLE_FIELDS.concat(['co_activity', 'reg_date', 'co_status']).map((k) => state.datapoints[k]).filter((d) => d && d.display).map((d) => ({ label: d.label, value: d.display }));
+      return { ...base, widget: 'confirm_facts', text: c.question || '', tag: c.tag || null, ai_assisted: c.ai_label !== false, options: c.options || [], facts, note: c.note || null };
+    }
+    if (st === 'correct') {
+      return { ...base, widget: 'form', text: MESSAGES.correctExtract, fields: ORG_PEOPLE_FIELDS.map((k) => ({ key: k, label: labelFor(snapshot, key, k), value: state.datapoints[k]?.display || '' })) };
+    }
+    return { ...base, widget: 'upload', text: rd.steps?.[2]?.ask || '', checks: rd.steps?.[2]?.document_checks || [], allow_defer: false, datapoint_key: 'doc_articles' };
+  }
+  if (b.widget === 'people_list') {
+    const officers = asList(state.reg?.officers);
+    const text = officers.length ? (state.route === 'nl' ? b.variants?.question_nl : b.variants?.question_document) : b.variants?.question_empty;
+    return { ...step, text: fillPlaceholders(text || '', v), people: officers.map((o) => ({ name: o.name, role: o.role || 'Director', authority: o.authority_text || o.authority || '', source: state.route === 'nl' ? 'prop' : 'doc' })), default_role: 'Director', mode: 'directors' };
+  }
+  if (b.widget === 'owners_builder') {
+    const text = state.legal_form_kind === 'partnership' ? b.variants?.question_partnership : (state.route === 'nl' ? b.variants?.question_nl : b.variants?.question_company);
+    return { ...step, text: fillPlaceholders(text || '', v), mode: state.legal_form_kind === 'partnership' ? 'partners' : 'owners', threshold: v.ownerListThreshold, rest_note: fillPlaceholders(MESSAGES.ownersRest, v), over_note: MESSAGES.ownersOver };
+  }
+  if (key === 'ubo') {
+    const tree = orgTree(state, v.uboThreshold);
+    const facts = tree.ubos.map((n) => ({ label: n, value: `${tree.shares[n]}%` }));
+    return {
+      ...step, text: fillPlaceholders(step.text, v), facts,
+      pre_messages: [{ author_type: 'system', kind: 'structure_card', block_key: key, text: structureText(tree), payload: { title: MESSAGES.structureTitle, caption: fillPlaceholders(MESSAGES.structureCaption, v), tree } }],
+      pre_events: [{ event: 'ubo.calculated', notes: tree.ubos.length ? tree.ubos.map((n) => `${n} ${tree.shares[n]}%`).join('; ') : `No owner reaches ${v.uboThreshold}%`, payload: { shares: tree.shares, ubos: tree.ubos, threshold: v.uboThreshold } }],
+    };
+  }
+  return step;
+}
+
+function orgTree(state, threshold) {
+  const owners = asList(state.datapoints.owners?.value);
+  const chain = {};
+  for (const [k, d] of Object.entries(state.datapoints)) if (k.startsWith('chain_') && d.value?.company) chain[d.value.company] = asList(d.value.owners);
+  const entity = state.datapoints.legal_name?.display || '';
+  const directors = asList(state.datapoints.directors?.value).map((x) => x.name);
+  return structureTree({ entity, owners, chain, directors, threshold });
+}
+
+/** The step for a queued ORG entry (people with authority, a document per person, owners of a company). null: dropped. */
+function orgQueueStep(snapshot, prevState, vars, now) {
+  const state = prevState;
+  const q = state.queue[0];
+  const v = ownerVars(vars);
+  const b = blockOf(snapshot, q.block);
+  const f = (b?.follow_ups || []).find((x) => x.id === q.fu);
+  const n = askCount(state, q.block) + 1;
+  const events = [];
+  const messages = [];
+  const ask = (step) => {
+    state.block_states[q.block] = { ...(state.block_states[q.block] || {}), state: 'asked', asks: n };
+    if (!q.logged && f) { events.push({ event: 'rule', notes: `Follow-up on ${q.block}: ${f.label || f.key || f.id}`, payload: { block: q.block, follow_up: q.fu, action: f.action } }); state.queue[0] = { ...q, logged: true }; }
+    events.push({ event: 'block.asked', notes: `${q.block} (${step.note_label || step.fu_id})`, payload: { block: q.block, follow_up: step.fu_id } });
+    messages.push({ author_type: 'bank', kind: 'message', block_key: q.block, text: step.text });
+    return { state, step, messages, events };
+  };
+  if (f?.action === 'ask_people') {
+    const fields = asList(f.fields);
+    const authField = fields.find((x) => /^authority/i.test(x)) || '';
+    const options = (authField.match(/\(([^)]*)\)/)?.[1] || '').split('|').map((x) => x.trim()).filter(Boolean);
+    return ask({ id: stepId(q.block, q.fu, n), block_key: q.block, kind: 'follow_up', fu_id: q.fu, widget: 'people_list', mode: 'reps', text: fillPlaceholders(f.question || '', v), people: [], authority_options: options, note_field: fields.find((x) => /role|limit/i.test(x)) ? 'note' : null, datapoint_key: f.key, note_label: 'authorised reps' });
+  }
+  if (f?.action === 'ask_file_per_person' && !q.person) {
+    // one upload per person named in the block's people follow-up
+    const peopleFu = (b.follow_ups || []).find((x) => x.action === 'ask_people');
+    const people = asList(state.datapoints[peopleFu?.key]?.value).map((p) => p.name).filter(Boolean);
+    state.queue.shift();
+    state.queue.unshift(...people.map((name) => ({ block: q.block, fu: q.fu, person: name })));
+    if (!people.length) return null;
+    return orgQueueStep(snapshot, state, vars, now);
+  }
+  if (f?.action === 'ask_file_per_person') {
+    const name = q.person;
+    return ask({ id: stepId(q.block, `${q.fu}:${slug(name)}`, n), block_key: q.block, kind: 'follow_up', fu_id: q.fu, person: name, widget: 'upload', text: fillPlaceholders(f.question || '', { ...v, name }), checks: asList(f.document_checks).map((c) => fillPlaceholders(c, { name })), allow_defer: f.allow_defer === true, datapoint_key: `auth_doc_${slug(name)}`, label: fillPlaceholders(labelFor(snapshot, q.block, 'auth_doc_{slug}', 'Authority of {name}'), { name }), note_label: 'authority evidence' });
+  }
+  if (q.kind === 'company_reg') {
+    return ask({ id: stepId(q.block, `company_reg:${slug(q.company)}`, n), block_key: q.block, kind: 'follow_up', fu_id: 'company_reg', company: q.company, widget: 'text', text: fillPlaceholders(MESSAGES.companyRegistered, { ...v, name: q.company }), note_label: `registration of ${q.company}` });
+  }
+  if (q.kind === 'company_owners') {
+    return ask({ id: stepId(q.block, `company_owners:${slug(q.company)}`, n), block_key: q.block, kind: 'follow_up', fu_id: 'company_owners', company: q.company, widget: 'owners_builder', mode: 'owners', text: fillPlaceholders(MESSAGES.companyOwners, { ...v, name: q.company }), threshold: v.ownerListThreshold, rest_note: fillPlaceholders(MESSAGES.ownersRest, v), over_note: MESSAGES.ownersOver, note_label: `owners of ${q.company}` });
+  }
+  state.queue.shift();
+  return null;
+}
+
+/** ORG answers. Returns the applyAnswer result, or null when the generic handling applies. */
+function orgApply(snapshot, state, step, value, extra, ctx) {
+  const { now, events, messages, changed } = ctx;
+  const key = step.block_key;
+  const b = blockOf(snapshot, key);
+  const v = ownerVars(extra.vars || {});
+  const done = (clientText, opts = {}) => {
+    if (opts.reask) state.block_states[key] = { ...(state.block_states[key] || {}), state: 'not_asked' };
+    else if (!state.queue.some((q) => q.block === key)) { state.block_states[key] = { ...(state.block_states[key] || {}), state: 'answered', answered_at: now }; events.push({ event: 'block.answered', notes: key, payload: { block: key } }); }
+    state.failed_checks = [];
+    return { state, clientText, messages, events, datapoints: changed, ...(opts.reask ? { reask: true } : {}), open_requests: extraOpen(state) };
+  };
+  const put = (k, value2, display, source, extraDp = {}) => { putDatapoint(state, { key: k, label: extraDp.label || labelFor(snapshot, key, k), value: value2, display, source, block_key: key, ...extraDp }, now); changed.push(k); };
+
+  // country: the route (6a: always the document route) and the stop for a blocked jurisdiction
+  if (step.kind === 'block' && key === 'country') return null; // generic; route set in afterCountry()
+  if (step.kind === 'follow_up' && key === 'country') return null;
+
+  if (step.kind === 'block' && b?.widget === 'registry_search') {
+    state.reg = { stage: 'extract', ...(state.reg || {}) };
+    const rd = routeDoc(b);
+    if (step.sub === 'extract' || step.sub === 'articles') {
+      const isExtract = step.sub === 'extract';
+      state.reg.intro_done = true;
+      uploadEffects(state, key, step, value, isExtract ? labelFor(snapshot, key, 'doc_extract') : labelFor(snapshot, key, 'doc_articles'), events, extra);
+      if (state.failed_checks.length) {
+        const n = state.reg[`${step.sub}_retries`] || 0;
+        if (n < MAX_RE_REQUESTS) {
+          state.reg[`${step.sub}_retries`] = n + 1;
+          events.push({ event: 'rule', notes: 'Document check failed: re-request issued', payload: { block: key, step: step.sub, failed: state.failed_checks } });
+          messages.push({ author_type: 'bank', kind: 'message', block_key: key, text: rd.steps?.[0]?.on_fail || '', tag: MESSAGES.documentTag });
+          return done(displayOf('upload', value), { reask: true });
+        }
+        events.push({ event: 'rule', notes: `${key}: check still not met after ${n} new upload(s); kept for manual review`, payload: { block: key, step: step.sub } });
+      }
+      put(isExtract ? 'doc_extract' : 'doc_articles', fileValue(value), value.name, 'doc', { status: evidenceStatus(value.checks || []) });
+      if (isExtract) {
+        const r = value.read || {};
+        const fields = { legal_name: r.legal_name, reg_no: r.registration_number, legal_form: r.legal_form, co_status: r.status, co_address: r.registered_address, co_activity: r.activity, reg_date: r.registration_date };
+        for (const [k, x] of Object.entries(fields)) if (x) put(k, x, String(x), 'doc');
+        state.reg.officers = asList(r.officers).filter((o) => o?.name);
+        if (r.legal_form) state.legal_form_kind = legalFormKind(r.legal_form, extra.legalFormKeywords) || state.legal_form_kind;
+        events.push({ event: 'ai.document.read', notes: r.legal_name ? 'Extract read by AI: name, number, legal form, address, activity, officers. Client confirms; an analyst checks against the original' : 'The extract could not be read automatically; the client enters the details', payload: { block: key, fields: Object.keys(fields).filter((k) => fields[k]), officers: state.reg.officers.length } });
+        state.reg.stage = r.legal_name ? 'confirm' : 'correct';
+        return done(displayOf('upload', value), { reask: true });
+      }
+      state.reg.stage = 'done';
+      return done(displayOf('upload', value));
+    }
+    if (step.sub === 'confirm') {
+      const ok = value === step.options?.[0];
+      state.reg.stage = ok ? 'articles' : 'correct';
+      return done(value, { reask: true });
+    }
+    if (step.sub === 'correct') {
+      for (const k of ORG_PEOPLE_FIELDS) put(k, String(value[k]).trim(), String(value[k]).trim(), 'rep');
+      state.legal_form_kind = legalFormKind(value.legal_form, extra.legalFormKeywords) || state.legal_form_kind;
+      state.reg.stage = 'articles';
+      return done(displayOf('form', value), { reask: true });
+    }
+  }
+
+  if (step.kind === 'block' && b?.widget === 'people_list') {
+    const list = asList(value).filter((p) => String(p?.name || '').trim()).map((p) => ({ name: String(p.name).trim(), role: p.role || 'Director', authority: p.authority || '', source: p.source || 'rep' }));
+    const allProposed = list.every((p) => p.source !== 'rep');
+    put(b.datapoints?.[0]?.key || key, list, list.map((p) => `${p.name}${p.role ? ` (${p.role})` : ''}`).join(', '), allProposed ? (list[0]?.source || 'doc') : 'rep');
+    return done(displayOf('people_list', list.map((p) => ({ name: p.name }))));
+  }
+
+  if (step.kind === 'block' && b?.widget === 'owners_builder') {
+    const list = ownersOf(value);
+    put('owners', list, list.map((o) => `${o.name} ${o.pct}%`).join(', '), 'rep');
+    queueCompanies(state, list, []);
+    return done(displayOf('owners_builder', list));
+  }
+
+  if (step.kind === 'block' && key === 'ubo') {
+    const tree = orgTree(state, v.uboThreshold);
+    state.calculations = { ...(state.calculations || {}), 'no owner reaches threshold': tree.ubos.length === 0 };
+    const dirs = asList(state.datapoints.directors?.value).map((x) => x.name);
+    const valueUbo = { ubos: tree.ubos, shares: tree.shares, threshold: v.uboThreshold, ...(tree.ubos.length ? {} : { directors_as_ubo: dirs }) };
+    put('ubos', valueUbo, tree.ubos.length ? tree.ubos.map((n) => `${n} (${tree.shares[n]}%)`).join(', ') : `${dirs.join(', ')} (senior managing officials)`, 'calc');
+    state.answers = { ...(state.answers || {}), [key]: value };
+    for (const f of triggeredFollowUps(snapshot, state, key)) {
+      state.fired.push(`${key}:${f.id}`);
+      if (f.action === 'rule') { events.push({ event: 'rule', notes: `No owner reaches ${v.uboThreshold}%: the directors are recorded as UBO (senior managing officials)`, payload: { block: key, follow_up: f.id, directors: dirs } }); continue; }
+      state.queue.push({ block: key, fu: f.id });
+    }
+    return done(value);
+  }
+
+  // queued ORG entries
+  if (step.kind === 'follow_up' && step.fu_id === 'company_reg') {
+    putDatapoint(state, { key: `chain_${slug(step.company)}`, label: fillPlaceholders(labelFor(snapshot, 'owners', 'chain_{slug}', 'Owners of {name}'), { name: step.company }), value: { company: step.company, registration: String(value).trim(), owners: state.datapoints[`chain_${slug(step.company)}`]?.value?.owners || [] }, display: String(value).trim(), source: 'rep', block_key: key }, now);
+    changed.push(`chain_${slug(step.company)}`);
+    state.queue = state.queue.slice(1);
+    return done(String(value).trim());
+  }
+  if (step.kind === 'follow_up' && step.fu_id === 'company_owners') {
+    const list = ownersOf(value);
+    const k = `chain_${slug(step.company)}`;
+    const prev = state.datapoints[k]?.value || {};
+    putDatapoint(state, { key: k, label: fillPlaceholders(labelFor(snapshot, 'owners', 'chain_{slug}', 'Owners of {name}'), { name: step.company }), value: { company: step.company, registration: prev.registration || '', owners: list }, display: list.map((o) => `${o.name} ${o.pct}%`).join(', '), source: 'rep', block_key: key }, now);
+    changed.push(k);
+    state.queue = state.queue.slice(1);
+    queueCompanies(state, list, [step.company]);
+    return done(displayOf('owners_builder', list));
+  }
+  if (step.kind === 'follow_up' && step.widget === 'people_list') {
+    const list = asList(value).filter((p) => String(p?.name || '').trim()).map((p) => ({ name: String(p.name).trim(), authority: p.authority || '', note: p.note || '' }));
+    put(step.datapoint_key || 'authreps', list, displayOf('people_list', list), 'rep');
+    state.queue = state.queue.slice(1);
+    return done(displayOf('people_list', list));
+  }
+  if (step.kind === 'follow_up' && step.person) {
+    uploadEffects(state, key, step, value, step.label || step.datapoint_key, events, extra);
+    put(step.datapoint_key, fileValue(value), value?.deferred ? MESSAGES.clientDeferred : value.name, 'doc', { label: step.label, status: value?.deferred ? 'deferred' : evidenceStatus(value.checks || []) });
+    state.queue = state.queue.slice(1);
+    return done(displayOf('upload', value));
+  }
+  return null;
+}
+
+function ownersOf(value) {
+  return asList(value).filter((o) => String(o?.name || '').trim()).map((o) => ({ type: o.type === 'company' ? 'company' : 'person', name: String(o.name).trim(), pct: Math.round(Number(o.pct) * 10) / 10 }));
+}
+/** For every company owner: its registration, then its own owners (once per company; cycle protection). */
+function queueCompanies(state, list, path) {
+  const seen = new Set([...Object.values(state.datapoints).filter((d) => d.value?.company).map((d) => normName(d.value.company)), normName(state.datapoints.legal_name?.display), ...path.map(normName)]);
+  const add = [];
+  for (const o of list.filter((x) => x.type === 'company')) {
+    if (seen.has(normName(o.name))) continue;
+    seen.add(normName(o.name));
+    add.push({ block: 'owners', kind: 'company_reg', company: o.name }, { block: 'owners', kind: 'company_owners', company: o.name });
+  }
+  state.queue.unshift(...add);
+}
+
+/** After the country answer: the route (6a: document) and a blocked jurisdiction. Called by the portal. */
+export function afterCountry(prev, { country, blocked = [] }) {
+  const state = clone(prev);
+  state.country = country;
+  state.route = 'document';
+  const isBlocked = blocked.map((x) => String(x).toLowerCase()).includes(String(country || '').toLowerCase());
+  return { state, blocked: isBlocked, events: [{ event: 'route.selected', notes: isBlocked ? `${country}: blocked jurisdiction` : `${country} routes to the document route (no register link: the client supplies the documents)`, payload: { country, route: 'document', blocked: isBlocked } }] };
 }
