@@ -125,3 +125,17 @@
 .oc .oc-idv-checks{list-style:none;margin:6px 0 0;padding:0;font-size:13px}
 .oc .oc-idv-checks li{display:flex;gap:6px}
 .oc .oc-idv-checks .ok{color:#137a43}.oc .oc-idv-checks .no{color:#a11d1d}
+
+/* Phase 6a: people, owners, structure card */
+.oc .oc-people{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.oc .oc-people li{display:flex;justify-content:space-between;gap:8px;align-items:center;border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:8px 10px;font-size:14px}
+.oc .oc-people li.off{opacity:.55}
+.oc .oc-owners{display:grid;gap:6px}
+.oc .oc-owner{display:flex;gap:6px;align-items:center}
+.oc .oc-pct{flex:0 0 76px;width:76px}
+.oc .oc-tree ul{list-style:none;margin:6px 0 0 14px;padding:0 0 0 10px;border-left:2px solid var(--line,#e5e7eb)}
+.oc .oc-tree li{margin:6px 0}
+.oc .oc-node{display:inline-block;padding:4px 9px;border-radius:999px;border:1px solid var(--line,#d6dbd9);font-size:13px;background:#fff}
+.oc .oc-node.co{border-radius:8px;background:#f3f6f5}
+.oc .oc-node.root{font-weight:600}
+.oc .oc-node.ubo{border-color:var(--brand,#12342b);background:color-mix(in srgb,var(--brand,#12342b) 10%,#fff);font-weight:600}

@@ -10,6 +10,8 @@ import Review from './Review';
 import Sign from './Sign';
 import Idv from './Idv';
 import Upload from './Upload';
+import PeopleList from './PeopleList';
+import OwnersBuilder from './OwnersBuilder';
 
 /** The widget for the server's current step (spec 5.2). Widgets of later phases (ORG) are not rendered yet. */
 export default function Widget({ step, view, busy, onAnswer, onEdit, onIdv, onUpload }) {
@@ -22,6 +24,8 @@ export default function Widget({ step, view, busy, onAnswer, onEdit, onIdv, onUp
     case 'address': return <Address {...p} countries={view.address_countries} />;
     case 'confirm_facts': return <ConfirmFacts {...p} />;
     case 'form': return <FormFields {...p} />;
+    case 'people_list': return <PeopleList {...p} />;
+    case 'owners_builder': return <OwnersBuilder {...p} />;
     case 'review': return <Review {...p} onEdit={onEdit} />;
     case 'sign': return <Sign {...p} />;
     case 'idv': return <Idv {...p} onIdv={onIdv} />;

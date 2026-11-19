@@ -7,6 +7,7 @@ import { base44 } from '@/api/base44Client';
 import { OC } from '@/lib/outreachConvStrings';
 import '@/lib/outreachConvTokens.css';
 import Widget from '@/components/outreachconv/widgets';
+import StructureCard from '@/components/outreachconv/widgets/StructureCard';
 
 const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return ''; } };
 const fmtTime = (iso) => { try { return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
@@ -88,6 +89,7 @@ function Message({ m, tenantName, onWhy }) {
       </ul>
     );
   }
+  if (m.kind === 'structure_card') return <StructureCard card={m.card} text={m.text} />;
   if (m.kind === 'status_card') {
     return (
       <div className="oc-status" role="status">

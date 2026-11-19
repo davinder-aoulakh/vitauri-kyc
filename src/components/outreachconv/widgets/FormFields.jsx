@@ -3,7 +3,7 @@ import { OC } from '@/lib/outreachConvStrings';
 /** Small form with labelled fields, all required (used for corrections; fields come from the step). */
 export default function FormFields({ step, busy, onAnswer }) {
   const fields = step.fields || [];
-  const [v, setV] = useState(Object.fromEntries(fields.map((f) => [f.key, ''])));
+  const [v, setV] = useState(Object.fromEntries(fields.map((f) => [f.key, f.value || ''])));
   const ok = fields.every((f) => String(v[f.key] || '').trim());
   return (
     <form className="oc-form oc-grid2" onSubmit={(e) => { e.preventDefault(); if (ok) onAnswer(v); }}>
