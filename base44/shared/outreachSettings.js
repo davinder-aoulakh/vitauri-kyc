@@ -36,7 +36,11 @@ export const OUTREACH_DEFAULTS = {
   blockedJurisdictions: [],
   referencePrefix: 'NAB',
   responseTimeTexts: { NP: '1 working day', ORG: '2 working days' },
-  adapterCosts: {},
+  adapterCosts: { didit_search: 0.5, didit_select: 2, kvk_search: 0, kvk_profile: 0.02 },
+  legalFormOptions: ['Besloten vennootschap (B.V.)', 'Naamloze vennootschap (N.V.)', 'Vennootschap onder firma (V.O.F.)', 'Commanditaire vennootschap (C.V.)', 'Eenmanszaak', 'Stichting', 'Vereniging', 'Other'],
+  directorsFromDidit: true,
+  registrySearchLimit: 3,
+  registryPendingSeconds: 90,
 };
 
 const num = (v, min, max, d) => { const n = Number(v); return Number.isFinite(n) && n >= min && n <= max ? n : d; };
@@ -91,7 +95,12 @@ export function cleanSettings(input = {}) {
     adapterCosts: i.adapterCosts && typeof i.adapterCosts === 'object'
       ? Object.fromEntries(Object.entries(i.adapterCosts).filter(([, v]) => Number.isFinite(Number(v)) && Number(v) >= 0).map(([k, v]) => [String(k).slice(0, 60), Number(v)]))
       : d.adapterCosts,
+    legalFormOptions: strList(i.legalFormOptions, d.legalFormOptions, 30),
+    directorsFromDidit: pick('directorsFromDidit', bool(i.directorsFromDidit, d.directorsFromDidit)),
+    registrySearchLimit: pick('registrySearchLimit', num(i.registrySearchLimit, 1, 10, d.registrySearchLimit)),
+    registryPendingSeconds: pick('registryPendingSeconds', num(i.registryPendingSeconds, 10, 600, d.registryPendingSeconds)),
   };
+  if (!settings.legalFormOptions.length) settings.legalFormOptions = d.legalFormOptions;
   if (!settings.phoneCountryCodes.length) settings.phoneCountryCodes = d.phoneCountryCodes;
   if (!settings.addressCountries.length) settings.addressCountries = d.addressCountries;
   if (!settings.reminderDays.length && Array.isArray(i.reminderDays) && i.reminderDays.length) errors.push('reminderDays');
