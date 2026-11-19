@@ -1,0 +1,392 @@
+// Guided conversation outreach: the conversation engine (spec sections 5 and 6.1). Pure: no I/O, runs in Deno and node.
+// The server (outreachPortal) owns the state and calls these functions; the browser only renders what they return.
+//
+// State (persisted on OutreachConversation): {
+//   block_states: { [block]: { state: 'asked'|'answered'|'skipped'|'off'|'declined'|'deferred', asked_at, answered_at, skip_reason } },
+//   queue: [{ block, fu }]        follow-ups still to ask, in order (kept in pending_step.queue)
+//   fired: ['block:fu', ...]       follow-ups already triggered (one per trigger)
+//   datapoints: { [key]: { key, label, value, display, source, block_key, history: [], test_stub? } }
+//   risk, route, legal_form_kind, failed_checks
+// }
+// A step: { id, block_key, kind: 'block'|'follow_up', fu_id?, widget, text, why?, tag?, options?, multi?, none_option?, facts?,
+//           prefill?, datapoint_key?, label?, allow_defer?, checks?, edit_rows? }
+import { evaluateCondition } from './outreachConditions.js';
+import { fillPlaceholders, minutesLeft } from './outreachSnapshot.js';
+import { MESSAGES } from './outreachMessages.js';
+
+const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
+const asList = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v === '' ? [] : [v]);
+const DONE_STATES = ['answered', 'skipped', 'off', 'deferred'];
+const SOURCE_LABEL = {
+  idv: 'Didit ID check', client: 'Declared by client', ai: 'Declared by client, AI follow-up', doc: 'From document', pre: 'Prefilled from invitation',
+  kvk: 'KvK trade register', prop: 'Suggested from registry data, confirmed by client', calc: 'Calculated by the tool', rep: 'Declared by the representative',
+};
+export const sourceLabel = (s) => SOURCE_LABEL[s] || s || '';
+const UPLOAD_ACTIONS = ['ask_file', 're_request'];
+const ASK_ACTIONS = ['ask_text', 'ask_area', 'ask_choice', 'ai_followup', 'ask_file'];
+
+/** A fresh state for a conversation. */
+export function initialState({ risk = 'medium', route = null, legal_form_kind = null } = {}) {
+  return { block_states: {}, queue: [], fired: [], datapoints: {}, risk, route, legal_form_kind, failed_checks: [] };
+}
+
+function items(snapshot) { return (snapshot?.template_snapshot?.items || []); }
+function blockOf(snapshot, key) { return snapshot?.blocks_snapshot?.[key] || null; }
+
+/** Answers per block for the condition language: the main datapoint of each answered block. */
+export function answersOf(snapshot, state) {
+  const out = {};
+  for (const it of items(snapshot)) {
+    const b = blockOf(snapshot, it.block_key);
+    const main = b?.datapoints?.[0]?.key;
+    const dp = main ? state.datapoints[main] : null;
+    if (dp && dp.block_key === it.block_key) out[it.block_key] = dp.raw_answer ?? dp.value;
+  }
+  return out;
+}
+function condCtx(snapshot, state) {
+  return { answers: answersOf(snapshot, state), risk: state.risk, route: state.route, legal_form_kind: state.legal_form_kind, failed_checks: state.failed_checks || [] };
+}
+
+function stepId(blockKey, fu, n) { return `${blockKey}${fu ? `:${fu}` : ''}:${n}`; }
+function askCount(state, blockKey) { return (state.block_states[blockKey]?.asks || 0); }
+
+function idvFacts(state) {
+  return ['full_name', 'dob', 'nat', 'doc'].map((k) => state.datapoints[k]).filter(Boolean).map((d) => ({ label: d.label, value: d.display }));
+}
+
+/** The step for a block (first ask or re-ask). vars: placeholder values. */
+function blockStep(snapshot, state, key, vars) {
+  const b = blockOf(snapshot, key);
+  const n = askCount(state, key) + 1;
+  const step = {
+    id: stepId(key, null, n), block_key: key, kind: 'block', widget: b.widget, text: fillPlaceholders(b.question_template, vars), why: b.why_text || null,
+    options: b.options || [], multi: !!b.multi || b.widget === 'multi', none_option: b.none_option || null,
+  };
+  if (b.widget === 'confirm_facts' && key === 'name_confirm') step.facts = idvFacts(state);
+  if (key === 'email' && vars.invitation_email) step.prefill = vars.invitation_email;
+  if (b.widget === 'upload') { step.checks = b.evidence?.document_checks || []; step.allow_defer = !!b.evidence?.allow_defer; step.datapoint_key = b.datapoints?.[0]?.key; }
+  if (b.widget === 'phone') step.validation = b.validation || null;
+  if (b.widget === 'review') step.rows = reviewRows(snapshot, state);
+  if (b.widget === 'sign') step.declaration = fillPlaceholders(b.variants?.declaration || '', vars);
+  return step;
+}
+
+function followUpStep(snapshot, state, blockKey, fu, vars) {
+  const n = askCount(state, blockKey) + 1;
+  const upload = UPLOAD_ACTIONS.includes(fu.action);
+  const widget = upload ? 'upload' : fu.action === 'ask_choice' ? 'chips' : fu.action === 'ask_area' ? 'area' : 'text';
+  return {
+    id: stepId(blockKey, fu.id, n), block_key: blockKey, kind: 'follow_up', fu_id: fu.id, widget,
+    text: fillPlaceholders(fu.question || fu.message || '', vars), tag: fu.action === 'ai_followup' ? MESSAGES.followUpTag : (fu.tag || null),
+    options: fu.options || [], datapoint_key: fu.key || null, label: fu.label || null,
+    ...(upload ? { checks: fu.document_checks || blockOf(snapshot, blockKey)?.evidence?.document_checks || [], allow_defer: fu.allow_defer === true } : {}),
+  };
+}
+
+/**
+ * Moves to the next step. Returns { state, step | null, done, messages[], events[] } where messages are bank messages to add
+ * (the question of the step) and events are audit entries { event, notes, payload }.
+ * Order: queued follow-ups first, then the next template item that is not done (inactive -> off, show_if false -> skipped).
+ */
+export function advance(snapshot, prev, vars = {}) {
+  const state = clone(prev);
+  const events = [];
+  const messages = [];
+  const now = vars.now || new Date().toISOString();
+  if (state.queue.length) {
+    const { block, fu } = state.queue[0];
+    const f = (blockOf(snapshot, block)?.follow_ups || []).find((x) => x.id === fu);
+    const step = followUpStep(snapshot, state, block, f, vars);
+    state.block_states[block] = { ...(state.block_states[block] || {}), state: 'asked', asks: askCount(state, block) + 1 };
+    events.push({ event: 'block.asked', notes: `${block} (${f.action === 'ai_followup' ? 'follow-up' : UPLOAD_ACTIONS.includes(f.action) ? 'evidence' : f.key || f.id})`, payload: { block, follow_up: fu } });
+    messages.push({ author_type: 'bank', kind: f.action === 'ai_followup' ? 'follow_up' : 'message', block_key: block, text: step.text, tag: step.tag || null });
+    return { state, step, done: false, messages, events };
+  }
+  for (const it of items(snapshot)) {
+    const key = it.block_key;
+    const bs = state.block_states[key];
+    if (bs && DONE_STATES.includes(bs.state)) continue;
+    if (bs && bs.state === 'asked' && state.pending_block === key) { /* re-entry: ask again below */ }
+    const b = blockOf(snapshot, key);
+    if (!b) continue;
+    if (it.active === false) {
+      state.block_states[key] = { state: 'off', skip_reason: 'Switched off in the template' };
+      events.push({ event: 'block.skipped', notes: `${key}: switched off in the template`, payload: { block: key, reason: 'off' } });
+      continue;
+    }
+    if (b.show_if && !evaluateCondition(b.show_if, condCtx(snapshot, state))) {
+      state.block_states[key] = { state: 'skipped', skip_reason: 'Condition not met' };
+      events.push({ event: 'block.skipped', notes: `${key}: condition not met`, payload: { block: key, reason: 'show_if', show_if: b.show_if } });
+      continue;
+    }
+    const step = blockStep(snapshot, state, key, vars);
+    state.block_states[key] = { ...(bs || {}), state: 'asked', asked_at: bs?.asked_at || now, asks: askCount(state, key) + 1 };
+    state.pending_block = key;
+    const prefilled = !!step.prefill || !!step.facts;
+    events.push({ event: 'block.asked', notes: `${key}${prefilled ? ' (prefilled)' : b.widget === 'upload' ? ' (upload)' : ''}`, payload: { block: key } });
+    messages.push({ author_type: 'bank', kind: 'message', block_key: key, text: step.text, why: step.why });
+    return { state, step, done: false, messages, events };
+  }
+  state.pending_block = null;
+  return { state, step: null, done: true, messages, events };
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function displayOf(widget, v) {
+  if (widget === 'multi') return asList(v).join(', ');
+  if (widget === 'phone') return `${v?.code || ''} ${v?.number || ''}`.trim();
+  if (widget === 'address') return `${v.street} ${v.number}, ${v.postcode} ${v.city}, ${v.country}`;
+  if (widget === 'upload') return v?.deferred ? MESSAGES.clientDeferred : (v?.name || '');
+  return String(v ?? '');
+}
+
+/** Validation per widget. Returns an error message or null. step: the current step; value: the client's answer. */
+export function validateAnswer(step, value, state = {}) {
+  const w = step.widget;
+  if (w === 'idv') return value?.stub === true || value?.session_done === true ? null : MESSAGES.required;
+  if (w === 'chips' || w === 'confirm_facts') {
+    if (!value) return MESSAGES.chooseOne;
+    if ((step.options || []).length && !step.options.includes(value)) return MESSAGES.chooseOne;
+    return null;
+  }
+  if (w === 'multi') {
+    const l = asList(value);
+    if (!l.length) return MESSAGES.chooseAtLeastOne;
+    if (l.some((x) => !(step.options || []).includes(x))) return MESSAGES.chooseAtLeastOne;
+    if (step.none_option && l.includes(step.none_option) && l.length > 1) return MESSAGES.chooseAtLeastOne;
+    return null;
+  }
+  if (w === 'text' || w === 'area') {
+    const t = String(value ?? '').trim();
+    if (!t) return MESSAGES.required;
+    if (step.fu_id === 'other_email' && !EMAIL_RE.test(t)) return MESSAGES.emailInvalid;
+    return null;
+  }
+  if (w === 'phone') {
+    const digits = String(value?.number || '').replace(/\D/g, '');
+    if (!value?.code || digits.length < 8) return step.validation?.message?.match(/"([^"]+)"/)?.[1] || MESSAGES.phoneShort;
+    return null;
+  }
+  if (w === 'address') {
+    const ok = value && ['country', 'postcode', 'number', 'street', 'city'].every((k) => String(value[k] ?? '').trim());
+    return ok ? null : MESSAGES.addressIncomplete;
+  }
+  if (w === 'upload') {
+    if (value?.deferred) return step.allow_defer ? null : MESSAGES.required;
+    return value?.name ? null : MESSAGES.required;
+  }
+  if (w === 'review') return value === 'confirmed' ? null : MESSAGES.required;
+  if (w === 'sign') {
+    if (!value?.terms || !String(value?.typed_name || '').trim() || !value?.signature) return MESSAGES.signIncomplete;
+    const idName = state.datapoints?.full_name?.display || '';
+    if (idName && String(value.typed_name).trim().toLowerCase() !== idName.trim().toLowerCase()) return fillPlaceholders(MESSAGES.signNameMismatch, { name: idName });
+    return null;
+  }
+  return null;
+}
+
+function labelFor(snapshot, blockKey, key, fallback) {
+  return (blockOf(snapshot, blockKey)?.datapoints || []).find((d) => d.key === key)?.label || fallback || key;
+}
+function sourceFor(snapshot, blockKey, key, fallback = 'client') {
+  return (blockOf(snapshot, blockKey)?.datapoints || []).find((d) => d.key === key)?.sources?.[0] || fallback;
+}
+
+function putDatapoint(state, dp, now, reason) {
+  const prev = state.datapoints[dp.key];
+  const history = [...(prev?.history || [])];
+  if (prev) history.push({ value: prev.value, display: prev.display, source: prev.source, changed_at: now, reason: reason || 'answered again' });
+  state.datapoints[dp.key] = { ...dp, history };
+}
+
+/** Follow-ups of a block that are triggered now and have not fired yet, in block order. */
+export function triggeredFollowUps(snapshot, state, blockKey) {
+  const ctx = condCtx(snapshot, state);
+  return (blockOf(snapshot, blockKey)?.follow_ups || []).filter((f) => !state.fired.includes(`${blockKey}:${f.id}`) && evaluateCondition(f.when, ctx));
+}
+
+/**
+ * Applies the client's answer to the current step. Returns { error } or
+ * { state, clientText, messages (after the answer), events, datapoints: [changed keys] }. Call advance() next.
+ * extra: { now, invitation_email, idv: { full_name, dob, nat, doc } (ID stub / Didit result), test_stub }
+ */
+export function applyAnswer(snapshot, prev, step, value, extra = {}) {
+  const err = validateAnswer(step, value, prev);
+  if (err) return { error: err };
+  const state = clone(prev);
+  const now = extra.now || new Date().toISOString();
+  const events = [];
+  const messages = [];
+  const changed = [];
+  const key = step.block_key;
+  const b = blockOf(snapshot, key);
+  let clientText = displayOf(step.widget, value);
+
+  if (step.kind === 'block') {
+    if (step.widget === 'idv') {
+      const id = extra.idv || {};
+      for (const k of ['full_name', 'dob', 'nat', 'doc']) {
+        if (!id[k]) continue;
+        putDatapoint(state, { key: k, label: labelFor(snapshot, key, k), value: id[k], display: String(id[k]), source: 'idv', block_key: key, ...(extra.test_stub ? { test_stub: true } : {}) }, now);
+        changed.push(k);
+      }
+      clientText = extra.test_stub ? MESSAGES.clientIdvStub : (extra.clientText || MESSAGES.clientIdvStub);
+      events.push({ event: 'prefill', notes: `Name, date of birth, nationality, document taken from ${extra.test_stub ? 'the test stand-in (test mode, not a real ID check)' : 'the Didit result'}`, payload: { keys: changed, test_stub: !!extra.test_stub } });
+    } else if (step.widget === 'review') {
+      clientText = MESSAGES.clientReview;
+    } else if (step.widget === 'sign') {
+      clientText = MESSAGES.clientSign;
+      const d = new Date(now);
+      const signed = `Signed ${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
+      putDatapoint(state, { key: 'declaration', label: labelFor(snapshot, key, 'declaration', 'Declaration and signature'), value: { typed_name: value.typed_name, signed_at: now }, display: signed, source: 'client', block_key: key }, now);
+      changed.push('declaration');
+    } else {
+      const main = b.datapoints?.[0];
+      if (main) {
+        let source = sourceFor(snapshot, key, main.key);
+        let v = value;
+        if (key === 'email' && value === b.options?.[0]) { v = extra.invitation_email || ''; source = 'pre'; }
+        if (key === 'email' && value !== b.options?.[0]) { v = null; } // the follow-up asks for the address
+        const raw = step.widget === 'upload' ? null : value;
+        if (v !== null) {
+          const display = key === 'email' ? String(v) : displayOf(step.widget, value);
+          putDatapoint(state, { key: main.key, label: main.label, value: step.widget === 'upload' ? { name: value.name, size: value.size, mime: value.mime } : v, display, raw_answer: raw, source: step.widget === 'upload' ? 'doc' : source, block_key: key, ...(value?.test_stub || extra.test_stub ? { test_stub: true } : {}), ...(value?.deferred ? { status: 'deferred' } : {}) }, now);
+          changed.push(main.key);
+        } else {
+          state.datapoints[main.key] = { ...(state.datapoints[main.key] || {}), key: main.key, label: main.label, block_key: key, raw_answer: value, value: state.datapoints[main.key]?.value ?? null, display: state.datapoints[main.key]?.display ?? '', source: 'client', history: state.datapoints[main.key]?.history || [] };
+        }
+      }
+      if (step.widget === 'upload') {
+        events.push({ event: 'doc.checked', notes: `${key}: ${value.name} — ${value.test_stub || extra.test_stub ? 'test mode, not checked' : 'checks run'}`, payload: { block: key, file: value.name, test_stub: !!(value.test_stub || extra.test_stub) } });
+      }
+    }
+  } else {
+    // follow-up answer
+    const f = (b.follow_ups || []).find((x) => x.id === step.fu_id);
+    if (f?.key) {
+      const src = f.action === 'ai_followup' ? 'ai' : UPLOAD_ACTIONS.includes(f.action) ? 'doc' : 'client';
+      if (f.merge && state.datapoints[f.key]) {
+        // e.g. purpose: replace "Other" by "Other: <text>"
+        const cur = asList(state.datapoints[f.key].value).map((x) => (x === 'Other' ? `Other: ${String(value).trim()}` : x));
+        putDatapoint(state, { ...state.datapoints[f.key], value: cur, display: cur.join(', ') }, now, 'merged follow-up');
+      } else if (f.combine_into) {
+        const part = { key: f.key, label: f.label || f.key, value: String(value).trim(), display: String(value).trim(), source: src, block_key: key };
+        state.parts = { ...(state.parts || {}), [f.key]: part };
+        const parts = Object.values(state.parts).filter((p) => p.block_key === key);
+        putDatapoint(state, { key: f.combine_into, label: labelFor(snapshot, key, f.combine_into), value: parts.map((p) => p.value), display: parts.map((p) => p.display).join(' · '), source: src, block_key: key }, now);
+        changed.push(f.combine_into);
+      } else {
+        const isUpload = UPLOAD_ACTIONS.includes(f.action);
+        putDatapoint(state, {
+          key: f.key, label: labelFor(snapshot, key, f.key, f.label), value: isUpload ? { name: value.name, size: value.size, mime: value.mime } : (step.widget === 'chips' ? value : String(value).trim()),
+          display: displayOf(step.widget, value), source: src, block_key: key, ...(value?.test_stub || extra.test_stub ? { test_stub: true } : {}), ...(value?.deferred ? { status: 'deferred' } : {}),
+        }, now);
+        changed.push(f.key);
+        if (isUpload) events.push({ event: 'doc.checked', notes: `${key}: ${value.deferred ? 'deferred' : value.name} — ${value.test_stub || extra.test_stub ? 'test mode, not checked' : 'checks run'}`, payload: { block: key, follow_up: f.id, test_stub: !!(value.test_stub || extra.test_stub), deferred: !!value.deferred } });
+      }
+      if (f.action === 'ai_followup') events.push({ event: 'ai.followup.answered', notes: f.key, payload: { block: key, key: f.key } });
+    }
+    if (f?.then_message) messages.push({ author_type: 'bank', kind: 'message', block_key: key, text: f.then_message });
+    state.queue = state.queue.slice(1);
+  }
+
+  // Follow-ups triggered by this answer (one per trigger).
+  if (step.kind === 'block' || state.queue.length === 0) {
+    const fired = triggeredFollowUps(snapshot, state, key);
+    for (const f of fired) {
+      state.fired.push(`${key}:${f.id}`);
+      events.push({ event: 'rule', notes: `Follow-up on ${key}: ${f.label || f.key || f.id}`, payload: { block: key, follow_up: f.id, action: f.action } });
+      if (f.action === 'explain_and_reask') {
+        messages.push({ author_type: 'bank', kind: 'explanation', block_key: key, text: f.message, tag: f.tag || MESSAGES.explanationTag });
+        state.block_states[key] = { ...(state.block_states[key] || {}), state: 'not_asked' };
+        // a re-ask: the answer is not final; the trigger may fire again on the next "I don't know"
+        state.fired = state.fired.filter((x) => x !== `${key}:${f.id}`);
+        return { state, clientText, messages, events, datapoints: changed, reask: true };
+      }
+      if (f.action === 'rule') continue;
+      if (f.action === 'ai_followup') events.push({ event: 'ai.followup.default', notes: `Asked with the template's default text (AI phrasing and approval arrive later) (${key})`, payload: { block: key, follow_up: f.id } });
+      if (ASK_ACTIONS.includes(f.action) || UPLOAD_ACTIONS.includes(f.action)) state.queue.push({ block: key, fu: f.id });
+    }
+  }
+  if (!state.queue.some((q) => q.block === key)) {
+    state.block_states[key] = { ...(state.block_states[key] || {}), state: value?.deferred ? 'deferred' : 'answered', answered_at: now };
+    events.push({ event: 'block.answered', notes: key, payload: { block: key } });
+  }
+  return { state, clientText, messages, events, datapoints: changed };
+}
+
+/** Review rows grouped by section: value, source label, editable. */
+export function reviewRows(snapshot, state) {
+  const sections = snapshot?.template_snapshot?.sections || [];
+  const sectionOf = (it) => it.section_key || blockOf(snapshot, it.block_key)?.section_key;
+  const rows = [];
+  for (const it of items(snapshot)) {
+    const b = blockOf(snapshot, it.block_key);
+    if (!b || ['review', 'sign'].includes(b.widget)) continue;
+    for (const dp of Object.values(state.datapoints).filter((d) => d.block_key === it.block_key && d.display)) {
+      const editable = !!b.edit && dp.key === b.datapoints?.[0]?.key;
+      rows.push({ section: sectionOf(it), section_label: sections.find((s) => s.key === sectionOf(it))?.label || '', key: dp.key, label: dp.label, value: dp.display, source: dp.source, source_label: sourceLabel(dp.source) + (dp.test_stub ? ' (test)' : ''), editable, edit: editable ? { type: b.edit.type, options: b.options || [], none_option: b.none_option || null } : null });
+    }
+  }
+  return rows;
+}
+
+/**
+ * An edit in the review: the value is replaced (source becomes "Declared by client"), the old value stays in history,
+ * answer.edited is logged and follow-ups that are now triggered for the first time are queued (earlier answers kept).
+ */
+export function applyEdit(snapshot, prev, datapointKey, value, extra = {}) {
+  const state = clone(prev);
+  const dp = state.datapoints[datapointKey];
+  if (!dp) return { error: 'Unknown answer' };
+  const b = blockOf(snapshot, dp.block_key);
+  if (!b?.edit || b.datapoints?.[0]?.key !== datapointKey) return { error: 'This answer cannot be changed here' };
+  const widget = b.edit.type === 'multi' ? 'multi' : b.edit.type === 'chips' ? 'chips' : 'text';
+  const err = validateAnswer({ widget, options: b.options || [], none_option: b.none_option }, value, state);
+  if (err) return { error: err };
+  const now = extra.now || new Date().toISOString();
+  const display = displayOf(widget, value);
+  const old = dp.display;
+  putDatapoint(state, { ...dp, value: widget === 'text' ? String(value).trim() : value, display, raw_answer: value, source: 'client' }, now, 'edited in review');
+  const events = [{ event: 'answer.edited', notes: `${dp.block_key}: "${old}" -> "${display}" (edited in review, previous value kept in history)`, payload: { key: datapointKey, old, new: display } }];
+  for (const f of triggeredFollowUps(snapshot, state, dp.block_key)) {
+    if (!ASK_ACTIONS.includes(f.action) && !UPLOAD_ACTIONS.includes(f.action)) continue;
+    state.fired.push(`${dp.block_key}:${f.id}`);
+    state.queue.push({ block: dp.block_key, fu: f.id });
+    events.push({ event: 'rule', notes: `Follow-up on ${dp.block_key} after an edit: ${f.label || f.key || f.id}`, payload: { block: dp.block_key, follow_up: f.id } });
+  }
+  return { state, events, display, queued: state.queue.length };
+}
+
+/** Progress per spec 5.5: active items minus skipped ones; one step per answered block. */
+export function progress(snapshot, state, { submitted = false } = {}) {
+  const its = items(snapshot);
+  const counted = its.filter((it) => it.active !== false && state.block_states[it.block_key]?.state !== 'skipped');
+  const total = counted.length;
+  const steps = counted.filter((it) => ['answered', 'deferred'].includes(state.block_states[it.block_key]?.state)).length;
+  const pct = total ? Math.min(100, Math.round((steps / total) * 100)) : 0;
+  return { steps, total, pct, minutes_left: submitted ? 0 : minutesLeft(total, steps) };
+}
+
+/** Canonical JSON of the answers (sorted keys, value and source only) — the basis of the submission hash. */
+export function canonicalAnswers(state) {
+  const keys = Object.keys(state.datapoints || {}).sort();
+  return JSON.stringify(keys.map((k) => [k, state.datapoints[k].value ?? null, state.datapoints[k].source || null]));
+}
+export async function submissionHash(state) {
+  const buf = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalAnswers(state)));
+  return [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+/** Reference number, e.g. NAB-2026-004217. rnd: 0..1 (injectable). */
+export function referenceNumber(prefix, now = new Date(), rnd = Math.random()) {
+  return `${prefix || 'REF'}-${now.getUTCFullYear()}-${String(Math.floor(rnd * 1e6)).padStart(6, '0')}`;
+}
+
+/** Messages after submission: thank-you line and the status card. */
+export function submissionMessages({ first_name, response_time, reference }) {
+  return [
+    { author_type: 'bank', kind: 'message', text: fillPlaceholders(MESSAGES.submitted, { first_name }) },
+    { author_type: 'system', kind: 'status_card', text: fillPlaceholders(MESSAGES.statusBody, { response_time }), payload: { title: MESSAGES.statusTitle, reference } },
+  ];
+}
