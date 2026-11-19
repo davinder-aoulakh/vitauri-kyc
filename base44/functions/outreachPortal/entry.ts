@@ -23,7 +23,7 @@ import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { looksLikeToken, hashToken, linkState, createAttemptLimiter } from '../../shared/outreachToken.js';
 import { fillPlaceholders, sectionsView } from '../../shared/outreachSnapshot.js';
 import { outreachAuditRow, writeOutreachAudit } from '../../shared/outreachAudit.js';
-import { initialState, advance, applyAnswer, applyEdit, reviewRows, progress, submissionHash, referenceNumber, submissionMessages, sourceLabel, setPhrasing, dropQueued } from '../../shared/outreachEngine.js';
+import { initialState, advance, applyAnswer, applyEdit, reviewRows, progress, submissionHash, referenceNumber, submissionMessages, sourceLabel, setPhrasing, dropQueued, joinNames } from '../../shared/outreachEngine.js';
 import { phraseFollowUp, approvalMode, phrasePrompt } from '../../shared/outreachAiFollowup.js';
 import { aiLogFields } from '../../shared/aiLog.js';
 import { MESSAGES } from '../../shared/outreachMessages.js';
@@ -37,7 +37,7 @@ import { createChildConversation } from '../../shared/outreachChildRequest.js';
 
 // ORG conversations stop before these blocks until phase 8 delivers them (business profile, documents by legal form,
 // the representative's ID check, review and the organisation's signature).
-const ORG_PAUSE_BEFORE = ['purpose_org'];
+const ORG_PAUSE_BEFORE = []; // phase 8: ORG conversations run to the end
 
 // Failed link attempts per client IP and per hash prefix (in memory per function instance; tokens are 256-bit).
 const limiter = createAttemptLimiter({ max: 20, windowMs: 15 * 60 * 1000 });
@@ -370,7 +370,8 @@ export default async function (req) {
         const sha = await submissionHash(engine);
         const reference = referenceNumber(settings.referencePrefix || 'REF', now);
         const responseTime = conversation.client_type === 'ORG' ? settings.responseTimeTexts?.ORG : settings.responseTimeTexts?.NP;
-        submissionMessages({ first_name: vars.first_name, response_time: responseTime || '', reference }).forEach((m) => addMsg(m));
+        const pendingParties = isOrg ? (await inviteRows()).filter((x) => x.status !== 'Completed').map((x) => String(x.roles_text || '').split('|')[0]).filter(Boolean) : [];
+        submissionMessages({ first_name: vars.first_name, response_time: responseTime || '', reference, company: isOrg ? (engine.datapoints?.legal_name?.display || '') : '', pending: pendingParties }).forEach((m) => addMsg(m));
         events.push({ event: 'case.submitted', notes: `Client declaration signed; answers frozen as version 1 (sha256:${sha.slice(0, 8)}…)`, payload: { sha256: sha, reference, test_data: testData } });
         await persist({ status: 'Submitted', submitted_at: nowIso, submission_hash: sha, reference });
         await E.OutreachRequest.update(request.id, { status: 'Complete' });
@@ -575,6 +576,30 @@ export default async function (req) {
       r.messages.forEach((m) => addMsg(m));
       await syncDatapoints(r.datapoints);
       await openRequests(r.open_requests);
+      if (r.rep_flag) {
+        // AT 30: the name on the ID differs from the declared representative — the analyst is alerted
+        const kc = await caseRow();
+        if (kc?.assigned_analyst_id) {
+          await E.Notification.create({
+            tenant_id: tenantId, user_id: kc.assigned_analyst_id, type: 'outreach_response', is_read: false,
+            title: 'Representative name differs from the ID', body: `${r.rep_flag.id_name} verified their identity, but ${r.rep_flag.declared} was selected as the representative.`,
+            link_case_id: kc.id, link_client_id: conversation.client_id, dedupe_key: `outreach_rep_flag:${conversation.id}`,
+          }).catch((e) => console.warn('notification failed', e?.message));
+        }
+      }
+      if (r.release_invites && isOrg) {
+        // the representative is verified: queued invitations go out now (spec 9.6)
+        const released = [];
+        const origin = String(req.headers.get('origin') || body.portal_origin || '').replace(/\/+$/, '');
+        for (const inv of (await inviteRows()).filter((x) => x.status === 'Queued')) {
+          const [name, roles] = String(inv.roles_text || '').split('|');
+          const roleText = String(roles || '').split(/\s*,\s*/).map((x) => ({ Director: 'Director', UBO: 'ultimate beneficial owner', 'Authorized Signatory': 'authorised representative' }[x])).filter(Boolean).join(' and ') || 'related party';
+          const c = await createChildConversation({ base44, tenant, parent: { conversation, request }, party: { name, role_text: roleText, related_party_id: inv.party_id }, email: inv.email, origin, actor: { type: 'System' } });
+          if (c.ok) { await E.OutreachInvite.update(inv.id, { status: 'Invited', invited_at: nowIso, child_request_id: c.child_request_id }); released.push(name); }
+        }
+        addMsg({ author_type: 'bank', kind: 'message', block_key: 'rep', text: released.length ? fillPlaceholders(MESSAGES.repVerifiedInvites, { names: joinNames(released) }) : MESSAGES.repVerified, tag: MESSAGES.invitationsSentTag });
+        r.events.push({ event: 'invitation.released', notes: `Released after the representative's ID check: ${released.join(', ') || 'none queued'}`, payload: { released, manual: false } });
+      }
       const events = [...r.events, ...(await moveOn())];
       await flushMsgs();
       await audit(toAudit(events));
