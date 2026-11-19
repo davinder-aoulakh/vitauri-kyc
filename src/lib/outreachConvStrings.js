@@ -41,6 +41,7 @@ export const OC = {
   continueDidit: 'Continue with Didit',
   notNow: 'Not now',
   qrLabel: 'QR code to open the identity check on your phone',
+  idvChecks: 'Results of the identity check',
   idvProcessing: 'Processing your identity check…',
   idvNotConfigured: 'Identity verification is not available at the moment. Please contact us.',
   attemptsLeft: (n) => (n === 1 ? '1 attempt left' : `${n} attempts left`),

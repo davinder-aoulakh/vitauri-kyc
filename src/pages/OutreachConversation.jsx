@@ -81,6 +81,13 @@ function Rail({ v }) {
 function Message({ m, tenantName, onWhy }) {
   const [open, setOpen] = useState(false);
   if (m.kind === 'system_line') return <div className="oc-sys">{m.text}</div>;
+  if (m.kind === 'idv_checks') {
+    return (
+      <ul className="oc-idv-checks oc-sys" aria-label={OC.idvChecks}>
+        {(m.checks || []).map((c) => <li key={c.label} className={c.ok ? 'ok' : 'no'}><span aria-hidden="true">{c.ok ? '✓' : '✗'}</span>{c.label}<span className="sr-only">{c.ok ? ' (passed)' : ' (not passed)'}</span></li>)}
+      </ul>
+    );
+  }
   if (m.kind === 'status_card') {
     return (
       <div className="oc-status" role="status">
@@ -204,6 +211,30 @@ export default function OutreachConversation() {
   const onAnswer = (value) => send({ action: 'answer', body: { client_answer_id: newAnswerId(), step_id: v.step?.id, value } });
   const onEdit = (key, value) => send({ action: 'edit', body: { client_answer_id: newAnswerId(), datapoint_key: key, value } });
   const onStart = () => send({ action: 'start', body: {} });
+  // The Didit ID step: start / reuse the session and pull the result (quiet calls do not block the page).
+  const onIdv = useCallback(async (action, { quiet = false } = {}) => {
+    try {
+      const r = await call(action, action === 'idv_start' ? { portal_origin: window.location.origin } : {});
+      setV(r.data);
+      if (!quiet) setFieldErr('');
+      return r.data;
+    } catch (e) {
+      const { status, message } = errOf(e);
+      if (status === 409) { await open(); return null; }
+      if (!quiet) setFieldErr(message || OC.notSaved);
+      return null;
+    }
+  }, [call, open]);
+
+  // Back from Didit on this device (?didit_done=1): clean the address and check the result straight away.
+  const diditReturn = useRef(typeof window !== 'undefined' && /[?&]didit_done=1/.test(window.location.search));
+  useEffect(() => {
+    if (diditReturn.current) window.history.replaceState(null, '', window.location.pathname);
+  }, []);
+  useEffect(() => {
+    if (diditReturn.current && v?.step?.widget === 'idv') { diditReturn.current = false; onIdv('idv_status'); }
+  }, [v?.step?.widget, onIdv]);
+
   const onWhy = (blockKey) => { call('why_opened', { block_key: blockKey }).catch(() => {}); };
 
   async function askNewLink() {
@@ -252,7 +283,7 @@ export default function OutreachConversation() {
               <button type="button" className="oc-chip" disabled={busy} onClick={onStart}>{v.start_chip}</button>
             </div>
           )}
-          {revealed && v.step && !v.submitted && <Widget key={v.step.id} step={v.step} view={v} busy={busy} onAnswer={onAnswer} onEdit={onEdit} />}
+          {revealed && v.step && !v.submitted && <Widget key={v.step.id} step={v.step} view={v} busy={busy} onAnswer={onAnswer} onEdit={onEdit} onIdv={onIdv} />}
           {fieldErr && <p className="oc-err" role="alert">{fieldErr}</p>}
           {saveErr && (
             <div className="oc-chips" role="alert">

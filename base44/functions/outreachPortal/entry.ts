@@ -49,7 +49,7 @@ function tenantView(tenant) {
 }
 
 function messageView(m) {
-  return { id: m.id, seq: m.seq, author_type: m.author_type, author_name: m.author_name || null, kind: m.kind, block_key: m.block_key || null, tag: m.tag || null, ai_assisted: !!m.ai_assisted, text: m.display_text || '', why: m.payload?.why || null, card: m.kind === 'status_card' ? (m.payload || null) : null, status: m.status || 'sent', created_at: m.created_date };
+  return { id: m.id, seq: m.seq, author_type: m.author_type, author_name: m.author_name || null, kind: m.kind, block_key: m.block_key || null, tag: m.tag || null, ai_assisted: !!m.ai_assisted, text: m.display_text || '', why: m.payload?.why || null, card: m.kind === 'status_card' ? (m.payload || null) : null, checks: m.kind === 'idv_checks' ? (m.payload?.checks || null) : null, status: m.status || 'sent', created_at: m.created_date };
 }
 
 /** What the browser may see of a step (no conditions, no follow-up rules). */
@@ -218,6 +218,7 @@ export default async function (req) {
         if (r.error) return [];
         engine = { ...r.state, idv_applied_session: sid };
         addMsg({ author_type: 'client', kind: 'answer', block_key: step.block_key, text: r.clientText }, { client_answer_id: `idv-${sid}`.slice(0, 80), payload: { step_id: step.id, value: { session_done: true } } });
+        addMsg({ author_type: 'system', kind: 'idv_checks', block_key: step.block_key, text: '', payload: { checks: idvChecks(item).map(({ label, ok }) => ({ label, ok })) } });
         r.messages.forEach((m) => addMsg(m));
         await syncDatapoints(r.datapoints);
         events.push({ event: 'idv.result', notes: `Didit ID check ${st.state === 'approved' ? 'approved' : 'in review'}`, payload: { session_id: sid, outcome: st.state, checks: idvChecks(item) } });
