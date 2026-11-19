@@ -13,7 +13,7 @@ const vars = { tenant_name: 'New Age Bank', first_name: 'John', invitation_email
 const idv = { full_name: 'John Carter', dob: '14 March 1987', nat: 'British', doc: 'Passport GBR, valid until 2 September 2031' };
 const file = (name) => ({ name, size: 1000, mime: 'application/pdf', test_stub: true });
 const SCRIPT_A = {
-  idv: { stub: true }, name_confirm: 'Yes, this is correct',
+  idv: { session_done: true }, name_confirm: 'Yes, this is correct',
   address: { country: 'United Kingdom', postcode: 'N1 9GU', number: '263', street: 'Upper Street', city: 'London' },
   address_proof: file('utility-bill-sept.pdf'), email: 'Yes, that is correct', phone: { code: '+44', number: '7700 900123' },
   purpose: ['Everyday payments', 'Receiving salary'], nature: ['Current account', 'Debit card'],
@@ -41,7 +41,7 @@ function run(script, { snapshot = snap, risk = 'low', onStep, maxSteps = 99 } = 
     let v = script[k];
     if (Array.isArray(v) && k === 'pep') v = v[pep++];
     if (onStep) s = onStep(k, s, audit) || s;
-    const r = E.applyAnswer(snapshot, s, a.step, v, { invitation_email: vars.invitation_email, idv, test_stub: a.step.widget === 'idv' });
+    const r = E.applyAnswer(snapshot, s, a.step, v, { invitation_email: vars.invitation_email, idv });
     if (r.error) throw new Error(`${k}: ${r.error}`);
     s = r.state;
     lines.push(['CLIENT', r.clientText]);

@@ -10,7 +10,7 @@ const seed = buildSeed(OUTREACH_BLOCK_LIBRARY, OUTREACH_FORM_TEMPLATES);
 const npTemplate = seed.templates.find((t) => t.key === 'onboarding_np');
 const vars = { tenant_name: 'New Age Bank', first_name: 'John', invitation_email: 'john.carter@example.com' };
 const ANSWERS = {
-  idv: { stub: true }, name_confirm: 'Yes, this is correct',
+  idv: { session_done: true }, name_confirm: 'Yes, this is correct',
   address: { country: 'United Kingdom', postcode: 'N1 9GU', number: '263', street: 'Upper Street', city: 'London' },
   address_proof: { name: 'bill.pdf', size: 1, mime: 'application/pdf', test_stub: true }, email: 'Yes, that is correct', phone: { code: '+44', number: '7700 900123' },
   purpose: ['Saving'], nature: ['Current account'],
@@ -19,7 +19,7 @@ function answerUntil(snap, n) {
   let s = E.initialState({ risk: 'low' });
   for (let i = 0; i < n; i++) {
     const a = E.advance(snap, s, vars);
-    s = E.applyAnswer(snap, a.state, a.step, ANSWERS[a.step.block_key], { idv: { full_name: 'John Carter' }, test_stub: true, invitation_email: vars.invitation_email }).state;
+    s = E.applyAnswer(snap, a.state, a.step, ANSWERS[a.step.block_key], { idv: { full_name: 'John Carter' }, invitation_email: vars.invitation_email }).state;
   }
   return s;
 }
