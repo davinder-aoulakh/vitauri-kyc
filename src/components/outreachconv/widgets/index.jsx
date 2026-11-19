@@ -8,11 +8,11 @@ import ConfirmFacts from './ConfirmFacts';
 import FormFields from './FormFields';
 import Review from './Review';
 import Sign from './Sign';
-import IdvStub from './IdvStub';
+import Idv from './Idv';
 import UploadStub from './UploadStub';
 
 /** The widget for the server's current step (spec 5.2). Widgets of later phases (ORG) are not rendered yet. */
-export default function Widget({ step, view, busy, onAnswer, onEdit }) {
+export default function Widget({ step, view, busy, onAnswer, onEdit, onIdv }) {
   const p = { step, busy, onAnswer };
   switch (step.widget) {
     case 'chips': return <Chips {...p} />;
@@ -24,7 +24,7 @@ export default function Widget({ step, view, busy, onAnswer, onEdit }) {
     case 'form': return <FormFields {...p} />;
     case 'review': return <Review {...p} onEdit={onEdit} />;
     case 'sign': return <Sign {...p} />;
-    case 'idv': return <IdvStub {...p} />;
+    case 'idv': return <Idv {...p} onIdv={onIdv} />;
     case 'upload': return <UploadStub {...p} />;
     default: return null;
   }
