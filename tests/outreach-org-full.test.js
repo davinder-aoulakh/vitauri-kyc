@@ -25,6 +25,7 @@ const SCRIPT = {
   activity: 'Yes, that is accurate', countries_org: ['Netherlands', 'Asia'], 'countries_org:outside': 'Suppliers in Turkey and Suriname, about 8 payments per month.',
   volume: 'Over € 1 million', 'volume:high': 'Seasonal container shipments for three large customers.',
   sof_org: ['Revenue from customers', 'Shareholder funding'], 'sof_org:loan': up('shareholder-loan-agreement.pdf', pass(['Readable and complete'])),
+  sow_ubo: 'Built the company from 2014, plus salary and a property sale in 2021.',
   docs: up('shareholder-register.pdf', pass(['Readable and complete'])), name_confirm: 'Yes, this is correct', pep: 'No', review: 'confirmed', review_org: 'confirmed',
   sign_org: { terms: true, typed_name: 'Emma Clarke', signature: 'data:image/png;base64,x' },
 };
