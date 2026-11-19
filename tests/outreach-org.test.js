@@ -46,7 +46,7 @@ function runD({ owners, chain = {}, ubo = 'Yes, this is complete', extraVars = {
     else if (st.block_key === 'ubo' && st.kind === 'block') val = ubo;
     else if (st.block_key === 'ubo') val = 'Through voting rights';
     else throw new Error(`unexpected step ${st.block_key}`);
-    const r = E.applyAnswer(snap, s, st, val, { vars: v, blockedJurisdictions: blocked });
+    const r = E.applyAnswer(snap, s, st, val, { vars: v, blockedJurisdictions: blocked, diditConfigured: false }); // transcript D is the document route (no Didit)
     if (r.error) throw new Error(`${st.block_key}: ${r.error}`);
     s = r.state;
     lines.push(['CLIENT', r.clientText]);
