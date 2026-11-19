@@ -43,6 +43,32 @@
     },
     "assigned_user_id": {
       "type": "string"
+    },
+    "request_type": {
+      "type": "string",
+      "enum": [
+        "question",
+        "document"
+      ]
+    },
+    "text": {
+      "type": "string"
+    },
+    "from_user_id": {
+      "type": "string"
+    },
+    "from_role": {
+      "type": "string"
+    },
+    "answer_evidence_id": {
+      "type": "string"
+    },
+    "answer_text": {
+      "type": "string"
+    },
+    "deferred_at": {
+      "type": "string",
+      "format": "date-time"
     }
   },
   "required": [

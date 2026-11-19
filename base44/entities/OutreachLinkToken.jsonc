@@ -1,0 +1,19 @@
+{
+  "name": "OutreachLinkToken",
+  "type": "object",
+  "description": "Guided conversation: the client's link (raw token) kept server-only so reminder and new-message emails carry the same link. Never readable from the browser.",
+  "properties": {
+    "tenant_id": { "type": "string" },
+    "conversation_id": { "type": "string" },
+    "request_id": { "type": "string" },
+    "token": { "type": "string" },
+    "link": { "type": "string" }
+  },
+  "required": ["tenant_id", "conversation_id", "token"],
+  "rls": {
+    "create": { "user_condition": { "data.app_role": "__backend_only__" } },
+    "read": false,
+    "update": { "user_condition": { "data.app_role": "__backend_only__" } },
+    "delete": false
+  }
+}
