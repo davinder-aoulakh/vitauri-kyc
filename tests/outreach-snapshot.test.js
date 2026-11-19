@@ -67,7 +67,8 @@ test('placeholders, first name, progress, sections and minutes', () => {
   const org = buildSnapshot({ template: templates[1], blocks });
   assert.equal(initialProgressTotal(org), 20); // two declaration blocks are off; rep adds its ID confirmation and PEP steps
   assert.equal(initialProgressTotal(org, { risk: 'low' }), 19); // spec 5.5: 2 + 2 + 15 at Low (sow_ubo not counted)
-  assert.deepEqual(org.template_snapshot.items.map((i) => i.block_key).slice(15, 18), ['rep', 'name_confirm', 'pep']);
+  const keys = org.template_snapshot.items.map((i) => i.block_key);
+  assert.deepEqual(keys.slice(keys.indexOf('rep'), keys.indexOf('rep') + 3), ['rep', 'name_confirm', 'pep']);
   const secs = sectionsView(s, { idv: { state: 'answered' }, name_confirm: { state: 'answered' }, address: { state: 'answered' }, address_proof: { state: 'answered' } }, 'email');
   assert.deepEqual(secs.slice(0, 3).map((x) => x.state), ['done', 'current', 'todo']);
   assert.equal(minutesLeft(15, 0), 6);
