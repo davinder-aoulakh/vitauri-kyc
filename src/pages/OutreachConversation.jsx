@@ -226,6 +226,25 @@ export default function OutreachConversation() {
     }
   }, [call, open]);
 
+  // Upload step: the file goes to outreachUpload; errors come back as a message for the widget.
+  const onUpload = useCallback(async (stepId, file) => {
+    try {
+      const r = await base44.functions.invoke('outreachUpload', { token, step_id: stepId, file });
+      return r.data;
+    } catch (e) {
+      const { status, message } = errOf(e);
+      if (status === 409) { await open(); return null; }
+      return { error: message || OC.notSaved };
+    }
+  }, [token, open]);
+
+  // An AI follow-up waits for a colleague's approval: look again every 5 seconds.
+  useEffect(() => {
+    if (v?.step?.widget !== 'wait') return undefined;
+    const t = setInterval(() => { call('open').then((r) => { if (r?.data && !r.data.error) setV(r.data); }).catch(() => {}); }, 5000);
+    return () => clearInterval(t);
+  }, [v?.step?.widget, v?.step?.id, call]);
+
   // Back from Didit on this device (?didit_done=1): clean the address and check the result straight away.
   const diditReturn = useRef(typeof window !== 'undefined' && /[?&]didit_done=1/.test(window.location.search));
   useEffect(() => {
@@ -283,7 +302,7 @@ export default function OutreachConversation() {
               <button type="button" className="oc-chip" disabled={busy} onClick={onStart}>{v.start_chip}</button>
             </div>
           )}
-          {revealed && v.step && !v.submitted && <Widget key={v.step.id} step={v.step} view={v} busy={busy} onAnswer={onAnswer} onEdit={onEdit} onIdv={onIdv} />}
+          {revealed && v.step && !v.submitted && <Widget key={v.step.id} step={v.step} view={v} busy={busy} onAnswer={onAnswer} onEdit={onEdit} onIdv={onIdv} onUpload={onUpload} />}
           {fieldErr && <p className="oc-err" role="alert">{fieldErr}</p>}
           {saveErr && (
             <div className="oc-chips" role="alert">

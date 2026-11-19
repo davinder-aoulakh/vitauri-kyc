@@ -9,10 +9,10 @@ import FormFields from './FormFields';
 import Review from './Review';
 import Sign from './Sign';
 import Idv from './Idv';
-import UploadStub from './UploadStub';
+import Upload from './Upload';
 
 /** The widget for the server's current step (spec 5.2). Widgets of later phases (ORG) are not rendered yet. */
-export default function Widget({ step, view, busy, onAnswer, onEdit, onIdv }) {
+export default function Widget({ step, view, busy, onAnswer, onEdit, onIdv, onUpload }) {
   const p = { step, busy, onAnswer };
   switch (step.widget) {
     case 'chips': return <Chips {...p} />;
@@ -25,7 +25,8 @@ export default function Widget({ step, view, busy, onAnswer, onEdit, onIdv }) {
     case 'review': return <Review {...p} onEdit={onEdit} />;
     case 'sign': return <Sign {...p} />;
     case 'idv': return <Idv {...p} onIdv={onIdv} />;
-    case 'upload': return <UploadStub {...p} />;
+    case 'upload': return <Upload {...p} onUpload={onUpload} />;
+    case 'wait': return <div className="oc-widget"><p className="oc-small oc-wait" role="status"><span className="oc-typing" aria-hidden="true"><span /><span /><span /></span></p></div>;
     default: return null;
   }
 }
