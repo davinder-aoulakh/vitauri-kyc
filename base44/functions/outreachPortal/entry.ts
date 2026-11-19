@@ -10,9 +10,13 @@
 //                                                    an answer for a step that is no longer current is refused (409)
 //   edit { client_answer_id, datapoint_key, value } -> a change in the review (source becomes "Declared by client")
 //   why_opened { block_key }                      -> logs client.why_opened
+//   idv_start { portal_origin }                   -> the ID step: reuses an open Didit session or starts one (createDiditSession,
+//                                                    server to server, within settings.idvMaxAttempts) and returns its address
+//   idv_status                                    -> pulls the Didit result when the webhook is late (getDiditSessionResult) and
+//                                                    applies a stored decision: approved / in review continue, declined re-offers
 //   request_new_link                              -> on an expired link: notifies the assigned analyst (once)
-// Test stand-ins until phases 4 and 5: the ID&V step is filled from the client record and an upload sends only its name; both are
-// marked test_stub and the conversation gets pending_step.test_data = true.
+// The ID&V step uses the real Didit session of the carrier's 'idv' item (phase 4). Test stand-in until phase 5: an upload sends
+// only its name; it is marked test_stub and the conversation gets pending_step.test_data = true.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { looksLikeToken, hashToken, linkState, createAttemptLimiter } from '../../shared/outreachToken.js';
@@ -20,6 +24,8 @@ import { fillPlaceholders, sectionsView } from '../../shared/outreachSnapshot.js
 import { outreachAuditRow, writeOutreachAudit } from '../../shared/outreachAudit.js';
 import { initialState, advance, applyAnswer, applyEdit, reviewRows, progress, submissionHash, referenceNumber, submissionMessages, sourceLabel } from '../../shared/outreachEngine.js';
 import { MESSAGES } from '../../shared/outreachMessages.js';
+import { idvFromItem, idvChecks, idvState } from '../../shared/outreachIdv.js';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 
 // Failed link attempts per client IP and per hash prefix (in memory per function instance; tokens are 256-bit).
 const limiter = createAttemptLimiter({ max: 20, windowMs: 15 * 60 * 1000 });
@@ -50,21 +56,10 @@ function messageView(m) {
 function stepView(step) {
   if (!step) return null;
   const { id, block_key, kind, widget, text, why, tag, options, multi, none_option, facts, prefill, checks, allow_defer, rows, declaration } = step;
-  return { id, block_key, kind, widget, text, why: why || null, tag: tag || null, options: options || [], multi: !!multi, none_option: none_option || null, facts: facts || null, prefill: prefill || null, checks: checks || null, allow_defer: !!allow_defer, rows: rows || null, declaration: declaration || null };
+  return { id, block_key, kind, widget, text, why: why || null, tag: tag || null, options: options || [], multi: !!multi, none_option: none_option || null, facts: facts || null, prefill: prefill || null, checks: checks || null, allow_defer: !!allow_defer, rows: rows || null, declaration: declaration || null, ...(step.idv ? { idv: step.idv } : {}) };
 }
 
 function fmtDate(iso) { try { return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return ''; } }
-
-function idvFromClient(client) {
-  const nat = String(client.nationality || '').replace(/\s*\([A-Z]{2}\)\s*$/, '');
-  const docType = String(client.id_type || 'Identity document').replace(/_/g, ' ');
-  return {
-    full_name: client.full_name || [client.first_names, client.last_name].filter(Boolean).join(' '),
-    dob: client.date_of_birth ? fmtDate(client.date_of_birth) : '',
-    nat,
-    doc: `${docType}${client.id_expiry_date ? `, valid until ${fmtDate(client.id_expiry_date)}` : ''}`,
-  };
-}
 
 export default async function (req) {
   try {
@@ -174,6 +169,75 @@ export default async function (req) {
     };
     const reload = async () => { messages = asList(await E.OutreachThreadMessage.filter({ tenant_id: tenantId, conversation_id: conversation.id }, 'seq', 1000)); };
 
+    // ── ID&V (Didit) ────────────────────────────────────────────────────────────────────────────────────────────
+    // The carrier's 'idv' item is written by createDiditSession, getDiditSessionResult and diditWebhook (frozen files).
+    // Sessions started in this conversation are counted in engine.idv_sessions (attempt limit from settings).
+    const maxAttempts = Number(settings.idvMaxAttempts) || 3;
+    const idvItemOf = (r) => (r?.items || []).find((i) => i.item_id === 'idv') || null;
+    const reloadCarrier = async () => asList(await E.OutreachRequest.filter({ tenant_id: tenantId, id: request.id }, undefined, 1))[0] || request;
+    const noteSession = (item) => {
+      const sid = item?.didit_session_id;
+      if (sid && !(engine.idv_sessions || []).includes(sid)) engine.idv_sessions = [...(engine.idv_sessions || []), sid];
+    };
+    let diditConfigured = null;
+    const isDiditConfigured = async () => {
+      if (diditConfigured === null) { try { diditConfigured = !!(await withDiditCredentials(base44, tenant))?.didit_api_key; } catch { diditConfigured = false; } }
+      return diditConfigured;
+    };
+    /** What the idv widget needs: state, session address (only while open), the four checks, attempts left. */
+    const idvView = async (item) => {
+      const st = idvState(item, { attempts: (engine.idv_sessions || []).length, maxAttempts });
+      const configured = await isDiditConfigured();
+      return {
+        state: st.state, can_start: configured && st.can_start, attempts_left: st.attempts_left, configured,
+        session_url: st.state === 'open' ? st.session_url : null,
+        checks: ['approved', 'in_review', 'declined'].includes(st.state) ? idvChecks(item) : null,
+        message: !configured ? MESSAGES.idvNotConfigured : st.state === 'declined' ? (st.can_start ? MESSAGES.idvDeclined : MESSAGES.idvNoAttempts)
+          : st.state === 'expired' ? (st.can_start ? MESSAGES.idvExpired : MESSAGES.idvNoAttempts) : null,
+      };
+    };
+    const decorateIdvStep = async (item) => { if (step?.widget === 'idv') step = { ...step, idv: await idvView(item) }; };
+    /**
+     * Applies a stored Didit decision to the conversation once per session: approved or in review -> the four datapoints
+     * (source idv) and the conversation continues; declined / expired -> a message (once), a new attempt when allowed.
+     */
+    const applyIdvDecision = async (carrier) => {
+      if (step?.widget !== 'idv') return [];
+      const item = idvItemOf(carrier);
+      noteSession(item);
+      const st = idvState(item, { attempts: (engine.idv_sessions || []).length, maxAttempts });
+      const sid = item?.didit_session_id || null;
+      const events = [];
+      if ((st.state === 'approved' || st.state === 'in_review') && sid && engine.idv_applied_session !== sid) {
+        const r = applyAnswer(snap, engine, step, { session_done: true }, { now: nowIso, idv: idvFromItem(item), idv_outcome: st.state });
+        if (r.error) return [];
+        engine = { ...r.state, idv_applied_session: sid };
+        addMsg({ author_type: 'client', kind: 'answer', block_key: step.block_key, text: r.clientText }, { client_answer_id: `idv-${sid}`.slice(0, 80), payload: { step_id: step.id, value: { session_done: true } } });
+        r.messages.forEach((m) => addMsg(m));
+        await syncDatapoints(r.datapoints);
+        events.push({ event: 'idv.result', notes: `Didit ID check ${st.state === 'approved' ? 'approved' : 'in review'}`, payload: { session_id: sid, outcome: st.state, checks: idvChecks(item) } });
+        events.push(...r.events, ...(await moveOn()));
+        return events;
+      }
+      if ((st.state === 'declined' || st.state === 'expired') && sid && engine.idv_reported_session !== sid) {
+        engine.idv_reported_session = sid;
+        addMsg({ author_type: 'bank', kind: 'message', block_key: step.block_key, text: st.can_start ? (st.state === 'expired' ? MESSAGES.idvExpired : MESSAGES.idvDeclined) : MESSAGES.idvNoAttempts });
+        events.push({ event: 'idv.result', notes: `Didit ID check ${st.state}${st.can_start ? `; ${st.attempts_left} attempt(s) left` : '; no attempts left'}`, payload: { session_id: sid, outcome: st.state, attempts_left: st.attempts_left, reason: st.reason || null } });
+        if (!st.can_start) {
+          const kc = conversation.case_id ? asList(await E.KycCase.filter({ tenant_id: tenantId, id: conversation.case_id }, undefined, 1))[0] : null;
+          if (kc?.assigned_analyst_id) {
+            await E.Notification.create({
+              tenant_id: tenantId, user_id: kc.assigned_analyst_id, type: 'outreach_response', is_read: false,
+              title: 'Identity check did not pass', body: `${conversation.invited_name || 'The client'} used all identity check attempts in the guided conversation.`,
+              link_case_id: kc.id, link_client_id: conversation.client_id, dedupe_key: `outreach_idv_attempts:${conversation.id}`,
+            }).catch((e) => console.warn('notification failed', e?.message));
+          }
+        }
+        await persist();
+      }
+      return events;
+    };
+
     // Moves on to the next step; at the end, submits.
     const moveOn = async () => {
       const a = advance(snap, engine, { ...vars, now: nowIso });
@@ -205,6 +269,13 @@ export default async function (req) {
         if (['Sent', 'Draft', 'Viewed'].includes(request.status)) await E.OutreachRequest.update(request.id, { status: 'Opened' });
         await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'client.opened', actor: clientActor, conversation: conv, payload: { ip, user_agent: String(req.headers.get('user-agent') || '').slice(0, 300) }, notes: 'The client opened the guided conversation for the first time.' }));
       }
+      if (step?.widget === 'idv' && !conversation.submitted_at) {
+        // Resume around the Didit check (17 Nov): a stored decision is applied at once; an open session is reused.
+        const carrier = await reloadCarrier();
+        const events = await applyIdvDecision(carrier);
+        if (events.length) { await flushMsgs(); await audit(toAudit(events)); await reload(); }
+        await decorateIdvStep(idvItemOf(await reloadCarrier()));
+      }
       if (!messages.length) {
         const deadlineDate = conversation.deadline ? fmtDate(conversation.deadline) : '';
         const client = asList(await E.Client.filter({ tenant_id: tenantId, id: conversation.client_id }, undefined, 1))[0] || {};
@@ -224,6 +295,50 @@ export default async function (req) {
     }
 
     if (link === 'submitted' || conversation.submitted_at) throw httpError(409, 'This conversation has been submitted.');
+
+    if (action === 'idv_start' || action === 'idv_status') {
+      if (step?.widget !== 'idv') return Response.json(view());
+      let carrier = await reloadCarrier();
+      let item = idvItemOf(carrier);
+      noteSession(item);
+      if (action === 'idv_status' && item?.didit_session_id && !['Pass', 'Fail', 'Expired'].includes(item.idv_status)) {
+        // The webhook may be late: pull the decision once (the frozen function stores it on the item).
+        try { await base44.asServiceRole.functions.invoke('getDiditSessionResult', { outreach_id: request.id, item_id: 'idv', access_token: token }); } catch (e) { console.warn('idv pull failed', e?.message); }
+        carrier = await reloadCarrier();
+        item = idvItemOf(carrier);
+      }
+      const events = await applyIdvDecision(carrier);
+      if (events.length) {
+        await flushMsgs(); await audit(toAudit(events)); await reload();
+        await decorateIdvStep(idvItemOf(await reloadCarrier()));
+        return Response.json(view());
+      }
+      if (action === 'idv_start') {
+        const st = idvState(item, { attempts: (engine.idv_sessions || []).length, maxAttempts });
+        if (st.state === 'open' || st.state === 'approved' || st.state === 'in_review') { await decorateIdvStep(item); return Response.json(view()); }
+        if (!(await isDiditConfigured())) throw httpError(422, MESSAGES.idvNotConfigured);
+        if (!st.can_start) throw httpError(422, MESSAGES.idvNoAttempts);
+        const origin = String(req.headers.get('origin') || body.portal_origin || '').replace(/\/+$/, '');
+        if (!/^https?:\/\/[^/\s]+$/.test(origin)) throw httpError(400, 'portal_origin is required');
+        const res = await base44.asServiceRole.functions.invoke('createDiditSession', {
+          outreach_id: request.id, item_id: 'idv', access_token: token, portal_url: `${origin}/o/${token}`, language: 'en',
+          ...(conversation.invited_email ? { client_email: conversation.invited_email } : {}),
+        }).catch((e) => ({ data: { error: e?.response?.status === 423 ? MESSAGES.idvUnavailable : (e?.response?.data?.error || e?.message) } }));
+        if (res?.data?.error || !res?.data?.session_url) {
+          await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'adapter.error', actor: { type: 'System' }, conversation: conv, payload: { adapter: 'didit_idv', error: String(res?.data?.error || 'no session').slice(0, 200) }, notes: 'Didit session could not be started' }));
+          throw httpError(502, /temporarily/.test(String(res?.data?.error)) ? MESSAGES.idvUnavailable : MESSAGES.idvNotConfigured);
+        }
+        carrier = await reloadCarrier();
+        item = idvItemOf(carrier);
+        noteSession(item);
+        await persist();
+        await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'idv.session_started', actor: clientActor, conversation: conv, payload: { session_id: item?.didit_session_id || null, attempt: (engine.idv_sessions || []).length, max: maxAttempts }, notes: `Didit ID check started (attempt ${(engine.idv_sessions || []).length} of ${maxAttempts})` }));
+      } else {
+        await persist();
+      }
+      await decorateIdvStep(item);
+      return Response.json(view());
+    }
 
     if (action === 'start') {
       if (step) return Response.json(view()); // already started (second tab, retry)
@@ -245,11 +360,9 @@ export default async function (req) {
       let value = body.value;
       const extra = { now: nowIso, invitation_email: vars.invitation_email };
       if (step.widget === 'idv') {
-        // Test stand-in until the Didit widget (phase 4): the four facts come from the client record and are marked as test data.
-        const client = asList(await E.Client.filter({ tenant_id: tenantId, id: conversation.client_id }, undefined, 1))[0] || {};
-        value = { stub: true };
-        Object.assign(extra, { idv: idvFromClient(client), test_stub: true });
-        testData = true;
+        // Only "Not now" is a client answer here; the Didit result arrives through idv_status / open.
+        if (value?.declined !== true) throw httpError(409, MESSAGES.notCurrent);
+        value = { declined: true };
       } else if (step.widget === 'upload') {
         // Test stand-in until real uploads and checks (phase 5): only name, size and type are kept; no file is stored.
         value = value?.deferred ? { deferred: true } : { name: String(value?.name || '').slice(0, 200), size: Number(value?.size) || 0, mime: String(value?.mime || '').slice(0, 100), test_stub: true };
