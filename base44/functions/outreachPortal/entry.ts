@@ -29,6 +29,12 @@ import { aiLogFields } from '../../shared/aiLog.js';
 import { MESSAGES } from '../../shared/outreachMessages.js';
 import { idvFromItem, idvChecks, idvState } from '../../shared/outreachIdv.js';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
+import { partiesOf, relationRows } from '../../shared/outreachParties.js';
+import { normName } from '../../shared/outreachUbo.js';
+
+// ORG conversations stop before these blocks until phases 7-8 deliver them (invitations, documents by legal form,
+// the representative's ID check, review and the organisation's signature).
+const ORG_PAUSE_BEFORE = ['invites'];
 
 // Failed link attempts per client IP and per hash prefix (in memory per function instance; tokens are 256-bit).
 const limiter = createAttemptLimiter({ max: 20, windowMs: 15 * 60 * 1000 });
@@ -52,14 +58,16 @@ function tenantView(tenant) {
 }
 
 function messageView(m) {
-  return { id: m.id, seq: m.seq, author_type: m.author_type, author_name: m.author_name || null, kind: m.kind, block_key: m.block_key || null, tag: m.tag || null, ai_assisted: !!m.ai_assisted, text: m.display_text || '', why: m.payload?.why || null, card: m.kind === 'status_card' ? (m.payload || null) : null, checks: m.kind === 'idv_checks' ? (m.payload?.checks || null) : null, status: m.status || 'sent', created_at: m.created_date };
+  return { id: m.id, seq: m.seq, author_type: m.author_type, author_name: m.author_name || null, kind: m.kind, block_key: m.block_key || null, tag: m.tag || null, ai_assisted: !!m.ai_assisted, text: m.display_text || '', why: m.payload?.why || null, card: m.kind === 'status_card' || m.kind === 'structure_card' ? (m.payload || null) : null, checks: m.kind === 'idv_checks' ? (m.payload?.checks || null) : null, status: m.status || 'sent', created_at: m.created_date };
 }
 
 /** What the browser may see of a step (no conditions, no follow-up rules). */
 function stepView(step) {
   if (!step) return null;
   const { id, block_key, kind, widget, text, why, tag, options, multi, none_option, facts, prefill, checks, allow_defer, rows, declaration } = step;
-  return { id, block_key, kind, widget, text, why: why || null, tag: tag || null, options: options || [], multi: !!multi, none_option: none_option || null, facts: facts || null, prefill: prefill || null, checks: checks || null, allow_defer: !!allow_defer, rows: rows || null, declaration: declaration || null, ...(step.idv ? { idv: step.idv } : {}) };
+  const org = {};
+  for (const k of ['people', 'fields', 'mode', 'authority_options', 'note_field', 'default_role', 'threshold', 'rest_note', 'over_note', 'note', 'sub', 'person', 'company', 'ai_assisted']) if (step[k] !== undefined && step[k] !== null) org[k] = step[k];
+  return { id, block_key, kind, widget, text, why: why || null, tag: tag || null, options: options || [], multi: !!multi, none_option: none_option || null, facts: facts || null, prefill: prefill || null, checks: checks || null, allow_defer: !!allow_defer, rows: rows || null, declaration: declaration || null, ...(step.idv ? { idv: step.idv } : {}), ...org };
 }
 
 function fmtDate(iso) { try { return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return ''; } }
@@ -126,7 +134,12 @@ export default async function (req) {
     engine.risk = conversation.risk_class || engine.risk; // staff may change the risk class; rules read the current value
     let step = ps.step || null;
     let testData = !!ps.test_data;
-    const vars = { tenant_name: tenant?.name || '', first_name: conversation.invited_first_name || '', invitation_email: conversation.invited_email || '' };
+    const isOrg = conversation.client_type === 'ORG';
+    const vars = {
+      tenant_name: tenant?.name || '', first_name: conversation.invited_first_name || '', invitation_email: conversation.invited_email || '',
+      ownerListThreshold: settings.ownerListThreshold ?? 10, uboThreshold: settings.uboThreshold ?? 25, ...(isOrg ? { pause_before: ORG_PAUSE_BEFORE } : {}),
+    };
+    const orgExtra = { vars, blockedJurisdictions: settings.blockedJurisdictions || [], legalFormKeywords: settings.legalFormKeywords };
 
     let messages = asList(await E.OutreachThreadMessage.filter({ tenant_id: tenantId, conversation_id: conversation.id }, 'seq', 1000));
     let seq = messages.reduce((m, x) => Math.max(m, x.seq || 0), 0);
@@ -259,6 +272,37 @@ export default async function (req) {
     const maxAi = Number.isFinite(Number(settings.aiFollowUpMaxPerRequest)) ? Number(settings.aiFollowUpMaxPerRequest) : 3;
     const invokeLLM = (payload) => base44.asServiceRole.integrations.Core.InvokeLLM(payload);
 
+    // ORG: the people and companies named become OutreachPartyRelation rows and related parties of the client.
+    const writeParties = async () => {
+      if (!isOrg || engine.parties_written) return;
+      const dp = engine.datapoints || {};
+      if (!dp.ubos && !dp.directors) return;
+      const entity = dp.legal_name?.display || '';
+      try {
+        const rels = relationRows({ entity, dp }).map((r) => ({ tenant_id: tenantId, case_id: conversation.case_id || undefined, client_id: conversation.client_id, conversation_id: conversation.id, from_name: r.from_name, from_kind: r.from_kind, relation: r.relation, pct: r.pct ?? undefined, effective_pct: r.effective_pct ?? undefined, authority: r.authority || undefined, authority_note: r.authority_note || undefined, source: r.source }));
+        if (rels.length) await E.OutreachPartyRelation.bulkCreate(rels);
+        const links = asList(await E.ClientRelatedPartyLink.filter({ tenant_id: tenantId, client_id: conversation.client_id }, undefined, 200));
+        const rps = links.length ? asList(await E.RelatedParty.filter({ tenant_id: tenantId, id: { $in: links.map((l) => l.related_party_id) } }, undefined, 200)) : [];
+        const created = [];
+        for (const p of partiesOf(dp)) {
+          const rp = rps.find((x) => normName(x.full_name) === p.key);
+          const link = rp && links.find((l) => l.related_party_id === rp.id);
+          const pct = p.effective ?? p.pct;
+          if (rp && link) {
+            const roles = [...new Set([...(link.roles || String(link.role || '').split(/\s*,\s*/)).filter((x) => x && x !== 'Unknown'), ...p.roles])];
+            await E.ClientRelatedPartyLink.update(link.id, { roles, role: roles.join(', '), ...(pct != null ? { ownership_percentage: pct } : {}) });
+            await E.RelatedParty.update(rp.id, { role_in_relationship: roles.join(', ') });
+          } else {
+            const nrp = await E.RelatedParty.create({ tenant_id: tenantId, party_type: p.kind === 'company' ? 'ORG' : 'NP', full_name: p.name, role_in_relationship: p.roles.join(', '), ...(pct != null ? { ownership_percentage: pct } : {}), verification_status: 'Unverified' });
+            await E.ClientRelatedPartyLink.create({ tenant_id: tenantId, client_id: conversation.client_id, related_party_id: nrp.id, role: p.roles.join(', '), roles: p.roles, ...(pct != null ? { ownership_percentage: pct } : {}) });
+            created.push(p.name);
+          }
+        }
+        engine.parties_written = true;
+        await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'parties.recorded', actor: { type: 'System' }, conversation: conv, payload: { relations: rels.length, created, test_data: testData }, notes: `${rels.length} relation(s) recorded from the conversation${created.length ? `; new related parties: ${created.join(', ')}` : ''}` }));
+      } catch (e) { console.warn('writeParties failed', e?.message); }
+    };
+
     // Moves on to the next step; phrases AI follow-ups on the way; at the end, submits.
     const moveOn = async () => {
       const events = [];
@@ -298,6 +342,18 @@ export default async function (req) {
       engine = a.state;
       a.messages.forEach((m) => addMsg(m));
       events.push(...a.events);
+      if (a.paused) {
+        // ORG (phase 6a) or a blocked jurisdiction: nothing is submitted; the conversation waits here.
+        step = null;
+        if (!engine.paused_noted) {
+          if (!engine.stopped) addMsg({ author_type: 'bank', kind: 'message', text: MESSAGES.orgPaused });
+          engine.paused_noted = true;
+          events.push({ event: 'conversation.paused', notes: engine.stopped ? 'Stopped: blocked jurisdiction' : 'Paused before the parts that follow in later releases (invitations, documents, representative, signature)', payload: { stopped: !!engine.stopped } });
+          await writeParties();
+        }
+        await persist();
+        return events;
+      }
       if (a.done) {
         step = null;
         const sha = await submissionHash(engine);
@@ -412,7 +468,7 @@ export default async function (req) {
       if (!step || body.step_id !== step.id) throw httpError(409, MESSAGES.notCurrent);
       if (step.widget === 'wait') throw httpError(409, MESSAGES.notCurrent); // an AI follow-up waits for approval
       let value = body.value;
-      const extra = { now: nowIso, invitation_email: vars.invitation_email };
+      const extra = { now: nowIso, invitation_email: vars.invitation_email, ...orgExtra };
       if (step.widget === 'idv') {
         // Only "Not now" is a client answer here; the Didit result arrives through idv_status / open.
         if (value?.declined !== true) throw httpError(409, MESSAGES.notCurrent);
@@ -423,7 +479,7 @@ export default async function (req) {
         else {
           const ev = asList(await E.OutreachEvidence.filter({ tenant_id: tenantId, conversation_id: conversation.id, id: String(value?.evidence_id || '') }, undefined, 1))[0];
           if (!ev || ev.block_key !== `${step.block_key}${step.fu_id ? `:${step.fu_id}` : ''}`) throw httpError(400, MESSAGES.required);
-          value = { evidence_id: ev.id, name: ev.name, size: ev.size, mime: ev.mime, checks: ev.checks || [] };
+          value = { evidence_id: ev.id, name: ev.name, size: ev.size, mime: ev.mime, checks: ev.checks || [], ...(step.read_extract || step.sub === 'extract' ? { read: ev.read_result || {} } : {}) };
         }
       } else if (step.widget === 'sign') {
         const sig = String(value?.signature || '');
