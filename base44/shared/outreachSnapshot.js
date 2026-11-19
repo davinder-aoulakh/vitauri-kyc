@@ -36,6 +36,22 @@ export function buildSnapshot({ template, blocks = [], settings = {}, kvkMode = 
     out[it.block_key] = Object.fromEntries(BLOCK_FIELDS.map((k) => [k, clone(row[k])]));
     it.block_version = row.version || 1;
   }
+  // A block that reuses other blocks as its steps (ORG `rep`: idv, name_confirm, pep) gets those blocks pinned and inserted
+  // as items right after it, in its section (spec 5.5: ORG progress counts the ID&V and the confirmation inside `rep`).
+  const items = [];
+  for (const it of t.items || []) {
+    items.push(it);
+    const steps = out[it.block_key]?.variants?.step_blocks;
+    if (!Array.isArray(steps) || !out[it.block_key]) continue;
+    for (const key of steps.slice(1)) {
+      if (out[key] && (t.items || []).some((x) => x.block_key === key)) continue;
+      const pub = blocks.filter((b) => b.key === key && b.status === 'published').sort((a2, b2) => (b2.version || 1) - (a2.version || 1))[0];
+      if (!pub) { missing.push(key); continue; }
+      out[key] = Object.fromEntries(BLOCK_FIELDS.map((k) => [k, clone(pub[k])]));
+      items.push({ block_key: key, block_version: pub.version || 1, active: it.active !== false, section_key: it.section_key || out[it.block_key].section_key, step_of: it.block_key });
+    }
+  }
+  t.items = items;
   if (missing.length) throw new Error(`These blocks have no published version: ${missing.join(', ')}`);
   return {
     template_key: t.key, template_version: t.version || 1, template_snapshot: t, blocks_snapshot: out,
