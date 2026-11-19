@@ -1,20 +1,30 @@
 // outreachPortal — the public endpoint of the guided conversation outreach. The client's browser calls only this function
 // (never entities). Access is the link token alone: it is hashed and matched against OutreachRequest.token_hash.
 // It does not check the feature flag, so a link that was sent keeps working when the flag is switched off later.
-// Body: { token, action }
-//   open               -> the view model of the conversation (no case data): tenant branding, greeting, deadline, sections,
-//                         progress, open requests and the thread. The first open writes the intro messages and logs client.opened.
-//   request_new_link   -> on an expired link: notifies the assigned analyst (once) and logs link.new_requested.
-// The server decides what is asked (from phase 3); the browser only renders.
+// The server runs the conversation (base44/shared/outreachEngine.js); the browser only renders the step it gets back.
+// Body: { token, action, ... }
+//   open                                          -> view model (no case data): branding, greeting, deadline, sections, progress,
+//                                                    open requests, thread, current step. The first open writes the intro messages.
+//   start                                         -> the start chip: asks the first block
+//   answer { client_answer_id, step_id, value }   -> applies an answer; the same client_answer_id twice returns the stored result;
+//                                                    an answer for a step that is no longer current is refused (409)
+//   edit { client_answer_id, datapoint_key, value } -> a change in the review (source becomes "Declared by client")
+//   why_opened { block_key }                      -> logs client.why_opened
+//   request_new_link                              -> on an expired link: notifies the assigned analyst (once)
+// Test stand-ins until phases 4 and 5: the ID&V step is filled from the client record and an upload sends only its name; both are
+// marked test_stub and the conversation gets pending_step.test_data = true.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { looksLikeToken, hashToken, linkState, createAttemptLimiter } from '../../shared/outreachToken.js';
-import { fillPlaceholders, sectionsView, minutesLeft } from '../../shared/outreachSnapshot.js';
+import { fillPlaceholders, sectionsView } from '../../shared/outreachSnapshot.js';
 import { outreachAuditRow, writeOutreachAudit } from '../../shared/outreachAudit.js';
+import { initialState, advance, applyAnswer, applyEdit, reviewRows, progress, submissionHash, referenceNumber, submissionMessages, sourceLabel } from '../../shared/outreachEngine.js';
+import { MESSAGES } from '../../shared/outreachMessages.js';
 
 // Failed link attempts per client IP and per hash prefix (in memory per function instance; tokens are 256-bit).
 const limiter = createAttemptLimiter({ max: 20, windowMs: 15 * 60 * 1000 });
 const NOT_FOUND = 'This link is not valid. Please use the link from your most recent email.';
+const MAX_SIGNATURE_BYTES = 600 * 1024;
 
 function clientIp(req) {
   const f = req.headers.get('x-forwarded-for') || '';
@@ -33,7 +43,27 @@ function tenantView(tenant) {
 }
 
 function messageView(m) {
-  return { id: m.id, seq: m.seq, author_type: m.author_type, author_name: m.author_name || null, kind: m.kind, block_key: m.block_key || null, tag: m.tag || null, ai_assisted: !!m.ai_assisted, text: m.display_text || '', status: m.status || 'sent', created_at: m.created_date };
+  return { id: m.id, seq: m.seq, author_type: m.author_type, author_name: m.author_name || null, kind: m.kind, block_key: m.block_key || null, tag: m.tag || null, ai_assisted: !!m.ai_assisted, text: m.display_text || '', why: m.payload?.why || null, card: m.kind === 'status_card' ? (m.payload || null) : null, status: m.status || 'sent', created_at: m.created_date };
+}
+
+/** What the browser may see of a step (no conditions, no follow-up rules). */
+function stepView(step) {
+  if (!step) return null;
+  const { id, block_key, kind, widget, text, why, tag, options, multi, none_option, facts, prefill, checks, allow_defer, rows, declaration } = step;
+  return { id, block_key, kind, widget, text, why: why || null, tag: tag || null, options: options || [], multi: !!multi, none_option: none_option || null, facts: facts || null, prefill: prefill || null, checks: checks || null, allow_defer: !!allow_defer, rows: rows || null, declaration: declaration || null };
+}
+
+function fmtDate(iso) { try { return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return ''; } }
+
+function idvFromClient(client) {
+  const nat = String(client.nationality || '').replace(/\s*\([A-Z]{2}\)\s*$/, '');
+  const docType = String(client.id_type || 'Identity document').replace(/_/g, ' ');
+  return {
+    full_name: client.full_name || [client.first_names, client.last_name].filter(Boolean).join(' '),
+    dob: client.date_of_birth ? fmtDate(client.date_of_birth) : '',
+    nat,
+    doc: `${docType}${client.id_expiry_date ? `, valid until ${fmtDate(client.id_expiry_date)}` : ''}`,
+  };
 }
 
 export default async function (req) {
@@ -57,11 +87,13 @@ export default async function (req) {
     const clientActor = { type: 'Client', name: conversation.invited_name || 'Client' };
     const now = new Date();
     const nowIso = now.toISOString();
-    const state = linkState(request, conversation, now);
+    const link = linkState(request, conversation, now);
     const action = body.action || 'open';
+    const audit = (rows) => (rows.length ? E.AuditEvent.bulkCreate(rows).catch((e) => console.warn('outreach audit failed', e?.message)) : null);
+    const toAudit = (events, actor = clientActor) => events.map((e) => outreachAuditRow({ tenantId, event: e.event, actor: e.event === 'block.asked' || e.event === 'block.skipped' || e.event === 'rule' || e.event === 'prefill' || e.event.startsWith('ai.') || e.event === 'doc.checked' ? { type: 'System' } : actor, conversation: conv, payload: e.payload || {}, notes: e.notes }));
 
     if (action === 'request_new_link') {
-      if (state !== 'expired') throw httpError(409, 'This link is still valid.');
+      if (link !== 'expired') throw httpError(409, 'This link is still valid.');
       if (!conversation.new_link_requested_at) {
         await E.OutreachConversation.update(conversation.id, { new_link_requested_at: nowIso });
         const kc = conversation.case_id ? asList(await E.KycCase.filter({ tenant_id: tenantId, id: conversation.case_id }, undefined, 1))[0] : null;
@@ -76,10 +108,9 @@ export default async function (req) {
       }
       return Response.json({ ok: true, requested: true });
     }
-    if (action !== 'open') throw httpError(400, 'Unknown action');
 
-    const base = { ok: true, state, tenant: tenantView(tenant), deadline: conversation.deadline || request.deadline || null };
-    if (state === 'expired') {
+    const base = { ok: true, state: link, tenant: tenantView(tenant), deadline: conversation.deadline || request.deadline || null };
+    if (link === 'expired') {
       if (conversation.status !== 'Expired' && conversation.status !== 'Submitted') {
         await E.OutreachConversation.update(conversation.id, { status: 'Expired' });
         await E.OutreachRequest.update(request.id, { status: 'Expired' });
@@ -87,50 +118,195 @@ export default async function (req) {
       }
       return Response.json({ ...base, first_name: conversation.invited_first_name || '', new_link_requested: !!conversation.new_link_requested_at });
     }
-    if (state === 'cancelled') return Response.json(base);
+    if (link === 'cancelled') return Response.json(base);
 
     const snap = { template_snapshot: conversation.template_snapshot, blocks_snapshot: conversation.blocks_snapshot };
     const template = conversation.template_snapshot || {};
-    let messages = asList(await E.OutreachThreadMessage.filter({ tenant_id: tenantId, conversation_id: conversation.id }, 'seq', 500));
-    if (!conversation.first_opened_at) {
-      const patch = { first_opened_at: nowIso, last_activity_at: nowIso, ...(conversation.status === 'Sent' ? { status: 'Opened' } : {}) };
-      await E.OutreachConversation.update(conversation.id, patch);
-      Object.assign(conversation, patch);
-      if (['Sent', 'Draft', 'Viewed'].includes(request.status)) await E.OutreachRequest.update(request.id, { status: 'Opened' });
-      await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'client.opened', actor: clientActor, conversation: conv, payload: { ip, user_agent: String(req.headers.get('user-agent') || '').slice(0, 300) }, notes: 'The client opened the guided conversation for the first time.' }));
-    }
-    if (!messages.length) {
-      const deadlineDate = conversation.deadline ? new Date(conversation.deadline).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
-      const client = asList(await E.Client.filter({ tenant_id: tenantId, id: conversation.client_id }, undefined, 1))[0] || {};
-      const vars = { first_name: conversation.invited_first_name || '', tenant_name: tenant?.name || '', deadline_date: deadlineDate, company: client.client_type === 'ORG' ? client.full_name : '', role_text: '' };
-      const rows = (template.intro_messages || []).map((t, i) => ({
-        tenant_id: tenantId, conversation_id: conversation.id, seq: i + 1, author_type: 'bank', author_name: tenant?.name || '', kind: 'message', display_text: fillPlaceholders(t, vars), status: 'sent',
-      })).filter((r) => r.display_text);
-      if (rows.length) {
-        await E.OutreachThreadMessage.bulkCreate(rows);
-        messages = asList(await E.OutreachThreadMessage.filter({ tenant_id: tenantId, conversation_id: conversation.id }, 'seq', 500));
+    const settings = conversation.settings_snapshot || {};
+    const ps = conversation.pending_step || {};
+    let engine = ps.engine || initialState({ risk: conversation.risk_class || 'medium' });
+    engine.risk = conversation.risk_class || engine.risk; // staff may change the risk class; rules read the current value
+    let step = ps.step || null;
+    let testData = !!ps.test_data;
+    const vars = { tenant_name: tenant?.name || '', first_name: conversation.invited_first_name || '', invitation_email: conversation.invited_email || '' };
+
+    let messages = asList(await E.OutreachThreadMessage.filter({ tenant_id: tenantId, conversation_id: conversation.id }, 'seq', 1000));
+    let seq = messages.reduce((m, x) => Math.max(m, x.seq || 0), 0);
+    const pendingMsgs = [];
+    const addMsg = (m, extra = {}) => { seq += 1; pendingMsgs.push({ tenant_id: tenantId, conversation_id: conversation.id, seq, author_type: m.author_type, author_name: m.author_type === 'bank' ? (tenant?.name || '') : m.author_type === 'client' ? (conversation.invited_name || '') : '', kind: m.kind || 'message', block_key: m.block_key || undefined, tag: m.tag || undefined, display_text: m.text, status: 'sent', ...(m.why || m.payload ? { payload: { ...(m.payload || {}), ...(m.why ? { why: m.why } : {}) } } : {}), ...extra }); };
+    const flushMsgs = async () => { if (pendingMsgs.length) { await E.OutreachThreadMessage.bulkCreate(pendingMsgs.splice(0)); } };
+
+    // Datapoint rows mirror the engine's datapoints (one row per key, history kept on the row).
+    const syncDatapoints = async (keys) => {
+      if (!keys.length) return;
+      const rows = asList(await E.OutreachDatapoint.filter({ tenant_id: tenantId, conversation_id: conversation.id }, undefined, 500));
+      for (const k of [...new Set(keys)]) {
+        const d = engine.datapoints[k];
+        if (!d) continue;
+        const data = { tenant_id: tenantId, conversation_id: conversation.id, case_id: conversation.case_id, party_id: conversation.party_id || undefined, key: k, label: d.label, value: { v: d.value }, display_value: d.display, source: d.source, block_key: d.block_key, status: d.status || (d.history?.length ? 'edited' : 'given'), history: d.history || [] };
+        const row = rows.find((r) => r.key === k);
+        if (row) await E.OutreachDatapoint.update(row.id, data); else await E.OutreachDatapoint.create(data);
       }
+    };
+
+    const persist = async (patch = {}) => {
+      const p = progress(snap, engine, { submitted: !!patch.submitted_at });
+      const data = {
+        block_states: engine.block_states, pending_step: { engine, step, test_data: testData },
+        current_block_key: step?.block_key || null, progress_steps: p.steps, progress_total: p.total, last_activity_at: nowIso, ...patch,
+      };
+      await E.OutreachConversation.update(conversation.id, data);
+      Object.assign(conversation, data);
+    };
+
+    const view = () => {
+      const p = progress(snap, engine, { submitted: link === 'submitted' || !!conversation.submitted_at });
+      return {
+        ...base, state: conversation.submitted_at ? 'submitted' : link,
+        first_name: conversation.invited_first_name || '', client_type: conversation.client_type || 'NP', template_name: template.name || '',
+        start_chip: template.start_chip || null, expected_minutes: template.expected_minutes || null,
+        sections: sectionsView(snap, engine.block_states || {}, step?.block_key || null), progress: p,
+        saved_at: conversation.last_activity_at || null, open_requests: [], thread: messages.map(messageView),
+        started: !!step || p.steps > 0 || !!conversation.submitted_at, submitted: !!conversation.submitted_at, reference: conversation.reference || null,
+        step: conversation.submitted_at ? null : stepView(step), last_seq: seq,
+        phone_codes: settings.phoneCountryCodes || [], address_countries: settings.addressCountries || [],
+      };
+    };
+    const reload = async () => { messages = asList(await E.OutreachThreadMessage.filter({ tenant_id: tenantId, conversation_id: conversation.id }, 'seq', 1000)); };
+
+    // Moves on to the next step; at the end, submits.
+    const moveOn = async () => {
+      const a = advance(snap, engine, { ...vars, now: nowIso });
+      engine = a.state;
+      a.messages.forEach((m) => addMsg(m));
+      const events = [...a.events];
+      if (a.done) {
+        step = null;
+        const sha = await submissionHash(engine);
+        const reference = referenceNumber(settings.referencePrefix || 'REF', now);
+        const responseTime = conversation.client_type === 'ORG' ? settings.responseTimeTexts?.ORG : settings.responseTimeTexts?.NP;
+        submissionMessages({ first_name: vars.first_name, response_time: responseTime || '', reference }).forEach((m) => addMsg(m));
+        events.push({ event: 'case.submitted', notes: `Client declaration signed; answers frozen as version 1 (sha256:${sha.slice(0, 8)}…)`, payload: { sha256: sha, reference, test_data: testData } });
+        await persist({ status: 'Submitted', submitted_at: nowIso, submission_hash: sha, reference });
+        await E.OutreachRequest.update(request.id, { status: 'Complete' });
+      } else {
+        step = a.step;
+        await persist(conversation.status === 'Opened' || conversation.status === 'Sent' ? { status: 'In_Progress' } : {});
+        if (['Opened', 'Sent'].includes(request.status)) await E.OutreachRequest.update(request.id, { status: 'In_Progress' });
+      }
+      return events;
+    };
+
+    if (action === 'open') {
+      if (!conversation.first_opened_at) {
+        const patch = { first_opened_at: nowIso, last_activity_at: nowIso, ...(conversation.status === 'Sent' ? { status: 'Opened' } : {}) };
+        await E.OutreachConversation.update(conversation.id, patch);
+        Object.assign(conversation, patch);
+        if (['Sent', 'Draft', 'Viewed'].includes(request.status)) await E.OutreachRequest.update(request.id, { status: 'Opened' });
+        await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'client.opened', actor: clientActor, conversation: conv, payload: { ip, user_agent: String(req.headers.get('user-agent') || '').slice(0, 300) }, notes: 'The client opened the guided conversation for the first time.' }));
+      }
+      if (!messages.length) {
+        const deadlineDate = conversation.deadline ? fmtDate(conversation.deadline) : '';
+        const client = asList(await E.Client.filter({ tenant_id: tenantId, id: conversation.client_id }, undefined, 1))[0] || {};
+        const introVars = { ...vars, deadline_date: deadlineDate, company: client.client_type === 'ORG' ? client.full_name : '', role_text: '' };
+        (template.intro_messages || []).map((t) => fillPlaceholders(t, introVars)).filter(Boolean).forEach((text) => addMsg({ author_type: 'bank', kind: 'message', text }));
+        await flushMsgs();
+        await reload();
+      }
+      return Response.json(view());
     }
-    const openRequests = asList(await E.OutreachOpenRequest.filter({ tenant_id: tenantId, conversation_id: conversation.id, status: 'open' }, undefined, 50))
-      .map((o) => ({ id: o.id, title: o.title, from: o.from_name || null }));
-    const total = conversation.progress_total || 0;
-    const steps = conversation.progress_steps || 0;
-    return Response.json({
-      ...base,
-      first_name: conversation.invited_first_name || '',
-      client_type: conversation.client_type || 'NP',
-      template_name: template.name || '',
-      start_chip: template.start_chip || null,
-      expected_minutes: template.expected_minutes || null,
-      sections: sectionsView(snap, conversation.block_states || {}, conversation.current_block_key),
-      progress: { steps, total, pct: total ? Math.min(100, Math.round((steps / total) * 100)) : 0, minutes_left: minutesLeft(total, steps) },
-      saved_at: conversation.last_activity_at || null,
-      open_requests: openRequests,
-      thread: messages.map(messageView),
-      started: !!conversation.current_block_key || steps > 0,
-      submitted: state === 'submitted',
-      reference: conversation.reference || null,
-    });
+
+    if (action === 'why_opened') {
+      const key = String(body.block_key || '').slice(0, 60);
+      if (!snap.blocks_snapshot?.[key]) throw httpError(400, 'Unknown question');
+      await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'client.why_opened', actor: clientActor, conversation: conv, payload: { block: key }, notes: `"Why do we ask this?" opened on ${key}` }));
+      return Response.json({ ok: true });
+    }
+
+    if (link === 'submitted' || conversation.submitted_at) throw httpError(409, 'This conversation has been submitted.');
+
+    if (action === 'start') {
+      if (step) return Response.json(view()); // already started (second tab, retry)
+      if (template.start_chip) addMsg({ author_type: 'client', kind: 'answer', text: template.start_chip });
+      const events = await moveOn();
+      await flushMsgs();
+      await audit(toAudit(events));
+      await reload();
+      return Response.json(view());
+    }
+
+    const answerId = String(body.client_answer_id || '').slice(0, 80);
+    if (!/^[A-Za-z0-9_-]{8,80}$/.test(answerId)) throw httpError(400, 'client_answer_id is required');
+    const dup = messages.find((m) => m.client_answer_id === answerId);
+    if (dup) return Response.json({ ...view(), duplicate: true });
+
+    if (action === 'answer') {
+      if (!step || body.step_id !== step.id) throw httpError(409, MESSAGES.notCurrent);
+      let value = body.value;
+      const extra = { now: nowIso, invitation_email: vars.invitation_email };
+      if (step.widget === 'idv') {
+        // Test stand-in until the Didit widget (phase 4): the four facts come from the client record and are marked as test data.
+        const client = asList(await E.Client.filter({ tenant_id: tenantId, id: conversation.client_id }, undefined, 1))[0] || {};
+        value = { stub: true };
+        Object.assign(extra, { idv: idvFromClient(client), test_stub: true });
+        testData = true;
+      } else if (step.widget === 'upload') {
+        // Test stand-in until real uploads and checks (phase 5): only name, size and type are kept; no file is stored.
+        value = value?.deferred ? { deferred: true } : { name: String(value?.name || '').slice(0, 200), size: Number(value?.size) || 0, mime: String(value?.mime || '').slice(0, 100), test_stub: true };
+        if (!value.deferred) testData = true;
+      } else if (step.widget === 'sign') {
+        const sig = String(value?.signature || '');
+        if (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(sig) || sig.length > MAX_SIGNATURE_BYTES * 1.4) throw httpError(400, MESSAGES.signIncomplete);
+        value = { terms: value?.terms === true, typed_name: String(value?.typed_name || '').slice(0, 200), signature: sig };
+      }
+      const r = applyAnswer(snap, engine, step, value, extra);
+      if (r.error) {
+        if (step.widget === 'sign') await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'rule', actor: { type: 'System' }, conversation: conv, payload: { block: step.block_key, error: r.error }, notes: `Signing refused: ${r.error}` }));
+        return Response.json({ ...view(), error: r.error }, { status: 422 });
+      }
+      engine = r.state;
+      if (step.widget === 'sign') {
+        const bytes = Uint8Array.from(atob(value.signature.split(',')[1]), (c) => c.charCodeAt(0));
+        let fileUri = null;
+        try { fileUri = (await base44.asServiceRole.integrations.Core.UploadPrivateFile({ file: new File([bytes], `signature-${conversation.id}.png`, { type: 'image/png' }) }))?.file_uri || null; } catch (e) { console.warn('signature upload failed', e?.message); }
+        await E.OutreachConversation.update(conversation.id, { signature: { file_uri: fileUri, typed_name: value.typed_name, signed_at: nowIso, ip, user_agent: String(req.headers.get('user-agent') || '').slice(0, 300) } });
+      }
+      addMsg({ author_type: 'client', kind: 'answer', block_key: step.block_key, text: r.clientText }, { client_answer_id: answerId, payload: { step_id: step.id, value: step.widget === 'sign' ? { typed_name: value.typed_name } : value } });
+      r.messages.forEach((m) => addMsg(m));
+      await syncDatapoints(r.datapoints);
+      const events = [...r.events, ...(await moveOn())];
+      await syncDatapoints(Object.keys(engine.datapoints).filter((k) => !r.datapoints.includes(k) && (engine.datapoints[k].history || []).length && false));
+      await flushMsgs();
+      await audit(toAudit(events));
+      await reload();
+      return Response.json(view());
+    }
+
+    if (action === 'edit') {
+      if (!step || step.widget !== 'review') throw httpError(409, MESSAGES.notCurrent);
+      const key = String(body.datapoint_key || '');
+      const r = applyEdit(snap, engine, key, body.value, { now: nowIso });
+      if (r.error) return Response.json({ ...view(), error: r.error }, { status: 422 });
+      engine = r.state;
+      await syncDatapoints([key]);
+      const events = [...r.events];
+      if (r.queued) {
+        // a newly triggered follow-up is asked first; the review is shown again afterwards
+        engine.block_states.review = { ...(engine.block_states.review || {}), state: 'not_asked' };
+        events.push(...(await moveOn()));
+      } else {
+        step = { ...step, rows: reviewRows(snap, engine) };
+        await persist();
+      }
+      // the edit itself is a client action: an id-stamped system line keeps retries idempotent
+      addMsg({ author_type: 'system', kind: 'system_line', text: `Changed: ${engine.datapoints[key].label} (${sourceLabel('client')})` }, { client_answer_id: answerId });
+      await flushMsgs();
+      await audit(toAudit(events));
+      await reload();
+      return Response.json(view());
+    }
+
+    throw httpError(400, 'Unknown action');
   } catch (error) {
     if (!error?.status || error.status >= 500) console.error('outreachPortal error:', error?.message);
     return errorResponse(error);
