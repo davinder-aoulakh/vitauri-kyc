@@ -44,5 +44,12 @@ export const MESSAGES = {
   blockedJurisdiction: 'We cannot open an account for an organisation registered in {country}. If you have questions, please contact us.',
   peopleRequired: 'Please keep or add at least one person.',
   sharesInvalid: 'Enter a share between 0 and 100% for every owner.',
+  legalFormQuestion: 'What is the legal form of your organisation?',
+  inactiveCompany: 'The trade register lists {name} as {status}. We cannot open an account for an inactive organisation. Please pick another organisation, or contact your relationship manager.',
+  statusFromExtract: 'The registry did not give us the status of your organisation. Please upload a recent extract of the trade register.',
+  companyFound: 'We found {name} in the trade register. Is this the same company?',
+  companyFoundYes: 'Yes, same company',
+  companyFoundNo: 'No, a different company',
+  cannotFind: 'I cannot find my organisation',
   notCurrent: 'This question was already answered. The conversation has been reloaded.',
 };
