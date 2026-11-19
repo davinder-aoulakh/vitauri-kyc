@@ -27,6 +27,13 @@ export default function OutreachIntegrationsPanel({ tenant, onClose }) {
       .catch((e) => setSt({ error: e?.response?.data?.error || e?.message }));
   }, [tenant.id]);
 
+  const [check, setCheck] = useState(null);
+  const [lookupQ, setLookupQ] = useState('');
+  async function runCheck(action, extra = {}) {
+    setBusy(true); setCheck(null);
+    try { setCheck(await call({ action, ...extra })); } catch (e) { setCheck({ error: e?.response?.data?.error || e?.message }); } finally { setBusy(false); }
+  }
+
   async function save(payload, okText) {
     setBusy(true);
     try {
@@ -96,11 +103,21 @@ export default function OutreachIntegrationsPanel({ tenant, onClose }) {
             </div>
             <div className="space-y-2">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Checks</div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" disabled title="Available with the KvK adapter (outreach phase 6)">Test connection</Button>
-                <Button size="sm" variant="outline" disabled title="Available with the KvK adapter (outreach phase 6)">Try a lookup</Button>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => runCheck('integration_test')} title="Free calls only: KvK search and a Didit key check">Test connection</Button>
+                <Input className="h-8 w-48" placeholder="Company name (KvK test)" value={lookupQ} onChange={(e) => setLookupQ(e.target.value)} />
+                <Button size="sm" variant="outline" disabled={busy || st.kvk_mode === 'live' || lookupQ.trim().length < 2} onClick={() => runCheck('integration_lookup', { q: lookupQ.trim() })} title={st.kvk_mode === 'live' ? 'Not available in Live mode' : 'KvK test environment, fictitious companies'}>Try a lookup</Button>
               </div>
-              <p className="text-[11px] text-muted-foreground">Available with the KvK adapter (outreach phase 6), together with the list of recent registry calls.</p>
+              {check && (
+                <div className="rounded-md border border-border p-2 text-xs">
+                  {check.error ? <span className="text-red-700">{check.error}</span> : (<>
+                    {check.kvk && <div>KvK ({check.kvk.mode}): {check.kvk.ok ? `reachable${check.kvk.count != null ? `, ${check.kvk.count} result(s)` : ''}` : `not reachable — ${check.kvk.message}`}</div>}
+                    {check.didit && <div>Didit: {check.didit.ok ? 'key accepted' : `not accepted — ${check.didit.message}`}</div>}
+                    {(check.results || []).map((r) => <div key={r.number} className="text-muted-foreground">{r.name} · {r.number}{r.city ? ` · ${r.city}` : ''} · {r.status}</div>)}
+                  </>)}
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground">Test connection makes free calls only. Try a lookup searches the KvK test environment (fictitious companies) and is not available in Live mode. Every call is logged without the key.</p>
             </div>
           </>)}
         </div>

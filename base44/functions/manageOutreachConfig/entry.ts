@@ -16,6 +16,8 @@ import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { conversationOn, cleanSettings, outreachSettings, registryProvider } from '../../shared/outreachSettings.js';
 import { versionsByKey, nextVersion, cleanBlockInput, cleanTemplateInput, draftFrom, pinItems, cleanIntegration, BLOCK_FIELDS, TEMPLATE_FIELDS } from '../../shared/outreachConfig.js';
 import { OUTREACH_CONFIG_ROLES, OUTREACH_WORK_ROLES, OPS_ROLE } from '../../shared/outreachAuth.js';
+import { kvkSearch } from '../../shared/outreachAdapters/kvk.js';
+import { withDiditCredentials } from '../../shared/diditCredentials.js';
 
 const KEY_RE = /^[a-z][a-z0-9_]{1,59}$/;
 
@@ -48,6 +50,29 @@ export default async function (req) {
         changed_at: s?.outreach_rotated_at || null, didit_key_set: !!s?.didit_api_key,
       };
     };
+
+    // Ops checks of the registry integrations: free calls only; the lookup is refused in Live mode.
+    if (action === 'integration_test' || action === 'integration_lookup') {
+      if (!isOps) throw httpError(403, 'Only Vitauri Ops can test outreach integrations');
+      const s = await secretRow();
+      const mode = s?.kvk_mode === 'live' ? 'live' : 'test';
+      if (action === 'integration_lookup') {
+        if (s?.kvk_mode === 'live') throw httpError(409, 'Try a lookup is not available in Live mode');
+        const r = await kvkSearch({ mode: 'test', apiKey: s?.kvk_api_key || '', q: String(body.q || '').slice(0, 80) });
+        await audit('outreach.integration.tested', `KvK test lookup "${String(body.q || '').slice(0, 40)}": ${r.ok ? `${(r.candidates || []).length} result(s)` : r.error_code}`);
+        if (!r.ok) throw httpError(502, r.message || 'KvK not reachable');
+        return Response.json({ ok: true, results: (r.candidates || []).slice(0, 10) });
+      }
+      const kv = await kvkSearch({ mode, apiKey: s?.kvk_api_key || '', q: 'test' });
+      const diditKey = (await withDiditCredentials(base44, tenant))?.didit_api_key || '';
+      let didit = { ok: false, message: 'No Didit key configured' };
+      if (diditKey) {
+        try { const r = await fetch('https://verification.didit.me/v3/workflows/', { headers: { 'x-api-key': diditKey } }); didit = r.ok ? { ok: true } : { ok: false, message: `HTTP ${r.status}` }; } catch (e) { didit = { ok: false, message: String(e?.message || e).slice(0, 120) }; }
+      }
+      const out = { kvk: { mode, ok: kv.ok, count: kv.ok ? (kv.candidates || []).length : null, message: kv.ok ? '' : kv.message }, didit };
+      await audit('outreach.integration.tested', `Integration test: KvK ${mode} ${kv.ok ? 'reachable' : 'not reachable'}; Didit key ${didit.ok ? 'accepted' : 'not accepted'}`);
+      return Response.json({ ok: true, ...out });
+    }
 
     // The Ops console works on the integration even while the flag is off (to prepare a tenant before switching it on).
     if (action === 'integration_status' || action === 'set_integration') {
