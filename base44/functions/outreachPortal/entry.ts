@@ -31,6 +31,7 @@ import { idvFromItem, idvChecks, idvState } from '../../shared/outreachIdv.js';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
 import { partiesOf, relationRows } from '../../shared/outreachParties.js';
 import { normName } from '../../shared/outreachUbo.js';
+import { kvkSearch } from '../../shared/outreachAdapters/kvk.js';
 
 // ORG conversations stop before these blocks until phases 7-8 deliver them (invitations, documents by legal form,
 // the representative's ID check, review and the organisation's signature).
@@ -66,7 +67,7 @@ function stepView(step) {
   if (!step) return null;
   const { id, block_key, kind, widget, text, why, tag, options, multi, none_option, facts, prefill, checks, allow_defer, rows, declaration } = step;
   const org = {};
-  for (const k of ['people', 'fields', 'mode', 'authority_options', 'note_field', 'default_role', 'threshold', 'rest_note', 'over_note', 'note', 'sub', 'person', 'company', 'ai_assisted']) if (step[k] !== undefined && step[k] !== null) org[k] = step[k];
+  for (const k of ['people', 'fields', 'mode', 'authority_options', 'note_field', 'default_role', 'threshold', 'rest_note', 'over_note', 'note', 'sub', 'person', 'company', 'ai_assisted', 'provider', 'country', 'cannot_find', 'searches_left', 'rows']) if (step[k] !== undefined && step[k] !== null) org[k] = step[k];
   return { id, block_key, kind, widget, text, why: why || null, tag: tag || null, options: options || [], multi: !!multi, none_option: none_option || null, facts: facts || null, prefill: prefill || null, checks: checks || null, allow_defer: !!allow_defer, rows: rows || null, declaration: declaration || null, ...(step.idv ? { idv: step.idv } : {}), ...org };
 }
 
@@ -137,7 +138,7 @@ export default async function (req) {
     const isOrg = conversation.client_type === 'ORG';
     const vars = {
       tenant_name: tenant?.name || '', first_name: conversation.invited_first_name || '', invitation_email: conversation.invited_email || '',
-      ownerListThreshold: settings.ownerListThreshold ?? 10, uboThreshold: settings.uboThreshold ?? 25, ...(isOrg ? { pause_before: ORG_PAUSE_BEFORE } : {}),
+      ownerListThreshold: settings.ownerListThreshold ?? 10, uboThreshold: settings.uboThreshold ?? 25, legalFormOptions: settings.legalFormOptions || [], registrySearchLimit: settings.registrySearchLimit ?? 3, ...(isOrg ? { pause_before: ORG_PAUSE_BEFORE } : {}),
     };
     const orgExtra = { vars, blockedJurisdictions: settings.blockedJurisdictions || [], legalFormKeywords: settings.legalFormKeywords };
 
@@ -469,6 +470,22 @@ export default async function (req) {
       if (step.widget === 'wait') throw httpError(409, MESSAGES.notCurrent); // an AI follow-up waits for approval
       let value = body.value;
       const extra = { now: nowIso, invitation_email: vars.invitation_email, ...orgExtra };
+      if (isOrg) {
+        // the registry route depends on the tenant's KvK mode and whether Didit is configured (plan phase 6 provider table)
+        const sec = asList(await E.TenantSecret.filter({ tenant_id: tenantId }, undefined, 1))[0] || null;
+        extra.kvkMode = sec?.kvk_mode === 'test' || sec?.kvk_mode === 'live' ? sec.kvk_mode : 'off';
+        extra.diditConfigured = await isDiditConfigured();
+        // NL owners: look up company owners in the trade register (KvK route only) for "We found {name}… same company?"
+        if (engine.route === 'nl' && step.widget === 'owners_builder' && Array.isArray(value)) {
+          extra.companyMatches = {};
+          for (const o of value.filter((x) => x?.type === 'company' && String(x.name || '').trim()).slice(0, 5)) {
+            const r = await kvkSearch({ mode: extra.kvkMode === 'live' ? 'live' : 'test', apiKey: sec?.kvk_api_key || '', q: String(o.name).trim() });
+            const hit = r.ok ? (r.candidates || []).find((c) => normName(c.name) === normName(o.name)) : null;
+            if (hit) extra.companyMatches[normName(o.name)] = { number: hit.number, name: hit.name };
+            await E.OutreachAdapterCall.create({ tenant_id: tenantId, conversation_id: conversation.id, vendor: 'kvk', operation: 'zoeken', environment: extra.kvkMode === 'live' ? 'live' : 'test', cost_eur: 0, cost_basis: r.ok ? 'search (free)' : `failed: ${r.error_code}`, status: r.ok ? 'ok' : 'error' }).catch(() => {});
+          }
+        }
+      }
       if (step.widget === 'idv') {
         // Only "Not now" is a client answer here; the Didit result arrives through idv_status / open.
         if (value?.declined !== true) throw httpError(409, MESSAGES.notCurrent);
