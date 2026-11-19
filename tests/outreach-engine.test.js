@@ -91,7 +91,7 @@ test('scenario A: the datapoints with value and source', () => {
   for (const [k, v] of Object.entries(want)) assert.deepEqual(got[k], v, k);
   assert.match(got.declaration[0], /^Signed \d\d\/\d\d\/\d{4}$/);
   assert.equal(Object.keys(got).length, 20);
-  assert.ok(s.datapoints.full_name.test_stub && s.datapoints.address_proof.test_stub);
+  assert.ok(!s.datapoints.full_name.test_stub && s.datapoints.address_proof.test_stub); // real Didit since phase 4; uploads stay a stand-in until phase 5
   assert.equal(s.datapoints.employment.history[0].display, 'Self-employed'); // the edit keeps the old value
 });
 
@@ -177,7 +177,7 @@ test('review rows: grouped by section, source label, only blocks with an edit de
   const { s } = run(SCRIPT_A);
   const rows = E.reviewRows(snap, s);
   const row = (k) => rows.find((r) => r.key === k);
-  assert.equal(row('full_name').source_label, 'Didit ID check (test)');
+  assert.equal(row('full_name').source_label, 'Didit ID check');
   assert.equal(row('full_name').editable, false);
   assert.equal(row('employment').editable, true);
   assert.equal(row('email').source_label, 'Prefilled from invitation');
