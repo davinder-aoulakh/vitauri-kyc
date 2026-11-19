@@ -450,7 +450,7 @@ export default async function (req) {
         const origin = String(req.headers.get('origin') || body.portal_origin || '').replace(/\/+$/, '');
         const r = await createChildConversation({ base44, tenant, parent: { conversation, request }, party: { name: party.name, role_text: party.role_text, related_party_id: rp?.id }, email, origin, actor: clientActor });
         if (r.ok) await E.OutreachInvite.update(inv.id || existing.id, { child_request_id: r.child_request_id });
-        else { await E.OutreachInvite.update(inv.id || existing.id, { status: 'To invite' }); throw httpError(502, r.error || MESSAGES.notSaved); }
+        else { await E.OutreachInvite.update(inv.id || existing.id, { status: 'To invite' }); throw httpError(502, r.error || 'The invitation could not be sent'); }
       } else {
         await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'invitation.queued', actor: clientActor, conversation: conv, payload: { party: party.name }, notes: `Invitation for ${party.name} queued. It is released after the representative has passed the ID check` }));
       }
