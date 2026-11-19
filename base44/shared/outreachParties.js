@@ -49,7 +49,10 @@ export function relationRows({ entity, dp = {} }) {
  * not a director or representative need no check (note_threshold).
  */
 export function inviteParties(dp = {}, { repName = null } = {}) {
-  const people = partiesOf(dp).filter((p) => p.kind === 'person' && p.roles.some((r) => ['Director', 'UBO', 'Authorized Signatory'].includes(r)));
+  // order: directors, then UBOs, then authorised representatives (as the transcripts list them)
+  const rank = (p) => (p.roles.includes('Director') ? 0 : p.roles.includes('UBO') ? 1 : 2);
+  const people = partiesOf(dp).filter((p) => p.kind === 'person' && p.roles.some((r) => ['Director', 'UBO', 'Authorized Signatory'].includes(r)))
+    .map((p, i) => ({ p, i })).sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i).map((x) => x.p);
   const repKey = repName ? normName(repName) : null;
   const rows = people.map((p) => ({
     key: p.key, name: p.name, roles: p.roles.filter((r) => r !== 'Shareholder'), role_text: roleText(p.roles),

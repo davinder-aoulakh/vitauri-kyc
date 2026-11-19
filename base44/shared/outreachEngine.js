@@ -592,7 +592,7 @@ function orgBlockStep(snapshot, state, key, vars, step) {
     const reg = state.datapoints.sbi?.display || state.datapoints.co_activity?.display || '';
     const detail = (b.follow_ups || []).find((f) => f.action === 'ask_area');
     if (!reg) return { ...step, sub: 'open', widget: 'area', text: fillPlaceholders(detail?.question || '', v), options: [] };
-    return { ...step, sub: 'confirm', text: fillPlaceholders(step.text, { ...v, activity: reg }) };
+    return { ...step, sub: 'confirm', text: fillPlaceholders(b.question_template || '', { ...v, activity: reg }) };
   }
   if (key === 'sow_ubo') {
     const first = asList(state.datapoints.ubos?.value?.ubos)[0] || MESSAGES.mainOwner;

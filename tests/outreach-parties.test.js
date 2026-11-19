@@ -19,7 +19,7 @@ const dpC = {
 
 test('AT 27: declared Emma -> Emma "Your check comes last", David, Tom and Anna to invite', () => {
   const { rows } = inviteParties(dpC, { repName: 'Emma Clarke' });
-  assert.deepEqual(rows.map((r) => [r.name, r.status]), [['Emma Clarke', 'Your check comes last'], ['David Okoye', 'To invite'], ['Anna Visser', 'To invite'], ['Tom Becker', 'To invite']]);
+  assert.deepEqual(rows.map((r) => [r.name, r.status]), [['Emma Clarke', 'Your check comes last'], ['David Okoye', 'To invite'], ['Tom Becker', 'To invite'], ['Anna Visser', 'To invite']]);
   assert.equal(rows.filter((r) => r.status === 'To invite').length, 3);
 });
 
@@ -105,7 +105,7 @@ test('AT 32 in the conversation: "None of these" asks the role and marks nobody 
   const { lines, s } = runD('None of these');
   assert.ok(lines.some((l) => l[1] === 'What is your role at Blue Coral Partners V.O.F.?'));
   assert.equal(s.datapoints.rep_role.display, 'Office manager');
-  assert.equal(s.datapoints.invites.display, 'Emma Clarke, Tom Becker, Anna Visser');
+  assert.equal(s.datapoints.invites.display, 'Emma Clarke, Tom Becker, Anna Visser'); // directors, UBOs, representatives
 });
 
 test('the tracker answer is refused while someone is still "To invite" (server side check is in the portal)', () => {

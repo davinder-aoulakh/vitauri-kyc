@@ -41,7 +41,7 @@ function run({ who = 'Emma Clarke', idv = IDV, risk = 'low', legalForm = null, o
     while (a.needs_phrasing) a = E.advance(snap, E.setPhrasing(a.state, { text: a.needs_phrasing.default_text, ai: true, mode: 'auto' }), vars);
     s = a.state;
     a.events.forEach((e) => audit.push(e.event));
-    a.messages.forEach((m) => lines.push(['BANK', m.text, m.tag || null]));
+    a.messages.forEach((m) => lines.push([m.kind === 'structure_card' ? 'CARD0' : 'BANK', m.text, m.tag || null]));
     if (a.done) {
       const pending = (s.datapoints.invites?.value || []);
       E.submissionMessages({ first_name: 'Emma', response_time: '2 working days', reference: 'NAB-2026-ORG-0412', company: s.datapoints.legal_name.display, pending }).forEach((m) => lines.push([m.kind === 'status_card' ? 'CARD' : 'BANK', m.text]));
@@ -66,6 +66,7 @@ function run({ who = 'Emma Clarke', idv = IDV, risk = 'low', legalForm = null, o
     else if (st.block_key === 'invites' && st.fu_id === 'role') val = 'Office manager';
     else if (st.block_key === 'invites') val = 'sent';
     else if (k === 'rep') val = { session_done: true };
+    else if (k === 'sign_org') val = { ...SCRIPT.sign_org, typed_name: s.datapoints.full_name?.display };
     else val = SCRIPT[k];
     if (val === undefined) throw new Error(`no answer for ${k}`);
     const r = E.applyAnswer(snap, s, st, val, { vars, kvkMode: 'test', diditConfigured: true, idv, idv_outcome: 'approved', companyMatches: { [normName('Harbour Logistics Holding B.V.')]: { number: '81234568', name: 'Harbour Logistics Holding B.V.' } } });
@@ -100,14 +101,14 @@ test('scenario C end to end: every bank line as in the transcript, up to the sub
   const { lines, released, s } = run();
   const bank = lines.filter((l) => l[0] === 'BANK').map((l) => l[1].replace(/\n/g, ' / '));
   assert.deepEqual(bank, transcriptC());
-  assert.deepEqual(released, ['David Okoye', 'Anna Visser', 'Tom Becker']);
+  assert.deepEqual(released, ['David Okoye', 'Tom Becker', 'Anna Visser']);
   assert.equal(E.progress(snap, s, { submitted: true }).pct, 100);
 });
 
 test('AT 33: the status card lists the parties that are still pending; case.submitted after signing', () => {
   const { lines, audit } = run();
   const card = lines.find((l) => l[0] === 'CARD');
-  assert.match(card[1], /^We are still waiting for David Okoye, Anna Visser and Tom Becker to complete their own checks\. We will review/);
+  assert.match(card[1], /^We are still waiting for David Okoye, Tom Becker and Anna Visser to complete their own checks\. We will review/);
   assert.ok(audit.includes('rep.verified'));
   assert.ok(audit.indexOf('rep.verified') < audit.lastIndexOf('block.asked'));
 });
