@@ -32,10 +32,12 @@ import { withDiditCredentials } from '../../shared/diditCredentials.js';
 import { partiesOf, relationRows } from '../../shared/outreachParties.js';
 import { normName } from '../../shared/outreachUbo.js';
 import { kvkSearch } from '../../shared/outreachAdapters/kvk.js';
+import { inviteTransition, canContinue } from '../../shared/outreachInvites.js';
+import { createChildConversation } from '../../shared/outreachChildRequest.js';
 
-// ORG conversations stop before these blocks until phases 7-8 deliver them (invitations, documents by legal form,
+// ORG conversations stop before these blocks until phase 8 delivers them (business profile, documents by legal form,
 // the representative's ID check, review and the organisation's signature).
-const ORG_PAUSE_BEFORE = ['invites'];
+const ORG_PAUSE_BEFORE = ['purpose_org'];
 
 // Failed link attempts per client IP and per hash prefix (in memory per function instance; tokens are 256-bit).
 const limiter = createAttemptLimiter({ max: 20, windowMs: 15 * 60 * 1000 });
@@ -67,7 +69,7 @@ function stepView(step) {
   if (!step) return null;
   const { id, block_key, kind, widget, text, why, tag, options, multi, none_option, facts, prefill, checks, allow_defer, rows, declaration } = step;
   const org = {};
-  for (const k of ['people', 'fields', 'mode', 'authority_options', 'note_field', 'default_role', 'threshold', 'rest_note', 'over_note', 'note', 'sub', 'person', 'company', 'ai_assisted', 'provider', 'country', 'cannot_find', 'searches_left', 'rows']) if (step[k] !== undefined && step[k] !== null) org[k] = step[k];
+  for (const k of ['people', 'fields', 'mode', 'authority_options', 'note_field', 'default_role', 'threshold', 'rest_note', 'over_note', 'note', 'sub', 'person', 'company', 'ai_assisted', 'provider', 'country', 'cannot_find', 'searches_left', 'rows', 'parties']) if (step[k] !== undefined && step[k] !== null) org[k] = step[k];
   return { id, block_key, kind, widget, text, why: why || null, tag: tag || null, options: options || [], multi: !!multi, none_option: none_option || null, facts: facts || null, prefill: prefill || null, checks: checks || null, allow_defer: !!allow_defer, rows: rows || null, declaration: declaration || null, ...(step.idv ? { idv: step.idv } : {}), ...org };
 }
 
@@ -138,7 +140,7 @@ export default async function (req) {
     const isOrg = conversation.client_type === 'ORG';
     const vars = {
       tenant_name: tenant?.name || '', first_name: conversation.invited_first_name || '', invitation_email: conversation.invited_email || '',
-      ownerListThreshold: settings.ownerListThreshold ?? 10, uboThreshold: settings.uboThreshold ?? 25, legalFormOptions: settings.legalFormOptions || [], registrySearchLimit: settings.registrySearchLimit ?? 3, ...(isOrg ? { pause_before: ORG_PAUSE_BEFORE } : {}),
+      ownerListThreshold: settings.ownerListThreshold ?? 10, uboThreshold: settings.uboThreshold ?? 25, legalFormOptions: settings.legalFormOptions || [], registrySearchLimit: settings.registrySearchLimit ?? 3, releaseInvitesAfterIdv: settings.releaseInvitesAfterIdv !== false, ...(isOrg ? { pause_before: ORG_PAUSE_BEFORE } : {}),
     };
     const orgExtra = { vars, blockedJurisdictions: settings.blockedJurisdictions || [], legalFormKeywords: settings.legalFormKeywords };
 
@@ -215,8 +217,16 @@ export default async function (req) {
     };
     const decorateIdvStep = async (item) => { if (step?.widget === 'idv') step = { ...step, idv: await idvView(item) }; };
     /** The view, with the ID step's Didit state when the current step is the ID check. */
+    // Tracker of block `invites`: the invitation status per party from OutreachInvite.
+    const inviteRows = async () => asList(await E.OutreachInvite.filter({ tenant_id: tenantId, conversation_id: conversation.id }, undefined, 100));
+    const decorateTracker = async () => {
+      if (step?.widget !== 'tracker') return;
+      const inv = await inviteRows();
+      step = { ...step, parties: (step.parties || []).map((p) => { const i = inv.find((x) => x.roles_text && normName(x.roles_text.split('|')[0]) === p.key); return i ? { ...p, status: i.status, email: i.email || p.email || null, invite_id: i.id } : p; }) };
+    };
     const finish = async (extra = {}) => {
       if (step?.widget === 'idv') await decorateIdvStep(idvItemOf(await reloadCarrier()));
+      await decorateTracker();
       return Response.json({ ...view(), ...extra });
     };
     /**
@@ -364,6 +374,15 @@ export default async function (req) {
         events.push({ event: 'case.submitted', notes: `Client declaration signed; answers frozen as version 1 (sha256:${sha.slice(0, 8)}…)`, payload: { sha256: sha, reference, test_data: testData } });
         await persist({ status: 'Submitted', submitted_at: nowIso, submission_hash: sha, reference });
         await E.OutreachRequest.update(request.id, { status: 'Complete' });
+        if (conversation.parent_conversation_id) {
+          // AT 31: the parent's invitation becomes Completed, its open request answered, and the parent conversation logs it
+          const inv = asList(await E.OutreachInvite.filter({ tenant_id: tenantId, child_request_id: request.id }, undefined, 1))[0];
+          if (inv) await E.OutreachInvite.update(inv.id, { status: 'Completed', completed_at: nowIso }).catch(() => {});
+          const opens = asList(await E.OutreachOpenRequest.filter({ tenant_id: tenantId, conversation_id: conversation.parent_conversation_id, kind: 'own_checks', status: 'open' }, undefined, 50));
+          for (const o of opens.filter((o) => normName(o.party_name) === normName(conversation.invited_name))) await E.OutreachOpenRequest.update(o.id, { status: 'answered', answered_at: nowIso }).catch(() => {});
+          const parentConv = asList(await E.OutreachConversation.filter({ tenant_id: tenantId, id: conversation.parent_conversation_id }, undefined, 1))[0];
+          await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'related_party.completed', actor: { type: 'System' }, conversation: { id: conversation.parent_conversation_id, request_id: parentConv?.request_id, case_id: conversation.case_id, client_id: conversation.client_id, party_id: conversation.party_id }, payload: { child_conversation_id: conversation.id, party: conversation.invited_name, reference }, notes: `${conversation.invited_name} completed their own checks (${reference})` }));
+        }
       } else {
         step = a.step;
         await persist(conversation.status === 'Opened' || conversation.status === 'Sent' ? { status: 'In_Progress' } : {});
@@ -375,6 +394,11 @@ export default async function (req) {
     if (action === 'open') {
       if (!conversation.first_opened_at) {
         const patch = { first_opened_at: nowIso, last_activity_at: nowIso, ...(conversation.status === 'Sent' ? { status: 'Opened' } : {}) };
+        if (conversation.parent_conversation_id) {
+          // a related party opened their own conversation: the parent's tracker shows Opened
+          const inv = asList(await E.OutreachInvite.filter({ tenant_id: conversation.tenant_id, child_request_id: request.id }, undefined, 1))[0];
+          if (inv && inviteTransition(inv.status, 'opened')) await E.OutreachInvite.update(inv.id, { status: 'Opened' }).catch(() => {});
+        }
         await E.OutreachConversation.update(conversation.id, patch);
         Object.assign(conversation, patch);
         if (['Sent', 'Draft', 'Viewed'].includes(request.status)) await E.OutreachRequest.update(request.id, { status: 'Opened' });
@@ -389,7 +413,7 @@ export default async function (req) {
       if (!messages.length) {
         const deadlineDate = conversation.deadline ? fmtDate(conversation.deadline) : '';
         const client = asList(await E.Client.filter({ tenant_id: tenantId, id: conversation.client_id }, undefined, 1))[0] || {};
-        const introVars = { ...vars, deadline_date: deadlineDate, company: client.client_type === 'ORG' ? client.full_name : '', role_text: '' };
+        const introVars = { ...vars, deadline_date: deadlineDate, company: conversation.org_context?.company || (client.client_type === 'ORG' ? client.full_name : ''), role_text: conversation.org_context?.role_text || '' };
         (template.intro_messages || []).map((t) => fillPlaceholders(t, introVars)).filter(Boolean).forEach((text) => addMsg({ author_type: 'bank', kind: 'message', text }));
         await flushMsgs();
         await reload();
@@ -405,6 +429,33 @@ export default async function (req) {
     }
 
     if (link === 'submitted' || conversation.submitted_at) throw httpError(409, 'This conversation has been submitted.');
+
+    if (action === 'invite') {
+      // "Send invitation" in the tracker (spec 9.6): Queued with releaseInvitesAfterIdv, else the child request at once.
+      if (step?.widget !== 'tracker') throw httpError(409, MESSAGES.notCurrent);
+      const party = (step.parties || []).find((p) => p.key === String(body.party_key || '') && !p.is_rep);
+      if (!party) throw httpError(400, 'Unknown person');
+      const email = String(body.email || '').trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw httpError(422, MESSAGES.emailInvalid);
+      const existing = (await inviteRows()).find((x) => normName(String(x.roles_text || '').split('|')[0]) === party.key);
+      if (existing && existing.status !== 'To invite') return finish();
+      await writeParties();
+      const links = asList(await E.ClientRelatedPartyLink.filter({ tenant_id: tenantId, client_id: conversation.client_id }, undefined, 200));
+      const rps = links.length ? asList(await E.RelatedParty.filter({ tenant_id: tenantId, id: { $in: links.map((l) => l.related_party_id) } }, undefined, 200)) : [];
+      const rp = rps.find((x) => normName(x.full_name) === party.key) || null;
+      const t = inviteTransition('To invite', 'send', { releaseAfterIdv: vars.releaseInvitesAfterIdv });
+      const row = { tenant_id: tenantId, conversation_id: conversation.id, party_id: rp?.id || undefined, roles_text: `${party.name}|${party.roles.join(', ')}`, needs: 'ID check and PEP declaration', email, status: t.status, ...(t.status === 'Queued' ? { queued_at: nowIso } : { invited_at: nowIso }) };
+      const inv = existing ? await E.OutreachInvite.update(existing.id, row) : await E.OutreachInvite.create(row);
+      if (t.createChild) {
+        const origin = String(req.headers.get('origin') || body.portal_origin || '').replace(/\/+$/, '');
+        const r = await createChildConversation({ base44, tenant, parent: { conversation, request }, party: { name: party.name, role_text: party.role_text, related_party_id: rp?.id }, email, origin, actor: clientActor });
+        if (r.ok) await E.OutreachInvite.update(inv.id || existing.id, { child_request_id: r.child_request_id });
+        else { await E.OutreachInvite.update(inv.id || existing.id, { status: 'To invite' }); throw httpError(502, r.error || MESSAGES.notSaved); }
+      } else {
+        await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'invitation.queued', actor: clientActor, conversation: conv, payload: { party: party.name }, notes: `Invitation for ${party.name} queued. It is released after the representative has passed the ID check` }));
+      }
+      return finish();
+    }
 
     if (action === 'idv_start' || action === 'idv_status') {
       if (step?.widget !== 'idv') return finish();
@@ -502,6 +553,11 @@ export default async function (req) {
         const sig = String(value?.signature || '');
         if (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(sig) || sig.length > MAX_SIGNATURE_BYTES * 1.4) throw httpError(400, MESSAGES.signIncomplete);
         value = { terms: value?.terms === true, typed_name: String(value?.typed_name || '').slice(0, 200), signature: sig };
+      }
+      if (step.widget === 'tracker') {
+        const inv = await inviteRows();
+        const rows = (step.parties || []).map((p) => (p.is_rep ? p : { ...p, status: inv.find((x) => normName(String(x.roles_text || '').split('|')[0]) === p.key)?.status || 'To invite' }));
+        if (!canContinue(rows)) throw httpError(422, MESSAGES.invitesPending);
       }
       const r = applyAnswer(snap, engine, step, value, extra);
       if (r.error) {
