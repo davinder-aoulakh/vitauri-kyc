@@ -97,7 +97,7 @@ export default async function (req) {
       ...(clientType === 'ORG' ? { pending_step: { test_data: true } } : {}),
       invited_name: invitedName, invited_first_name: firstName, invited_email: invitedEmail,
       deadline: dates.deadline, token_expires_at: dates.token_expires_at, sent_at: now.toISOString(), sent_by: actor.name,
-      progress_steps: 0, progress_total: initialProgressTotal(snap), block_states: {}, ai_followup_count: 0,
+      progress_steps: 0, progress_total: initialProgressTotal(snap, { risk }), block_states: {}, ai_followup_count: 0,
     });
     await E.OutreachRequest.update(request.id, { conversation_id: conversation.id });
     const conv = { id: conversation.id, request_id: request.id, case_id: kycCase.id, client_id: client.id };

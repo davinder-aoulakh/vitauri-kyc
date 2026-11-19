@@ -74,8 +74,16 @@ export function firstNameOf(client = {}, invitedName = '') {
 }
 
 /** Initial progress total: the template's active items (the engine refines this from phase 3 on). */
-export function initialProgressTotal(snapshot) {
-  return (snapshot?.template_snapshot?.items || []).filter((i) => i.active !== false).length;
+export function initialProgressTotal(snapshot, { risk = null } = {}) {
+  return (snapshot?.template_snapshot?.items || []).filter((i) => i.active !== false && !riskExcluded(snapshot?.blocks_snapshot?.[i.block_key]?.show_if, risk)).length;
+}
+
+/** A show_if that depends only on the risk class and is false for it (spec 5.5: such a block is not counted at the start). */
+export function riskExcluded(cond, risk) {
+  if (!cond || !risk || typeof cond !== 'object') return false;
+  const keys = Object.keys(cond);
+  if (keys.length === 1 && keys[0] === 'risk_in' && Array.isArray(cond.risk_in)) return !cond.risk_in.map((x) => String(x).toLowerCase()).includes(String(risk).toLowerCase());
+  return false;
 }
 
 /** Sections for the left rail with their state, from the snapshot and the block states. */

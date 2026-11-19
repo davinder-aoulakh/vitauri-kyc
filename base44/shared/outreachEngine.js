@@ -11,7 +11,7 @@
 // A step: { id, block_key, kind: 'block'|'follow_up', fu_id?, widget, text, why?, tag?, options?, multi?, none_option?, facts?,
 //           prefill?, datapoint_key?, label?, allow_defer?, checks?, edit_rows? }
 import { evaluateCondition } from './outreachConditions.js';
-import { fillPlaceholders, minutesLeft } from './outreachSnapshot.js';
+import { fillPlaceholders, minutesLeft, riskExcluded } from './outreachSnapshot.js';
 import { MESSAGES } from './outreachMessages.js';
 import { sameName } from './outreachIdv.js';
 import { failedNames, evidenceStatus } from './outreachDocRules.js';
@@ -488,7 +488,8 @@ export function applyEdit(snapshot, prev, datapointKey, value, extra = {}) {
 /** Progress per spec 5.5: active items minus skipped ones; one step per answered block. */
 export function progress(snapshot, state, { submitted = false } = {}) {
   const its = items(snapshot);
-  const counted = its.filter((it) => it.active !== false && state.block_states[it.block_key]?.state !== 'skipped');
+  const counted = its.filter((it) => it.active !== false && state.block_states[it.block_key]?.state !== 'skipped'
+    && !(state.block_states[it.block_key] === undefined && riskExcluded(blockOf(snapshot, it.block_key)?.show_if, state.risk)));
   const total = counted.length;
   const steps = counted.filter((it) => ['answered', 'deferred'].includes(state.block_states[it.block_key]?.state)).length;
   const pct = total ? Math.min(100, Math.round((steps / total) * 100)) : 0;
