@@ -43,7 +43,7 @@ export default function PeopleList({ step, busy, onAnswer }) {
         <button type="button" className="oc-link" disabled={busy} onClick={() => setAdding(true)}>+ {OC.addPerson}</button>
       )}
       {!chosen.length && <p className="oc-small">{OC.keepOne}</p>}
-      <button type="button" className="oc-btn" disabled={busy || !chosen.length || adding} onClick={() => onAnswer(chosen.map(({ on, ...p }) => p))}>{OC.continue}</button>
+      <button type="button" className="oc-btn" disabled={busy || !chosen.length || adding} onClick={() => onAnswer(chosen.map((p) => ({ name: p.name, role: p.role, authority: p.authority, note: p.note, source: p.source })))}>{OC.continue}</button>
     </div>
   );
 }
