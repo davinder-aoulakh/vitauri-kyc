@@ -11,7 +11,7 @@ const seed = buildSeed(OUTREACH_BLOCK_LIBRARY, OUTREACH_FORM_TEMPLATES);
 const snap = buildSnapshot({ template: seed.templates.find((t) => t.key === 'onboarding_np'), blocks: seed.blocks });
 const vars = { tenant_name: 'New Age Bank', first_name: 'John', invitation_email: 'john.carter@example.com' };
 const idv = { full_name: 'John Carter', dob: '14 March 1987', nat: 'British', doc: 'Passport GBR, valid until 2 September 2031' };
-const file = (name) => ({ name, size: 1000, mime: 'application/pdf', test_stub: true });
+const file = (name) => ({ name, size: 1000, mime: 'application/pdf', checks: [] });
 const SCRIPT_A = {
   idv: { session_done: true }, name_confirm: 'Yes, this is correct',
   address: { country: 'United Kingdom', postcode: 'N1 9GU', number: '263', street: 'Upper Street', city: 'London' },
@@ -32,7 +32,8 @@ function run(script, { snapshot = snap, risk = 'low', onStep, maxSteps = 99 } = 
   let pep = 0;
   let answered = 0;
   for (let i = 0; i < 80; i++) {
-    const a = E.advance(snapshot, s, vars);
+    let a = E.advance(snapshot, s, vars);
+    while (a.needs_phrasing) a = E.advance(snapshot, E.setPhrasing(a.state, { text: a.needs_phrasing.default_text, ai: false, mode: 'auto' }), vars);
     s = a.state;
     a.events.forEach((e) => audit.push(e.event));
     a.messages.forEach((m) => lines.push(['BANK', m.text, m.tag || null]));
@@ -91,7 +92,7 @@ test('scenario A: the datapoints with value and source', () => {
   for (const [k, v] of Object.entries(want)) assert.deepEqual(got[k], v, k);
   assert.match(got.declaration[0], /^Signed \d\d\/\d\d\/\d{4}$/);
   assert.equal(Object.keys(got).length, 20);
-  assert.ok(!s.datapoints.full_name.test_stub && s.datapoints.address_proof.test_stub); // real Didit since phase 4; uploads stay a stand-in until phase 5
+  assert.ok(!s.datapoints.full_name.test_stub && !s.datapoints.address_proof.test_stub);
   assert.equal(s.datapoints.employment.history[0].display, 'Self-employed'); // the edit keeps the old value
 });
 
@@ -105,7 +106,7 @@ test('scenario A: the audit order', () => {
     'block.asked', 'rule', 'block.asked', 'block.answered', // employment + company
     'block.asked', 'block.answered', // income
     'block.asked', 'rule', 'block.asked', 'doc.checked', 'block.answered', // sof + deed
-    'block.asked', 'rule', 'block.asked', 'rule', 'ai.followup.default', 'block.asked', 'ai.followup.answered', 'block.answered', // activities
+    'block.asked', 'rule', 'block.asked', 'rule', 'ai.followup.auto', 'block.asked', 'ai.followup.answered', 'block.answered', // activities
     'block.asked', 'rule', 'block.asked', 'block.answered', // pep unsure, again
     'block.asked', 'answer.edited', 'block.answered', 'block.asked', 'block.answered', // review, sign
   ];

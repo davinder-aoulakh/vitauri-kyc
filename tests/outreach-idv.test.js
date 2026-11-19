@@ -66,6 +66,7 @@ const npSnap = buildSnapshot({ template: seed.templates.find((t) => t.key === 'o
 test('approved Didit result: four datapoints with source idv, checks, then the confirmation question (AT 13)', () => {
   let s = E.initialState();
   let a = E.advance(npSnap, s, {});
+  while (a.needs_phrasing) a = E.advance(npSnap, E.setPhrasing(a.state, { text: a.needs_phrasing.default_text, ai: false, mode: 'auto' }), {});
   assert.equal(a.step.widget, 'idv');
   const r = E.applyAnswer(npSnap, a.state, a.step, { session_done: true }, { idv: idvFromItem(approvedItem), idv_outcome: 'approved' });
   assert.ok(!r.error);
@@ -78,7 +79,8 @@ test('approved Didit result: four datapoints with source idv, checks, then the c
 });
 
 test('in review: datapoints flagged, a neutral message, the conversation continues', () => {
-  const a = E.advance(npSnap, E.initialState(), {});
+  let a = E.advance(npSnap, E.initialState(), {});
+  while (a.needs_phrasing) a = E.advance(npSnap, E.setPhrasing(a.state, { text: a.needs_phrasing.default_text, ai: false, mode: 'auto' }), {});
   const r = E.applyAnswer(npSnap, a.state, a.step, { session_done: true }, { idv: idvFromItem(approvedItem), idv_outcome: 'in_review' });
   assert.equal(r.state.datapoints.full_name.status, 'in_review');
   assert.ok(r.messages.some((m) => /colleague will look/.test(m.text)));
@@ -86,7 +88,8 @@ test('in review: datapoints flagged, a neutral message, the conversation continu
 });
 
 test('"Not now": block.declined, a neutral reply and the ID step again', () => {
-  const a = E.advance(npSnap, E.initialState(), {});
+  let a = E.advance(npSnap, E.initialState(), {});
+  while (a.needs_phrasing) a = E.advance(npSnap, E.setPhrasing(a.state, { text: a.needs_phrasing.default_text, ai: false, mode: 'auto' }), {});
   const r = E.applyAnswer(npSnap, a.state, a.step, { declined: true }, {});
   assert.equal(r.reask, true);
   assert.equal(r.clientText, 'Not now');
@@ -116,7 +119,8 @@ test('related-party template: 8 blocks, {company} and {role_text} filled, pep in
   let s = E.initialState();
   const asked = [];
   for (let i = 0; i < 30; i++) {
-    const a = E.advance(snap, s, { invitation_email: 'anna@example.com' });
+    let a = E.advance(snap, s, { invitation_email: 'anna@example.com' });
+    while (a.needs_phrasing) a = E.advance(snap, E.setPhrasing(a.state, { text: a.needs_phrasing.default_text, ai: false, mode: 'auto' }), { invitation_email: 'anna@example.com' });
     s = a.state;
     if (a.done) break;
     asked.push(a.step.block_key);

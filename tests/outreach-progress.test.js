@@ -12,13 +12,14 @@ const vars = { tenant_name: 'New Age Bank', first_name: 'John', invitation_email
 const ANSWERS = {
   idv: { session_done: true }, name_confirm: 'Yes, this is correct',
   address: { country: 'United Kingdom', postcode: 'N1 9GU', number: '263', street: 'Upper Street', city: 'London' },
-  address_proof: { name: 'bill.pdf', size: 1, mime: 'application/pdf', test_stub: true }, email: 'Yes, that is correct', phone: { code: '+44', number: '7700 900123' },
+  address_proof: { name: 'bill.pdf', size: 1, mime: 'application/pdf', checks: [] }, email: 'Yes, that is correct', phone: { code: '+44', number: '7700 900123' },
   purpose: ['Saving'], nature: ['Current account'],
 };
 function answerUntil(snap, n) {
   let s = E.initialState({ risk: 'low' });
   for (let i = 0; i < n; i++) {
-    const a = E.advance(snap, s, vars);
+    let a = E.advance(snap, s, vars);
+    while (a.needs_phrasing) a = E.advance(snap, E.setPhrasing(a.state, { text: a.needs_phrasing.default_text, ai: false, mode: 'auto' }), vars);
     s = E.applyAnswer(snap, a.state, a.step, ANSWERS[a.step.block_key], { idv: { full_name: 'John Carter' }, invitation_email: vars.invitation_email }).state;
   }
   return s;
@@ -47,7 +48,8 @@ test('an inactive block is not asked, block.skipped is written and the total is 
   const snap = buildSnapshot({ template: tpl, blocks: seed.blocks });
   assert.equal(E.progress(snap, E.initialState()).total, 14);
   let s = answerUntil(snap, 7); // up to purpose
-  const a = E.advance(snap, s, vars);
+  let a = E.advance(snap, s, vars);
+  while (a.needs_phrasing) a = E.advance(snap, E.setPhrasing(a.state, { text: a.needs_phrasing.default_text, ai: false, mode: 'auto' }), vars);
   assert.equal(a.step.block_key, 'employment');
   assert.ok(a.events.some((e) => e.event === 'block.skipped' && e.payload.block === 'nature'));
   s = a.state;
