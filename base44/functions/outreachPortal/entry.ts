@@ -197,6 +197,11 @@ export default async function (req) {
       };
     };
     const decorateIdvStep = async (item) => { if (step?.widget === 'idv') step = { ...step, idv: await idvView(item) }; };
+    /** The view, with the ID step's Didit state when the current step is the ID check. */
+    const finish = async (extra = {}) => {
+      if (step?.widget === 'idv') await decorateIdvStep(idvItemOf(await reloadCarrier()));
+      return Response.json({ ...view(), ...extra });
+    };
     /**
      * Applies a stored Didit decision to the conversation once per session: approved or in review -> the four datapoints
      * (source idv) and the conversation continues; declined / expired -> a message (once), a new attempt when allowed.
@@ -274,7 +279,6 @@ export default async function (req) {
         const carrier = await reloadCarrier();
         const events = await applyIdvDecision(carrier);
         if (events.length) { await flushMsgs(); await audit(toAudit(events)); await reload(); }
-        await decorateIdvStep(idvItemOf(await reloadCarrier()));
       }
       if (!messages.length) {
         const deadlineDate = conversation.deadline ? fmtDate(conversation.deadline) : '';
@@ -284,7 +288,7 @@ export default async function (req) {
         await flushMsgs();
         await reload();
       }
-      return Response.json(view());
+      return finish();
     }
 
     if (action === 'why_opened') {
@@ -297,7 +301,7 @@ export default async function (req) {
     if (link === 'submitted' || conversation.submitted_at) throw httpError(409, 'This conversation has been submitted.');
 
     if (action === 'idv_start' || action === 'idv_status') {
-      if (step?.widget !== 'idv') return Response.json(view());
+      if (step?.widget !== 'idv') return finish();
       let carrier = await reloadCarrier();
       let item = idvItemOf(carrier);
       noteSession(item);
@@ -311,11 +315,11 @@ export default async function (req) {
       if (events.length) {
         await flushMsgs(); await audit(toAudit(events)); await reload();
         await decorateIdvStep(idvItemOf(await reloadCarrier()));
-        return Response.json(view());
+        return finish();
       }
       if (action === 'idv_start') {
         const st = idvState(item, { attempts: (engine.idv_sessions || []).length, maxAttempts });
-        if (st.state === 'open' || st.state === 'approved' || st.state === 'in_review') { await decorateIdvStep(item); return Response.json(view()); }
+        if (st.state === 'open' || st.state === 'approved' || st.state === 'in_review') { await decorateIdvStep(item); return finish(); }
         if (!(await isDiditConfigured())) throw httpError(422, MESSAGES.idvNotConfigured);
         if (!st.can_start) throw httpError(422, MESSAGES.idvNoAttempts);
         const origin = String(req.headers.get('origin') || body.portal_origin || '').replace(/\/+$/, '');
@@ -337,23 +341,23 @@ export default async function (req) {
         await persist();
       }
       await decorateIdvStep(item);
-      return Response.json(view());
+      return finish();
     }
 
     if (action === 'start') {
-      if (step) return Response.json(view()); // already started (second tab, retry)
+      if (step) return finish(); // already started (second tab, retry)
       if (template.start_chip) addMsg({ author_type: 'client', kind: 'answer', text: template.start_chip });
       const events = await moveOn();
       await flushMsgs();
       await audit(toAudit(events));
       await reload();
-      return Response.json(view());
+      return finish();
     }
 
     const answerId = String(body.client_answer_id || '').slice(0, 80);
     if (!/^[A-Za-z0-9_-]{8,80}$/.test(answerId)) throw httpError(400, 'client_answer_id is required');
     const dup = messages.find((m) => m.client_answer_id === answerId);
-    if (dup) return Response.json({ ...view(), duplicate: true });
+    if (dup) return finish({ duplicate: true });
 
     if (action === 'answer') {
       if (!step || body.step_id !== step.id) throw httpError(409, MESSAGES.notCurrent);
@@ -391,7 +395,7 @@ export default async function (req) {
       await flushMsgs();
       await audit(toAudit(events));
       await reload();
-      return Response.json(view());
+      return finish();
     }
 
     if (action === 'edit') {
@@ -415,7 +419,7 @@ export default async function (req) {
       await flushMsgs();
       await audit(toAudit(events));
       await reload();
-      return Response.json(view());
+      return finish();
     }
 
     throw httpError(400, 'Unknown action');
