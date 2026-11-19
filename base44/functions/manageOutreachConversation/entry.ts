@@ -100,7 +100,7 @@ export default async function (req) {
       const conv = { id: c.id, request_id: c.request_id || undefined, case_id: c.case_id, client_id: c.client_id, party_id: c.party_id };
       const audit = [
         outreachAuditRow({ tenantId, event: 'ai.followup.approved', actor: { type: 'User', id: user.id, name: actorName }, conversation: conv, payload: { block: q.block, follow_up: q.fu, how, ai, text }, notes: `Follow-up on ${q.block} ${how} by ${actorName}` }),
-        ...a.events.filter((e) => e.event !== 'rule').map((e) => outreachAuditRow({ tenantId, event: e.event, actor: { type: 'System' }, conversation: conv, payload: e.payload || {}, notes: e.notes })),
+        ...a.events.map((e) => outreachAuditRow({ tenantId, event: e.event, actor: { type: 'System' }, conversation: conv, payload: e.payload || {}, notes: e.notes })),
       ];
       await E.AuditEvent.bulkCreate(audit).catch((e) => console.warn('audit failed', e?.message));
       return Response.json({ ok: true, text, how });
