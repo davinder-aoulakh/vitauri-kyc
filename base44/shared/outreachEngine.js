@@ -14,6 +14,7 @@ import { evaluateCondition } from './outreachConditions.js';
 import { fillPlaceholders, minutesLeft } from './outreachSnapshot.js';
 import { MESSAGES } from './outreachMessages.js';
 import { sameName } from './outreachIdv.js';
+import { failedNames, evidenceStatus } from './outreachDocRules.js';
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const asList = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v === '' ? [] : [v]);
@@ -23,7 +24,8 @@ const SOURCE_LABEL = {
   kvk: 'KvK trade register', prop: 'Suggested from registry data, confirmed by client', calc: 'Calculated by the tool', rep: 'Declared by the representative',
 };
 export const sourceLabel = (s) => SOURCE_LABEL[s] || s || '';
-const UPLOAD_ACTIONS = ['ask_file', 're_request'];
+const UPLOAD_ACTIONS = ['ask_file'];
+export const MAX_RE_REQUESTS = 2;
 const ASK_ACTIONS = ['ask_text', 'ask_area', 'ask_choice', 'ai_followup', 'ask_file'];
 
 /** A fresh state for a conversation. */
@@ -66,13 +68,15 @@ function blockStep(snapshot, state, key, vars) {
   return step;
 }
 
-function followUpStep(snapshot, state, blockKey, fu, vars) {
+function followUpStep(snapshot, state, blockKey, fu, vars, phrased = null) {
   const n = askCount(state, blockKey) + 1;
   const upload = UPLOAD_ACTIONS.includes(fu.action);
   const widget = upload ? 'upload' : fu.action === 'ask_choice' ? 'chips' : fu.action === 'ask_area' ? 'area' : 'text';
   return {
     id: stepId(blockKey, fu.id, n), block_key: blockKey, kind: 'follow_up', fu_id: fu.id, widget,
-    text: fillPlaceholders(fu.question || fu.message || '', vars), tag: fu.action === 'ai_followup' ? MESSAGES.followUpTag : (fu.tag || null),
+    text: phrased?.text || fillPlaceholders(fu.question || fu.message || '', vars),
+    tag: fu.action === 'ai_followup' ? (phrased?.approver ? fillPlaceholders(MESSAGES.followUpCheckedTag, { name: phrased.approver }) : MESSAGES.followUpTag) : (fu.tag || null),
+    ai_assisted: fu.action === 'ai_followup' && !!phrased?.ai,
     options: fu.options || [], datapoint_key: fu.key || null, label: fu.label || null,
     ...(upload ? { checks: fu.document_checks || blockOf(snapshot, blockKey)?.evidence?.document_checks || [], allow_defer: fu.allow_defer === true } : {}),
   };
@@ -91,16 +95,24 @@ export function advance(snapshot, prev, vars = {}) {
   if (state.queue.length) {
     const { block, fu } = state.queue[0];
     const f = (blockOf(snapshot, block)?.follow_ups || []).find((x) => x.id === fu);
-    const step = followUpStep(snapshot, state, block, f, vars);
+    if (f?.action === 'ai_followup' && !state.queue[0].phrased) {
+      // AI follow-up (spec 6.2): the server phrases it (setPhrasing) and, for Medium/High, holds it for approval.
+      if (state.queue[0].held) {
+        const wait = { id: `${block}:${fu}:wait`, block_key: block, kind: 'follow_up', fu_id: fu, widget: 'wait', text: '' };
+        return { state, step: wait, done: false, messages, events };
+      }
+      return { state, step: null, done: false, messages, events, needs_phrasing: { block, fu, default_text: fillPlaceholders(f.question || '', vars), answer: state.answers?.[block] ?? null, label: blockOf(snapshot, block)?.label || block } };
+    }
+    const step = followUpStep(snapshot, state, block, f, vars, state.queue[0].phrased || null);
     state.block_states[block] = { ...(state.block_states[block] || {}), state: 'asked', asks: askCount(state, block) + 1 };
     // The rule that triggered this follow-up is logged when the follow-up is asked (audit order of spec 12 / transcript A).
     if (!state.queue[0].logged) {
       events.push({ event: 'rule', notes: `Follow-up on ${block}: ${f.label || f.key || f.id}`, payload: { block, follow_up: fu, action: f.action } });
-      if (f.action === 'ai_followup') events.push({ event: 'ai.followup.default', notes: `Asked with the template's default text; AI phrasing and approval arrive later (${block})`, payload: { block, follow_up: fu } });
+      if (f.action === 'ai_followup' && !state.queue[0].phrased?.approver) events.push({ event: 'ai.followup.auto', notes: `Sent without approval (${state.risk} risk)${state.queue[0].phrased?.ai ? '' : '; default text used'}`, payload: { block, follow_up: fu, ai: !!state.queue[0].phrased?.ai } });
       state.queue[0] = { ...state.queue[0], logged: true };
     }
     events.push({ event: 'block.asked', notes: `${block} (${f.action === 'ai_followup' ? 'follow-up' : UPLOAD_ACTIONS.includes(f.action) ? 'evidence' : f.key || f.id})`, payload: { block, follow_up: fu } });
-    messages.push({ author_type: 'bank', kind: f.action === 'ai_followup' ? 'follow_up' : 'message', block_key: block, text: step.text, tag: step.tag || null });
+    messages.push({ author_type: 'bank', kind: f.action === 'ai_followup' ? 'follow_up' : 'message', block_key: block, text: step.text, tag: step.tag || null, ai_assisted: !!step.ai_assisted });
     return { state, step, done: false, messages, events };
   }
   for (const it of items(snapshot)) {
@@ -264,15 +276,13 @@ export function applyAnswer(snapshot, prev, step, value, extra = {}) {
         const raw = step.widget === 'upload' ? null : value;
         if (v !== null) {
           const display = key === 'email' ? String(v) : displayOf(step.widget, value);
-          putDatapoint(state, { key: main.key, label: main.label, value: step.widget === 'upload' ? { name: value.name, size: value.size, mime: value.mime } : v, display, raw_answer: raw, source: step.widget === 'upload' ? 'doc' : source, block_key: key, ...(value?.test_stub || extra.test_stub ? { test_stub: true } : {}), ...(value?.deferred ? { status: 'deferred' } : {}) }, now);
+          putDatapoint(state, { key: main.key, label: main.label, value: step.widget === 'upload' ? fileValue(value) : v, display, raw_answer: raw, source: step.widget === 'upload' ? 'doc' : source, block_key: key, ...(step.widget === 'upload' && !value?.deferred ? { status: evidenceStatus(value.checks || []) } : {}), ...(value?.deferred ? { status: 'deferred' } : {}) }, now);
           changed.push(main.key);
         } else {
           state.datapoints[main.key] = { ...(state.datapoints[main.key] || {}), key: main.key, label: main.label, block_key: key, raw_answer: value, value: state.datapoints[main.key]?.value ?? null, display: state.datapoints[main.key]?.display ?? '', source: 'client', history: state.datapoints[main.key]?.history || [] };
         }
       }
-      if (step.widget === 'upload') {
-        events.push({ event: 'doc.checked', notes: `${key}: ${value.name} — ${value.test_stub || extra.test_stub ? 'test mode, not checked' : 'checks run'}`, payload: { block: key, file: value.name, test_stub: !!(value.test_stub || extra.test_stub) } });
-      }
+      if (step.widget === 'upload') uploadEffects(state, key, step, value, b?.label || key, events, extra);
     }
   } else {
     // follow-up answer
@@ -292,11 +302,11 @@ export function applyAnswer(snapshot, prev, step, value, extra = {}) {
       } else {
         const isUpload = UPLOAD_ACTIONS.includes(f.action);
         putDatapoint(state, {
-          key: f.key, label: labelFor(snapshot, key, f.key, f.label), value: isUpload ? { name: value.name, size: value.size, mime: value.mime } : (step.widget === 'chips' ? value : String(value).trim()),
-          display: displayOf(step.widget, value), source: src, block_key: key, ...(value?.test_stub || extra.test_stub ? { test_stub: true } : {}), ...(value?.deferred ? { status: 'deferred' } : {}),
+          key: f.key, label: labelFor(snapshot, key, f.key, f.label), value: isUpload ? fileValue(value) : (step.widget === 'chips' ? value : String(value).trim()),
+          display: displayOf(step.widget, value), source: src, block_key: key, ...(isUpload && !value?.deferred ? { status: evidenceStatus(value.checks || []) } : {}), ...(value?.deferred ? { status: 'deferred' } : {}),
         }, now);
         changed.push(f.key);
-        if (isUpload) events.push({ event: 'doc.checked', notes: `${key}: ${value.deferred ? 'deferred' : value.name} — ${value.test_stub || extra.test_stub ? 'test mode, not checked' : 'checks run'}`, payload: { block: key, follow_up: f.id, test_stub: !!(value.test_stub || extra.test_stub), deferred: !!value.deferred } });
+        if (isUpload) uploadEffects(state, key, step, value, f.label || f.key, events, extra);
       }
       if (f.action === 'ai_followup') events.push({ event: 'ai.followup.answered', notes: f.key, payload: { block: key, key: f.key } });
     }
@@ -309,6 +319,19 @@ export function applyAnswer(snapshot, prev, step, value, extra = {}) {
     const fired = triggeredFollowUps(snapshot, state, key);
     for (const f of fired) {
       state.fired.push(`${key}:${f.id}`);
+      if (f.action === 're_request') {
+        const n = state.block_states[key]?.re_requests || 0;
+        if (n >= MAX_RE_REQUESTS) {
+          events.push({ event: 'rule', notes: `${key}: check still not met after ${n} new upload(s); the file is kept for manual review`, payload: { block: key, follow_up: f.id, action: 'kept_for_review' } });
+          continue;
+        }
+        events.push({ event: 'rule', notes: `Follow-up on ${key}: ${f.label || f.id} (document check failed)`, payload: { block: key, follow_up: f.id, action: f.action } });
+        messages.push({ author_type: 'bank', kind: 'message', block_key: key, text: f.message, tag: f.tag || MESSAGES.documentTag });
+        state.block_states[key] = { ...(state.block_states[key] || {}), state: 'not_asked', re_requests: n + 1 };
+        state.fired = state.fired.filter((x) => x !== `${key}:${f.id}`);
+        state.failed_checks = [];
+        return { state, clientText, messages, events, datapoints: changed, reask: true, open_requests: extraOpen(state) };
+      }
       if (f.action === 'explain_and_reask' || f.action === 'rule') events.push({ event: 'rule', notes: `Follow-up on ${key}: ${f.label || f.key || f.id}`, payload: { block: key, follow_up: f.id, action: f.action } });
       if (f.action === 'explain_and_reask') {
         messages.push({ author_type: 'bank', kind: 'explanation', block_key: key, text: f.message, tag: f.tag || MESSAGES.explanationTag });
@@ -325,7 +348,58 @@ export function applyAnswer(snapshot, prev, step, value, extra = {}) {
     state.block_states[key] = { ...(state.block_states[key] || {}), state: value?.deferred ? 'deferred' : 'answered', answered_at: now };
     events.push({ event: 'block.answered', notes: key, payload: { block: key } });
   }
-  return { state, clientText, messages, events, datapoints: changed };
+  state.failed_checks = [];
+  return { state, clientText, messages, events, datapoints: changed, open_requests: extraOpen(state) };
+}
+
+function fileValue(v) {
+  if (v?.deferred) return { deferred: true };
+  return { name: v?.name || '', size: Number(v?.size) || 0, mime: v?.mime || '', evidence_id: v?.evidence_id || null, checks: v?.checks || [] };
+}
+
+/** Failed checks feed `document_check_failed`; a deferral asks the portal to open an OutreachOpenRequest. */
+function uploadEffects(state, key, step, value, label, events, extra) {
+  if (value?.deferred) {
+    events.push({ event: 'request.deferred', notes: `${label}: the client will provide this later`, payload: { block: key, follow_up: step.fu_id || null } });
+    state.open_new = [...(state.open_new || []), { kind: 'deferred_evidence', title: label, block_key: key }];
+    return;
+  }
+  const checks = value?.checks || [];
+  state.failed_checks = failedNames(checks);
+  const passed = checks.filter((c) => c.ok === true).length;
+  const pending = checks.filter((c) => c.ok === null).length;
+  events.push({ event: 'doc.checked', notes: `${label}: ${value?.name || ''} — ${passed} of ${checks.length} checks met${state.failed_checks.length ? `; not met: ${state.failed_checks.join(', ')}` : ''}${pending ? `; ${pending} pending manual review` : ''}`, payload: { block: key, follow_up: step.fu_id || null, evidence_id: value?.evidence_id || null, checks } });
+}
+function extraOpen(state) { const o = state.open_new || []; delete state.open_new; return o; }
+
+/**
+ * The server phrased the queued AI follow-up. mode 'auto' -> asked on the next advance(); 'approval' -> held (wait step)
+ * until approvePhrasing(). Counts against the per-request limit.
+ */
+export function setPhrasing(prev, { text, ai, mode }) {
+  const state = clone(prev);
+  const q = state.queue[0];
+  if (!q) return state;
+  state.ai_count = (state.ai_count || 0) + 1;
+  if (mode === 'approval') state.queue[0] = { ...q, held: true, proposal: { text, ai: !!ai } };
+  else state.queue[0] = { ...q, phrased: { text, ai: !!ai } };
+  return state;
+}
+/** Staff approved the held follow-up (text may be edited or the default). */
+export function approvePhrasing(prev, { text, ai, approver }) {
+  const state = clone(prev);
+  const q = state.queue[0];
+  if (!q?.held) return state;
+  state.queue[0] = { ...q, held: false, phrased: { text, ai: !!ai, approver: approver || null } };
+  return state;
+}
+/** Over the per-request limit: the queued AI follow-up is not asked. */
+export function dropQueued(prev, reason) {
+  const state = clone(prev);
+  const q = state.queue.shift();
+  const events = q ? [{ event: 'rule', notes: `AI follow-up on ${q.block} not asked: ${reason}`, payload: { block: q.block, follow_up: q.fu, action: 'limit' } }] : [];
+  if (q && !state.queue.some((x) => x.block === q.block)) state.block_states[q.block] = { ...(state.block_states[q.block] || {}), state: 'answered' };
+  return { state, events };
 }
 
 /** Review rows grouped by section: value, source label, editable. */
@@ -338,7 +412,7 @@ export function reviewRows(snapshot, state) {
     if (!b || ['review', 'sign'].includes(b.widget)) continue;
     for (const dp of Object.values(state.datapoints).filter((d) => d.block_key === it.block_key && d.display)) {
       const editable = !!b.edit && dp.key === b.datapoints?.[0]?.key;
-      rows.push({ section: sectionOf(it), section_label: sections.find((s) => s.key === sectionOf(it))?.label || '', key: dp.key, label: dp.label, value: dp.display, source: dp.source, source_label: sourceLabel(dp.source) + (dp.test_stub ? ' (test)' : ''), editable, edit: editable ? { type: b.edit.type, options: b.options || [], none_option: b.none_option || null } : null });
+      rows.push({ section: sectionOf(it), section_label: sections.find((s) => s.key === sectionOf(it))?.label || '', key: dp.key, label: dp.label, value: dp.display, source: dp.source, source_label: sourceLabel(dp.source) + (dp.test_stub ? ' (test)' : '') + (dp.status === 'pending' ? ' (pending review)' : ''), editable, edit: editable ? { type: b.edit.type, options: b.options || [], none_option: b.none_option || null } : null });
     }
   }
   return rows;
