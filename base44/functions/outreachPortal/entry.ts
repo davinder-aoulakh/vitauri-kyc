@@ -410,6 +410,7 @@ export default async function (req) {
 
     if (action === 'answer') {
       if (!step || body.step_id !== step.id) throw httpError(409, MESSAGES.notCurrent);
+      if (step.widget === 'wait') throw httpError(409, MESSAGES.notCurrent); // an AI follow-up waits for approval
       let value = body.value;
       const extra = { now: nowIso, invitation_email: vars.invitation_email };
       if (step.widget === 'idv') {
