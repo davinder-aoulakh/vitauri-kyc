@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { toast } from '@/components/ui/use-toast';
 import { Copy, Loader2, MessagesSquare, Send } from 'lucide-react';
 import { format } from 'date-fns';
+import ApprovalsAndEvidence from './ApprovalsAndEvidence';
 
 const list = (r) => (Array.isArray(r) ? r : r?.items || []);
 const fmt = (d) => { try { return d ? format(new Date(d), 'd MMM yyyy HH:mm') : '—'; } catch { return '—'; } };
@@ -104,6 +105,7 @@ export default function ConversationPanel({ kycCase, client, currentUser }) {
           </table>
         </div>
       )}
+      <ApprovalsAndEvidence kycCase={kycCase} canWork={canWork} reloadKey={rows?.length || 0} />
       <Dialog open={open} onOpenChange={(v) => !busy && setOpen(v)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
