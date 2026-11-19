@@ -3,6 +3,8 @@
 //   list_pending { case_id }                                  -> AI follow-ups held for approval and the case's uploaded evidence
 //   approve { conversation_id, text?, use_default? }          -> posts the held follow-up, tagged "checked by {name}" (spec 6.2)
 //   evidence_url { evidence_id }                              -> 5-minute signed URL of an uploaded file
+//   release_invites { conversation_id, portal_origin }       -> Queued invitations -> Invited (child requests + emails); until phase 8
+//                                                               releases them at the representative's ID check, staff do it here (audited)
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { conversationOn } from '../../shared/outreachSettings.js';
@@ -10,7 +12,9 @@ import { OUTREACH_WORK_ROLES, OPS_ROLE } from '../../shared/outreachAuth.js';
 import { approvePhrasing, advance, progress } from '../../shared/outreachEngine.js';
 import { validatePhrasing } from '../../shared/outreachAiFollowup.js';
 import { fillPlaceholders } from '../../shared/outreachSnapshot.js';
-import { outreachAuditRow } from '../../shared/outreachAudit.js';
+import { outreachAuditRow, writeOutreachAudit } from '../../shared/outreachAudit.js';
+import { inviteTransition } from '../../shared/outreachInvites.js';
+import { createChildConversation } from '../../shared/outreachChildRequest.js';
 
 export default async function (req) {
   try {
@@ -54,7 +58,8 @@ export default async function (req) {
       }
       const ids = convs.map((c) => c.id);
       const evidence = ids.length ? asList(await E.OutreachEvidence.filter({ tenant_id: tenantId, conversation_id: { $in: ids } }, '-created_date', 100)) : [];
-      return Response.json({ ok: true, pending, evidence: evidence.map((e) => ({ id: e.id, conversation_id: e.conversation_id, block_key: e.block_key, name: e.name, size: e.size, status: e.status, checks: e.checks || [], uploaded_at: e.uploaded_at, document_id: e.document_id || null })) });
+      const invites = ids.length ? asList(await E.OutreachInvite.filter({ tenant_id: tenantId, conversation_id: { $in: ids } }, '-created_date', 100)) : [];
+      return Response.json({ ok: true, pending, invites: invites.map((i) => ({ id: i.id, conversation_id: i.conversation_id, name: String(i.roles_text || '').split('|')[0], roles: String(i.roles_text || '').split('|')[1] || '', email: i.email, status: i.status, queued_at: i.queued_at, invited_at: i.invited_at, completed_at: i.completed_at })), evidence: evidence.map((e) => ({ id: e.id, conversation_id: e.conversation_id, block_key: e.block_key, name: e.name, size: e.size, status: e.status, checks: e.checks || [], uploaded_at: e.uploaded_at, document_id: e.document_id || null })) });
     }
 
     if (action === 'evidence_url') {
@@ -62,6 +67,25 @@ export default async function (req) {
       if (!ev?.file_uri) throw httpError(404, 'File not found');
       const signed = await base44.asServiceRole.integrations.Core.CreateFileSignedUrl({ file_uri: ev.file_uri, expires_in: 300 });
       return Response.json({ ok: true, url: signed?.signed_url || null });
+    }
+
+    if (action === 'release_invites') {
+      const c = asList(await E.OutreachConversation.filter({ tenant_id: tenantId, id: String(body.conversation_id || '') }, undefined, 1))[0];
+      if (!c) throw httpError(404, 'Conversation not found');
+      const request = asList(await E.OutreachRequest.filter({ tenant_id: tenantId, id: c.request_id }, undefined, 1))[0];
+      const origin = String(body.portal_origin || req.headers.get('origin') || '').replace(/\/+$/, '');
+      if (!/^https?:\/\/[^/\s]+$/.test(origin)) throw httpError(400, 'portal_origin is required');
+      const queued = asList(await E.OutreachInvite.filter({ tenant_id: tenantId, conversation_id: c.id, status: 'Queued' }, undefined, 50));
+      const done = [];
+      for (const inv of queued) {
+        if (!inviteTransition(inv.status, 'release')) continue;
+        const [name, roles] = String(inv.roles_text || '').split('|');
+        const roleText = String(roles || '').split(/\s*,\s*/).map((r) => ({ Director: 'Director', UBO: 'ultimate beneficial owner', 'Authorized Signatory': 'authorised representative' }[r])).filter(Boolean).join(' and ') || 'related party';
+        const r = await createChildConversation({ base44, tenant, parent: { conversation: c, request }, party: { name, role_text: roleText, related_party_id: inv.party_id }, email: inv.email, origin, actor: { type: 'User', id: user.id, name: actorName } });
+        if (r.ok) { await E.OutreachInvite.update(inv.id, { status: 'Invited', invited_at: new Date().toISOString(), child_request_id: r.child_request_id }); done.push(name); }
+      }
+      await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'invitation.released', actor: { type: 'User', id: user.id, name: actorName }, conversation: { id: c.id, request_id: c.request_id, case_id: c.case_id, client_id: c.client_id }, payload: { released: done, manual: true }, notes: `Queued invitations released manually by ${actorName} (before the representative's ID check exists): ${done.join(', ') || 'none'}` }));
+      return Response.json({ ok: true, released: done });
     }
 
     if (action === 'approve') {
