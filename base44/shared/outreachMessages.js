@@ -1,0 +1,24 @@
+// Guided conversation outreach: fixed texts the engine needs that are not part of any block (spec sections 5.5, 7, 8.14).
+// Neutral wording, no bank name: {placeholders} are filled from the conversation. Block questions never live here.
+export const MESSAGES = {
+  submitted: 'Thank you, {first_name}. Your application has been submitted.',
+  statusTitle: 'Received',
+  statusBody: 'We will review your details and usually let you know within {response_time} how to proceed. If we need anything else, we will ask here, in this conversation, and by email.',
+  clientIdvStub: 'I completed the identity check (test mode)',
+  clientReview: 'Everything is correct',
+  clientSign: 'I confirm my declaration and signature.',
+  clientDeferred: 'I will provide this later',
+  followUpTag: 'Follow-up question',
+  explanationTag: 'Explanation',
+  documentTag: 'Document checked',
+  testCheck: 'Test mode: not checked',
+  signNameMismatch: 'The name does not match your ID ({name}). Type your name as it appears on your ID.',
+  required: 'Please answer this question.',
+  chooseOne: 'Please choose an option.',
+  chooseAtLeastOne: 'Please choose at least one option.',
+  emailInvalid: 'This email address does not look right.',
+  phoneShort: 'This number looks too short. Enter it without the leading 0.',
+  addressIncomplete: 'Please fill in every part of the address.',
+  signIncomplete: 'Accept the terms, type your name and sign to continue.',
+  notCurrent: 'This question was already answered. The conversation has been reloaded.',
+};
