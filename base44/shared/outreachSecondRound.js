@@ -79,9 +79,9 @@ export function linkExpired(conversation, now = new Date()) {
 }
 
 /** A held AI follow-up (Medium/High) waited longer than aiApprovalWaitMinutes → the default text goes out (decision 12). */
-export function followUpTimedOut(pendingAi, waitMinutes, now = new Date()) {
-  if (!pendingAi?.since) return false;
-  return new Date(now).getTime() - new Date(pendingAi.since).getTime() >= Number(waitMinutes || 60) * 60000;
+export function followUpTimedOut(queueEntry, waitMinutes, now = new Date()) {
+  if (!queueEntry?.held || !queueEntry.held_since) return false;
+  return new Date(now).getTime() - new Date(queueEntry.held_since).getTime() >= Number(waitMinutes || 60) * 60000;
 }
 
 // ---- Emails ---------------------------------------------------------------------------------------------------

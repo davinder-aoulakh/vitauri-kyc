@@ -421,12 +421,12 @@ function extraOpen(state) { const o = state.open_new || []; delete state.open_ne
  * The server phrased the queued AI follow-up. mode 'auto' -> asked on the next advance(); 'approval' -> held (wait step)
  * until approvePhrasing(). Counts against the per-request limit.
  */
-export function setPhrasing(prev, { text, ai, mode }) {
+export function setPhrasing(prev, { text, ai, mode, now }) {
   const state = clone(prev);
   const q = state.queue[0];
   if (!q) return state;
   state.ai_count = (state.ai_count || 0) + 1;
-  if (mode === 'approval') state.queue[0] = { ...q, held: true, proposal: { text, ai: !!ai } };
+  if (mode === 'approval') state.queue[0] = { ...q, held: true, held_since: now || new Date().toISOString(), proposal: { text, ai: !!ai } };
   else state.queue[0] = { ...q, phrased: { text, ai: !!ai } };
   return state;
 }
