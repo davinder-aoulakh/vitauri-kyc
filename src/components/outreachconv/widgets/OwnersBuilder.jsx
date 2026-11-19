@@ -3,7 +3,7 @@ import { OC } from '@/lib/outreachConvStrings';
 
 /** Owners or partners: rows of type (person | company), name and share; running total; error above 100 %. */
 export default function OwnersBuilder({ step, busy, onAnswer }) {
-  const [rows, setRows] = useState([{ type: 'person', name: '', pct: '' }]);
+  const [rows, setRows] = useState(() => (step.rows?.length ? [...step.rows.map((r) => ({ type: r.type || 'company', name: r.name || '', pct: r.pct ?? '' })), { type: 'person', name: '', pct: '' }] : [{ type: 'person', name: '', pct: '' }]));
   const set = (i, patch) => setRows((r) => r.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const filled = rows.filter((r) => r.name.trim());
   const total = filled.reduce((t, r) => t + (Number(r.pct) || 0), 0);

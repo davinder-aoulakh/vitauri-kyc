@@ -240,6 +240,18 @@ export default function OutreachConversation() {
     }
   }, [token, open]);
 
+  // Registry step: search and select go to outreachRegistry; the answer then names the selection.
+  const onRegistry = useCallback(async (action, extra) => {
+    try {
+      const r = await base44.functions.invoke('outreachRegistry', { token, step_id: v?.step?.id, action, ...extra });
+      return r.data;
+    } catch (e) {
+      const { status, message } = errOf(e);
+      if (status === 409) { await open(); return null; }
+      return { ok: false, error: message || OC.notSaved };
+    }
+  }, [token, open, v?.step?.id]);
+
   // An AI follow-up waits for a colleague's approval: look again every 5 seconds.
   useEffect(() => {
     if (v?.step?.widget !== 'wait') return undefined;
@@ -304,7 +316,7 @@ export default function OutreachConversation() {
               <button type="button" className="oc-chip" disabled={busy} onClick={onStart}>{v.start_chip}</button>
             </div>
           )}
-          {revealed && v.step && !v.submitted && <Widget key={v.step.id} step={v.step} view={v} busy={busy} onAnswer={onAnswer} onEdit={onEdit} onIdv={onIdv} onUpload={onUpload} />}
+          {revealed && v.step && !v.submitted && <Widget key={v.step.id} step={v.step} view={v} busy={busy} onAnswer={onAnswer} onEdit={onEdit} onIdv={onIdv} onUpload={onUpload} onRegistry={onRegistry} />}
           {fieldErr && <p className="oc-err" role="alert">{fieldErr}</p>}
           {saveErr && (
             <div className="oc-chips" role="alert">
