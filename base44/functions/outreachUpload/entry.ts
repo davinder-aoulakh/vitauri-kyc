@@ -19,7 +19,7 @@ const limiter = createAttemptLimiter({ max: 20, windowMs: 15 * 60 * 1000 });
 const NOT_FOUND = 'This link is not valid. Please use the link from your most recent email.';
 const MAX_MB = 25;
 const MIME = { pdf: 'application/pdf', jpg: 'image/jpeg', png: 'image/png' };
-const DOC_TYPE = { payslip: 'Salary_Slip', sof_doc: 'Financial_Statement', wealth: 'Financial_Statement' };
+const DOC_TYPE = { payslip: 'Salary_Slip', sof_doc: 'Financial_Statement', wealth: 'Financial_Statement', doc_extract: 'Registry_Extract', doc_articles: 'Articles_of_Association' };
 
 function clientIp(req) {
   const f = req.headers.get('x-forwarded-for') || '';
@@ -85,7 +85,7 @@ export default async function (req) {
     // Checks: rules for age / name / address, the AI for the rest.
     const checks = normaliseChecks(step.checks || [], settings);
     const today = new Date().toISOString();
-    const context = { today, id_name: engine.datapoints?.full_name?.display || conversation.invited_name || '', address: engine.answers?.address || null, address_text: addressText(engine.answers?.address), max_age_months: settings.documentMaxAgeMonths || 3 };
+    const context = { today, id_name: step.person || engine.datapoints?.full_name?.display || conversation.invited_name || '', address: engine.answers?.address || null, address_text: addressText(engine.answers?.address), max_age_months: settings.documentMaxAgeMonths || 3 };
     let ai = { ok: false, error: 'not run' };
     try {
       const signed = (await base44.asServiceRole.integrations.Core.CreateFileSignedUrl({ file_uri: fileUri, expires_in: 600 }))?.signed_url;
@@ -94,7 +94,7 @@ export default async function (req) {
         ai = await checkDocumentAi({
           invokeLLM: (p) => base44.asServiceRole.integrations.Core.InvokeLLM(p),
           log: (row) => E.AiAgentRun.create({ tenant_id: tenantId, case_id: conversation.case_id || undefined, sources: [`outreach_evidence:${evidenceKey}`], ...row }),
-          tenant, signedUrl: signed, kind: datapointKey, label, checks, context,
+          tenant, signedUrl: signed, kind: datapointKey, label, checks, context, extract: !!step.read_extract,
         });
       }
     } catch (e) { ai = { ok: false, error: String(e?.message || e).slice(0, 200) }; }
