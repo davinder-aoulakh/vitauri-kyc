@@ -275,7 +275,6 @@ export default async function (req) {
       r.messages.forEach((m) => addMsg(m));
       await syncDatapoints(r.datapoints);
       const events = [...r.events, ...(await moveOn())];
-      await syncDatapoints(Object.keys(engine.datapoints).filter((k) => !r.datapoints.includes(k) && (engine.datapoints[k].history || []).length && false));
       await flushMsgs();
       await audit(toAudit(events));
       await reload();
