@@ -41,3 +41,27 @@ export function relationRows({ entity, dp = {} }) {
   for (const n of asArr(dp.ubos?.value?.ubos)) rows.push({ from_name: n, from_kind: 'person', to: ent, relation: 'ubo', effective_pct: shares[n] ?? null, source: 'calc' });
   return rows;
 }
+
+
+/**
+ * The tracker of block `invites` (spec 9.6): directors, UBOs and authorised representatives, one row per person.
+ * repName: the person the client declared to be (null for "None of these"). Owners below the UBO threshold who are
+ * not a director or representative need no check (note_threshold).
+ */
+export function inviteParties(dp = {}, { repName = null } = {}) {
+  const people = partiesOf(dp).filter((p) => p.kind === 'person' && p.roles.some((r) => ['Director', 'UBO', 'Authorized Signatory'].includes(r)));
+  const repKey = repName ? normName(repName) : null;
+  const rows = people.map((p) => ({
+    key: p.key, name: p.name, roles: p.roles.filter((r) => r !== 'Shareholder'), role_text: roleText(p.roles),
+    status: p.key === repKey ? 'Your check comes last' : 'To invite', is_rep: p.key === repKey,
+  }));
+  const below = partiesOf(dp).filter((p) => p.kind === 'person' && p.roles.length === 1 && p.roles[0] === 'Shareholder').map((p) => p.name);
+  return { rows, belowThreshold: below };
+}
+
+/** "Director", "UBO", "authorised representative" — for "{company} has asked you … as {role_text}". */
+export function roleText(roles = []) {
+  const map = { Director: 'Director', UBO: 'ultimate beneficial owner', 'Authorized Signatory': 'authorised representative', Shareholder: 'shareholder' };
+  const list = roles.filter((r) => map[r]).map((r) => map[r]);
+  return list.length ? list.join(' and ') : 'related party';
+}

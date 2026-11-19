@@ -51,5 +51,10 @@ export const MESSAGES = {
   companyFoundYes: 'Yes, same company',
   companyFoundNo: 'No, a different company',
   cannotFind: 'I cannot find my organisation',
+  noneOfThese: 'None of these',
+  invitationsSent: 'Invitations sent',
+  repDeclared: '{name} ({role}). To be verified by ID check at the end',
+  invitesPending: 'Please send an invitation to everyone in the list first.',
+  ownChecks: 'Own checks: {name}',
   notCurrent: 'This question was already answered. The conversation has been reloaded.',
 };

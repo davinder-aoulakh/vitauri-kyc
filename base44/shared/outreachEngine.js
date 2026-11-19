@@ -17,7 +17,7 @@ import { sameName } from './outreachIdv.js';
 import { failedNames, evidenceStatus } from './outreachDocRules.js';
 import { effectiveShares, ubos as uboList, structureTree, structureText, normName } from './outreachUbo.js';
 import { legalFormKind } from './outreachLegalForm.js';
-import { slug } from './outreachParties.js';
+import { slug, inviteParties, partiesOf } from './outreachParties.js';
 import { pickProvider, fallbackRoute, providerLabel } from './outreachRegistryProvider.js';
 import { isActiveStatus } from './outreachAdapters/diditRegistry.js';
 
@@ -92,8 +92,9 @@ function followUpStep(snapshot, state, blockKey, fu, vars, phrased = null) {
  * (the question of the step) and events are audit entries { event, notes, payload }.
  * Order: queued follow-ups first, then the next template item that is not done (inactive -> off, show_if false -> skipped).
  */
-export function advance(snapshot, prev, vars = {}) {
+export function advance(snapshot, prev, varsIn = {}) {
   const state = clone(prev);
+  const vars = { company: state.datapoints?.legal_name?.display || '', ...varsIn };
   const events = [];
   const messages = [];
   const now = vars.now || new Date().toISOString();
@@ -210,6 +211,7 @@ export function validateAnswer(step, value, state = {}) {
     return value?.name ? null : MESSAGES.required;
   }
   if (w === 'review') return value === 'confirmed' ? null : MESSAGES.required;
+  if (w === 'tracker') return value === 'sent' ? null : MESSAGES.invitesPending;
   if (w === 'people_list') {
     const l = Array.isArray(value) ? value.filter((p) => String(p?.name || '').trim()) : [];
     return l.length ? null : MESSAGES.peopleRequired;
@@ -572,6 +574,18 @@ function orgBlockStep(snapshot, state, key, vars, step) {
     const text = state.legal_form_kind === 'partnership' ? b.variants?.question_partnership : (state.route === 'nl' && parent ? b.variants?.question_nl : b.variants?.question_company);
     return { ...step, text: fillPlaceholders(text || '', { ...v, parent }), rows: parent && state.legal_form_kind !== 'partnership' ? [{ type: 'company', name: parent, pct: '' }] : null, mode: state.legal_form_kind === 'partnership' ? 'partners' : 'owners', threshold: v.ownerListThreshold, rest_note: fillPlaceholders(MESSAGES.ownersRest, v), over_note: MESSAGES.ownersOver };
   }
+  if (key === 'invites') {
+    const st = state.inv?.stage || 'who';
+    const n = askCount(state, key) + 1;
+    if (st === 'who') {
+      const names = partiesOf(state.datapoints).filter((p) => p.kind === 'person' && p.roles.some((r) => ['Director', 'UBO', 'Authorized Signatory'].includes(r))).map((p) => p.name);
+      return { ...step, id: `${key}:who:${n}`, sub: 'who', widget: 'chips', text: fillPlaceholders(b.variants?.question_who || '', v), options: [...names, MESSAGES.noneOfThese] };
+    }
+    const { rows, belowThreshold } = inviteParties(state.datapoints, { repName: state.inv?.rep || null });
+    const queueNote = vars.releaseInvitesAfterIdv !== false ? String(b.variants?.note_queue || '').replace(/\s*\(shown when[^)]*\)\s*$/i, '').trim() : '';
+    const threshold = belowThreshold.length ? fillPlaceholders(b.variants?.note_threshold || '', { ...v, names: belowThreshold.join(', ') }) : '';
+    return { ...step, id: `${key}:tracker:${n}`, sub: 'tracker', widget: 'tracker', text: [fillPlaceholders(step.text, v), queueNote].filter(Boolean).join('\n'), parties: rows, note: threshold || null };
+  }
   if (key === 'ubo') {
     const tree = orgTree(state, v.uboThreshold);
     const facts = tree.ubos.map((n) => ({ label: n, value: `${tree.shares[n]}%` }));
@@ -799,6 +813,34 @@ function orgApply(snapshot, state, step, value, extra, ctx) {
       state.queue.push({ block: key, fu: f.id });
     }
     return done(value);
+  }
+
+  if (key === 'invites' && step.kind === 'block' && step.sub === 'who') {
+    state.inv = { ...(state.inv || {}), stage: 'tracker' };
+    if (value === MESSAGES.noneOfThese) {
+      state.inv.rep = null;
+      state.answers = { ...(state.answers || {}), [key]: value };
+      for (const f of triggeredFollowUps(snapshot, state, key)) { state.fired.push(`${key}:${f.id}`); state.queue.push({ block: key, fu: f.id }); }
+      return done(value);
+    }
+    state.inv.rep = value;
+    const p = partiesOf(state.datapoints).find((x) => normName(x.name) === normName(value));
+    const dirRole = asList(state.datapoints.directors?.value).find((d) => normName(d.name) === normName(value))?.role;
+    const role = dirRole || (p?.roles || []).filter((r) => r !== 'Shareholder')[0] || '';
+    put('rep_role', { name: value, role }, fillPlaceholders(MESSAGES.repDeclared, { name: value, role }), 'rep');
+    events.push({ event: 'rep.declared', notes: `Representative declared as ${value}, not yet verified`, payload: { block: key, name: value } });
+    return done(value, { reask: true });
+  }
+  if (key === 'invites' && step.kind === 'follow_up' && step.fu_id === 'role') {
+    put('rep_role', { name: null, role: String(value).trim() }, String(value).trim(), 'rep');
+    events.push({ event: 'rep.declared', notes: `Representative is not one of the listed people (role: ${String(value).trim()}), not yet verified`, payload: { block: key, name: null } });
+    state.queue = state.queue.slice(1);
+    return done(String(value).trim(), { reask: true });
+  }
+  if (key === 'invites' && step.sub === 'tracker') {
+    const names = (step.parties || []).filter((r) => !r.is_rep).map((r) => r.name);
+    put('invites', names, names.join(', '), 'calc');
+    return done(MESSAGES.invitationsSent);
   }
 
   // queued ORG entries
