@@ -29,7 +29,7 @@ const SOURCE_LABEL = {
 export const sourceLabel = (s) => SOURCE_LABEL[s] || s || '';
 const UPLOAD_ACTIONS = ['ask_file'];
 export const MAX_RE_REQUESTS = 2;
-const ASK_ACTIONS = ['ask_text', 'ask_area', 'ask_choice', 'ai_followup', 'ask_file'];
+const ASK_ACTIONS = ['ask_text', 'ask_area', 'ask_choice', 'ai_followup', 'ask_file', 'ask_people', 'ask_file_per_person'];
 
 /** A fresh state for a conversation. */
 export function initialState({ risk = 'medium', route = null, legal_form_kind = null } = {}) {
@@ -95,6 +95,7 @@ export function advance(snapshot, prev, vars = {}) {
   const events = [];
   const messages = [];
   const now = vars.now || new Date().toISOString();
+  if (state.stopped) return { state, step: null, done: false, paused: true, messages, events };
   if (state.queue.length) {
     const { block, fu } = state.queue[0];
     const f = (blockOf(snapshot, block)?.follow_ups || []).find((x) => x.id === fu);
@@ -636,9 +637,15 @@ function orgApply(snapshot, state, step, value, extra, ctx) {
   };
   const put = (k, value2, display, source, extraDp = {}) => { putDatapoint(state, { key: k, label: extraDp.label || labelFor(snapshot, key, k), value: value2, display, source, block_key: key, ...extraDp }, now); changed.push(k); };
 
-  // country: the route (6a: always the document route) and the stop for a blocked jurisdiction
-  if (step.kind === 'block' && key === 'country') return null; // generic; route set in afterCountry()
-  if (step.kind === 'follow_up' && key === 'country') return null;
+  // country: the route (6a: always the document route) and the stop for a blocked jurisdiction; then the generic handling
+  if (key === 'country' && (step.kind === 'follow_up' || value !== (b?.options || []).slice(-1)[0])) {
+    state.country = String(value).trim();
+    state.route = 'document';
+    const blocked = asList(extra.blockedJurisdictions).map((x) => String(x).toLowerCase()).includes(state.country.toLowerCase());
+    events.push({ event: 'route.selected', notes: blocked ? `${state.country}: blocked jurisdiction` : `${state.country} routes to the document route (no register link: the client supplies the documents)`, payload: { country: state.country, route: 'document', blocked } });
+    if (blocked) { state.stopped = true; messages.push({ author_type: 'bank', kind: 'message', block_key: key, text: fillPlaceholders(MESSAGES.blockedJurisdiction, { country: state.country }) }); }
+    return null;
+  }
 
   if (step.kind === 'block' && b?.widget === 'registry_search') {
     state.reg = { stage: 'extract', ...(state.reg || {}) };
@@ -760,11 +767,3 @@ function queueCompanies(state, list, path) {
   state.queue.unshift(...add);
 }
 
-/** After the country answer: the route (6a: document) and a blocked jurisdiction. Called by the portal. */
-export function afterCountry(prev, { country, blocked = [] }) {
-  const state = clone(prev);
-  state.country = country;
-  state.route = 'document';
-  const isBlocked = blocked.map((x) => String(x).toLowerCase()).includes(String(country || '').toLowerCase());
-  return { state, blocked: isBlocked, events: [{ event: 'route.selected', notes: isBlocked ? `${country}: blocked jurisdiction` : `${country} routes to the document route (no register link: the client supplies the documents)`, payload: { country, route: 'document', blocked: isBlocked } }] };
-}
