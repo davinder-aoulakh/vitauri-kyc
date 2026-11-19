@@ -57,14 +57,37 @@ export default function ApprovalsAndEvidence({ kycCase, canWork, reloadKey }) {
   }
 
   if (!canWork || !data) return null;
-  const { pending = [], evidence = [] } = data;
-  if (!pending.length && !evidence.length) return null;
+  const { pending = [], evidence = [], invites = [] } = data;
+  if (!pending.length && !evidence.length && !invites.length) return null;
+  const queuedConvs = [...new Set(invites.filter((i) => i.status === 'Queued').map((i) => i.conversation_id))];
+  async function release(conversationId) {
+    try {
+      const r = await base44.functions.invoke('manageOutreachConversation', { action: 'release_invites', conversation_id: conversationId, portal_origin: window.location.origin });
+      toast({ title: r.data?.released?.length ? `Invitations sent: ${r.data.released.join(', ')}` : 'Nothing to release' });
+      load();
+    } catch (e) { toast({ title: 'Not released', description: errText(e), variant: 'destructive' }); }
+  }
   return (
     <div className="mt-3 space-y-3">
       {pending.length > 0 && (
         <div className="space-y-2">
           <div className="text-xs font-semibold">Waiting for your approval ({pending.length})</div>
           {pending.map((p) => <Pending key={`${p.conversation_id}:${p.block_key}`} p={p} onDone={load} />)}
+        </div>
+      )}
+      {invites.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 text-xs font-semibold">Invitations for own checks
+            {queuedConvs.map((cid) => <Button key={cid} size="sm" variant="outline" className="ml-auto h-6 text-xs" onClick={() => release(cid)} title="Until the representative's ID check releases them (phase 8), staff can send queued invitations here. Audited.">Release queued invitations</Button>)}
+          </div>
+          <ul className="mt-1 divide-y divide-border rounded-lg border border-border text-xs">
+            {invites.map((i) => (
+              <li key={i.id} className="flex flex-wrap items-center gap-2 p-2">
+                <span className="font-medium">{i.name}</span><span className="text-muted-foreground">{i.roles}</span><span className="text-muted-foreground">{i.email}</span>
+                <Badge variant="outline" className="ml-auto text-[10px]">{i.status}</Badge>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       {evidence.length > 0 && (

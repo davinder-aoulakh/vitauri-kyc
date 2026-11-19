@@ -139,3 +139,12 @@
 .oc .oc-node.co{border-radius:8px;background:#f3f6f5}
 .oc .oc-node.root{font-weight:600}
 .oc .oc-node.ubo{border-color:var(--brand,#12342b);background:color-mix(in srgb,var(--brand,#12342b) 10%,#fff);font-weight:600}
+
+/* Phase 7: invitation tracker */
+.oc .oc-track{flex-direction:column;align-items:stretch !important}
+.oc .oc-status-pill{display:inline-block;margin-left:8px;font-size:11px;padding:1px 8px;border-radius:999px;background:#eef2f1;color:var(--muted,#5b6b66)}
+.oc .oc-status-pill.todo{background:#fff4e5;color:#8a4b00}
+.oc .oc-status-pill.queued{background:#eef2ff;color:#3730a3}
+.oc .oc-status-pill.sent{background:#e8f4ff;color:#075985}
+.oc .oc-status-pill.done{background:#e7f6ec;color:#137a43}
+.oc .oc-status-pill.rep{background:#f3f6f5;color:#12342b}

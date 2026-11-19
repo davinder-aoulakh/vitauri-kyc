@@ -95,5 +95,9 @@ export const OC = {
   results: 'Search results',
   noResults: 'No organisation found. Try another spelling or the registration number.',
   cannotFind: 'I cannot find my organisation',
+  inviteStatus: { 'Your check comes last': 'Your check comes last', 'To invite': 'To invite', Queued: 'Queued', Invited: 'Invited', Opened: 'Opened', Completed: 'Completed', Declined: 'Declined', Expired: 'Expired' },
+  emailOf: (n) => `Email address of ${n}`,
+  sendInvitation: 'Send invitation',
+  inviteLeft: (n) => (n === 1 ? '1 person still to invite' : `${n} people still to invite`),
   needHelp: 'Need help?',
 };

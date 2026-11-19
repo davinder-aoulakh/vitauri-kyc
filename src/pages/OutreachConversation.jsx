@@ -252,6 +252,19 @@ export default function OutreachConversation() {
     }
   }, [token, open, v?.step?.id]);
 
+  // Tracker: "Send invitation" for one person.
+  const onInvite = useCallback(async (partyKey, email) => {
+    try {
+      const r = await call('invite', { party_key: partyKey, email, portal_origin: window.location.origin });
+      setV(r.data);
+      return r.data;
+    } catch (e) {
+      const { status, message } = errOf(e);
+      if (status === 409) { await open(); return null; }
+      return { error: message || OC.notSaved };
+    }
+  }, [call, open]);
+
   // An AI follow-up waits for a colleague's approval: look again every 5 seconds.
   useEffect(() => {
     if (v?.step?.widget !== 'wait') return undefined;
@@ -316,7 +329,7 @@ export default function OutreachConversation() {
               <button type="button" className="oc-chip" disabled={busy} onClick={onStart}>{v.start_chip}</button>
             </div>
           )}
-          {revealed && v.step && !v.submitted && <Widget key={v.step.id} step={v.step} view={v} busy={busy} onAnswer={onAnswer} onEdit={onEdit} onIdv={onIdv} onUpload={onUpload} onRegistry={onRegistry} />}
+          {revealed && v.step && !v.submitted && <Widget key={v.step.id} step={v.step} view={v} busy={busy} onAnswer={onAnswer} onEdit={onEdit} onIdv={onIdv} onUpload={onUpload} onRegistry={onRegistry} onInvite={onInvite} />}
           {fieldErr && <p className="oc-err" role="alert">{fieldErr}</p>}
           {saveErr && (
             <div className="oc-chips" role="alert">

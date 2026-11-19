@@ -13,9 +13,10 @@ import Upload from './Upload';
 import PeopleList from './PeopleList';
 import OwnersBuilder from './OwnersBuilder';
 import RegistrySearch from './RegistrySearch';
+import Tracker from './Tracker';
 
 /** The widget for the server's current step (spec 5.2). Widgets of later phases (ORG) are not rendered yet. */
-export default function Widget({ step, view, busy, onAnswer, onEdit, onIdv, onUpload, onRegistry }) {
+export default function Widget({ step, view, busy, onAnswer, onEdit, onIdv, onUpload, onRegistry, onInvite }) {
   const p = { step, busy, onAnswer };
   switch (step.widget) {
     case 'chips': return <Chips {...p} />;
@@ -27,6 +28,7 @@ export default function Widget({ step, view, busy, onAnswer, onEdit, onIdv, onUp
     case 'form': return <FormFields {...p} />;
     case 'people_list': return <PeopleList {...p} />;
     case 'owners_builder': return <OwnersBuilder {...p} />;
+    case 'tracker': return <Tracker {...p} onInvite={onInvite} />;
     case 'registry_search': return <RegistrySearch {...p} onRegistry={onRegistry} />;
     case 'review': return <Review {...p} onEdit={onEdit} />;
     case 'sign': return <Sign {...p} />;
