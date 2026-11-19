@@ -130,11 +130,12 @@ test('an edit in the review keeps earlier follow-up answers and asks only what i
   const { s, lines } = run(script, { onStep: (k, st, audit) => (k === 'review' ? E.applyEdit(snap, st, 'employment', 'Self-employed').state : st) });
   // the company question was not asked before, so it is asked now, before the review continues
   assert.ok(lines.some((l) => l[1] === 'What is the name of your company?'));
-  assert.equal(s.datapoints.company?.display, undefined === s.datapoints.company ? undefined : s.datapoints.company.display);
+  assert.equal(lines.filter((l) => l[1] === 'What is the name of your company?').length, 1);
+  assert.equal(s.datapoints.company.display, 'Carter Consulting');
+  assert.equal(s.datapoints.employment.display, 'Self-employed');
 });
 
 test('validation: email format, phone length, address parts, none-option, sign name', () => {
-  const b = (k) => ({ ...E.advance(snap, E.initialState(), vars).step, widget: k });
   assert.ok(E.validateAnswer({ widget: 'text', fu_id: 'other_email' }, 'not-an-email'));
   assert.equal(E.validateAnswer({ widget: 'text', fu_id: 'other_email' }, 'a@b.co'), null);
   assert.ok(E.validateAnswer({ widget: 'phone' }, { code: '+44', number: '1234' }));
@@ -148,7 +149,6 @@ test('validation: email format, phone length, address parts, none-option, sign n
   assert.ok(E.validateAnswer({ widget: 'sign' }, { terms: false, typed_name: 'John Carter', signature: 'x' }, state));
   assert.ok(E.validateAnswer({ widget: 'upload', allow_defer: false }, { deferred: true }));
   assert.equal(E.validateAnswer({ widget: 'upload', allow_defer: true }, { deferred: true }), null);
-  assert.ok(b);
 });
 
 test('a deferred deed: open request kind of answer, block counts as done, conversation can still finish', () => {
