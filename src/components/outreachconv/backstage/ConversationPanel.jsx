@@ -11,6 +11,7 @@ import { toast } from '@/components/ui/use-toast';
 import { Copy, Loader2, MessagesSquare, Send } from 'lucide-react';
 import { format } from 'date-fns';
 import ApprovalsAndEvidence from './ApprovalsAndEvidence';
+import Backstage from './Backstage';
 
 const list = (r) => (Array.isArray(r) ? r : r?.items || []);
 const fmt = (d) => { try { return d ? format(new Date(d), 'd MMM yyyy HH:mm') : '—'; } catch { return '—'; } };
@@ -24,6 +25,7 @@ const IDV_LABEL = { Pass: 'Approved', Fail: 'Declined', Inconclusive: 'In review
 const IDV_TONE = { Pass: 'border-emerald-300 text-emerald-800', Fail: 'border-red-300 text-red-800', Inconclusive: 'border-amber-300 text-amber-800', Expired: 'border-slate-300 text-slate-700' };
 
 export default function ConversationPanel({ kycCase, client, currentUser }) {
+  const [bs, setBs] = useState(null); // conversation shown in "Behind the scenes"
   const [rows, setRows] = useState(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -87,7 +89,7 @@ export default function ConversationPanel({ kycCase, client, currentUser }) {
           <table className="w-full text-xs">
             <thead><tr className="border-b border-border text-left text-muted-foreground">
               <th className="py-1.5 pr-3 font-medium">Template</th><th className="py-1.5 pr-3 font-medium">Invited</th><th className="py-1.5 pr-3 font-medium">Status</th>
-              <th className="py-1.5 pr-3 font-medium">Sent</th><th className="py-1.5 pr-3 font-medium">First opened</th><th className="py-1.5 pr-3 font-medium">Deadline</th><th className="py-1.5 font-medium">Progress</th>
+              <th className="py-1.5 pr-3 font-medium">Sent</th><th className="py-1.5 pr-3 font-medium">First opened</th><th className="py-1.5 pr-3 font-medium">Deadline</th><th className="py-1.5 pr-3 font-medium">Progress</th><th className="py-1.5 font-medium"><span className="sr-only">Behind the scenes</span></th>
             </tr></thead>
             <tbody>
               {rows.map((c) => (
@@ -98,7 +100,8 @@ export default function ConversationPanel({ kycCase, client, currentUser }) {
                   <td className="py-1.5 pr-3">{fmt(c.sent_at)}<span className="block text-muted-foreground">{c.sent_by}</span></td>
                   <td className="py-1.5 pr-3">{fmt(c.first_opened_at)}</td>
                   <td className="py-1.5 pr-3">{fmt(c.deadline)}</td>
-                  <td className="py-1.5">{c.progress_steps || 0} / {c.progress_total || 0}</td>
+                  <td className="py-1.5 pr-3">{c.progress_steps || 0} / {c.progress_total || 0}</td>
+                  <td className="py-1.5"><Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setBs(c.id)}>Behind the scenes</Button></td>
                 </tr>
               ))}
             </tbody>
@@ -106,6 +109,7 @@ export default function ConversationPanel({ kycCase, client, currentUser }) {
         </div>
       )}
       <ApprovalsAndEvidence kycCase={kycCase} canWork={canWork} reloadKey={rows?.length || 0} />
+      <Backstage conversationId={bs} open={!!bs} onOpenChange={(o) => { if (!o) setBs(null); }} />
       <Dialog open={open} onOpenChange={(v) => !busy && setOpen(v)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
