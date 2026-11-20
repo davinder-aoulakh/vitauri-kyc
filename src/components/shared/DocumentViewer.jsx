@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { getSignedUrl } from '@/lib/securityUtils';
 import { Button } from '@/components/ui/button';
 import { X, Download, FileText } from 'lucide-react';
 
@@ -43,8 +44,36 @@ function decodeDataHtml(dataUrl) {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
+// A private file reference (UploadPrivateFile, e.g. guided-conversation uploads and Didit copies) is opened through a
+// short-lived signed URL; public, data: and blob: URLs are shown as before.
+const isPrivateRef = (u) => !!u && !/^(https?:|data:|blob:)/i.test(u);
+
 export default function DocumentViewer({ fileUrl, fileName, onClose }) {
+  const [resolved, setResolved] = useState(isPrivateRef(fileUrl) ? null : fileUrl);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    setFailed(false);
+    if (!isPrivateRef(fileUrl)) { setResolved(fileUrl); return undefined; }
+    setResolved(null);
+    getSignedUrl(fileUrl, 600).then((u) => { if (live) { if (u) setResolved(u); else setFailed(true); } }).catch(() => { if (live) setFailed(true); });
+    return () => { live = false; };
+  }, [fileUrl]);
   if (!fileUrl) return null;
+  if (!resolved) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" role="dialog" aria-label={fileName}>
+        <div className="rounded-lg bg-background p-4 text-sm">
+          {failed ? 'This file could not be opened.' : 'Opening file…'}
+          <Button size="sm" variant="ghost" className="ml-3" onClick={onClose}><X className="h-4 w-4" /></Button>
+        </div>
+      </div>
+    );
+  }
+  return <DocumentViewerBody fileUrl={resolved} fileName={fileName} onClose={onClose} />;
+}
+
+function DocumentViewerBody({ fileUrl, fileName, onClose }) {
 
   const fileType = detectFileType(fileUrl, fileName);
 
