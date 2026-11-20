@@ -229,6 +229,8 @@ function extractFromOutreach(outreaches: any[], isOrg: boolean, templateFields: 
         }
         continue;
       }
+      // Guided conversation answers without a KYC field link are shown as answers only (outreach plan decision 18)
+      if (item.origin === 'conversation') continue;
 
       if (label.includes('e-mail') || label.includes('email')) push('primary_contact_email', val, ref, 80);
       if (/phone|mobile|telefoon/.test(label)) push('primary_contact_phone', val, ref, 80);

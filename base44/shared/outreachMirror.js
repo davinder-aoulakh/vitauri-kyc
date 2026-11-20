@@ -36,7 +36,9 @@ export function mirrorItems({ datapoints = [], evidence = [], blocks = {}, now =
     if (!row?.key || row.status === 'deferred') continue;
     const def = defOf(blocks, row) || {};
     if (def.type === 'file') continue; // files come from the evidence rows
-    const value = row.value && typeof row.value === 'object' && 'v' in row.value ? row.value.v : row.value;
+    let value = row.value && typeof row.value === 'object' && 'v' in row.value ? row.value.v : row.value;
+    // the conversation's address uses postcode; the KYC address uses zipcode (readers of response_value expect it)
+    if (value && typeof value === 'object' && !Array.isArray(value) && 'postcode' in value && !('zipcode' in value)) value = { ...value, zipcode: value.postcode };
     const text = String(row.display_value ?? asText(value) ?? '').trim();
     if (!text && (value == null || value === '')) continue;
     items.push({
