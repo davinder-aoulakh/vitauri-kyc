@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Plus, Save, Send, Trash2 } from 'lucide-react';
 import ConditionBuilder from './ConditionBuilder';
 import JsonField from './JsonField';
+import { PROFILE_FIELDS } from '@/lib/profileFieldMap';
 import { WIDGET_OPTIONS, FOLLOW_UP_ACTIONS, SOURCE_LABEL } from '@/lib/outreachConfigView';
 
 const sel = 'h-9 w-full rounded-md border border-border bg-background px-2 text-sm';
@@ -35,6 +36,11 @@ export default function BlockEditor({ open, onOpenChange, entry, isNew, allBlock
   }, [open, row?.id]);
   const set = (k, v) => setB((x) => ({ ...x, [k]: v }));
   const setJson = (k) => (r) => { setJsonErr((e) => ({ ...e, [k]: r.error || '' })); if (!r.error) set(k, r.value); };
+  const [dpRev, setDpRev] = useState(0); // remounts the datapoints JSON field after a KYC-field pick
+  const setProfileField = (i, pf) => {
+    const next = (b.datapoints || []).map((d, j) => { if (j !== i) return d; const { profile_field: _old, ...rest } = d; return pf ? { ...rest, profile_field: pf } : rest; });
+    set('datapoints', next); setDpRev((n) => n + 1);
+  };
   const condBlocks = useMemo(() => allBlocks.map((x) => ({ key: x.key, label: x.label, options: x.options || [] })), [allBlocks]);
   const hasJsonErr = Object.values(jsonErr).some(Boolean);
   const ro = !canEdit;
@@ -114,7 +120,23 @@ export default function BlockEditor({ open, onOpenChange, entry, isNew, allBlock
             })}
           </div>
 
-          <JsonField label="Datapoints" kind="array" rows={6} hint={`[{ "key", "label", "type", "sources": [${Object.keys(SOURCE_LABEL).map((s) => `"${s}"`).join(', ')}], "profile_field" }]`} value={b.datapoints || []} onChange={setJson('datapoints')} />
+          <JsonField key={`dp-${dpRev}`} label="Datapoints" kind="array" rows={6} hint={`[{ "key", "label", "type", "sources": [${Object.keys(SOURCE_LABEL).map((s) => `"${s}"`).join(', ')}], "profile_field" }]`} value={b.datapoints || []} onChange={setJson('datapoints')} />
+          {(b.datapoints || []).filter((d) => d?.key && d.type !== 'file').length > 0 && (
+            <div className="rounded-md border border-border p-2 text-xs">
+              <div className="mb-1 font-medium">KYC field per datapoint <span className="font-normal text-muted-foreground">(feeds profile suggestions when the answer is copied to the case; empty = shown as an answer only)</span></div>
+              <div className="grid gap-1 sm:grid-cols-2">
+                {(b.datapoints || []).map((d, i) => (d?.key && d.type !== 'file') ? (
+                  <label key={`${d.key}-${i}`} className="flex items-center gap-2">
+                    <span className="w-32 truncate" title={d.label || d.key}>{d.label || d.key}</span>
+                    <select className="flex-1 rounded border border-border bg-background px-1 py-0.5" value={d.profile_field || ''} disabled={!canEdit || busy} onChange={(e) => setProfileField(i, e.target.value)}>
+                      <option value="">— none —</option>
+                      {PROFILE_FIELDS.map((f) => <option key={f.key} value={f.key}>{f.label}{f.clients ? ` (${f.clients.join('/')})` : ''}</option>)}
+                    </select>
+                  </label>
+                ) : null)}
+              </div>
+            </div>
+          )}
           <JsonField label="Evidence" hint='{ "required", "allow_defer", "defer_creates_open_request", "document_checks": [], "max_age_months" }' value={b.evidence || null} onChange={setJson('evidence')} />
           <div className="grid gap-3 sm:grid-cols-2">
             <JsonField label="Variants" hint="Alternative texts, e.g. per legal form or route." value={b.variants || null} onChange={setJson('variants')} />
