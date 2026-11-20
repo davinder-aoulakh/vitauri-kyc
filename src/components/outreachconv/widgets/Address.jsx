@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { OC } from '@/lib/outreachConvStrings';
+import CountryPicker from './CountryPicker';
 /** Residential address: country, postcode, house number, street, city. All required. */
 export default function Address({ countries, busy, onAnswer }) {
   const list = countries?.length ? countries : [];
@@ -8,10 +9,9 @@ export default function Address({ countries, busy, onAnswer }) {
   const ok = ['country', 'postcode', 'number', 'street', 'city'].every((k) => String(a[k]).trim());
   return (
     <form className="oc-form oc-grid2" onSubmit={(e) => { e.preventDefault(); if (ok) onAnswer(a); }}>
-      <label className="oc-lbl oc-span2">{OC.country}
-        {list.length ? <select className="oc-in" value={a.country} onChange={set('country')} disabled={busy}>{list.map((c) => <option key={c}>{c}</option>)}</select>
-          : <input className="oc-in" value={a.country} onChange={set('country')} disabled={busy} autoComplete="country-name" />}
-      </label>
+      <div className="oc-lbl oc-span2"><label htmlFor="oc-addr-country">{OC.country}</label>
+        <CountryPicker id="oc-addr-country" value={a.country} common={list} disabled={busy} onChange={(c) => setA((x) => ({ ...x, country: c }))} />
+      </div>
       <label className="oc-lbl">{OC.postcode}<input className="oc-in" value={a.postcode} onChange={set('postcode')} disabled={busy} autoComplete="postal-code" /></label>
       <label className="oc-lbl">{OC.houseNumber}<input className="oc-in" value={a.number} onChange={set('number')} disabled={busy} /></label>
       <label className="oc-lbl">{OC.street}<input className="oc-in" value={a.street} onChange={set('street')} disabled={busy} autoComplete="address-line1" /></label>

@@ -156,3 +156,13 @@
 .oc-composer { display: flex; gap: 8px; align-items: flex-end; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--oc-line, #e5e7eb); }
 .oc-composer .oc-in { flex: 1; resize: vertical; min-height: 44px; font-size: 16px; }
 .oc-composer .oc-btn { min-height: 44px; }
+
+/* Country picker: every country with its flag, searchable */
+.oc-cpick{position:relative}
+.oc .oc-cpick-btn{display:flex;align-items:center;gap:8px;width:100%;text-align:left;cursor:pointer;background:var(--surface);color:var(--ink)}
+.oc-cpick-caret{margin-left:auto;color:var(--muted)}
+.oc-cpick-pop{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:8px}
+.oc-cpick-list{list-style:none;margin:6px 0 0;padding:0;max-height:260px;overflow-y:auto;overscroll-behavior:contain}
+.oc-cpick-list li{display:flex;align-items:center;gap:8px;min-height:40px;padding:6px 8px;border-radius:8px;cursor:pointer;color:var(--ink)}
+.oc-cpick-list li.on{background:var(--brand-soft)}
+.oc-cpick-list li.oc-cpick-sep{border-bottom:1px solid var(--line);border-radius:8px 8px 0 0;margin-bottom:4px}
