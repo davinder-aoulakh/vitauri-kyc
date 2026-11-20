@@ -5,7 +5,9 @@
 //   save_block { key?, block }                   -> creates or updates the draft of a block (version + 1 over the published one)
 //   publish_block { key }                        -> the draft becomes the published version
 //   save_template { key?, template }             -> draft of a template;  publish_template { key }
-//   toggle_template_item { key, block_key, active } -> per-template Active switch (on the draft)
+//   toggle_template_item { key, block_key, active, publish? } -> per-template Active switch (on the draft; publish: true
+//                                                  = backstage switch: new published version at once, next request only)
+//   costs { months? }                            -> OutreachAdapterCall totals per vendor, operation, environment and month
 //   save_settings { settings }                   -> Tenant.outreach_settings through cleanSettings
 //   integration_status                           -> registry in use, KvK mode, key set + last 4 (Vitauri Ops)
 //   set_integration { kvk_mode?, kvk_api_key? }  -> Vitauri Ops only; the key is never returned
@@ -110,6 +112,22 @@ export default async function (req) {
     if (!canEdit) throw httpError(403, 'Only a Tenant Admin or Compliance Admin can change the outreach configuration');
     const blockKeys = [...new Set(blocks.map((b) => b.key))];
 
+    if (action === 'costs') {
+      // AT 37 / plan phase 10: adapter calls and their cost per tenant (no keys, no personal data)
+      const months = Math.min(Math.max(Number(body.months) || 3, 1), 24);
+      const since = new Date(Date.now() - months * 31 * 86400000).toISOString();
+      const calls = asList(await E.OutreachAdapterCall.filter({ tenant_id: tenantId, created_date: { $gte: since } }, '-created_date', 5000).catch(() => []));
+      const rows = {};
+      for (const c of calls) {
+        const month = String(c.created_date || '').slice(0, 7);
+        const k = [month, c.vendor || '?', c.operation || '?', c.environment || '?'].join('|');
+        const r = (rows[k] = rows[k] || { month, vendor: c.vendor || '?', operation: c.operation || '?', environment: c.environment || '?', calls: 0, errors: 0, cost_eur: 0 });
+        r.calls += 1; if (c.status && c.status !== 'ok') r.errors += 1; r.cost_eur += Number(c.cost_eur) || 0;
+      }
+      const list = Object.values(rows).map((r) => ({ ...r, cost_eur: Math.round(r.cost_eur * 100) / 100 })).sort((a, b) => b.month.localeCompare(a.month) || a.vendor.localeCompare(b.vendor));
+      return Response.json({ ok: true, months, rows: list, total_eur: Math.round(list.reduce((t, r) => t + r.cost_eur, 0) * 100) / 100, calls: calls.length });
+    }
+
     if (action === 'seed_email_templates') {
       // phase 9: adds the conversation email situations the tenant does not have yet (existing rows are never changed)
       const existing = asList(await E.EmailTemplate.filter({ tenant_id: tenantId }, undefined, 200).catch(() => []));
@@ -170,13 +188,20 @@ export default async function (req) {
       const key = String(body.key || '');
       const v = versionsByKey(templates)[key];
       if (!v) throw httpError(404, 'Template not found');
+      if (body.publish === true && v.draft) throw httpError(409, 'This template has unpublished changes. Switch the block in Tenant Config, then publish.');
       const src = v.draft || v.published;
       const items = (src.items || []).map((it) => (it.block_key === body.block_key ? { ...it, active: body.active === true } : it));
       if (!items.some((it) => it.block_key === body.block_key)) throw httpError(404, 'Block is not on this template');
       let row;
       if (v.draft) { await E.OutreachFlowTemplate.update(v.draft.id, { items }); row = { ...v.draft, items }; }
       else row = await E.OutreachFlowTemplate.create({ ...draftFrom(v.published, TEMPLATE_FIELDS, nextVersion(templates, key)), items, tenant_id: tenantId });
-      await audit('outreach.config.changed', `Template "${key}": block "${body.block_key}" switched ${body.active === true ? 'on' : 'off'} (draft v${row.version}).`,
+      if (body.publish === true) {
+        const published = Object.fromEntries(Object.entries(versionsByKey(blocks)).map(([k, x]) => [k, x.published]).filter(([, p]) => p));
+        const pinned = pinItems(items, published);
+        await E.OutreachFlowTemplate.update(row.id, { status: 'published', published_at: now(), published_by: actor.name, items: pinned });
+        row = { ...row, status: 'published', items: pinned };
+      }
+      await audit('outreach.config.changed', `Template "${key}": block "${body.block_key}" switched ${body.active === true ? 'on' : 'off'} (${body.publish === true ? `published v${row.version}; applies to the next request` : `draft v${row.version}`}).`,
         { kind: 'template', key, block_key: body.block_key }, { kind: 'template', key, block_key: body.block_key, active: body.active === true, version: row.version });
       return Response.json({ ok: true, row });
     }
