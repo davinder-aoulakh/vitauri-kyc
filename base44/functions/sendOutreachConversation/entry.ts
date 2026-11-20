@@ -104,7 +104,7 @@ export default async function (req) {
     let emailError = null;
     if (body.send_email !== false) {
       const deadlineDate = new Date(dates.deadline).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-      const mail = inviteEmail({ templates: emailTemplates, clientType, vars: { first_name: firstName, tenant_name: tenant.name, link, deadline_date: deadlineDate, minutes: template.expected_minutes || '' } });
+      const mail = inviteEmail({ templates: emailTemplates, clientType, vars: { first_name: firstName, company: clientType === 'ORG' ? (client.full_name || '') : '', tenant_name: tenant.name, link, deadline_date: deadlineDate, minutes: template.expected_minutes || '' } });
       try {
         await base44.asServiceRole.integrations.Core.SendEmail({
           from_name: tenant.email_from_name || tenant.name || 'Compliance Team',

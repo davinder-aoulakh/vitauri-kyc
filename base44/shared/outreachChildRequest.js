@@ -62,7 +62,7 @@ export async function createChildConversation({ base44, tenant, parent, party, e
   let emailError = null;
   try {
     const link = `${origin}/o/${token}`;
-    const mail = inviteEmail({ templates: emailTemplates, clientType: 'RP', vars: { first_name: firstName, tenant_name: tenant?.name || '', link, deadline_date: new Date(dates.deadline).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }), minutes: template.expected_minutes || '' } });
+    const mail = inviteEmail({ templates: emailTemplates, clientType: 'RP', vars: { first_name: firstName, company, tenant_name: tenant?.name || '', link, deadline_date: new Date(dates.deadline).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }), minutes: template.expected_minutes || '' } });
     await base44.asServiceRole.integrations.Core.SendEmail({ from_name: tenant?.email_from_name || tenant?.name || 'Compliance Team', ...(tenant?.email_from_address ? { from_email: tenant.email_from_address } : {}), to, subject: mail.subject, body: mail.body });
     emailed = true;
   } catch (e) { emailError = String(e?.message || e).slice(0, 200); }
