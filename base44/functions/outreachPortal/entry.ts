@@ -15,6 +15,8 @@
 //   idv_status                                    -> pulls the Didit result when the webhook is late (getDiditSessionResult) and
 //                                                    applies a stored decision: approved / in review continue, declined re-offers
 //   request_new_link                              -> on an expired link: notifies the assigned analyst (once)
+//   message { client_answer_id, text, open_request_id? } -> phase 9 composer (after submission) or the answer to an analyst
+//                                                    question: client message, automatic reply or confirmation, staff notified
 // The ID&V step uses the real Didit session of the carrier's 'idv' item (phase 4). Uploads go to outreachUpload (private storage,
 // checks); the answer then names the OutreachEvidence row. AI follow-ups are phrased here and, for Medium/High risk, held for an
 // analyst's approval (manageOutreachConversation); the client sees a short waiting line meanwhile (spec 6.2).
@@ -34,6 +36,8 @@ import { normName } from '../../shared/outreachUbo.js';
 import { kvkSearch } from '../../shared/outreachAdapters/kvk.js';
 import { inviteTransition, canContinue } from '../../shared/outreachInvites.js';
 import { createChildConversation } from '../../shared/outreachChildRequest.js';
+import { clientMessageMessages, cleanMessage, answeredMessage } from '../../shared/outreachSecondRound.js';
+import { tenantUsers, roleOf } from '../../shared/tmCaseCommon.js';
 
 // ORG conversations stop before these blocks until phase 8 delivers them (business profile, documents by legal form,
 // the representative's ID check, review and the organisation's signature).
@@ -61,7 +65,7 @@ function tenantView(tenant) {
 }
 
 function messageView(m) {
-  return { id: m.id, seq: m.seq, author_type: m.author_type, author_name: m.author_name || null, kind: m.kind, block_key: m.block_key || null, tag: m.tag || null, ai_assisted: !!m.ai_assisted, text: m.display_text || '', why: m.payload?.why || null, card: m.kind === 'status_card' || m.kind === 'structure_card' ? (m.payload || null) : null, checks: m.kind === 'idv_checks' ? (m.payload?.checks || null) : null, status: m.status || 'sent', created_at: m.created_date };
+  return { id: m.id, seq: m.seq, author_type: m.author_type, author_name: m.author_name || null, kind: m.kind, block_key: m.block_key || null, tag: m.tag || null, ai_assisted: !!m.ai_assisted, text: m.display_text || '', why: m.payload?.why || null, card: m.kind === 'status_card' || m.kind === 'structure_card' ? (m.payload || null) : null, checks: m.kind === 'idv_checks' ? (m.payload?.checks || null) : null, status: m.status || 'sent', created_at: m.created_date, request: m.payload?.open_request_id ? { id: m.payload.open_request_id, request_type: m.payload.request_type || 'document', widget: m.payload.widget || 'upload' } : null };
 }
 
 /** What the browser may see of a step (no conditions, no follow-up rules). */
@@ -227,7 +231,9 @@ export default async function (req) {
     const finish = async (extra = {}) => {
       if (step?.widget === 'idv') await decorateIdvStep(idvItemOf(await reloadCarrier()));
       await decorateTracker();
-      return Response.json({ ...view(), ...extra });
+      const opens = asList(await E.OutreachOpenRequest.filter({ tenant_id: tenantId, conversation_id: conversation.id, kind: { $in: ['analyst_request', 'deferred_evidence'] } }, 'created_date', 50).catch(() => []));
+      const open_requests = opens.map((o) => ({ id: o.id, title: o.title, text: o.text || '', request_type: o.request_type || (o.kind === 'deferred_evidence' ? 'document' : 'question'), kind: o.kind, status: o.status, from_name: o.from_name || '', block_key: o.block_key || null, deferred: !!o.deferred_at }));
+      return Response.json({ ...view(), open_requests, composer: !!conversation.submitted_at, ...extra });
     };
     /**
      * Applies a stored Didit decision to the conversation once per session: approved or in review -> the four datapoints
@@ -333,7 +339,7 @@ export default async function (req) {
             ...aiLogFields({ prompt: phrasePrompt(np), output: ph.raw || { error: ph.reason }, tenant }),
           }).catch(() => {});
           const mode = approvalMode(settings, engine.risk);
-          engine = setPhrasing(engine, { text: ph.text, ai: ph.ai, mode });
+          engine = setPhrasing(engine, { text: ph.text, ai: ph.ai, mode, now: nowIso });
           if (mode === 'approval') {
             addMsg({ author_type: 'bank', kind: 'message', block_key: np.block, text: MESSAGES.waitText, tag: MESSAGES.waitTag });
             events.push({ event: 'ai.followup.pending', notes: `Held for approval (${engine.risk} risk): ${np.block}${ph.ai ? '' : '; default text proposed'}`, payload: { block: np.block, follow_up: np.fu, proposal: ph.text, default_text: np.default_text, ai: ph.ai } });
@@ -405,6 +411,7 @@ export default async function (req) {
         Object.assign(conversation, patch);
         if (['Sent', 'Draft', 'Viewed'].includes(request.status)) await E.OutreachRequest.update(request.id, { status: 'Opened' });
         await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'client.opened', actor: clientActor, conversation: conv, payload: { ip, user_agent: String(req.headers.get('user-agent') || '').slice(0, 300) }, notes: 'The client opened the guided conversation for the first time.' }));
+        await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'request.opened', actor: clientActor, conversation: conv, payload: { request_id: request.id }, notes: 'Request opened for the first time' }));
       }
       if (step?.widget === 'idv' && !conversation.submitted_at) {
         // Resume around the Didit check (17 Nov): a stored decision is applied at once; an open session is reused.
@@ -627,6 +634,50 @@ export default async function (req) {
       // the edit itself is a client action: an id-stamped system line keeps retries idempotent
       addMsg({ author_type: 'system', kind: 'system_line', text: `Changed: ${engine.datapoints[key].label} (${sourceLabel('client')})` }, { client_answer_id: answerId });
       await flushMsgs();
+      await audit(toAudit(events));
+      await reload();
+      return finish();
+    }
+
+    if (action === 'message') {
+      // Composer after submission (spec 5.7, AT 35), or the client's text answer to an analyst question.
+      const cid = String(body.client_answer_id || '').slice(0, 80);
+      if (!cid) throw httpError(400, 'client_answer_id is required');
+      if (messages.some((m) => m.client_answer_id === cid)) return finish({ duplicate: true });
+      const text = cleanMessage(body.text);
+      let open = null;
+      if (body.open_request_id) {
+        open = asList(await E.OutreachOpenRequest.filter({ tenant_id: tenantId, conversation_id: conversation.id, id: String(body.open_request_id) }, undefined, 1))[0] || null;
+        if (!open || open.status !== 'open' || open.kind !== 'analyst_request') throw httpError(409, MESSAGES.notCurrent);
+      } else if (!conversation.submitted_at) {
+        throw httpError(409, MESSAGES.notCurrent); // before submission the client answers the current step
+      }
+      const events = [];
+      if (open) {
+        addMsg({ author_type: 'client', kind: 'answer', text }, { client_answer_id: cid });
+        addMsg(answeredMessage({ name: open.from_name, role: open.from_role }), { author_type: 'analyst', author_name: open.from_name || '' });
+        await E.OutreachOpenRequest.update(open.id, { status: 'answered', answered_at: nowIso, answer_text: text });
+        events.push({ event: 'request.answered', notes: `Answer received: ${open.title}`, payload: { open_request_id: open.id, request_type: open.request_type || 'question' } });
+      } else {
+        const [cm, auto] = clientMessageMessages(text);
+        addMsg(cm, { client_answer_id: cid });
+        addMsg(auto);
+        events.push({ event: 'client.message', notes: 'Message typed in the composer', payload: { length: text.length } });
+      }
+      await flushMsgs();
+      await E.OutreachConversation.update(conversation.id, { last_activity_at: nowIso });
+      // staff are notified: the case analyst, else the tenant's managers and compliance users
+      const kc = await caseRow();
+      let userIds = kc?.assigned_analyst_id ? [kc.assigned_analyst_id] : [];
+      if (!userIds.length) userIds = (await tenantUsers(E, tenantId).catch(() => [])).filter((u) => ['Manager', 'Compliance Officer', 'Compliance Admin'].includes(roleOf(u))).map((u) => u.id).slice(0, 5);
+      for (const uid of userIds) {
+        await E.Notification.create({
+          tenant_id: tenantId, user_id: uid, type: 'outreach_response', is_read: false,
+          title: open ? `Answer received: ${open.title}` : 'New message from a client',
+          body: `${conversation.invited_name || 'The client'} wrote in the guided conversation.`,
+          link_case_id: kc?.id, link_client_id: conversation.client_id, dedupe_key: `outreach_msg:${conversation.id}:${cid}:${uid}`,
+        }).catch((e) => console.warn('notification failed', e?.message));
+      }
       await audit(toAudit(events));
       await reload();
       return finish();
