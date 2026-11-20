@@ -38,14 +38,26 @@ export default function Idv({ step, busy, onAnswer, onIdv }) {
   }, [wide, idv.session_url]);
 
   // Waiting for the result: a ref-based timer, stopped when the step changes or the page unmounts.
+  // One pull at a time: the next one is scheduled only after the previous answer is back (a pull can take seconds,
+  // and two overlapping pulls once moved the conversation back to the ID confirmation).
   useEffect(() => {
     if (idv.state !== 'open') return undefined;
-    const tick = () => { onIdv('idv_status', { quiet: true }); };
-    timer.current = setInterval(tick, PULL_MS);
+    let alive = true;
+    let inFlight = false;
+    const tick = async () => {
+      if (!alive || inFlight) return;
+      inFlight = true;
+      clearTimeout(timer.current);
+      try { await onIdv('idv_status', { quiet: true }); } finally {
+        inFlight = false;
+        if (alive) timer.current = setTimeout(tick, PULL_MS);
+      }
+    };
+    timer.current = setTimeout(tick, PULL_MS);
     const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', tick);
-    return () => { clearInterval(timer.current); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('online', tick); };
+    return () => { alive = false; clearTimeout(timer.current); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('online', tick); };
   }, [idv.state, onIdv]);
 
   async function continueOnPhone() {

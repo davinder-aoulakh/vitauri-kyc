@@ -216,7 +216,13 @@ export default function OutreachConversation() {
   const onEdit = (key, value) => send({ action: 'edit', body: { client_answer_id: newAnswerId(), datapoint_key: key, value } });
   const onStart = () => send({ action: 'start', body: {} });
   // The Didit ID step: start / reuse the session and pull the result (quiet calls do not block the page).
+  const idvBusy = useRef(false);
+  const stepRef = useRef(null);
+  stepRef.current = v?.step || null;
   const onIdv = useCallback(async (action, { quiet = false } = {}) => {
+    // only while the ID step is on screen, and one ID call at a time (the server also refuses stale writes)
+    if (stepRef.current?.widget !== 'idv' || (quiet && idvBusy.current)) return null;
+    idvBusy.current = true;
     try {
       const r = await call(action, action === 'idv_start' ? { portal_origin: window.location.origin } : {});
       setV(r.data);
