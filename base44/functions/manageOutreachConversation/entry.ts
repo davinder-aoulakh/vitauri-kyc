@@ -8,10 +8,13 @@
 //   ask { conversation_id, request_type: question|document, title, text } -> second round (spec 5.7): open request, system
 //                                                               line + analyst message, "new message" email (tipping-off check)
 //   reply { conversation_id, text }                           -> analyst message in the thread (+ new message email)
+//   backstage { conversation_id }                             -> spec section 11 view model (template, blocks, datapoints, rules,
+//                                                               audit, requests, ORG structure and parties)
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { conversationOn } from '../../shared/outreachSettings.js';
-import { OUTREACH_WORK_ROLES, OPS_ROLE } from '../../shared/outreachAuth.js';
+import { OUTREACH_WORK_ROLES, OUTREACH_CONFIG_ROLES, OPS_ROLE } from '../../shared/outreachAuth.js';
+import { backstageView } from '../../shared/outreachBackstage.js';
 import { validatePhrasing } from '../../shared/outreachAiFollowup.js';
 import { fillPlaceholders } from '../../shared/outreachSnapshot.js';
 import { outreachAuditRow, writeOutreachAudit } from '../../shared/outreachAudit.js';
@@ -126,6 +129,24 @@ export default async function (req) {
         auditEvent: 'ai.followup.approved', auditPayload: { how }, auditNotes: `Follow-up on ${q.block} ${how} by ${actorName}`,
       });
       return Response.json({ ok: true, text, how });
+    }
+
+    if (action === 'backstage') {
+      const c = asList(await E.OutreachConversation.filter({ tenant_id: tenantId, id: String(body.conversation_id || '') }, undefined, 1))[0];
+      if (!c) throw httpError(404, 'Conversation not found');
+      const [datapoints, events, openRequests, invites, cards, published] = await Promise.all([
+        E.OutreachDatapoint.filter({ tenant_id: tenantId, conversation_id: c.id }, undefined, 500).then(asList),
+        c.request_id ? E.AuditEvent.filter({ tenant_id: tenantId, outreach_request_id: c.request_id }, '-created_date', 300).then(asList).catch(() => []) : [],
+        E.OutreachOpenRequest.filter({ tenant_id: tenantId, conversation_id: c.id }, 'created_date', 100).then(asList),
+        c.client_type === 'ORG' ? E.OutreachInvite.filter({ tenant_id: tenantId, conversation_id: c.id }, undefined, 50).then(asList) : [],
+        c.client_type === 'ORG' ? E.OutreachThreadMessage.filter({ tenant_id: tenantId, conversation_id: c.id, kind: 'structure_card' }, '-seq', 1).then(asList).catch(() => []) : [],
+        E.OutreachFlowTemplate.filter({ tenant_id: tenantId, key: c.template_key, status: 'published' }, '-version', 1).then(asList).catch(() => []),
+      ]);
+      const view = backstageView({
+        conversation: c, settings: c.settings_snapshot || {}, datapoints, events, openRequests, invites,
+        structureCard: cards[0] ? { ...(cards[0].payload || {}), text: cards[0].display_text || '' } : null, publishedItems: published[0]?.items || null,
+      });
+      return Response.json({ ok: true, ...view, published_template_id: published[0]?.id || null, can_config: isOps || OUTREACH_CONFIG_ROLES.includes(role) });
     }
 
     if (action === 'ask' || action === 'reply') {
