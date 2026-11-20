@@ -102,7 +102,7 @@ export default async function (req) {
         const r = await createChildConversation({ base44, tenant, parent: { conversation: c, request }, party: { name, role_text: roleText, related_party_id: inv.party_id }, email: inv.email, origin, actor: { type: 'User', id: user.id, name: actorName } });
         if (r.ok) { await E.OutreachInvite.update(inv.id, { status: 'Invited', invited_at: new Date().toISOString(), child_request_id: r.child_request_id }); done.push(name); }
       }
-      await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'invitation.released', actor: { type: 'User', id: user.id, name: actorName }, conversation: { id: c.id, request_id: c.request_id, case_id: c.case_id, client_id: c.client_id }, payload: { released: done, manual: true }, notes: `Queued invitations released manually by ${actorName}: ${done.join(', ') || 'none'}` }));
+      await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'invitation.released', actor: { type: 'User', id: user.id, name: actorName }, conversation: { id: c.id, request_id: c.request_id, case_id: c.case_id, client_id: c.client_id }, payload: { released: done, manual: true }, notes: `Queued invitations released manually by ${actorName}: ${done.length}` }));
       return Response.json({ ok: true, released: done });
     }
 

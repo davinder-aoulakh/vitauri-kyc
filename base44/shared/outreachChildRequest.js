@@ -69,7 +69,7 @@ export async function createChildConversation({ base44, tenant, parent, party, e
   await writeOutreachAudit(E, outreachAuditRow({
     tenantId, event: 'invitation.sent', actor, conversation: { id: parent.conversation.id, request_id: parent.request.id, case_id: parent.conversation.case_id, client_id: parent.conversation.client_id, party_id: party.related_party_id },
     payload: { child_request_id: request.id, child_conversation_id: conv.id, party: party.name, emailed, email_error: emailError, open_request_id: open?.id || null },
-    notes: `Invitation for ${party.name} sent${emailed ? ' by email' : ' (email failed)'} (tipping-off check passed)`,
+    notes: `Invitation sent${emailed ? ' by email' : ' (email failed)'} (tipping-off check passed)`,
   }));
   return { ok: true, child_request_id: request.id, conversation_id: conv.id, emailed, email_error: emailError, open_request_id: open?.id || null };
 }

@@ -138,7 +138,7 @@ export default async function (req) {
     await writeOutreachAudit(E, outreachAuditRow({
       tenantId, event: 'doc.uploaded', actor: { type: 'Client', name: conversation.invited_name || 'Client' }, conversation: conv,
       payload: { evidence_id: ev.id, document_id: doc?.id || null, block: evidenceKey, size: bytes.length, mime, status, ai_ok: !!ai.ok },
-      notes: `${label}: ${name} uploaded (${Math.round(bytes.length / 1024)} KB)${ai.ok ? '' : '; AI check unavailable, pending manual review'}`,
+      payload_file: name, notes: `${label}: file uploaded (${Math.round(bytes.length / 1024)} KB)${ai.ok ? '' : '; AI check unavailable, pending manual review'}`,
     }));
     if (open) {
       const nowIso = new Date().toISOString();
@@ -153,8 +153,8 @@ export default async function (req) {
       if (conversation.submitted_at) await applyMirror(E, { conversation, request }).catch((e) => console.warn('mirror failed', e?.message)); // decision 10
       const passed = result.every((c) => c.ok !== false);
       await E.AuditEvent.bulkCreate([
-        outreachAuditRow({ tenantId, event: 'doc.checked', actor: { type: 'System' }, conversation: conv, payload: { evidence_id: ev.id, open_request_id: open.id, checks: result.map((c) => ({ name: c.name, ok: c.ok })) }, notes: `request: ${open.title}: ${name} — ${passed ? 'all checks passed' : 'some checks did not pass'}` }),
-        outreachAuditRow({ tenantId, event: 'request.answered', actor: clientActor, conversation: conv, payload: { open_request_id: open.id, evidence_id: ev.id }, notes: `Evidence received: ${name}` }),
+        outreachAuditRow({ tenantId, event: 'doc.checked', actor: { type: 'System' }, conversation: conv, payload: { evidence_id: ev.id, open_request_id: open.id, checks: result.map((c) => ({ name: c.name, ok: c.ok })) }, notes: `request: ${open.title} — ${passed ? 'all checks passed' : 'some checks did not pass'}` }),
+        outreachAuditRow({ tenantId, event: 'request.answered', actor: clientActor, conversation: conv, payload: { open_request_id: open.id, evidence_id: ev.id, file: name }, notes: 'Evidence received' }),
       ]).catch((e) => console.warn('audit failed', e?.message));
       const kc = conversation.case_id ? asList(await E.KycCase.filter({ tenant_id: tenantId, id: conversation.case_id }, undefined, 1))[0] : null;
       const uid = open.from_user_id || kc?.assigned_analyst_id;

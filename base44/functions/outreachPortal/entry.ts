@@ -392,7 +392,7 @@ export default async function (req) {
           const opens = asList(await E.OutreachOpenRequest.filter({ tenant_id: tenantId, conversation_id: conversation.parent_conversation_id, kind: 'own_checks', status: 'open' }, undefined, 50));
           for (const o of opens.filter((o) => normName(o.party_name) === normName(conversation.invited_name))) await E.OutreachOpenRequest.update(o.id, { status: 'answered', answered_at: nowIso }).catch(() => {});
           const parentConv = asList(await E.OutreachConversation.filter({ tenant_id: tenantId, id: conversation.parent_conversation_id }, undefined, 1))[0];
-          await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'related_party.completed', actor: { type: 'System' }, conversation: { id: conversation.parent_conversation_id, request_id: parentConv?.request_id, case_id: conversation.case_id, client_id: conversation.client_id, party_id: conversation.party_id }, payload: { child_conversation_id: conversation.id, party: conversation.invited_name, reference }, notes: `${conversation.invited_name} completed their own checks (${reference})` }));
+          await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'related_party.completed', actor: { type: 'System' }, conversation: { id: conversation.parent_conversation_id, request_id: parentConv?.request_id, case_id: conversation.case_id, client_id: conversation.client_id, party_id: conversation.party_id }, payload: { child_conversation_id: conversation.id, party: conversation.invited_name, reference }, notes: `A related party completed their own checks (${reference})` }));
         }
       } else {
         step = a.step;
@@ -464,7 +464,7 @@ export default async function (req) {
         if (r.ok) await E.OutreachInvite.update(inv.id || existing.id, { child_request_id: r.child_request_id });
         else { await E.OutreachInvite.update(inv.id || existing.id, { status: 'To invite' }); throw httpError(502, r.error || 'The invitation could not be sent'); }
       } else {
-        await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'invitation.queued', actor: clientActor, conversation: conv, payload: { party: party.name }, notes: `Invitation for ${party.name} queued. It is released after the representative has passed the ID check` }));
+        await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'invitation.queued', actor: clientActor, conversation: conv, payload: { party: party.name }, notes: 'Invitation queued. It is released after the representative has passed the ID check' }));
       }
       return finish();
     }
