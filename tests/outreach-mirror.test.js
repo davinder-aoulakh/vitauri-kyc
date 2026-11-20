@@ -159,8 +159,7 @@ test('audit coverage: every spec section 12 event is written somewhere in the ba
   const written = (e) => code.includes(`'${e}'`) || code.includes(`"${e}"`) || code.includes(`'outreach.${e}'`) || code.includes(`event: \`${e}`);
   const missing = events.filter((e) => !written(e)).sort();
   // Known gaps (reported in phase 10): the second-source vendor is not used (Didit replaces it, decision 2); the
-  // registry adapters log OutreachAdapterCall rows instead of separate kvk.* events; invitation.* events are written as
-  // invitation.released and related_party.completed.
-  const KNOWN = ['company.info.organisatieprofiel', 'invitation.completed', 'invitation.queued', 'invitation.sent', 'kvk.basisprofiel', 'kvk.zoeken'];
+  // registry adapters log every KvK call as an OutreachAdapterCall row (with cost) instead of separate kvk.* events.
+  const KNOWN = ['company.info.organisatieprofiel', 'kvk.basisprofiel', 'kvk.zoeken'];
   assert.deepEqual(missing, KNOWN.filter((k) => events.includes(k)).sort(), `missing: ${missing.join(', ')}`);
 });

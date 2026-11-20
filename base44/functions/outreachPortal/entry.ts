@@ -388,6 +388,7 @@ export default async function (req) {
           // AT 31: the parent's invitation becomes Completed, its open request answered, and the parent conversation logs it
           const inv = asList(await E.OutreachInvite.filter({ tenant_id: tenantId, child_request_id: request.id }, undefined, 1))[0];
           if (inv) await E.OutreachInvite.update(inv.id, { status: 'Completed', completed_at: nowIso }).catch(() => {});
+          if (inv) await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'invitation.completed', actor: { type: 'System' }, conversation: { id: conversation.parent_conversation_id, case_id: conversation.case_id, client_id: conversation.client_id, party_id: conversation.party_id }, payload: { invite_id: inv.id, child_conversation_id: conversation.id }, notes: 'Invitation completed: the related party signed their own conversation' }));
           const opens = asList(await E.OutreachOpenRequest.filter({ tenant_id: tenantId, conversation_id: conversation.parent_conversation_id, kind: 'own_checks', status: 'open' }, undefined, 50));
           for (const o of opens.filter((o) => normName(o.party_name) === normName(conversation.invited_name))) await E.OutreachOpenRequest.update(o.id, { status: 'answered', answered_at: nowIso }).catch(() => {});
           const parentConv = asList(await E.OutreachConversation.filter({ tenant_id: tenantId, id: conversation.parent_conversation_id }, undefined, 1))[0];
