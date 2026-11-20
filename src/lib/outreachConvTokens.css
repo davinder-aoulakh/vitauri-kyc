@@ -13,7 +13,7 @@
 }
 @media (prefers-color-scheme:dark){.oc{
   --bg:#0e1814; --surface:#15231e; --surface2:#1a2a24; --ink:#e3eee8; --muted:#97aea3; --line:#26382f;
-  --brand-ink:#052116; --brand-soft:#1c3a30; --me-ink:#fff;
+  --brand-ink:#ffffff; --brand-soft:#1c3a30; --me-ink:#fff;
   --ok:#5fd09a; --ok-soft:#173528; --warn:#f0be5c; --warn-soft:#3a2f12; --bad:#ff8f84; --bad-soft:#3d1c19;
   --ai:#9aa8ff; --ai-soft:#222a52; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.25); color-scheme:dark}}
 .oc *{box-sizing:border-box}

@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { OC } from '@/lib/outreachConvStrings';
+import { brandStyle } from '@/lib/outreachContrast';
 import '@/lib/outreachConvTokens.css';
 import Widget from '@/components/outreachconv/widgets';
 import StructureCard from '@/components/outreachconv/widgets/StructureCard';
@@ -16,7 +17,7 @@ const errOf = (e) => ({ status: e?.response?.status || e?.status || 0, message: 
 const initial = (name) => String(name || '').trim().charAt(0).toUpperCase() || '·';
 
 function Shell({ tenant, children }) {
-  const style = tenant?.brand_color ? { '--brand': tenant.brand_color } : undefined;
+  const style = brandStyle(tenant?.brand_color); // brand colour with a readable text colour on it (phase 11)
   return (
     <div className="oc" style={style}>
       <header className="oc-top">
