@@ -18,6 +18,7 @@ import { versionsByKey, nextVersion, cleanBlockInput, cleanTemplateInput, draftF
 import { OUTREACH_CONFIG_ROLES, OUTREACH_WORK_ROLES, OPS_ROLE } from '../../shared/outreachAuth.js';
 import { kvkSearch } from '../../shared/outreachAdapters/kvk.js';
 import { withDiditCredentials } from '../../shared/diditCredentials.js';
+import { emailTemplatesToSeed } from '../../shared/outreachSecondRound.js';
 
 const KEY_RE = /^[a-z][a-z0-9_]{1,59}$/;
 
@@ -108,6 +109,15 @@ export default async function (req) {
     }
     if (!canEdit) throw httpError(403, 'Only a Tenant Admin or Compliance Admin can change the outreach configuration');
     const blockKeys = [...new Set(blocks.map((b) => b.key))];
+
+    if (action === 'seed_email_templates') {
+      // phase 9: adds the conversation email situations the tenant does not have yet (existing rows are never changed)
+      const existing = asList(await E.EmailTemplate.filter({ tenant_id: tenantId }, undefined, 200).catch(() => []));
+      const rows = emailTemplatesToSeed(existing, tenantId).map((r) => ({ ...r, created_by: actor.name }));
+      if (rows.length) await E.EmailTemplate.bulkCreate(rows);
+      await audit('outreach.config.changed', `Conversation email templates added: ${rows.map((r) => r.situation).join(', ') || 'none (all present)'}`, {}, { email_templates: rows.map((r) => r.situation) });
+      return Response.json({ ok: true, created: rows.map((r) => r.situation) });
+    }
 
     if (action === 'save_block' || action === 'save_template') {
       const isBlock = action === 'save_block';
