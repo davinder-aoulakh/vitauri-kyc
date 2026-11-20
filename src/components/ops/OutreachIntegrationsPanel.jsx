@@ -6,6 +6,7 @@ import { toast } from '@/components/ui/use-toast';
 import { AlertTriangle, Building2, KeyRound, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import AdapterCostTable from '@/components/outreachconv/AdapterCostTable';
 
 const MODES = [['off', 'Off', 'Didit for every country'], ['test', 'Test', 'KvK public test environment; fictitious companies'], ['live', 'Live', 'KvK with the tenant\'s own key']];
 
@@ -117,6 +118,7 @@ export default function OutreachIntegrationsPanel({ tenant, onClose }) {
                   </>)}
                 </div>
               )}
+              <div className="rounded-lg border border-border p-3"><AdapterCostTable tenantId={tenant.id} /></div>
               <p className="text-[11px] text-muted-foreground">Test connection makes free calls only. Try a lookup searches the KvK test environment (fictitious companies) and is not available in Live mode. Every call is logged without the key.</p>
             </div>
           </>)}

@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Loader2, Save, Settings2 } from 'lucide-react';
+import AdapterCostTable from '@/components/outreachconv/AdapterCostTable';
 
 const listText = (v) => (v || []).join(', ');
 const fromList = (t) => String(t || '').split(',').map((x) => x.trim()).filter(Boolean);
@@ -57,6 +58,7 @@ export default function OutreachSettingsCard({ settings, registry, canEdit, busy
           ))}
         </div>
       </div>
+      {canEdit && <div className="rounded-lg border border-border p-3"><AdapterCostTable /></div>}
       {canEdit && (
         <div className="flex justify-end">
           <Button size="sm" className="gap-1.5" disabled={!!busy} onClick={() => onSave(s)}>{busy === 'save_settings' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Save settings</Button>
