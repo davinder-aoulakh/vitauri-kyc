@@ -137,8 +137,8 @@ export default async function (req) {
     const conv = { id: conversation.id, request_id: request.id, case_id: conversation.case_id, client_id: conversation.client_id, party_id: conversation.party_id };
     await writeOutreachAudit(E, outreachAuditRow({
       tenantId, event: 'doc.uploaded', actor: { type: 'Client', name: conversation.invited_name || 'Client' }, conversation: conv,
-      payload: { evidence_id: ev.id, document_id: doc?.id || null, block: evidenceKey, size: bytes.length, mime, status, ai_ok: !!ai.ok },
-      payload_file: name, notes: `${label}: file uploaded (${Math.round(bytes.length / 1024)} KB)${ai.ok ? '' : '; AI check unavailable, pending manual review'}`,
+      payload: { evidence_id: ev.id, document_id: doc?.id || null, block: evidenceKey, size: bytes.length, mime, status, ai_ok: !!ai.ok, file: name },
+      notes: `${label}: file uploaded (${Math.round(bytes.length / 1024)} KB)${ai.ok ? '' : '; AI check unavailable, pending manual review'}`,
     }));
     if (open) {
       const nowIso = new Date().toISOString();
