@@ -48,7 +48,7 @@ export default function CountryPicker({ value, onChange, common = [], disabled, 
   return (
     <div className="oc-cpick" ref={box}>
       <button type="button" id={id} className="oc-in oc-cpick-btn" aria-haspopup="listbox" aria-expanded={open} disabled={disabled} onClick={() => setOpen((o) => !o)}>
-        {selected ? <><Flag iso2={selected.iso2} /> <span>{selected.name}</span></> : <span className="oc-small">{OC.chooseCountry}</span>}
+        {selected ? <><Flag iso2={selected.iso2} className="" title={selected.name} /> <span>{selected.name}</span></> : <span className="oc-small">{OC.chooseCountry}</span>}
         <span aria-hidden="true" className="oc-cpick-caret">▾</span>
       </button>
       {open && (
@@ -61,7 +61,7 @@ export default function CountryPicker({ value, onChange, common = [], disabled, 
               <li key={`${c.iso2}-${c.name}`} id={`${listId}-${i}`} role="option" aria-selected={c.name === value}
                 className={`${i === active ? 'on' : ''}${c.common && !list[i + 1]?.common && !q ? ' oc-cpick-sep' : ''}`}
                 onPointerDown={(e) => { e.preventDefault(); pick(c); }} onMouseEnter={() => setActive(i)}>
-                <Flag iso2={c.iso2} /> <span>{c.name}</span>
+                <Flag iso2={c.iso2} className="" title={c.name} /> <span>{c.name}</span>
               </li>
             ))}
           </ul>
