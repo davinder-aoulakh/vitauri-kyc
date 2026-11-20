@@ -16,6 +16,7 @@ export default function CountryPicker({ value, onChange, common = [], disabled, 
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
+  const [place, setPlace] = useState({ up: false, max: 300 });
   const box = useRef(null);
   const search = useRef(null);
   const listId = `${id || 'country'}-list`;
@@ -41,7 +42,21 @@ export default function CountryPicker({ value, onChange, common = [], disabled, 
     ? (value?.dial ? { name: countryByDial(value.dial)?.name || '', iso2: value.iso2 || countryByDial(value.dial)?.iso2 || '', dial: value.dial } : null)
     : (value ? { name: value, iso2: countryByName(value)?.iso2 || '' } : null));
 
-  useEffect(() => { if (open) { setActive(0); setTimeout(() => search.current?.focus(), 0); } }, [open]);
+  // Open where there is room: the question often sits at the bottom of the screen, so the list opens upwards when
+  // there is more space above, and its height follows the space available (all ~200 countries scroll inside it).
+  useEffect(() => {
+    if (!open) return;
+    setActive(0);
+    const r = box.current?.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight || 700;
+    if (r) {
+      const below = vh - r.bottom - 16;
+      const above = r.top - 16;
+      const up = below < 300 && above > below;
+      setPlace({ up, max: Math.max(160, Math.min(380, (up ? above : below) - 70)) });
+    }
+    setTimeout(() => search.current?.focus({ preventScroll: true }), 0);
+  }, [open]);
   useEffect(() => {
     if (!open) return undefined;
     const close = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
@@ -66,10 +81,11 @@ export default function CountryPicker({ value, onChange, common = [], disabled, 
         <span aria-hidden="true" className="oc-cpick-caret">▾</span>
       </button>
       {open && (
-        <div className="oc-cpick-pop">
+        <div className={`oc-cpick-pop${place.up ? ' up' : ''}`}>
           <input ref={search} className="oc-in" type="search" placeholder={placeholder} aria-label={placeholder} value={q}
             onChange={(e) => { setQ(e.target.value); setActive(0); }} onKeyDown={onKey} aria-controls={listId} aria-activedescendant={list[active] ? `${listId}-${active}` : undefined} />
-          <ul id={listId} role="listbox" className="oc-cpick-list">
+          <div className="oc-small oc-cpick-count" aria-live="polite">{OC.countriesShown(list.length, all.length)}</div>
+          <ul id={listId} role="listbox" className="oc-cpick-list" style={{ maxHeight: place.max }}>
             {list.length === 0 && <li className="oc-small" role="option" aria-selected="false" aria-disabled="true">{OC.noCountry}</li>}
             {list.map((c, i) => (
               <li key={`${c.iso2}-${c.name}-${c.dial}`} id={`${listId}-${i}`} role="option" aria-selected={isSelected(c)}

@@ -171,3 +171,6 @@
 .oc-phone-code{flex:0 0 auto;min-width:118px}
 .oc-cpick-dial .oc-cpick-pop{right:auto;width:min(320px,calc(100vw - 48px))}
 .oc-cpick-dialcode{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.oc-cpick-pop.up{top:auto;bottom:calc(100% + 4px)}
+.oc-cpick-count{margin:6px 2px 0}

@@ -11,6 +11,7 @@ export const OC = {
   searchCountry: 'Search for a country',
   searchCountryCode: 'Search by country or code',
   noCountry: 'No country found',
+  countriesShown: (n, total) => (n === total ? `${total} countries` : `${n} of ${total} countries`),
   signWithName: 'Use my typed name as signature',
   composerPlaceholder: 'Ask a question or reply here…',
   minutesLeft: (n) => (n <= 0 ? 'Almost done' : `About ${n} minute${n === 1 ? '' : 's'} left`),
