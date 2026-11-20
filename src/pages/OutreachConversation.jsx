@@ -283,6 +283,16 @@ export default function OutreachConversation() {
     }
   }, [call, open]);
 
+  // After submission a colleague may write in the thread: look again every 30 seconds while the page is visible.
+  useEffect(() => {
+    if (!v?.composer) return undefined;
+    const t = setInterval(() => {
+      if (document.visibilityState !== 'visible' || busy) return;
+      call('open').then((r) => { if (r?.data && !r.data.error && (r.data.thread?.length || 0) !== (v.thread?.length || 0)) setV(r.data); }).catch(() => {});
+    }, 30000);
+    return () => clearInterval(t);
+  }, [v?.composer, v?.thread?.length, busy, call]);
+
   // An AI follow-up waits for a colleague's approval: look again every 5 seconds.
   useEffect(() => {
     if (v?.step?.widget !== 'wait') return undefined;
