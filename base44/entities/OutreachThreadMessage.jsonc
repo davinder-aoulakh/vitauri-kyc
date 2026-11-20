@@ -63,9 +63,11 @@
       "type": "string",
       "enum": [
         "sent",
-        "held"
+        "held",
+        "superseded"
       ],
-      "default": "sent"
+      "default": "sent",
+      "description": "superseded = written by a stale request and hidden from the thread (kept for the record)"
     },
     "client_answer_id": {
       "type": "string",

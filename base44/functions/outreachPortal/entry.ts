@@ -191,7 +191,7 @@ export default async function (req) {
         first_name: conversation.invited_first_name || '', client_type: conversation.client_type || 'NP', template_name: template.name || '',
         start_chip: template.start_chip || null, expected_minutes: template.expected_minutes || null,
         sections: sectionsView(snap, engine.block_states || {}, step?.block_key || null), progress: p,
-        saved_at: conversation.last_activity_at || null, open_requests: [], thread: messages.map(messageView),
+        saved_at: conversation.last_activity_at || null, open_requests: [], thread: messages.filter((m) => m.status !== 'superseded').map(messageView),
         started: !!step || p.steps > 0 || !!conversation.submitted_at, submitted: !!conversation.submitted_at, reference: conversation.reference || null,
         step: conversation.submitted_at ? null : stepView(step), last_seq: seq,
         phone_codes: settings.phoneCountryCodes || [], address_countries: settings.addressCountries || [],
