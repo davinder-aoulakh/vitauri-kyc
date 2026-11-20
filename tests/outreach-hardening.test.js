@@ -96,3 +96,27 @@ test('PII: client names and file names stay out of audit notes in the server fun
     }
   }
 });
+
+test('race (20 Nov): overlapping ID-check pulls cannot move the conversation back; stale writes are refused', () => {
+  const portal = read('base44/functions/outreachPortal/entry.ts');
+  assert.match(portal, /if \(\(await freshRev\(\)\) !== rev\) \{ pendingMsgs\.length = 0; throw httpError\(409/, 'persist checks the stored revision');
+  assert.match(portal, /pending_step: \{ engine, step, test_data: testData, rev \}/);
+  assert.match(portal, /applyIdvDecision = async[\s\S]{0,200}freshRev\(\)\) !== rev\) return \[\]/, 'the Didit decision is applied only on the current state');
+  for (const f of ['base44/shared/outreachThread.js', 'base44/functions/outreachRegistry/entry.ts']) assert.match(read(f), /rev: Number\(/, `${f} bumps the revision`);
+  const idv = read('src/components/outreachconv/widgets/Idv.jsx');
+  assert.ok(!idv.includes('setInterval('), 'no fixed-interval pulling');
+  assert.ok(idv.includes('inFlight'), 'one pull at a time');
+  const page = read('src/pages/OutreachConversation.jsx');
+  assert.ok(page.includes("stepRef.current?.widget !== 'idv'") && page.includes('lastSeqRef.current'), 'late answers never take the page back');
+  assert.ok(portal.includes("messages.filter((m) => m.status !== 'superseded')"));
+});
+
+test('address country: every country with its flag, searchable, common countries first', async () => {
+  const { COUNTRY_META } = await import('../src/lib/countries.js');
+  assert.ok(COUNTRY_META.length >= 195, `${COUNTRY_META.length} countries`);
+  assert.ok(COUNTRY_META.some((c) => c.iso2 === 'CW') && COUNTRY_META.some((c) => c.iso2 === 'NL'));
+  const picker = read('src/components/outreachconv/widgets/CountryPicker.jsx');
+  assert.ok(picker.includes('COUNTRY_META') && picker.includes('<Flag') && picker.includes('role="listbox"') && picker.includes('ArrowDown'));
+  assert.ok(!/https?:\/\//.test(picker), 'no external resources');
+  assert.ok(read('src/components/outreachconv/widgets/Address.jsx').includes('<CountryPicker'));
+});
