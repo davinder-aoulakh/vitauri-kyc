@@ -1,0 +1,43 @@
+{
+  "name": "Outreach Conversation Sweep",
+  "description": "Every hour: guided conversation outreach reminders (days before the deadline), link expiry, and held AI follow-ups past the approval wait time (default question sent). Tenants with the guided conversation flag only.",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "17 * * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "outreach_conversation_sweep",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "outreachSweep",
+            "args": {
+              "sweep": true
+            }
+          },
+          "then": "end"
+        }
+      }
+    ]
+  }
+}
