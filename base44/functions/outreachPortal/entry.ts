@@ -38,6 +38,7 @@ import { inviteTransition, canContinue } from '../../shared/outreachInvites.js';
 import { createChildConversation } from '../../shared/outreachChildRequest.js';
 import { clientMessageMessages, cleanMessage, answeredMessage } from '../../shared/outreachSecondRound.js';
 import { tenantUsers, roleOf } from '../../shared/tmCaseCommon.js';
+import { applyMirror } from '../../shared/outreachMirror.js';
 
 // ORG conversations stop before these blocks until phase 8 delivers them (business profile, documents by legal form,
 // the representative's ID check, review and the organisation's signature).
@@ -381,7 +382,8 @@ export default async function (req) {
         submissionMessages({ first_name: vars.first_name, response_time: responseTime || '', reference, company: isOrg ? (engine.datapoints?.legal_name?.display || '') : '', pending: pendingParties }).forEach((m) => addMsg(m));
         events.push({ event: 'case.submitted', notes: `Client declaration signed; answers frozen as version 1 (sha256:${sha.slice(0, 8)}…)`, payload: { sha256: sha, reference, test_data: testData } });
         await persist({ status: 'Submitted', submitted_at: nowIso, submission_hash: sha, reference });
-        await E.OutreachRequest.update(request.id, { status: 'Complete' });
+        // decision 10: signed answers are mirrored into the carrier's items (classic step, profile suggestions, QC, …)
+        await applyMirror(E, { conversation, request, complete: true }).catch(async (e) => { console.warn('mirror failed', e?.message); await E.OutreachRequest.update(request.id, { status: 'Complete' }); });
         if (conversation.parent_conversation_id) {
           // AT 31: the parent's invitation becomes Completed, its open request answered, and the parent conversation logs it
           const inv = asList(await E.OutreachInvite.filter({ tenant_id: tenantId, child_request_id: request.id }, undefined, 1))[0];

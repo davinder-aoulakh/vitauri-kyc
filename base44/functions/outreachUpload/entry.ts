@@ -19,6 +19,7 @@ import { MESSAGES } from '../../shared/outreachMessages.js';
 import { fillPlaceholders } from '../../shared/outreachSnapshot.js';
 import { appendMessages } from '../../shared/outreachThread.js';
 import { answeredMessage } from '../../shared/outreachSecondRound.js';
+import { applyMirror } from '../../shared/outreachMirror.js';
 
 const limiter = createAttemptLimiter({ max: 20, windowMs: 15 * 60 * 1000 });
 const NOT_FOUND = 'This link is not valid. Please use the link from your most recent email.';
@@ -149,6 +150,7 @@ export default async function (req) {
         confirm,
       ] });
       await E.OutreachConversation.update(conversation.id, { last_activity_at: nowIso });
+      if (conversation.submitted_at) await applyMirror(E, { conversation, request }).catch((e) => console.warn('mirror failed', e?.message)); // decision 10
       const passed = result.every((c) => c.ok !== false);
       await E.AuditEvent.bulkCreate([
         outreachAuditRow({ tenantId, event: 'doc.checked', actor: { type: 'System' }, conversation: conv, payload: { evidence_id: ev.id, open_request_id: open.id, checks: result.map((c) => ({ name: c.name, ok: c.ok })) }, notes: `request: ${open.title}: ${name} — ${passed ? 'all checks passed' : 'some checks did not pass'}` }),
