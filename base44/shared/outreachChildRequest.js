@@ -9,6 +9,7 @@ import { inviteEmail } from './outreachEmail.js';
 import { outreachAuditRow, writeOutreachAudit } from './outreachAudit.js';
 import { assertNotLocked } from './tippingOff.js';
 import { MESSAGES } from './outreachMessages.js';
+import { storeLinkToken } from './outreachThread.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -55,6 +56,7 @@ export async function createChildConversation({ base44, tenant, parent, party, e
     progress_steps: 0, progress_total: initialProgressTotal(snap), block_states: {}, ai_followup_count: 0,
   });
   await E.OutreachRequest.update(request.id, { conversation_id: conv.id });
+  await storeLinkToken(E, { tenantId, conversationId: conv.id, requestId: request.id, token, link: `${String(origin || '').replace(/\/+$/, '')}/o/${token}` });
   const open = await E.OutreachOpenRequest.create({ tenant_id: tenantId, conversation_id: parent.conversation.id, title: fillPlaceholders(MESSAGES.ownChecks, { name: party.name }), party_name: party.name, kind: 'own_checks', status: 'open' }).catch(() => null);
   let emailed = false;
   let emailError = null;

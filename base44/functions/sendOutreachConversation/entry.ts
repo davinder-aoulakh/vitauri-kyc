@@ -8,6 +8,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { assertNotLocked } from '../../shared/tippingOff.js';
+import { storeLinkToken } from '../../shared/outreachThread.js';
 import { conversationOn, outreachSettings } from '../../shared/outreachSettings.js';
 import { OUTREACH_WORK_ROLES } from '../../shared/outreachAuth.js';
 import { newToken, hashToken, linkDates } from '../../shared/outreachToken.js';
@@ -98,6 +99,7 @@ export default async function (req) {
     const conv = { id: conversation.id, request_id: request.id, case_id: kycCase.id, client_id: client.id };
 
     const link = `${origin}/o/${token}`;
+    await storeLinkToken(E, { tenantId, conversationId: conversation.id, requestId: request.id, token, link }); // server-only (phase 9 emails)
     let emailed = false;
     let emailError = null;
     if (body.send_email !== false) {
