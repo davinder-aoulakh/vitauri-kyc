@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/use-toast';
 import { CheckCircle2, FileText, Loader2, Sparkles } from 'lucide-react';
+import SecondRoundPanel from './SecondRoundPanel';
 
 const errText = (e) => e?.response?.data?.error || e?.message || 'Something went wrong';
 const EV_TONE = { passed: 'border-emerald-300 text-emerald-800', failed: 'border-red-300 text-red-800', pending: 'border-amber-300 text-amber-800', deferred: 'border-slate-300 text-slate-700' };
@@ -58,7 +59,7 @@ export default function ApprovalsAndEvidence({ kycCase, canWork, reloadKey }) {
 
   if (!canWork || !data) return null;
   const { pending = [], evidence = [], invites = [] } = data;
-  if (!pending.length && !evidence.length && !invites.length) return null;
+  if (!pending.length && !evidence.length && !invites.length && !data.conversations?.length) return null;
   const queuedConvs = [...new Set(invites.filter((i) => i.status === 'Queued').map((i) => i.conversation_id))];
   async function release(conversationId) {
     try {
@@ -69,6 +70,7 @@ export default function ApprovalsAndEvidence({ kycCase, canWork, reloadKey }) {
   }
   return (
     <div className="mt-3 space-y-3">
+      <SecondRoundPanel data={data} onReload={load} onOpenFile={openFile} />
       {pending.length > 0 && (
         <div className="space-y-2">
           <div className="text-xs font-semibold">Waiting for your approval ({pending.length})</div>
