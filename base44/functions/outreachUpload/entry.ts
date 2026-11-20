@@ -5,6 +5,9 @@
 // review, so the classic step and the AI Document Checker see it), then checked: rules (age, name, address) plus the platform
 // LLM for the other checks. If the AI fails, those checks are "Pending manual review" and the conversation continues.
 // Returns { evidence_id, checks }. The answer itself goes through outreachPortal 'answer' with { evidence_id }.
+// Phase 9: { token, open_request_id, file } answers an open request (analyst document request, or deferred evidence),
+// also after submission: evidence + Document + checks, request answered, the analyst's confirmation in the thread,
+// doc.checked + request.answered. { token, open_request_id, defer: true } keeps it open ("I will provide this later").
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { asList, errorResponse, httpError } from '../../shared/tmAuth.js';
 import { looksLikeToken, hashToken, linkState, createAttemptLimiter } from '../../shared/outreachToken.js';
@@ -14,6 +17,8 @@ import { normaliseChecks, ruleChecks, combineChecks, evidenceStatus } from '../.
 import { checkDocumentAi } from '../../shared/outreachDocAi.js';
 import { MESSAGES } from '../../shared/outreachMessages.js';
 import { fillPlaceholders } from '../../shared/outreachSnapshot.js';
+import { appendMessages } from '../../shared/outreachThread.js';
+import { answeredMessage } from '../../shared/outreachSecondRound.js';
 
 const limiter = createAttemptLimiter({ max: 20, windowMs: 15 * 60 * 1000 });
 const NOT_FOUND = 'This link is not valid. Please use the link from your most recent email.';
@@ -49,12 +54,33 @@ export default async function (req) {
     const conversation = request.conversation_id ? asList(await E.OutreachConversation.filter({ tenant_id: request.tenant_id, id: request.conversation_id }, undefined, 1))[0] : null;
     if (!conversation) throw httpError(404, NOT_FOUND);
     const link = linkState(request, conversation, new Date());
-    if (link !== 'valid' || conversation.submitted_at) throw httpError(409, MESSAGES.notCurrent);
-
     const tenantId = conversation.tenant_id;
-    const step = conversation.pending_step?.step || null;
     const engine = conversation.pending_step?.engine || {};
-    if (!step || step.widget !== 'upload' || String(body.step_id || '') !== step.id) throw httpError(409, MESSAGES.notCurrent);
+    const conv0 = { id: conversation.id, request_id: request.id, case_id: conversation.case_id, client_id: conversation.client_id, party_id: conversation.party_id };
+    const clientActor = { type: 'Client', name: conversation.invited_name || 'Client' };
+    let step = null;
+    let open = null;
+    if (body.open_request_id) {
+      if (link !== 'valid' && link !== 'submitted') throw httpError(409, MESSAGES.notCurrent);
+      open = asList(await E.OutreachOpenRequest.filter({ tenant_id: tenantId, conversation_id: conversation.id, id: String(body.open_request_id) }, undefined, 1))[0] || null;
+      const isDoc = open && (open.kind === 'deferred_evidence' || (open.kind === 'analyst_request' && (open.request_type || 'document') === 'document'));
+      if (!open || open.status !== 'open' || !isDoc) throw httpError(409, MESSAGES.notCurrent);
+      if (body.defer === true) {
+        if (!open.deferred_at) await E.OutreachOpenRequest.update(open.id, { deferred_at: new Date().toISOString() });
+        await appendMessages(E, { tenantId, conversationId: conversation.id, msgs: [
+          { author_type: 'client', author_name: conversation.invited_name || '', kind: 'answer', text: MESSAGES.clientDeferred },
+          { author_type: 'bank', kind: 'message', text: MESSAGES.requestDeferred },
+        ] });
+        await writeOutreachAudit(E, outreachAuditRow({ tenantId, event: 'request.deferred', actor: clientActor, conversation: conv0, payload: { open_request_id: open.id }, notes: `Deferred by the client: ${open.title}` }));
+        return Response.json({ ok: true, deferred: true });
+      }
+      const blk = open.block_key ? conversation.blocks_snapshot?.[open.block_key] : null;
+      step = { id: `request:${open.id}`, widget: 'upload', block_key: open.block_key || 'request', label: open.title, datapoint_key: open.block_key || 'request', checks: open.kind === 'deferred_evidence' ? (blk?.evidence?.checks || blk?.checks || []) : [] };
+    } else {
+      if (link !== 'valid' || conversation.submitted_at) throw httpError(409, MESSAGES.notCurrent);
+      step = conversation.pending_step?.step || null;
+      if (!step || step.widget !== 'upload' || String(body.step_id || '') !== step.id) throw httpError(409, MESSAGES.notCurrent);
+    }
     const settings = conversation.settings_snapshot || {};
 
     const f = body.file || {};
@@ -113,6 +139,26 @@ export default async function (req) {
       payload: { evidence_id: ev.id, document_id: doc?.id || null, block: evidenceKey, size: bytes.length, mime, status, ai_ok: !!ai.ok },
       notes: `${label}: ${name} uploaded (${Math.round(bytes.length / 1024)} KB)${ai.ok ? '' : '; AI check unavailable, pending manual review'}`,
     }));
+    if (open) {
+      const nowIso = new Date().toISOString();
+      await E.OutreachOpenRequest.update(open.id, { status: 'answered', answered_at: nowIso, answer_evidence_id: ev.id });
+      const tenant = asList(await E.Tenant.filter({ id: tenantId }, undefined, 1))[0] || null;
+      const confirm = open.from_name ? answeredMessage({ name: open.from_name, role: open.from_role }) : { author_type: 'bank', kind: 'message', text: MESSAGES.analystReceived };
+      await appendMessages(E, { tenantId, conversationId: conversation.id, tenantName: tenant?.name || '', msgs: [
+        { author_type: 'client', author_name: conversation.invited_name || '', kind: 'answer', text: name, payload: { evidence_id: ev.id, open_request_id: open.id } },
+        confirm,
+      ] });
+      await E.OutreachConversation.update(conversation.id, { last_activity_at: nowIso });
+      const passed = result.every((c) => c.ok !== false);
+      await E.AuditEvent.bulkCreate([
+        outreachAuditRow({ tenantId, event: 'doc.checked', actor: { type: 'System' }, conversation: conv, payload: { evidence_id: ev.id, open_request_id: open.id, checks: result.map((c) => ({ name: c.name, ok: c.ok })) }, notes: `request: ${open.title}: ${name} — ${passed ? 'all checks passed' : 'some checks did not pass'}` }),
+        outreachAuditRow({ tenantId, event: 'request.answered', actor: clientActor, conversation: conv, payload: { open_request_id: open.id, evidence_id: ev.id }, notes: `Evidence received: ${name}` }),
+      ]).catch((e) => console.warn('audit failed', e?.message));
+      const kc = conversation.case_id ? asList(await E.KycCase.filter({ tenant_id: tenantId, id: conversation.case_id }, undefined, 1))[0] : null;
+      const uid = open.from_user_id || kc?.assigned_analyst_id;
+      if (uid) await E.Notification.create({ tenant_id: tenantId, user_id: uid, type: 'outreach_response', is_read: false, title: `Document received: ${open.title}`, body: `${conversation.invited_name || 'The client'} uploaded ${name}.`, link_case_id: kc?.id, link_client_id: conversation.client_id, dedupe_key: `outreach_req:${open.id}` }).catch(() => {});
+      return Response.json({ ok: true, evidence_id: ev.id, checks: result, status, answered: true });
+    }
     return Response.json({ ok: true, evidence_id: ev.id, checks: result, status });
   } catch (error) {
     if (!error?.status || error.status >= 500) console.error('outreachUpload error:', error?.message);
