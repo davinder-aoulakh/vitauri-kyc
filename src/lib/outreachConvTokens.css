@@ -148,3 +148,11 @@
 .oc .oc-status-pill.sent{background:#e8f4ff;color:#075985}
 .oc .oc-status-pill.done{background:#e7f6ec;color:#137a43}
 .oc .oc-status-pill.rep{background:#f3f6f5;color:#12342b}
+
+/* Phase 9: open requests from a colleague and the composer after submission */
+.oc-requests { display: grid; gap: 12px; }
+.oc-request { border-top: 1px solid var(--oc-line, #e5e7eb); padding-top: 10px; }
+.oc-request:first-child { border-top: 0; padding-top: 0; }
+.oc-composer { display: flex; gap: 8px; align-items: flex-end; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--oc-line, #e5e7eb); }
+.oc-composer .oc-in { flex: 1; resize: vertical; min-height: 44px; font-size: 16px; }
+.oc-composer .oc-btn { min-height: 44px; }

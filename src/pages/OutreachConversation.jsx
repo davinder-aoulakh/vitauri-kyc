@@ -8,6 +8,7 @@ import { OC } from '@/lib/outreachConvStrings';
 import '@/lib/outreachConvTokens.css';
 import Widget from '@/components/outreachconv/widgets';
 import StructureCard from '@/components/outreachconv/widgets/StructureCard';
+import { OpenRequestCards, Composer } from '@/components/outreachconv/SecondRound';
 
 const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return ''; } };
 const fmtTime = (iso) => { try { return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
@@ -71,7 +72,7 @@ function Rail({ v }) {
       {(v.open_requests || []).length > 0 && (
         <div className="oc-card oc-req">
           <h3>{OC.openRequests}</h3>
-          <ul className="oc-secs">{v.open_requests.map((r) => <li key={r.id}>{r.title}</li>)}</ul>
+          <ul className="oc-secs">{v.open_requests.map((r) => <li key={r.id} className={r.status === 'answered' ? 'done' : ''}><span className="oc-dot" aria-hidden="true">{r.status === 'answered' ? '✓' : ''}</span>{r.title}{r.status === 'answered' ? <span className="sr-only"> (answered)</span> : null}</li>)}</ul>
         </div>
       )}
       {v.tenant?.help_text && <div className="oc-small oc-help">{OC.needHelp} {v.tenant.help_text}</div>}
@@ -240,6 +241,23 @@ export default function OutreachConversation() {
     }
   }, [token, open]);
 
+  // Phase 9: composer messages and answers to a colleague's open request (same retry rules as answers).
+  const onMessage = useCallback((text, openRequestId) => send({ action: 'message', body: { client_answer_id: newAnswerId(), text, ...(openRequestId ? { open_request_id: openRequestId } : {}) } }), [send]);
+  const onRequestUpload = useCallback(async (openRequestId, file) => {
+    try {
+      const r = await base44.functions.invoke('outreachUpload', { token, open_request_id: openRequestId, file });
+      return r.data;
+    } catch (e) {
+      const { status, message } = errOf(e);
+      if (status === 409) { await open(); return null; }
+      return { error: message || OC.notSaved };
+    }
+  }, [token, open]);
+  const onDefer = useCallback(async (openRequestId) => {
+    try { await base44.functions.invoke('outreachUpload', { token, open_request_id: openRequestId, defer: true }); } catch { /* reloaded below */ }
+    await open();
+  }, [token, open]);
+
   // Registry step: search and select go to outreachRegistry; the answer then names the selection.
   const onRegistry = useCallback(async (action, extra) => {
     try {
@@ -330,6 +348,8 @@ export default function OutreachConversation() {
             </div>
           )}
           {revealed && v.step && !v.submitted && <Widget key={v.step.id} step={v.step} view={v} busy={busy} onAnswer={onAnswer} onEdit={onEdit} onIdv={onIdv} onUpload={onUpload} onRegistry={onRegistry} onInvite={onInvite} />}
+          {revealed && <OpenRequestCards v={v} busy={busy} onMessage={onMessage} onRequestUpload={onRequestUpload} onDefer={onDefer} onReload={open} />}
+          {revealed && v.composer && <Composer busy={busy} onMessage={onMessage} />}
           {fieldErr && <p className="oc-err" role="alert">{fieldErr}</p>}
           {saveErr && (
             <div className="oc-chips" role="alert">

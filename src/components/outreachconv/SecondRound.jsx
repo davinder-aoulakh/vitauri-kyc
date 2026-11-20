@@ -15,7 +15,7 @@ function TextAnswer({ request, busy, onMessage }) {
   );
 }
 
-export function OpenRequestCards({ v, busy, onMessage, onRequestUpload, onDefer }) {
+export function OpenRequestCards({ v, busy, onMessage, onRequestUpload, onDefer, onReload }) {
   const open = (v.open_requests || []).filter((r) => r.status === 'open' && (r.kind === 'analyst_request' || v.submitted));
   if (!open.length) return null;
   return (
@@ -27,7 +27,7 @@ export function OpenRequestCards({ v, busy, onMessage, onRequestUpload, onDefer 
               step={{ id: `request:${r.id}`, text: r.title, checks: [], allow_defer: !r.deferred }}
               busy={busy}
               onUpload={(_stepId, file) => onRequestUpload(r.id, file)}
-              onAnswer={async (value) => { if (value?.deferred) await onDefer(r.id); }}
+              onAnswer={async (value) => { if (value?.deferred) await onDefer(r.id); else await onReload(); }}
             />
           ) : (
             <TextAnswer request={r} busy={busy} onMessage={onMessage} />

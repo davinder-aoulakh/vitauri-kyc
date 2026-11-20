@@ -7,6 +7,7 @@ export const OC = {
   saved: 'Your answers are saved automatically',
   savedAt: (t) => `Saved at ${t}`,
   openRequests: 'Open requests',
+  composerPlaceholder: 'Ask a question or reply here…',
   minutesLeft: (n) => (n <= 0 ? 'Almost done' : `About ${n} minute${n === 1 ? '' : 's'} left`),
   submittedEta: 'Submitted. You will see here if we need anything else.',
   conversationSaved: 'Conversation saved in your file',
