@@ -7,6 +7,7 @@ export const OC = {
   saved: 'Your answers are saved automatically',
   savedAt: (t) => `Saved at ${t}`,
   openRequests: 'Open requests',
+  signWithName: 'Use my typed name as signature',
   composerPlaceholder: 'Ask a question or reply here…',
   minutesLeft: (n) => (n <= 0 ? 'Almost done' : `About ${n} minute${n === 1 ? '' : 's'} left`),
   submittedEta: 'Submitted. You will see here if we need anything else.',
