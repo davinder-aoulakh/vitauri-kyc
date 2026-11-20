@@ -219,13 +219,16 @@ export default function OutreachConversation() {
   const idvBusy = useRef(false);
   const stepRef = useRef(null);
   stepRef.current = v?.step || null;
+  const lastSeqRef = useRef(0);
+  lastSeqRef.current = v?.last_seq || 0;
   const onIdv = useCallback(async (action, { quiet = false } = {}) => {
     // only while the ID step is on screen, and one ID call at a time (the server also refuses stale writes)
     if (stepRef.current?.widget !== 'idv' || (quiet && idvBusy.current)) return null;
     idvBusy.current = true;
     try {
       const r = await call(action, action === 'idv_start' ? { portal_origin: window.location.origin } : {});
-      setV(r.data);
+      // a late answer must never take the page back to an older state
+      if ((r.data?.last_seq ?? 0) >= (lastSeqRef.current ?? 0)) setV(r.data);
       if (!quiet) setFieldErr('');
       return r.data;
     } catch (e) {
@@ -233,7 +236,7 @@ export default function OutreachConversation() {
       if (status === 409) { await open(); return null; }
       if (!quiet) setFieldErr(message || OC.notSaved);
       return null;
-    }
+    } finally { idvBusy.current = false; }
   }, [call, open]);
 
   // Upload step: the file goes to outreachUpload; errors come back as a message for the widget.
