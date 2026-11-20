@@ -55,7 +55,7 @@ export default async function (req) {
     };
     const save = async (patch) => {
       const next = { ...engine, reg: { ...(engine.reg || {}), ...patch } };
-      await E.OutreachConversation.update(conversation.id, { pending_step: { ...ps, engine: next } });
+      await E.OutreachConversation.update(conversation.id, { pending_step: { ...ps, engine: next, rev: Number(ps.rev || 0) + 1 } });
       return next.reg;
     };
 

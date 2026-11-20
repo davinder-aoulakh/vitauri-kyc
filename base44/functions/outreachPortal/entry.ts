@@ -139,6 +139,10 @@ export default async function (req) {
     const settings = conversation.settings_snapshot || {};
     const ps = conversation.pending_step || {};
     let engine = ps.engine || initialState({ risk: conversation.risk_class || 'medium' });
+    // Revision of the stored state: every write checks that nobody else wrote in between (two tabs, overlapping
+    // ID-check pulls). A stale request is refused with 409 and the page reloads, so a newer answer is never overwritten.
+    let rev = Number(ps.rev || 0);
+    const freshRev = async () => Number(asList(await E.OutreachConversation.filter({ tenant_id: request.tenant_id, id: conversation.id }, undefined, 1))[0]?.pending_step?.rev || 0);
     engine.risk = conversation.risk_class || engine.risk; // staff may change the risk class; rules read the current value
     let step = ps.step || null;
     let testData = !!ps.test_data;
@@ -169,9 +173,11 @@ export default async function (req) {
     };
 
     const persist = async (patch = {}) => {
+      if ((await freshRev()) !== rev) { pendingMsgs.length = 0; throw httpError(409, MESSAGES.notCurrent); }
+      rev += 1;
       const p = progress(snap, engine, { submitted: !!patch.submitted_at });
       const data = {
-        block_states: engine.block_states, pending_step: { engine, step, test_data: testData },
+        block_states: engine.block_states, pending_step: { engine, step, test_data: testData, rev },
         current_block_key: step?.block_key || null, progress_steps: p.steps, progress_total: p.total, last_activity_at: nowIso, ...patch,
       };
       await E.OutreachConversation.update(conversation.id, data);
@@ -242,6 +248,8 @@ export default async function (req) {
      */
     const applyIdvDecision = async (carrier) => {
       if (step?.widget !== 'idv') return [];
+      // The Didit pull takes seconds: when another request moved the conversation on meanwhile, do nothing.
+      if ((await freshRev()) !== rev) return [];
       const item = idvItemOf(carrier);
       noteSession(item);
       const st = idvState(item, { attempts: (engine.idv_sessions || []).length, maxAttempts });

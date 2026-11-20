@@ -39,7 +39,7 @@ export async function postHeldFollowUp(E, { tenant, c, text, ai, approverName, v
   engine = a.state;
   await appendMessages(E, { tenantId, conversationId: c.id, tenantName: tenant.name || '', msgs: a.messages.map((m) => ({ ...m, author_type: 'bank' })) });
   const p = progress(snap, engine, {});
-  await E.OutreachConversation.update(c.id, { pending_step: { ...(c.pending_step || {}), engine, step: a.step }, block_states: engine.block_states, current_block_key: a.step?.block_key || null, progress_steps: p.steps, progress_total: p.total });
+  await E.OutreachConversation.update(c.id, { pending_step: { ...(c.pending_step || {}), engine, step: a.step, rev: Number(c.pending_step?.rev || 0) + 1 }, block_states: engine.block_states, current_block_key: a.step?.block_key || null, progress_steps: p.steps, progress_total: p.total });
   const open = asList(await E.OutreachOpenRequest.filter({ tenant_id: tenantId, conversation_id: c.id, kind: 'ai_approval', status: 'open' }, undefined, 20));
   for (const o of open.filter((o) => o.block_key === q.block)) await E.OutreachOpenRequest.update(o.id, { status: 'answered', answered_at: new Date().toISOString() });
   const conv = { id: c.id, request_id: c.request_id || undefined, case_id: c.case_id, client_id: c.client_id, party_id: c.party_id };
