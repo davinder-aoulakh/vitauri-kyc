@@ -166,3 +166,8 @@
 .oc-cpick-list li{display:flex;align-items:center;gap:8px;min-height:40px;padding:6px 8px;border-radius:8px;cursor:pointer;color:var(--ink)}
 .oc-cpick-list li.on{background:var(--brand-soft)}
 .oc-cpick-list li.oc-cpick-sep{border-bottom:1px solid var(--line);border-radius:8px 8px 0 0;margin-bottom:4px}
+
+/* Phone code: same picker, dial codes; the list is wider than the narrow code button */
+.oc-phone-code{flex:0 0 auto;min-width:118px}
+.oc-cpick-dial .oc-cpick-pop{right:auto;width:min(320px,calc(100vw - 48px))}
+.oc-cpick-dialcode{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums}

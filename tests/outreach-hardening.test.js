@@ -119,4 +119,7 @@ test('address country: every country with its flag, searchable, common countries
   assert.ok(picker.includes('COUNTRY_META') && picker.includes('<Flag') && picker.includes('role="listbox"') && picker.includes('ArrowDown'));
   assert.ok(!/https?:\/\//.test(picker), 'no external resources');
   assert.ok(read('src/components/outreachconv/widgets/Address.jsx').includes('<CountryPicker'));
+  const phone = read('src/components/outreachconv/widgets/Phone.jsx');
+  assert.ok(phone.includes('<CountryPicker') && phone.includes('mode="dial"') && phone.includes('code: code.dial'), 'phone code uses the same flag list; the answer keeps { code, number }');
+  assert.ok(picker.includes("mode === 'dial'") && picker.includes('digits(c.dial).startsWith(d)'), 'search by dial code');
 });

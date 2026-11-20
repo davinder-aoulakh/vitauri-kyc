@@ -9,6 +9,7 @@ export const OC = {
   openRequests: 'Open requests',
   chooseCountry: 'Choose a country',
   searchCountry: 'Search for a country',
+  searchCountryCode: 'Search by country or code',
   noCountry: 'No country found',
   signWithName: 'Use my typed name as signature',
   composerPlaceholder: 'Ask a question or reply here…',
