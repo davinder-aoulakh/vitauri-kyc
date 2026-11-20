@@ -17,6 +17,7 @@ import { fillPlaceholders } from '../../shared/outreachSnapshot.js';
 import { outreachAuditRow, writeOutreachAudit } from '../../shared/outreachAudit.js';
 import { inviteTransition } from '../../shared/outreachInvites.js';
 import { createChildConversation } from '../../shared/outreachChildRequest.js';
+import { assertNotLocked } from '../../shared/tippingOff.js';
 import { postHeldFollowUp, appendMessages, sendConversationEmail } from '../../shared/outreachThread.js';
 import { analystRequestMessages, analystTag, cleanMessage, SITUATIONS } from '../../shared/outreachSecondRound.js';
 
@@ -135,7 +136,6 @@ export default async function (req) {
       const conv = { id: c.id, request_id: c.request_id || undefined, case_id: c.case_id, client_id: c.client_id, party_id: c.party_id };
       const actor = { type: 'User', id: user.id, name: actorName };
       // tipping-off: no new customer communication while the client is locked (423, nothing written)
-      const { assertNotLocked } = await import('../../shared/tippingOff.js');
       await assertNotLocked(base44, c.client_id, tenantId);
       let open = null;
       let msgs;
